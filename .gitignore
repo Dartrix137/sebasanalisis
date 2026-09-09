@@ -1,0 +1,25 @@
+# Entornos y dependencias
+backend/.venv/
+frontend/node_modules/
+__pycache__/
+*.py[cod]
+
+# Secretos: nunca al repositorio. Dokploy inyecta las variables en su panel.
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Artefactos de build
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Sistema operativo / editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/

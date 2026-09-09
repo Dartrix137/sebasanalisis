@@ -1,0 +1,279 @@
+﻿GUÍA DE RULETA
+Estrategias, probabilidades y gestión del riesgo
+
+Versión corregida y verificada — septiembre de 2026
+
+
+IMPORTANTE: ninguna estrategia de progresión, cambio de docena, color, columna o paridad elimina la ventaja matemática del casino ni permite garantizar ganancias. Esta guía explica cómo funcionan estas ideas y corrige las afirmaciones que no son matemáticamente válidas.
+	
+
+Qué se corrigió del documento original
+El documento original contenía ideas útiles de disciplina y control, pero también varias afirmaciones que no pueden presentarse como hechos: que las últimas 11 tiradas predicen la siguiente, que cambiar de sector “desvía el algoritmo”, que el casino modifica el resultado por aumentar la apuesta, que existen horarios o días más favorables, y que determinadas columnas salen menos por naturaleza. Esas afirmaciones fueron retiradas o reformuladas.
+También se corrigió la explicación de la martingala. En apuestas de pago 1:1 (rojo/negro, par/impar, 1–18/19–36), la martingala clásica duplica la apuesta tras una pérdida. En dos docenas o dos columnas se apuesta simultáneamente a dos sectores y el beneficio neto al acertar es solo una parte del total apostado; por eso una progresión de recuperación no funciona igual que la martingala clásica.
+________________
+
+
+1. Fundamentos reales de la ruleta
+La ruleta es un juego de azar. En una ruleta correctamente operada, cada giro debe tratarse como un evento independiente: los resultados anteriores no hacen que un número, color, docena o columna quede “obligado” a salir después.
+Versión
+	Casillas
+	Ceros
+	Ventaja de la casa*
+	Europea / single-zero
+	37 (0–36)
+	0
+	≈ 2,70 %
+	Americana / double-zero
+	38 (0–36, 0 y 00)
+	0 y 00
+	≈ 5,26 %
+	Francesa con La Partage
+	37 (0–36)
+	0
+	≈ 1,35 % en apuestas 1:1 cuando aplica la regla
+	
+
+*Valores estándar con pagos tradicionales. Las reglas específicas del juego pueden variar y deben revisarse dentro de la mesa o proveedor.
+Pagos y probabilidades básicas — ruleta europea
+Apuesta
+	Números cubiertos
+	Pago neto estándar
+	Probabilidad de acierto
+	Pleno
+	1
+	35 a 1
+	1/37 = 2,70 %
+	Docena
+	12
+	2 a 1
+	12/37 = 32,43 %
+	Columna
+	12
+	2 a 1
+	12/37 = 32,43 %
+	Dos docenas
+	24
+	Resultado combinado
+	24/37 = 64,86 %
+	Dos columnas
+	24
+	Resultado combinado
+	24/37 = 64,86 %
+	Rojo/negro
+	18
+	1 a 1
+	18/37 = 48,65 %
+	Par/impar
+	18
+	1 a 1
+	18/37 = 48,65 %
+	
+
+En dos docenas, por ejemplo, si se apuesta 1 unidad a cada una (2 unidades en total) y cae un número cubierto, una docena gana 2 unidades netas y la otra pierde 1: el beneficio neto es 1 unidad. Si cae la docena no cubierta o el 0, se pierden las 2 unidades.
+El cero
+En una ruleta europea estándar, el 0 no pertenece a ninguna docena, columna, rojo/negro ni par/impar. Por eso esas apuestas normalmente pierden cuando sale 0, salvo reglas especiales como La Partage o En Prison en determinadas apuestas de dinero parejo. En ruleta americana también existe 00, lo que aumenta la ventaja de la casa.
+________________
+
+
+2. Martingala: qué es y qué no es
+La martingala clásica es una progresión de apuestas usada principalmente sobre resultados que pagan 1:1. Después de cada pérdida se duplica la siguiente apuesta; después de una victoria se vuelve a la apuesta base.
+Intento
+	Apuesta si la base es $100
+	Pérdida acumulada si falla
+	1
+	$100
+	$100
+	2
+	$200
+	$300
+	3
+	$400
+	$700
+	4
+	$800
+	$1.500
+	5
+	$1.600
+	$3.100
+	6
+	$3.200
+	$6.300
+	7
+	$6.400
+	$12.700
+	
+
+Si la apuesta ganadora paga 1:1, una victoria en cualquier escalón recupera las pérdidas anteriores de esa serie y deja, en el modelo ideal sin límites, una ganancia igual a la apuesta inicial. Pero esto no convierte la estrategia en rentable a largo plazo: una racha suficientemente larga de pérdidas exige apuestas cada vez mayores, y existen límites de saldo y de mesa.
+La martingala modifica el tamaño y la distribución de las pérdidas y ganancias; no modifica la probabilidad del giro ni la ventaja matemática del casino.
+	
+
+3. Estrategia de dos docenas
+Las docenas son 1–12, 13–24 y 25–36. Apostar a dos docenas cubre 24 de los 37 resultados de una ruleta europea. No existe una razón matemática para elegir siempre la segunda docena, ni para excluir la combinación 1.ª + 3.ª: las tres parejas de docenas cubren exactamente 24 números y tienen la misma probabilidad antes de cada giro.
+¿Sirven 11 tiradas para decidir?
+Se pueden registrar 11 tiradas para observar una muestra, pero esa muestra no permite predecir con fiabilidad la siguiente tirada. Si en 11 giros la tercera docena apareció cinco veces y las otras tres veces cada una, eso describe el pasado; no hace que las docenas menos frecuentes tengan una probabilidad superior en el giro 12.
+Ejemplo del documento original: 12, 1, 3, 22, 24, 18, 35, 36, 31, 32, 25.
+Sector
+	Resultados observados
+	Cantidad
+	1.ª docena
+	12, 1, 3
+	3
+	2.ª docena
+	22, 24, 18
+	3
+	3.ª docena
+	35, 36, 31, 32, 25
+	5
+	
+
+Conclusión correcta: en esa muestra la tercera docena apareció más veces. Conclusión incorrecta: asumir que por ello la primera y la segunda están “por salir”. Cada giro nuevo conserva las probabilidades del juego.
+Progresión de recuperación para dos docenas
+La secuencia 1–1, 2–2, 6–6, 18–18, 54–54 del documento original no es una martingala clásica. Es una progresión de recuperación adaptada al beneficio neto de apostar a dos docenas. Con ella, una victoria después de una o más pérdidas puede recuperar el saldo acumulado de la serie, pero el riesgo crece extremadamente rápido.
+Escalón
+	Apuesta por docena
+	Total del giro
+	Pérdida acumulada si vuelve a fallar
+	1
+	1 u.
+	2 u.
+	2 u.
+	2
+	2 u.
+	4 u.
+	6 u.
+	3
+	6 u.
+	12 u.
+	18 u.
+	4
+	18 u.
+	36 u.
+	54 u.
+	5
+	54 u.
+	108 u.
+	162 u.
+	
+
+Ejemplo con unidad de $100 COP: los totales por giro serían $200, $400, $1.200, $3.600 y $10.800. Si se pierden los cinco escalones, la pérdida acumulada es $16.200. Un sexto escalón de recuperación requeriría $16.200 por docena ($32.400 en total).
+________________
+
+
+4. Estrategia de columnas
+Las tres columnas contienen 12 números cada una y pagan 2 a 1. Matemáticamente son equivalentes a las docenas. No es correcto afirmar que la columna 1 “sale menos” de manera general: en una ruleta justa, cada columna tiene 12/37 de probabilidad por giro.
+Si se apuesta a dos columnas, se cubren 24 números. Puede usarse la misma lógica de unidades descrita para dos docenas, entendiendo que la progresión solo administra el tamaño de la apuesta y no crea una ventaja estadística.
+5. Estrategia de colores
+Rojo y negro cubren 18 números cada uno. En ruleta europea, cada color tiene una probabilidad de 18/37 (≈48,65 %) porque el 0 es verde. En la americana la probabilidad es 18/38 (≈47,37 %) porque existen 0 y 00.
+Elegir el color que menos apareció en las últimas 11 tiradas puede ser una regla personal de selección, pero no aumenta su probabilidad en el siguiente giro. Tampoco hay base para afirmar que el casino detecta que subiste la apuesta y por eso hace perder tu color en una ruleta regulada correctamente.
+Progresión 1:1
+Escalón
+	Apuesta base $100 COP
+	Acumulado arriesgado si se pierden todos
+	1
+	$100
+	$100
+	2
+	$200
+	$300
+	3
+	$400
+	$700
+	4
+	$800
+	$1.500
+	5
+	$1.600
+	$3.100
+	6
+	$3.200
+	$6.300
+	7
+	$6.400
+	$12.700
+	8
+	$12.800
+	$25.500
+	9
+	$25.600
+	$51.100
+	10
+	$51.200
+	$102.300
+	
+
+Esta tabla corrige el total del documento original: siguiendo una martingala estándar desde $100 hasta $51.200, una racha de 10 pérdidas implica $102.300 COP acumulados, no $100.000 exactos.
+6. Par e impar
+Par/impar tiene la misma estructura matemática que rojo/negro: 18 números ganadores y el 0 fuera de ambas opciones en la ruleta europea. El color del número no afecta una apuesta par/impar. Por tanto, que un número sea rojo o negro es irrelevante si la apuesta realizada es únicamente a par o impar.
+________________
+
+
+7. Cambiar de lado después de varias victorias o pérdidas
+Cambiar de 1.ª+2.ª docena a 2.ª+3.ª, de rojo a negro o de par a impar después de tres o cuatro resultados puede formar parte de una regla de disciplina, pero no “desvía el algoritmo” ni obliga al juego a entregar el sector que no ha salido.
+Dos errores comunes son la falacia del jugador (“como no ha salido, ya le toca”) y la falacia de la racha (“como está saliendo, seguirá saliendo”). Ninguna de las dos cambia las probabilidades de una ruleta independiente.
+8. Horarios y días
+No existe una base matemática general para afirmar que domingo a jueves, ciertas franjas horarias, o evitar viernes y sábado mejore las probabilidades de la ruleta. La cantidad de personas conectadas tampoco debería cambiar la probabilidad de un giro individual en un juego correctamente operado.
+Sí puede ser razonable elegir horarios por motivos personales: jugar descansado, sin alcohol, sin presión y con tiempo limitado. Eso mejora la toma de decisiones, no las probabilidades del giro.
+9. Gestión de banca y límites
+La parte más valiosa de cualquier plan de juego es controlar cuánto dinero y tiempo se está dispuesto a perder. El límite debe definirse antes de jugar y no debe ser dinero necesario para gastos, deudas o responsabilidades.
+* Fija un límite de pérdida y un límite de tiempo antes de iniciar.
+* No aumentes el límite para recuperar pérdidas.
+* No uses crédito ni dinero destinado a obligaciones.
+* No interpretes una racha ganadora como evidencia de que la estrategia venció la ventaja de la casa.
+* Si una progresión alcanza un monto incómodo, detenerse es más prudente que continuar escalando.
+* Revisa los límites mínimos y máximos de la mesa antes de usar cualquier progresión.
+10. Qué tipo de ruleta conviene matemáticamente
+Si dos juegos usan pagos estándar, una ruleta de un solo cero es matemáticamente preferible a una ruleta americana de doble cero porque tiene una menor ventaja de la casa. Si existe una ruleta francesa con La Partage o En Prison aplicada a apuestas 1:1, esas reglas pueden reducir todavía más la ventaja de la casa en dichas apuestas.
+Corrección importante del original: no es recomendable usar ruleta americana por defecto. Si las demás condiciones son equivalentes, el doble cero empeora las probabilidades del jugador.
+	
+
+11. Sobre BetPlay y otros casinos
+Los mínimos de apuesta, proveedores y mesas disponibles pueden cambiar. Por eso no debe afirmarse como regla permanente que una mesa específica permite apostar desde $100 COP sin comprobarlo dentro del juego en ese momento. BetPlay indica que las reglas concretas de cada juego están disponibles dentro del propio juego y promueve el uso de límites y herramientas de juego responsable.
+12. Versión práctica de las estrategias
+Si se desea conservar la estructura del método original, puede presentarse de forma correcta así: elegir previamente un mercado (dos docenas, dos columnas, color o paridad), definir una unidad pequeña, establecer un máximo de escalones y detener la sesión al alcanzar el límite. Los resultados previos pueden registrarse como información descriptiva, pero no deben utilizarse como prueba de que el siguiente resultado es más probable.
+Método
+	Cobertura en europea
+	Regla de selección válida
+	Advertencia
+	Dos docenas
+	24/37
+	Cualquier pareja de docenas; todas tienen igual probabilidad
+	La progresión crece muy rápido
+	Dos columnas
+	24/37
+	Cualquier pareja de columnas; todas tienen igual probabilidad
+	Misma matemática que dos docenas
+	Color
+	18/37
+	Rojo o negro; ninguno está “debido”
+	0 hace perder en regla estándar
+	Par/impar
+	18/37
+	Par o impar; ninguno está “debido”
+	0 no es par ni impar
+	
+
+________________
+
+
+Conclusiones
+* No existe una estrategia de ruleta que garantice ganancias ni elimine la ventaja de la casa.
+* Las tiradas anteriores no aumentan por sí mismas la probabilidad de una docena, columna, color o paridad en el siguiente giro.
+* La martingala y otras progresiones son sistemas de tamaño de apuesta, no sistemas de predicción.
+* Cambiar de apuesta no desvía un algoritmo ni obliga a que aparezca un resultado atrasado.
+* No hay horarios universalmente mejores para ganar; el horario solo puede influir en la disciplina personal.
+* En igualdad de condiciones, single-zero es preferible a double-zero por su menor ventaja de la casa.
+* La gestión de banca reduce la exposición, pero no convierte un juego con expectativa negativa en uno de expectativa positiva.
+Fuentes de verificación
+• Wizard of Odds, Roulette Basics y House Edge: reglas, pagos y ventaja matemática de ruleta single-zero, double-zero y reglas francesas.
+ https://wizardofodds.com/games/roulette/basics/
+ https://wizardofodds.com/gambling/house-edge/
+
+• BetPlay, Términos y condiciones y Juego Responsable: reglas específicas disponibles dentro de cada juego, límites y recomendaciones de juego responsable.
+ https://betplay.com.co/terminos-y-condiciones
+ https://betplay.com.co/static/juego-responsable
+
+
+Documento informativo para mayores de edad. El juego debe entenderse como entretenimiento, no como una fuente de ingresos. Jugar sin control puede causar problemas financieros y de conducta.
+	
+
+Guía de Ruleta — versión corregida y verificada

@@ -1,0 +1,6 @@
+# Los scripts de shell van SIEMPRE con finales de linea LF, se editen donde se
+# editen. Con CRLF el contenedor falla al arrancar con un error que no dice lo
+# que pasa: "/bin/sh^M: bad interpreter".
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile text eol=lf

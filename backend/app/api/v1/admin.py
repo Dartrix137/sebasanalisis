@@ -1,0 +1,176 @@
+"""Panel de administracion: CRUD de juegos/variantes y gestion de acceso (§3.4).
+
+El MVP usa un formulario estructurado simple, NO un builder visual de categorias
+(decision explicita de CLAUDE.md). Toda `categories_json` que entre por aqui pasa
+por `validate_game_config` antes de persistir: una configuracion mal formada que
+se guarda en silencio rompe `engine/probability.py` sin error visible.
+"""
+
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
+
+from app.api.deps import AdminUser, DbSession
+from app.core.game_config_validation import (
+    check_payouts_against_house_edge,
+    validate_game_config,
+)
+from app.models import Game, GameVariant, User
+from app.schemas.auth import UpdateUserAccessRequest, UserResponse
+from app.schemas.games import (
+    CreateGameRequest,
+    CreateGameVariantRequest,
+    GameResponse,
+    GameVariantConfig,
+    GameVariantResponse,
+    UpdateGameRequest,
+    UpdateGameVariantRequest,
+)
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _validate_config_or_422(config: GameVariantConfig, house_edge: float) -> list[str]:
+    """Bloquea si hay errores; devuelve los avisos para informarlos al admin."""
+    result = validate_game_config(config)
+    if not result.ok:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "La configuracion del juego no es valida",
+                "errors": result.errors,
+            },
+        )
+    return result.warnings + check_payouts_against_house_edge(config, house_edge)
+
+
+# ---------- Juegos ----------
+
+
+@router.post("/games", response_model=GameResponse, status_code=status.HTTP_201_CREATED)
+def create_game(payload: CreateGameRequest, db: DbSession, admin: AdminUser) -> Game:
+    if db.scalar(select(Game).where(Game.type == payload.type)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya existe un juego con el tipo '{payload.type}'",
+        )
+    game = Game(name=payload.name, type=payload.type, active=payload.active)
+    db.add(game)
+    db.commit()
+    db.refresh(game)
+    return game
+
+
+@router.patch("/games/{game_id}", response_model=GameResponse)
+def update_game(
+    game_id: UUID, payload: UpdateGameRequest, db: DbSession, admin: AdminUser
+) -> Game:
+    game = db.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Juego no encontrado")
+    for campo, valor in payload.model_dump(exclude_unset=True).items():
+        setattr(game, campo, valor)
+    db.commit()
+    db.refresh(game)
+    return game
+
+
+# ---------- Variantes ----------
+
+
+@router.post(
+    "/games/{game_id}/variants",
+    response_model=GameVariantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_variant(
+    game_id: UUID, payload: CreateGameVariantRequest, db: DbSession, admin: AdminUser
+) -> GameVariant:
+    game = db.get(Game, game_id)
+    if game is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Juego no encontrado")
+    if db.scalar(
+        select(GameVariant).where(
+            GameVariant.game_id == game_id, GameVariant.name == payload.name
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El juego ya tiene una variante llamada '{payload.name}'",
+        )
+    _validate_config_or_422(payload.config, payload.house_edge)
+    variant = GameVariant(
+        game_id=game_id,
+        name=payload.name,
+        house_edge=payload.house_edge,
+        categories_json=payload.config.model_dump(),
+        active=payload.active,
+    )
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+@router.patch("/games/{game_id}/variants/{variant_id}", response_model=GameVariantResponse)
+def update_variant(
+    game_id: UUID,
+    variant_id: UUID,
+    payload: UpdateGameVariantRequest,
+    db: DbSession,
+    admin: AdminUser,
+) -> GameVariant:
+    variant = db.get(GameVariant, variant_id)
+    if variant is None or variant.game_id != game_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+
+    cambios = payload.model_dump(exclude_unset=True)
+
+    if payload.name is not None and payload.name != variant.name:
+        if db.scalar(
+            select(GameVariant).where(
+                GameVariant.game_id == game_id, GameVariant.name == payload.name
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El juego ya tiene una variante llamada '{payload.name}'",
+            )
+
+    if payload.config is not None:
+        # El house_edge contra el que se validan los pagos es el nuevo si viene
+        # en el mismo request, y el ya persistido si no.
+        house_edge = (
+            payload.house_edge if payload.house_edge is not None else float(variant.house_edge)
+        )
+        _validate_config_or_422(payload.config, house_edge)
+        variant.categories_json = payload.config.model_dump()
+    cambios.pop("config", None)
+
+    for campo, valor in cambios.items():
+        setattr(variant, campo, valor)
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+# ---------- Usuarios ----------
+
+
+@router.get("/users", response_model=list[UserResponse])
+def list_users(db: DbSession, admin: AdminUser) -> list[User]:
+    return list(db.scalars(select(User).order_by(User.created_at.desc())))
+
+
+@router.patch("/users/{user_id}/access", response_model=UserResponse)
+def update_user_access(
+    user_id: UUID, payload: UpdateUserAccessRequest, db: DbSession, admin: AdminUser
+) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    user.access_type = payload.access_type.value
+    db.commit()
+    db.refresh(user)
+    return user

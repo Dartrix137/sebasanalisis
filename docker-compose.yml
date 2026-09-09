@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sebasanalisis-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sebas
+      POSTGRES_PASSWORD: sebas
+      POSTGRES_DB: sebasanalisis
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sebas -d sebasanalisis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
