@@ -79,7 +79,24 @@ Test de regresión: `shrinkage_estimate(favorable=7, total=11, p_teorica=0.4865,
 
 ### χ² — mínimo de activación
 
-Test de regresión: con menos de 36 giros en la sesión, `chi_square_signal()` debe devolver `None` o un flag `activo=False` sin importar cuán "significativo" sea el p-valor calculado — el mínimo de muestra es un requisito duro, no una sugerencia.
+Test de regresión: con menos de **200 giros** (`MIN_SPINS`) en la sesión, `chi_square_signal()` debe devolver un flag `active=False` y `p_value=None` sin importar cuán "significativo" sea el p-valor calculado — el mínimo de muestra es un requisito duro, no una sugerencia.
+
+Ese 200 es un **piso de ruido, no un umbral de detección de sesgo**, y los tests deben reflejarlo: a 200 giros la prueba solo tiene potencia para ver una docena saliendo ~43% contra 32.4% teórico. No escribas tests que asuman que a partir de ahí se detecta sesgo real — un sesgo explotable (>33.3% frente al pago 2:1) pediría del orden de 30.000 giros.
+
+### χ² — corrección por comparaciones múltiples
+
+`all_chi_square_signals()` corre la prueba sobre las 5 categorías y ajusta los p-valores con Benjamini-Hochberg antes de decidir `active`. Dos reglas al testear:
+
+- **Una prueba aislada es familia de tamaño 1**: `chi_square_signal()` por sí sola no corrige nada y `p_value_adjusted == p_value`. Si un test necesita comprobar la corrección, tiene que pasar por `all_chi_square_signals()`.
+- **Las categorías sin muestra suficiente no entran en la familia**: no son pruebas, y contarlas inflaría `m` castigando a las demás.
+
+Caso de regresión disponible en `tests/engine/test_chi_square.py`: `GIROS_SIN_SESGO_CON_UN_P_BAJO`, 210 giros de una rueda justa donde `color` da p=0.023 crudo y q=0.116 corregido. Sin corrección esa sesión mostraría una señal FUERTE inexistente.
+
+### Intervalo de Wilson — valor de referencia
+
+Test de regresión: `wilson_interval(0, 10)` al 95% debe dar `[0, 0.2775]`, el valor tabulado. Comprobar además que **no colapsa a ancho cero** cuando el grupo nunca salió (es la razón de usar Wilson y no la aproximación normal) y que se estrecha con el volumen: el intervalo de 6/10 es más de 8 veces más ancho que el de 600/1000, aunque ambos sean 60%.
+
+No derives de este intervalo un veredicto por grupo del tipo "esta desviación se distingue del azar": serían 13 pruebas simultáneas y marcarían algo en ~⅓ de las sesiones de una rueda justa (ver §2.2 del doc de arquitectura).
 
 ## Checklist antes de dar por cerrado un módulo del motor
 

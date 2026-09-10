@@ -162,7 +162,7 @@ significance_score = |p̂ − p_teórica| × sqrt(total_giros_ponderados)
 
 Se muestran las **top 3 categorías** por `significance_score`, con badge de fuerza:
 
-- **FUERTE**: EV ≥ 0.15 y `|p̂ − p_teórica|` con soporte de χ² significativo (p<0.05) si aplica a esa dimensión.
+- **FUERTE**: EV ≥ 0.15 y `|p̂ − p_teórica|` con soporte de χ² significativo si aplica a esa dimensión — donde "significativo" es **p<0.05 sobre el p-valor ya corregido** por comparaciones múltiples (§2.4), nunca sobre el crudo. Es el único punto del motor donde una señal se declara fuerte, así que es el que tiene que aguantar la corrección.
 - **MEDIA**: EV ≥ 0.06.
 - **DÉBIL**: por debajo, se muestra igual pero claramente etiquetada — nunca se oculta ni se disfraza de fuerte.
 
@@ -298,7 +298,7 @@ spins (id, session_id, spin_index, result_value, source, created_at)
 bets (id, session_id, spin_id, category, option_label, amount, followed_suggestion,
       status, won, payout, net_change, created_at, resolved_at)
 
-statistical_suggestions (
+statistical_suggestions (              -- TABLA LATENTE: hoy nada la escribe (ver nota)
   id, session_id, spin_id, category, option_label,
   theoretical_probability, observed_frequency_shrunk, deviation,
   significance_score, strength,          -- 'strong' | 'medium' | 'weak'
@@ -314,6 +314,15 @@ session_performance (            -- nuevo, soporta la auto-evaluación (2.7)
   baseline_matched, updated_at
 )
 ```
+
+**Nota sobre `statistical_suggestions` y `session_performance`.** Ambas están creadas pero **hoy nada las escribe**: los endpoints recalculan desde los giros en cada llamada. Es deliberado y está explicado en `api/v1/suggestions.py` — el motor es determinista, así que re-simular da el mismo resultado que haber acumulado fila a fila, y evita que un cambio de fórmula deje conteos viejos e incomparables en la base.
+
+Consecuencia práctica: **la lista de campos de arriba no es el contrato de la API**, que vive en `schemas/suggestions.py`. Divergen a propósito en dos puntos, y por eso no se hizo migración para alinearlos:
+
+- La columna se llama `chi_square_pvalue`; el campo de la API es `chi_square_pvalue_adjusted`, porque lo que se expone es el p-valor ya corregido (§2.4).
+- La API agrega `observed_ci_low` / `observed_ci_high` (§2.2); la tabla no los tiene.
+
+Si alguna vez se empieza a persistir, hay que alinear ambas cosas con una migración antes de escribir la primera fila.
 
 ### 3.4 Endpoints (consolidado de la conversación)
 
@@ -367,7 +376,8 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
    - Ingreso manual de números giro a giro, más carga inicial de la lista ya observada al abrir la sesión (3.5).
    - Panel de sugerencias: top-3 por categoría con fuerza (FUERTE/MEDIA/DÉBIL), EV visible, disclaimer fijo.
    - Alerta de racha activa (con recordatorio de que no predice el próximo giro).
-   - Señal de sesgo χ² cuando la sesión tiene ≥36 giros.
+   - Señal de sesgo χ² cuando la sesión tiene ≥200 giros, corregida por comparaciones múltiples (§2.4).
+   - Cada frecuencia observada con su intervalo de Wilson, para que la desviación se lea a escala del ruido (§2.2).
    - Motor de bankroll (modo 1:1 y modo dos-sectores) con tabla de progresión visible antes de activar.
    - Registro de apuesta real (categoría + monto) y resolución automática win/loss al ingresar el siguiente número.
    - Auto-evaluación: tasa de coincidencia del motor vs. línea base ingenua, visible en vivo y en el resumen de cierre.
