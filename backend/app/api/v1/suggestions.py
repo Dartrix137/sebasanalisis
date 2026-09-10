@@ -29,27 +29,29 @@ router = APIRouter(prefix="/sessions", tags=["suggestions"])
 
 def _load_context(
     db: DbSession, user_id: UUID, session_id: UUID
-) -> tuple[GameConfig, list[str], int]:
+) -> tuple[GameConfig, list[str], list[str], int]:
     """Configuracion de la variante y los giros de la sesion, mas antiguo primero.
 
-    `window_size` es un limite superior por rendimiento (§2.3): se cargan los
-    ultimos N giros. El peso real de cada uno lo decide el decaimiento
-    exponencial dentro del motor, no este recorte.
+    Devuelve DOS listas a proposito: la ventana de recencia y el historial
+    completo. `window_size` es un limite superior por rendimiento (§2.3) que
+    aplica solo a las senales ponderadas, donde recortar no cuesta casi nada
+    porque el peso ya decae exponencialmente. Aplicarselo tambien al
+    chi-cuadrado lo dejaba viendo 50 giros por defecto y contradecia en silencio
+    lo que esa prueba dice hacer (§2.4), que es mirar el historial entero.
     """
     session = get_owned_session(db, user_id, session_id)
     variant = db.get(GameVariant, session.game_variant_id)
     config = GameConfig.from_dict(variant.categories_json)
 
-    stmt = (
-        select(Spin.result_value)
-        .where(Spin.session_id == session.id)
-        .order_by(Spin.spin_index.desc())
-        .limit(session.window_size)
+    # Orden cronologico ascendente, que es lo que espera el motor.
+    completo = list(
+        db.scalars(
+            select(Spin.result_value)
+            .where(Spin.session_id == session.id)
+            .order_by(Spin.spin_index.asc())
+        )
     )
-    # Se piden los ultimos N descendente y se invierte, para dejarlos en orden
-    # cronologico ascendente, que es lo que espera el motor.
-    resultados = list(reversed(list(db.scalars(stmt))))
-    return config, resultados, session.window_size
+    return config, completo[-session.window_size :], completo, session.window_size
 
 
 def _to_item(s: Suggestion) -> StatisticalSuggestionItem:
@@ -70,8 +72,8 @@ def _to_item(s: Suggestion) -> StatisticalSuggestionItem:
 def latest_suggestions(
     session_id: UUID, db: DbSession, user: CurrentUser
 ) -> StatisticalSuggestionsPanel:
-    config, resultados, window = _load_context(db, user.id, session_id)
-    sugerencias = rank_suggestions(config, resultados)
+    config, ventana, completo, window = _load_context(db, user.id, session_id)
+    sugerencias = rank_suggestions(config, ventana, full_history=completo)
 
     por_categoria: dict[str, list[StatisticalSuggestionItem]] = {}
     for s in sugerencias:
@@ -86,8 +88,9 @@ def latest_suggestions(
 
 @router.get("/{session_id}/streak", response_model=StreakAlert | None)
 def active_streak_alert(session_id: UUID, db: DbSession, user: CurrentUser) -> StreakAlert | None:
-    config, resultados, _ = _load_context(db, user.id, session_id)
-    racha = longest_active_streak(config, resultados)
+    # La racha activa es por definicion lo mas reciente: le basta la ventana.
+    config, ventana, _, _ = _load_context(db, user.id, session_id)
+    racha = longest_active_streak(config, ventana)
     if racha is None:
         return None
     return StreakAlert(
@@ -110,8 +113,13 @@ def session_performance(
     en una formula deje conteos viejos e incomparables en la base.
     """
     session = get_owned_session(db, user.id, session_id)
-    config, resultados, _ = _load_context(db, user.id, session_id)
-    informe = evaluate(config, resultados)
+    # Va sobre la ventana y no sobre la sesion entera por costo: `evaluate`
+    # re-simula giro a giro y cada paso vuelve a rankear, asi que el trabajo
+    # crece con el cuadrado de los giros (800 giros ~ 1.4 s) y este endpoint se
+    # llama despues de cada giro. La ventana da una comparacion mas ruidosa pero
+    # igual de valida; el chi-cuadrado es el que no admite recorte, no esto.
+    config, ventana, _, _ = _load_context(db, user.id, session_id)
+    informe = evaluate(config, ventana)
 
     return SessionPerformanceResponse(
         session_id=session.id,

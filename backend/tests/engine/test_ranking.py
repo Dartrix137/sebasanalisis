@@ -3,7 +3,10 @@
 import pytest
 
 from app.engine.chi_square import all_chi_square_signals, chi_square_signal
-from tests.engine.test_chi_square import GIROS_SIN_SESGO_CON_DOS_P_BAJOS
+from tests.engine.test_chi_square import (
+    GIROS_CON_SESGO_BURDO,
+    GIROS_SIN_SESGO_CON_UN_P_BAJO,
+)
 from app.engine.frequency import category_frequencies
 from app.engine.ranking import (
     EV_MEDIUM,
@@ -42,7 +45,7 @@ def test_sin_desviacion_el_puntaje_es_cero(europea) -> None:
 def test_fuerte_exige_ev_alto_y_respaldo_de_chi_cuadrado(europea) -> None:
     """Interpretacion conservadora de §2.6: sin chi-cuadrado activo, un EV alto
     no basta para llamar FUERTE a una senal."""
-    chi_activo = chi_square_signal(europea, "dozen", ["1"] * 40 + ["13"] * 5 + ["25"] * 5)
+    chi_activo = chi_square_signal(europea, "dozen", GIROS_CON_SESGO_BURDO)
     chi_inactivo = chi_square_signal(europea, "dozen", ["1"] * 10)
     assert chi_activo.active and not chi_inactivo.active
 
@@ -108,25 +111,65 @@ def test_el_pvalue_solo_aparece_si_chi_cuadrado_esta_activo(europea) -> None:
     pocos = rank_suggestions(europea, ["1", "3", "5"])
     assert all(s.chi_square_pvalue_adjusted is None for s in pocos)
 
-    sesgada = rank_suggestions(europea, ["1"] * 40 + ["13"] * 5 + ["25"] * 5)
+    sesgada = rank_suggestions(europea, GIROS_CON_SESGO_BURDO)
     docenas = [s for s in sesgada if s.category_id == "dozen"]
     assert all(s.chi_square_pvalue_adjusted is not None for s in docenas)
 
 
 def test_el_ranking_expone_el_pvalue_corregido_no_el_crudo(europea) -> None:
     """El numero que llega a la UI tiene que ser el que sostuvo la decision."""
-    giros = ["1"] * 40 + ["13"] * 5 + ["25"] * 5
-    corregido = all_chi_square_signals(europea, giros)["dozen"].p_value_adjusted
+    corregido = all_chi_square_signals(europea, GIROS_CON_SESGO_BURDO)[
+        "dozen"
+    ].p_value_adjusted
 
-    docenas = [s for s in rank_suggestions(europea, giros) if s.category_id == "dozen"]
+    docenas = [
+        s
+        for s in rank_suggestions(europea, GIROS_CON_SESGO_BURDO)
+        if s.category_id == "dozen"
+    ]
     assert all(s.chi_square_pvalue_adjusted == pytest.approx(corregido) for s in docenas)
 
 
 def test_el_ruido_corregido_no_llega_a_fuerte(europea) -> None:
-    """Sin correccion, estas 80 tiradas al azar producian senales FUERTE."""
-    sugerencias = rank_suggestions(europea, GIROS_SIN_SESGO_CON_DOS_P_BAJOS)
+    """Sin correccion, estas 210 tiradas al azar producian una senal FUERTE."""
+    sugerencias = rank_suggestions(europea, GIROS_SIN_SESGO_CON_UN_P_BAJO)
     assert all(s.strength is not SignalStrength.strong for s in sugerencias)
     assert all(s.chi_square_pvalue_adjusted is None for s in sugerencias)
+
+
+# ---------- Ventana de recencia vs. historial completo ----------
+
+
+def test_el_chi_cuadrado_usa_el_historial_completo_no_la_ventana(europea) -> None:
+    """El recorte por ventana dejaba al chi-cuadrado viendo 50 giros y apagado.
+
+    Con el sesgo burdo entero la senal se activa; si solo se le pasa la ventana
+    de recencia, la muestra no llega al minimo y no hay p-valor que mostrar.
+    """
+    ventana = GIROS_CON_SESGO_BURDO[-50:]
+
+    recortado = rank_suggestions(europea, ventana)
+    assert all(s.chi_square_pvalue_adjusted is None for s in recortado)
+
+    completo = rank_suggestions(europea, ventana, full_history=GIROS_CON_SESGO_BURDO)
+    docenas = [s for s in completo if s.category_id == "dozen"]
+    assert all(s.chi_square_pvalue_adjusted is not None for s in docenas)
+
+
+def test_la_ventana_no_altera_el_chi_cuadrado(europea) -> None:
+    """El chi-cuadrado depende solo del historial completo: cambiar la ventana
+    de recencia mueve las frecuencias, nunca el p-valor."""
+    a = rank_suggestions(
+        europea, GIROS_CON_SESGO_BURDO[-30:], full_history=GIROS_CON_SESGO_BURDO
+    )
+    b = rank_suggestions(
+        europea, GIROS_CON_SESGO_BURDO[-90:], full_history=GIROS_CON_SESGO_BURDO
+    )
+    por_grupo = {(s.category_id, s.group_id): s.chi_square_pvalue_adjusted for s in a}
+    assert all(
+        por_grupo[(s.category_id, s.group_id)] == pytest.approx(s.chi_square_pvalue_adjusted)
+        for s in b
+    )
 
 
 def test_sin_giros_no_hay_desviacion_en_ninguna_senal(europea) -> None:

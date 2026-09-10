@@ -6,6 +6,10 @@ A diferencia del resto del motor, esta senal usa el historial COMPLETO de la
 sesion sin decaimiento por recencia: un sesgo fisico real de una mesa necesita
 volumen para distinguirse del ruido, y descontar los giros viejos lo escondería.
 
+Que reciba el historial completo depende de quien la llama: `ranking` toma la
+ventana de recencia y el historial entero por separado, justamente para no
+recortarle la muestra a esta prueba. Ver `ranking.rank_suggestions`.
+
 Cuando la prueba se corre sobre varias categorias a la vez (color, docena,
 columna, paridad, alto/bajo), los p-valores se corrigen por comparaciones
 multiples antes de decidir si la senal se activa. Ver `all_chi_square_signals`.
@@ -22,7 +26,15 @@ from app.engine.probability import GameConfig, theoretical_probability
 
 #: Minimo duro de giros. No es una sugerencia: por debajo de esto la senal no se
 #: activa aunque el p-valor calculado saliera "significativo" (§2.4).
-MIN_SPINS = 36
+#:
+#: Es un piso de ruido, NO un umbral de deteccion de sesgo, y la diferencia
+#: importa. Con 200 giros la prueba solo tiene potencia para ver una docena que
+#: salga >=43% (contra 32.4% teorico); detectar un sesgo realmente explotable
+#: —una docena por encima del 33.3% que hace falta para superar la ventaja de la
+#: casa a 2:1— pediria del orden de 30.000 giros. Eso no cabe en una sesion, y
+#: por eso lo que este minimo compra es que la etiqueta FUERTE no se desbloquee
+#: con muestras que no sostienen ninguna afirmacion, no que el sesgo se detecte.
+MIN_SPINS = 200
 
 #: Umbral de significancia. Aplicado sobre el p-valor ya corregido cuando hay
 #: mas de una prueba en juego, nunca sobre el crudo.

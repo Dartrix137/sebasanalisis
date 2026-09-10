@@ -90,15 +90,24 @@ def rank_suggestions(
     config: GameConfig,
     results: Sequence[str],
     lambda_: float = RECENCY_LAMBDA,
+    full_history: Sequence[str] | None = None,
 ) -> list[Suggestion]:
     """Todas las senales, ordenadas por significancia, con las 3 primeras
     marcadas `is_top3`.
 
     Se devuelven TODAS, no solo las tres: §2.6 exige que las senales debiles se
     muestren etiquetadas como debiles, nunca ocultarlas ni disfrazarlas.
+
+    `results` es la ventana de recencia y `full_history` la sesion entera. Van
+    separados porque las dos familias de senales piden lo contrario: la
+    frecuencia ponderada no gana nada mirando mas atras —con lambda=0.969 un
+    giro con 200 de antiguedad pesa 0.0018— mientras que el chi-cuadrado pierde
+    entero cada giro que se le recorte. Cuando no se pasa historial completo se
+    asume que `results` ya lo es, que es el caso de los tests del motor y de la
+    re-simulacion de `baseline`.
     """
     frecuencias = all_frequencies(config, results, lambda_)
-    chis = all_chi_square_signals(config, results)
+    chis = all_chi_square_signals(config, results if full_history is None else full_history)
 
     sugerencias: list[Suggestion] = []
     for category_id, grupos in frecuencias.items():
@@ -135,5 +144,12 @@ def rank_suggestions(
     ]
 
 
-def top3(config: GameConfig, results: Sequence[str], lambda_: float = RECENCY_LAMBDA) -> list[Suggestion]:
-    return [s for s in rank_suggestions(config, results, lambda_) if s.is_top3]
+def top3(
+    config: GameConfig,
+    results: Sequence[str],
+    lambda_: float = RECENCY_LAMBDA,
+    full_history: Sequence[str] | None = None,
+) -> list[Suggestion]:
+    return [
+        s for s in rank_suggestions(config, results, lambda_, full_history) if s.is_top3
+    ]

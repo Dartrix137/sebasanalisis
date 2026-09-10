@@ -112,10 +112,18 @@ def test_con_pocos_giros_ninguna_senal_es_fuerte(
 def test_con_sesgo_marcado_y_volumen_aparece_el_pvalue(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    _ingresar(client, user_token, sesion, ["1"] * 40)
+    """El chi-cuadrado ve la sesion entera, no la ventana de recencia.
+
+    La sesion tiene `window_size=50` y se cargan 220 giros: si el recorte por
+    ventana volviera a aplicarsele —como pasaba antes—, la muestra quedaria en
+    50 y no alcanzaria el minimo, y este p-valor volveria en null.
+    """
+    _ingresar(client, user_token, sesion, ["1"] * 220)
     panel = client.get(
         f"/sessions/{sesion}/suggestions/latest", headers=auth(user_token)
     ).json()
+    assert panel["window_size_used"] == 50
+
     rojo = next(i for i in panel["all_categories"]["color"] if i["option_label"] == "Rojo")
     assert rojo["chi_square_pvalue_adjusted"] is not None
     assert rojo["chi_square_pvalue_adjusted"] < 0.05

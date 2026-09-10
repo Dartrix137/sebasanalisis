@@ -98,9 +98,22 @@ Mide si las frecuencias observadas de TODAS las categorías de una dimensión (e
 χ² = Σ (observado − esperado)² / esperado
 ```
 
-- Requiere **mínimo 36 giros** en la sesión y **p < 0.05** para activarse.
-- Es la única señal que usa el historial completo de la sesión sin decaimiento (los sesgos físicos reales de una mesa necesitan volumen para detectarse).
+- Requiere **mínimo 200 giros** en la sesión y **p < 0.05 (ya corregido)** para activarse.
+- Es la única señal que usa el historial completo de la sesión sin decaimiento (los sesgos físicos reales de una mesa necesitan volumen para detectarse). Ese historial completo se le pasa **aparte de la ventana de recencia** — ver "Ventana de recencia vs. historial completo" más abajo.
 - Evidencia generada, ej.: _"Docena 2 salió 15 de 40 (37.5%) vs. 32.4% esperado (χ² p=0.03)"_.
+
+**Qué compra el mínimo de 200, y qué no.** Es un piso de ruido, no un umbral de detección de sesgo, y confundirlos lleva a leer la señal como algo que no es. La potencia real de la prueba sobre docenas (df=3, potencia 80%, α=0.05):
+
+| Giros | Sesgo mínimo detectable | |
+|---|---|---|
+| 36 (umbral anterior) | una docena saliendo **58.2%** | una rueda visiblemente rota |
+| 200 (umbral actual) | 43.4% | sigue siendo enorme |
+| 5.000 | 34.6% | |
+| ~29.660 | 33.3% | el mínimo *explotable* frente al pago 2:1 |
+
+Contra un 32.43% teórico. Es decir: **ningún umbral dentro de una sesión convierte esta prueba en un detector de sesgo físico** — eso requeriría acumular giros por mesa entre sesiones, que está fuera del MVP. Lo que el mínimo de 200 sí garantiza es que la etiqueta FUERTE (§2.6) no se desbloquee con muestras que no sostienen ninguna afirmación.
+
+**Ventana de recencia vs. historial completo.** `window_size` (§2.3) es un límite superior por rendimiento que aplica **solo a las señales ponderadas**, donde recortar casi no cuesta: con λ=0.969 los 50 giros más recientes ya concentran el 79% del peso total y un giro con 200 de antigüedad pesa 0.0018. Al χ² no se le aplica: ahí no hay decaimiento y cada giro recortado se pierde entero, así que la capa de API carga las dos listas por separado y `rank_suggestions` recibe ambas. Aplicarle la ventana lo dejaba viendo 50 giros por defecto y contradecía en silencio lo que esta sección dice que hace.
 
 **Corrección por comparaciones múltiples (obligatoria).** La prueba no se corre sobre una dimensión sino sobre las cinco a la vez (color, docena, columna, paridad, alto/bajo). Contrastar cada una contra p < 0.05 por separado no da un 5% de falsos positivos sino `1 − 0.95⁵ = 23%`: aproximadamente **una de cada cuatro sesiones mostraría una señal FUERTE espuria**, porque `active` es lo que habilita esa etiqueta en el ranking (§2.6).
 
