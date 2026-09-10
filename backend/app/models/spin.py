@@ -33,8 +33,14 @@ class Spin(Base):
     # Texto, no entero: el modelo generico admite resultados como "00" (americana)
     # o etiquetas de otros juegos sin cambiar el schema.
     result_value: Mapped[str] = mapped_column(String(20), nullable=False)
+    # length=20 y no el 13 de 'initial_batch': la migracion a1f4c07b93de ensancho
+    # la columna a proposito para dejar holgura a valores futuros. El modelo lo
+    # declara para no quedar en desacuerdo con la base por una diferencia que
+    # nadie quiso.
     source: Mapped[str] = mapped_column(
-        enum_col(*SPIN_SOURCES, name="spin_source"), default="manual", nullable=False
+        enum_col(*SPIN_SOURCES, name="spin_source", length=20),
+        default="manual",
+        nullable=False,
     )
     # Escalon de la progresion ANTES de que este giro resolviera apuestas.
     # Deshacer el giro lo restaura: `advance_stage` no es invertible y recalcular
