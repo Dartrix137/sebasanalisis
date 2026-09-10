@@ -36,15 +36,47 @@ function parseValues(raw: string): string[] {
   return raw.trim().split(SEPARATORS).filter(Boolean);
 }
 
-const ESTRATEGIAS: { value: BankrollStrategy; label: string; nota: string }[] = [
-  { value: "flat", label: "Plana", nota: "Siempre la misma apuesta base." },
-  { value: "martingale", label: "Martingala", nota: "Dobla tras perder. Solo pagos 1:1." },
-  { value: "dalembert", label: "D'Alembert", nota: "Sube y baja una unidad." },
-  { value: "fibonacci", label: "Fibonacci", nota: "Avanza por la secuencia al perder." },
+const ESTRATEGIAS: {
+  value: BankrollStrategy;
+  label: string;
+  nota: string;
+  /** Explicación completa para el panel expandible — no solo el resumen de una línea. */
+  detalle: string;
+}[] = [
+  {
+    value: "flat",
+    label: "Plana",
+    nota: "Siempre la misma apuesta base.",
+    detalle:
+      "Apuesta siempre el mismo monto, gane o pierda. No intenta recuperar lo perdido en el giro anterior, así que es la opción con el crecimiento de apuesta más predecible y el riesgo de agotar la banca más bajo de las que ofrece esta app.",
+  },
+  {
+    value: "martingale",
+    label: "Martingala",
+    nota: "Dobla tras perder. Solo pagos 1:1.",
+    detalle:
+      "Duplica la apuesta después de cada pérdida y vuelve a la apuesta base tras ganar. Solo tiene sentido en apuestas que pagan 1:1 (color, par/impar, alto/bajo): ahí, ganar en cualquier escalón recupera toda la serie y deja como ganancia neta exactamente la apuesta base. El riesgo crece de forma exponencial — pocas pérdidas seguidas ya exigen apuestas muy altas, y el límite de la mesa o la banca disponible pueden cortar la serie antes de que llegue la recuperación.",
+  },
+  {
+    value: "dalembert",
+    label: "D'Alembert",
+    nota: "Sube y baja una unidad.",
+    detalle:
+      "Sube una unidad tras cada pérdida y baja una unidad tras cada victoria. Crece mucho más despacio que la martingala, pero por eso mismo tampoco recupera toda la serie con una sola victoria — solo la compensa parcialmente. Es un punto intermedio entre el crecimiento plano y el exponencial.",
+  },
+  {
+    value: "fibonacci",
+    label: "Fibonacci",
+    nota: "Avanza por la secuencia al perder.",
+    detalle:
+      "Avanza por la secuencia de Fibonacci (1, 1, 2, 3, 5, 8, 13…) tras cada pérdida, y retrocede dos posiciones tras ganar. Crece más rápido que D'Alembert pero más lento que la martingala. Igual que D'Alembert, ganar no siempre recupera toda la serie: depende del escalón en el que ocurra la victoria.",
+  },
   {
     value: "two_sector_recovery",
     label: "Recuperación dos sectores",
     nota: "Para dos docenas o dos columnas. El riesgo crece muy rápido.",
+    detalle:
+      "Pensada para apostar a la vez a dos docenas o dos columnas (pago 2:1). Como la ganancia neta al acertar es solo una fracción de lo apostado, la progresión de recuperación es distinta a la martingala clásica: duplicar no alcanza. El riesgo crece de forma extremadamente rápida — pocos escalones ya representan montos muy altos frente a la apuesta base.",
   },
 ];
 
@@ -197,6 +229,24 @@ export function NewSessionForm({
           {ESTRATEGIAS.find((s) => s.value === strategy)?.nota}
         </span>
       </label>
+
+      <details className="rounded-lg border border-edge bg-ink px-3.5 py-3">
+        <summary className="cursor-pointer text-xs font-bold text-muted hover:text-white">
+          ¿Qué es cada tipo de gestión de banca?
+        </summary>
+        <div className="mt-3 space-y-3">
+          {ESTRATEGIAS.map((s) => (
+            <div key={s.value}>
+              <p className="text-xs font-bold text-white">{s.label}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">{s.detalle}</p>
+            </div>
+          ))}
+          <p className="text-xs leading-relaxed text-muted">
+            Ninguna de estas progresiones cambia la probabilidad del giro ni la ventaja
+            matemática de la casa: solo cambian el tamaño y la distribución de las apuestas.
+          </p>
+        </div>
+      </details>
 
       {progression ? (
         <ProgressionDetails progression={progression} open={esDosSectores} />

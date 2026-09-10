@@ -102,6 +102,43 @@ si se vuelve a correr no duplica nada ni cambia la clave del administrador.
 4. Abrir una mesa de ruleta y registrar un numero — esto confirma de una vez
    que el CORS y la URL de la API quedaron bien.
 
+## MVP sin dominio propio (dominios gratuitos de Dokploy)
+
+Mientras no se compre `sebasanalisis.com`, se puede desplegar igual con los
+subdominios gratuitos que Dokploy genera para cada aplicacion (tipo
+`algo-random.sslip.io`). **Estos dominios son solo HTTP**: `sslip.io` no
+soporta HTTPS/SSL y Dokploy lo advierte al generarlos — el toggle de "HTTPS"
+no tiene ningun efecto ahi, a diferencia de `traefik.me` en otras instancias.
+
+Esto no es un problema mientras **las dos aplicaciones queden en HTTP por
+igual**. El bloqueo por contenido mixto solo aparece cuando se mezclan
+protocolos distintos entre frontend y API — con ambas en HTTP no hay
+inconsistencia.
+
+Con los dominios generados, las variables cambian de valor y de protocolo:
+
+```
+# API - Environment
+CORS_ORIGINS=["http://DOMINIO-WEB-GENERADO.sslip.io"]
+
+# Web - Build Arguments
+NEXT_PUBLIC_API_BASE_URL=http://DOMINIO-API-GENERADO.sslip.io
+```
+
+### Migrar al dominio real cuando se compre
+
+No basta con cambiar el dominio en Dokploy. Hay que repetir estos dos pasos o
+la aplicacion queda viva pero rota:
+
+1. Actualizar `CORS_ORIGINS` en la API al nuevo dominio del frontend, y de
+   paso pasar de `http://` a `https://` — el dominio real si va con HTTPS.
+2. Cambiar `NEXT_PUBLIC_API_BASE_URL` en los Build Arguments del Web (tambien
+   a `https://`) y **reconstruir** — un reinicio no alcanza, porque Next.js
+   incrusta esa variable en el JavaScript durante el build, no la lee al
+   arrancar.
+
+Repetir la comprobacion de la seccion anterior despues de migrar.
+
 ## Antes del primer despliegue
 
 - El repositorio **no** debe llevar `backend/.env`: tiene la clave JWT y la del
