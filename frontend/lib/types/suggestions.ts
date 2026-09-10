@@ -16,6 +16,9 @@ export interface StatisticalSuggestionItem {
   /** Estos dos se muestran SIEMPRE juntos (regla anti-falacia del jugador, §2). */
   theoretical_probability: number;
   observed_frequency_shrunk: number;
+  /** Intervalo de Wilson al 95% sobre los conteos crudos (§2.2). */
+  observed_ci_low: number;
+  observed_ci_high: number;
   deviation: number;
   significance_score: number;
   strength: SignalStrength;

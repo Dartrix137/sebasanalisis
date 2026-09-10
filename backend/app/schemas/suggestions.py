@@ -29,6 +29,12 @@ class StatisticalSuggestionItem(BaseModel):
     # El sufijo `_shrunk` es deliberado: aquí va la frecuencia con shrinkage
     # bayesiano (§2.2), nunca la frecuencia cruda.
     observed_frequency_shrunk: float
+    # Intervalo de Wilson al 95% sobre los conteos crudos (§2.2). Es la escala
+    # del ruido: 6 de 10 y 600 de 1000 son ambos 60% y no dicen lo mismo.
+    # Se muestra, no se interpreta: no hay un campo "esto se distingue del azar"
+    # a propósito (serían 13 pruebas simultáneas — ver §2.2 del doc).
+    observed_ci_low: float
+    observed_ci_high: float
     deviation: float
     significance_score: float
     strength: SignalStrength

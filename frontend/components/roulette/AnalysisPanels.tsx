@@ -76,7 +76,6 @@ export function AllCategoriesPanel({
                   key={`${item.category}-${item.option_label}`}
                   item={item}
                   categoryLabel={categoryLabels[categoryId] ?? categoryId}
-                  compact
                 />
               ))}
             </ul>
@@ -96,11 +95,9 @@ export function AllCategoriesPanel({
 function SignalRow({
   item,
   categoryLabel,
-  compact = false,
 }: {
   item: StatisticalSuggestionItem;
   categoryLabel: string;
-  compact?: boolean;
 }) {
   return (
     <li className="rounded-lg border border-edge bg-ink px-3.5 py-3">
@@ -164,13 +161,71 @@ function SignalRow({
         />
       </div>
 
-      {!compact && item.chi_square_pvalue_adjusted !== null ? (
-        <p className="mt-2 text-xs text-muted">
+      <ConfidenceBand item={item} />
+
+      {/*
+        `!= null` y no `!== null`: la API y la web se despliegan como dos
+        aplicaciones separadas, asi que hay ventanas en las que una va por
+        delante de la otra y un campo nuevo llega `undefined`. Con `!==` eso
+        pasaba el filtro y reventaba en `.toFixed`.
+      */}
+      {item.chi_square_pvalue_adjusted != null ? (
+        <p className="mt-1.5 text-xs text-muted">
           Respaldo de sesgo global: χ² p = {item.chi_square_pvalue_adjusted.toFixed(3)},
           corregido por las pruebas de todas las categorías.
         </p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Intervalo de Wilson (§2.2): el margen dentro del cual puede moverse lo
+ * observado con la cantidad de giros que hay.
+ *
+ * Es lo que evita leer cualquier desviación como una señal: una barra ancha
+ * dice "con esta muestra no se sabe nada", una angosta dice que hay volumen
+ * detrás. La marca es la probabilidad teórica; que caiga dentro de la banda se
+ * ve de un vistazo, y eso es todo lo que se afirma — no se muestra ningún
+ * veredicto por opción de "esto se distingue del azar", porque serían 13
+ * pruebas a la vez y marcarían algo en un tercio de las mesas justas.
+ */
+function ConfidenceBand({ item }: { item: StatisticalSuggestionItem }) {
+  const bajo = item.observed_ci_low * 100;
+  const alto = item.observed_ci_high * 100;
+  const teorica = item.theoretical_probability * 100;
+
+  return (
+    <div className="mt-2.5">
+      <div
+        className="relative h-1.5 w-full rounded-full bg-ink-sunken"
+        role="img"
+        aria-label={`Lo observado es compatible con valores entre ${bajo.toFixed(
+          1,
+        )} y ${alto.toFixed(1)} por ciento. La probabilidad teórica, ${teorica.toFixed(
+          1,
+        )} por ciento, ${
+          bajo <= teorica && teorica <= alto ? "cae dentro" : "queda fuera"
+        } de ese rango.`}
+      >
+        <div
+          className="absolute h-full rounded-full bg-gold/40"
+          // Ancho mínimo visible: con mucha muestra el intervalo es tan angosto
+          // que sin esto desaparece, y "no se ve" leeria como "no hay dato".
+          style={{ left: `${bajo}%`, width: `${Math.max(alto - bajo, 0.6)}%` }}
+        />
+        <div
+          className="absolute -top-0.5 h-2.5 w-0.5 -translate-x-1/2 rounded-full bg-white"
+          style={{ left: `${teorica}%` }}
+        />
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Con estos giros, lo observado es compatible con{" "}
+        <span className="font-bold text-white">{PCT(item.observed_ci_low)}</span> –{" "}
+        <span className="font-bold text-white">{PCT(item.observed_ci_high)}</span>. La
+        marca es la teórica.
+      </p>
+    </div>
   );
 }
 

@@ -80,6 +80,19 @@ p̂ = (casos_favorables + α × p_teórica) / (total_casos + α)
 - `α` (fuerza de shrinkage) configurable por categoría; sugerido `α = 8` para categorías binarias (color, paridad, alto/bajo) y ajustado proporcionalmente para docenas/columnas (3 grupos, `α = 12`). **Vive dentro de cada objeto de categoría en `categories_json` como campo `shrinkage_alpha`** (es configuración del juego, no una constante de `engine/frequency.py` — depende de cuántos grupos tiene esa categoría, así que cada juego/categoría define el suyo).
 - Con pocos datos, `p̂` se queda cerca de `p_teórica` (prudente). Con muchos datos, se acerca a la frecuencia cruda observada.
 
+**Intervalo de Wilson: la escala del ruido.** El shrinkage modera la estimación, pero no dice *cuánto* puede moverse por azar — y sin eso, "60 %" leído sobre 10 giros y sobre 1.000 se ven idénticos. Cada frecuencia viaja con un intervalo de Wilson al 95 % (`observed_ci_low` / `observed_ci_high`):
+
+```
+centro = (p̂ + z²/2n) / (1 + z²/n)
+margen = z/(1 + z²/n) × √( p̂(1−p̂)/n + z²/4n² )
+```
+
+- Se usa **Wilson y no la aproximación normal** (`p ± z√(p(1−p)/n)`) porque esa se rompe justo donde más hace falta: con pocos giros devuelve límites fuera de `[0,1]`, y cuando un grupo no salió ninguna vez colapsa a un intervalo de ancho cero — afirmando certeza absoluta a partir de no haber visto nada.
+- Va sobre los **conteos crudos**, sin ponderar por recencia: Wilson supone un conteo binomial y la estimación con shrinkage y decaimiento no lo es. El intervalo describe lo que sostienen los datos crudos; `p̂` se muestra a su lado, no dentro.
+- En la UI se dibuja como una banda con la probabilidad teórica marcada. Que la teórica caiga dentro se ve de un vistazo, y eso es todo lo que se comunica.
+
+**Por qué NO hay un campo del tipo `deviation_compatible_with_chance`.** Es tentador derivar un booleano por opción ("esta desviación se distingue del azar"), pero serían 13 pruebas simultáneas —una por grupo— y en una rueda perfectamente justa marcarían al menos un grupo en **~⅓ de las sesiones**, medido por simulación. Es el mismo falso positivo que §2.4 corrige con Benjamini-Hochberg, reintroducido por otra puerta. El intervalo **describe incertidumbre y no afirma nada**; la afirmación la hace `strength`, que sí está corregida. Si alguna vez se agrega ese veredicto, hay que corregirlo por comparaciones múltiples primero.
+
 ### 2.3 Ponderación por recencia (decaimiento exponencial)
 
 En vez de una "ventana fija de últimos N giros" (lo que habíamos definido antes como `window_size`), se usa un peso que decae con la antigüedad — matemáticamente más correcto y evita el efecto escalón de una ventana dura:

@@ -7,6 +7,7 @@ from app.engine.frequency import (
     category_frequencies,
     recency_weights,
     shrinkage_estimate,
+    wilson_interval,
 )
 
 
@@ -128,3 +129,93 @@ def test_es_una_funcion_pura(europea) -> None:
     b = category_frequencies(europea, "color", resultados)
     assert [x.observed_frequency_shrunk for x in a] == [x.observed_frequency_shrunk for x in b]
     assert resultados == copia, "no debe mutar su entrada"
+
+
+# ---------- Intervalo de Wilson (§2.2) ----------
+
+
+def test_wilson_caso_de_referencia_publicado() -> None:
+    """0 de 10 al 95% da [0, 0.2775], el valor tabulado de Wilson."""
+    bajo, alto = wilson_interval(0, 10)
+    assert bajo == pytest.approx(0.0)
+    assert alto == pytest.approx(0.2775, abs=0.0001)
+
+
+def test_wilson_no_colapsa_cuando_el_grupo_nunca_salio() -> None:
+    """Es la razon de usar Wilson y no la aproximacion normal.
+
+    Con p=0 la normal da p +- z*raiz(0/n) = [0, 0]: afirmaria certeza absoluta
+    de que ese grupo no puede salir, a partir de no haberlo visto. Wilson deja
+    el intervalo abierto, que es lo que los datos realmente sostienen.
+    """
+    bajo, alto = wilson_interval(0, 20)
+    assert bajo == 0.0
+    assert alto > 0.15
+
+
+def test_wilson_nunca_se_sale_de_cero_uno() -> None:
+    """La otra rotura de la aproximacion normal: limites imposibles."""
+    for favorable, total in [(0, 5), (5, 5), (1, 3), (99, 100)]:
+        bajo, alto = wilson_interval(favorable, total)
+        assert 0.0 <= bajo <= alto <= 1.0
+
+
+def test_wilson_se_estrecha_con_el_volumen() -> None:
+    """El punto de todo el intervalo: 6 de 10 y 600 de 1000 son ambos 60% y no
+    dicen lo mismo. Sin esto, una desviacion de ruido y una respaldada por
+    volumen se muestran identicas."""
+    anchos = []
+    for favorable, total in [(6, 10), (60, 100), (600, 1000)]:
+        bajo, alto = wilson_interval(favorable, total)
+        assert bajo <= favorable / total <= alto
+        anchos.append(alto - bajo)
+
+    assert anchos == sorted(anchos, reverse=True)
+    # Con cien veces mas giros el intervalo es casi diez veces mas angosto.
+    assert anchos[0] / anchos[2] > 8
+
+
+def test_wilson_es_simetrico_frente_al_complemento() -> None:
+    """El intervalo de k/n y el de (n-k)/n son imagen especular."""
+    bajo_a, alto_a = wilson_interval(3, 10)
+    bajo_b, alto_b = wilson_interval(7, 10)
+    assert bajo_a == pytest.approx(1 - alto_b)
+    assert alto_a == pytest.approx(1 - bajo_b)
+
+
+def test_wilson_sin_giros_no_afirma_nada() -> None:
+    assert wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_wilson_rechaza_conteos_imposibles() -> None:
+    with pytest.raises(ValueError):
+        wilson_interval(5, 3)
+    with pytest.raises(ValueError):
+        wilson_interval(-1, 10)
+    with pytest.raises(ValueError):
+        wilson_interval(1, 10, confidence=1.0)
+
+
+def test_wilson_mas_confianza_da_intervalo_mas_ancho() -> None:
+    estrecho = wilson_interval(30, 50, confidence=0.80)
+    ancho = wilson_interval(30, 50, confidence=0.99)
+    assert (ancho[1] - ancho[0]) > (estrecho[1] - estrecho[0])
+
+
+def test_cada_frecuencia_trae_su_intervalo(europea) -> None:
+    frecuencias = category_frequencies(europea, "color", ["1", "3", "5", "2", "0"])
+    for f in frecuencias:
+        assert f.observed_ci_low <= f.raw_count / f.raw_total <= f.observed_ci_high
+
+
+def test_con_pocos_giros_el_intervalo_es_enorme(europea) -> None:
+    """Que es exactamente el mensaje que debe llegar: con 5 giros no se sabe nada.
+
+    Lo que NO se hace con esto es derivar un veredicto por grupo del tipo "esta
+    desviacion se distingue del azar". Serian 13 pruebas simultaneas y en una
+    rueda justa marcarian al menos un grupo en un tercio de las sesiones. El
+    intervalo describe incertidumbre; afirmar es trabajo de `strength`, que esta
+    corregida por comparaciones multiples.
+    """
+    for f in category_frequencies(europea, "color", ["1", "3", "5", "2", "0"]):
+        assert f.observed_ci_high - f.observed_ci_low > 0.3

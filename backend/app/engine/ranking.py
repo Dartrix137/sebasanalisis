@@ -41,6 +41,18 @@ class Suggestion:
     #: Los dos viajan juntos siempre (regla anti-falacia del jugador, §2).
     theoretical_probability: float
     observed_frequency_shrunk: float
+    #: Intervalo de Wilson sobre los conteos crudos (§2.2). Da la escala del
+    #: ruido: sin el, una desviacion de 4 giros y una de 400 se leen igual.
+    #:
+    #: Deliberadamente NO viene acompanado de un booleano del tipo "esta
+    #: desviacion se distingue del azar". Ese veredicto son 13 pruebas
+    #: simultaneas (una por grupo) y en una rueda perfectamente justa marcaria
+    #: al menos un grupo en un tercio de las sesiones — el mismo falso positivo
+    #: que §2.4 corrige con Benjamini-Hochberg, reintroducido por otra puerta.
+    #: El intervalo describe incertidumbre y no afirma nada; la afirmacion la
+    #: hace `strength`, que si esta corregida.
+    observed_ci_low: float
+    observed_ci_high: float
     deviation: float
     significance_score: float
     strength: SignalStrength
@@ -121,6 +133,8 @@ def rank_suggestions(
                     group_label=f.group_label,
                     theoretical_probability=f.theoretical_probability,
                     observed_frequency_shrunk=f.observed_frequency_shrunk,
+                    observed_ci_low=f.observed_ci_low,
+                    observed_ci_high=f.observed_ci_high,
                     deviation=f.deviation,
                     significance_score=significance_score(f),
                     strength=classify_strength(ev, chi),

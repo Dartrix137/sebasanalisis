@@ -20,6 +20,8 @@ def _sugerencia(category_id: str, group_id: str) -> Suggestion:
         group_label=group_id,
         theoretical_probability=0.5,
         observed_frequency_shrunk=0.5,
+        observed_ci_low=0.0,
+        observed_ci_high=1.0,
         deviation=0.0,
         significance_score=0.0,
         strength=SignalStrength.weak,

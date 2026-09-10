@@ -60,6 +60,8 @@ def _to_item(s: Suggestion) -> StatisticalSuggestionItem:
         option_label=s.group_label,
         theoretical_probability=s.theoretical_probability,
         observed_frequency_shrunk=s.observed_frequency_shrunk,
+        observed_ci_low=s.observed_ci_low,
+        observed_ci_high=s.observed_ci_high,
         deviation=s.deviation,
         significance_score=s.significance_score,
         strength=SignalStrength(s.strength.value),

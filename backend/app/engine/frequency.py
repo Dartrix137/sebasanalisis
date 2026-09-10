@@ -8,13 +8,59 @@ probabilidad teorica. Nunca se devuelve una frecuencia observada suelta.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Sequence
+
+from scipy import stats
 
 from app.engine.probability import GameConfig, theoretical_probability
 
 # peso(antiguedad) = LAMBDA ** antiguedad, con vida media ~= 22 tiradas (§2.3).
 RECENCY_LAMBDA = 0.969
+
+#: Nivel de confianza del intervalo que acompana a cada frecuencia observada.
+CONFIDENCE_LEVEL = 0.95
+
+
+def wilson_interval(
+    favorable: int, total: int, confidence: float = CONFIDENCE_LEVEL
+) -> tuple[float, float]:
+    """Intervalo de Wilson para una proporcion observada.
+
+    Responde "que tanto puede moverse esto por puro azar con esta cantidad de
+    giros", que es justo lo que falta al mostrar una frecuencia sola: 6 de 10 y
+    600 de 1000 son ambos 60% y no dicen ni remotamente lo mismo. Sin el
+    intervalo, una desviacion de ruido y una respaldada por volumen se ven igual.
+
+    Se usa Wilson y no la aproximacion normal (p +- z*raiz(p(1-p)/n)) porque esa
+    se rompe justo donde mas hace falta: con pocos giros devuelve limites fuera
+    de [0,1], y cuando un grupo no salio ninguna vez colapsa a un intervalo de
+    ancho cero, afirmando certeza absoluta a partir de nada.
+
+    Va sobre los conteos SIN ponderar por recencia: Wilson supone un conteo
+    binomial y la estimacion con shrinkage y decaimiento no lo es. El intervalo
+    describe lo que sostienen los datos crudos; la estimacion con shrinkage se
+    muestra a su lado, no dentro.
+    """
+    if favorable < 0 or total < 0:
+        raise ValueError("Los conteos no pueden ser negativos")
+    if favorable > total:
+        raise ValueError("Los favorables no pueden superar el total")
+    if not 0 < confidence < 1:
+        raise ValueError("La confianza tiene que estar entre 0 y 1")
+    # Sin giros no se sabe nada, y el intervalo honesto es "cualquier valor".
+    if total == 0:
+        return (0.0, 1.0)
+
+    z = float(stats.norm.ppf(1 - (1 - confidence) / 2))
+    p = favorable / total
+    denominador = 1 + z**2 / total
+    centro = (p + z**2 / (2 * total)) / denominador
+    margen = (
+        z / denominador * math.sqrt(p * (1 - p) / total + z**2 / (4 * total**2))
+    )
+    return (max(0.0, centro - margen), min(1.0, centro + margen))
 
 
 def recency_weights(n_results: int, lambda_: float = RECENCY_LAMBDA) -> list[float]:
@@ -66,6 +112,11 @@ class GroupFrequency:
     #: Conteos sin ponderar, para textos del tipo "salio 15 de 40".
     raw_count: int
     raw_total: int
+    #: Intervalo de Wilson sobre los conteos crudos. Es el contexto que vuelve
+    #: legible la desviacion: si la probabilidad teorica cae dentro, lo observado
+    #: no se distingue del azar con esta cantidad de giros.
+    observed_ci_low: float
+    observed_ci_high: float
 
 
 def category_frequencies(
@@ -102,6 +153,7 @@ def category_frequencies(
             p_teorica=p_teorica,
             alpha=category.shrinkage_alpha,
         )
+        ci_low, ci_high = wilson_interval(crudo, len(results))
         salidas.append(
             GroupFrequency(
                 category_id=category_id,
@@ -116,6 +168,8 @@ def category_frequencies(
                 payout=group.payout,
                 raw_count=crudo,
                 raw_total=len(results),
+                observed_ci_low=ci_low,
+                observed_ci_high=ci_high,
             )
         )
     return salidas
