@@ -106,7 +106,7 @@ def test_con_pocos_giros_ninguna_senal_es_fuerte(
     ).json()
     todas = [i for grupo in panel["all_categories"].values() for i in grupo]
     assert all(i["strength"] != "strong" for i in todas)
-    assert all(i["chi_square_pvalue"] is None for i in todas)
+    assert all(i["chi_square_pvalue_adjusted"] is None for i in todas)
 
 
 def test_con_sesgo_marcado_y_volumen_aparece_el_pvalue(
@@ -117,8 +117,8 @@ def test_con_sesgo_marcado_y_volumen_aparece_el_pvalue(
         f"/sessions/{sesion}/suggestions/latest", headers=auth(user_token)
     ).json()
     rojo = next(i for i in panel["all_categories"]["color"] if i["option_label"] == "Rojo")
-    assert rojo["chi_square_pvalue"] is not None
-    assert rojo["chi_square_pvalue"] < 0.05
+    assert rojo["chi_square_pvalue_adjusted"] is not None
+    assert rojo["chi_square_pvalue_adjusted"] < 0.05
     assert rojo["observed_frequency_shrunk"] > rojo["theoretical_probability"]
 
 

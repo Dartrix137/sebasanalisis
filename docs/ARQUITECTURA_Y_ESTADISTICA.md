@@ -102,6 +102,20 @@ Mide si las frecuencias observadas de TODAS las categorías de una dimensión (e
 - Es la única señal que usa el historial completo de la sesión sin decaimiento (los sesgos físicos reales de una mesa necesitan volumen para detectarse).
 - Evidencia generada, ej.: _"Docena 2 salió 15 de 40 (37.5%) vs. 32.4% esperado (χ² p=0.03)"_.
 
+**Corrección por comparaciones múltiples (obligatoria).** La prueba no se corre sobre una dimensión sino sobre las cinco a la vez (color, docena, columna, paridad, alto/bajo). Contrastar cada una contra p < 0.05 por separado no da un 5% de falsos positivos sino `1 − 0.95⁵ = 23%`: aproximadamente **una de cada cuatro sesiones mostraría una señal FUERTE espuria**, porque `active` es lo que habilita esa etiqueta en el ranking (§2.6).
+
+Por eso los p-valores de la familia se ajustan con **Benjamini-Hochberg (FDR)** antes de decidir la activación:
+
+```
+q_(i) = min sobre j≥i de ( m/j × p_(j) ),  acotado a 1 y monótono
+activa  ⟺  q < 0.05
+```
+
+- `m` cuenta **solo las categorías que llegaron a calcular un p-valor**. Las que se detuvieron por muestra insuficiente no son pruebas: incluirlas inflaría `m` y castigaría a las demás sin haber mirado nada.
+- BH controla la tasa de falsos descubrimientos bajo independencia o **dependencia positiva**. Las categorías de la ruleta no son independientes —color, paridad y alto/bajo reparten los mismos 37 números— pero su dependencia es positiva, que es el caso que BH cubre.
+- El valor que viaja a la UI y se persiste es el **corregido** (`chi_square_pvalue_adjusted`), nunca el crudo: mostrar el crudo junto a una señal activada por el corregido invita a leer una significancia que la familia de pruebas no respalda.
+- Una prueba corrida aisladamente es una familia de tamaño 1, donde `q = p` por definición y no hay nada que corregir.
+
 ### 2.5 Cola binomial — señal de racha
 
 Para eventos binarios (¿se repitió el mismo color/paridad/alto-bajo N veces seguidas?):

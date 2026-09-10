@@ -20,7 +20,8 @@ export interface StatisticalSuggestionItem {
   significance_score: number;
   strength: SignalStrength;
   ev: number;
-  chi_square_pvalue: number | null;
+  /** χ² ya corregido por comparaciones múltiples (§2.4). null si no está activo. */
+  chi_square_pvalue_adjusted: number | null;
 }
 
 export interface StatisticalSuggestionsPanel {

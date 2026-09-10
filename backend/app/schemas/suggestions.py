@@ -32,8 +32,12 @@ class StatisticalSuggestionItem(BaseModel):
     deviation: float
     significance_score: float
     strength: SignalStrength
-    ev: float                                  # §2.1: visible siempre junto a la señal
-    chi_square_pvalue: Optional[float] = None  # null si no aplica a esta categoría/momento
+    ev: float  # §2.1: visible siempre junto a la señal
+    # p-valor del χ² YA corregido por comparaciones múltiples (Benjamini-Hochberg,
+    # §2.4). Es el que sostiene la decisión de activar la señal; el crudo no viaja
+    # a la UI porque leerlo como significancia sobreestima lo que la familia de
+    # pruebas respalda. null si el χ² no está activo para esa categoría.
+    chi_square_pvalue_adjusted: Optional[float] = None
 
 
 class StatisticalSuggestionsPanel(BaseModel):

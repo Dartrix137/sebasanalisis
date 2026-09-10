@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.engine.chi_square import chi_square_signal
+from app.engine.chi_square import all_chi_square_signals, chi_square_signal
+from tests.engine.test_chi_square import GIROS_SIN_SESGO_CON_DOS_P_BAJOS
 from app.engine.frequency import category_frequencies
 from app.engine.ranking import (
     EV_MEDIUM,
@@ -105,11 +106,27 @@ def test_el_ev_teorico_es_siempre_la_ventaja_de_la_casa(europea) -> None:
 
 def test_el_pvalue_solo_aparece_si_chi_cuadrado_esta_activo(europea) -> None:
     pocos = rank_suggestions(europea, ["1", "3", "5"])
-    assert all(s.chi_square_pvalue is None for s in pocos)
+    assert all(s.chi_square_pvalue_adjusted is None for s in pocos)
 
     sesgada = rank_suggestions(europea, ["1"] * 40 + ["13"] * 5 + ["25"] * 5)
     docenas = [s for s in sesgada if s.category_id == "dozen"]
-    assert all(s.chi_square_pvalue is not None for s in docenas)
+    assert all(s.chi_square_pvalue_adjusted is not None for s in docenas)
+
+
+def test_el_ranking_expone_el_pvalue_corregido_no_el_crudo(europea) -> None:
+    """El numero que llega a la UI tiene que ser el que sostuvo la decision."""
+    giros = ["1"] * 40 + ["13"] * 5 + ["25"] * 5
+    corregido = all_chi_square_signals(europea, giros)["dozen"].p_value_adjusted
+
+    docenas = [s for s in rank_suggestions(europea, giros) if s.category_id == "dozen"]
+    assert all(s.chi_square_pvalue_adjusted == pytest.approx(corregido) for s in docenas)
+
+
+def test_el_ruido_corregido_no_llega_a_fuerte(europea) -> None:
+    """Sin correccion, estas 80 tiradas al azar producian senales FUERTE."""
+    sugerencias = rank_suggestions(europea, GIROS_SIN_SESGO_CON_DOS_P_BAJOS)
+    assert all(s.strength is not SignalStrength.strong for s in sugerencias)
+    assert all(s.chi_square_pvalue_adjusted is None for s in sugerencias)
 
 
 def test_sin_giros_no_hay_desviacion_en_ninguna_senal(europea) -> None:

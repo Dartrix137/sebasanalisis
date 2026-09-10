@@ -62,7 +62,7 @@ def _to_item(s: Suggestion) -> StatisticalSuggestionItem:
         significance_score=s.significance_score,
         strength=SignalStrength(s.strength.value),
         ev=s.ev,
-        chi_square_pvalue=s.chi_square_pvalue,
+        chi_square_pvalue_adjusted=s.chi_square_pvalue_adjusted,
     )
 
 

@@ -50,7 +50,11 @@ class Suggestion:
     ev: float
     #: EV con la probabilidad teorica, para mostrar al lado del anterior.
     ev_theoretical: float
-    chi_square_pvalue: float | None
+    #: p-valor del chi-cuadrado YA corregido por comparaciones multiples. Se
+    #: guarda el corregido y no el crudo porque es el que sostiene la decision:
+    #: mostrar el crudo al lado de una senal activada por el corregido invita a
+    #: leer una significancia que la familia de pruebas no respalda.
+    chi_square_pvalue_adjusted: float | None
     payout: float
     raw_count: int
     raw_total: int
@@ -70,9 +74,10 @@ def classify_strength(ev: float, chi: ChiSquareResult | None) -> SignalStrength:
     """FUERTE exige EV alto Y respaldo de chi-cuadrado significativo (§2.6).
 
     Interpretacion conservadora de "si aplica a esa dimension": cuando la prueba
-    no esta activa —porque faltan giros o porque la desviacion es compatible con
-    el azar— la senal no llega a FUERTE. Un EV alto sobre diez giros es ruido, y
-    llamarlo fuerte seria exactamente la sobre-promesa que el producto no hace.
+    no esta activa —porque faltan giros, porque la desviacion es compatible con
+    el azar, o porque no sobrevive a la correccion por comparaciones multiples—
+    la senal no llega a FUERTE. Un EV alto sobre diez giros es ruido, y llamarlo
+    fuerte seria exactamente la sobre-promesa que el producto no hace.
     """
     if ev >= EV_STRONG and chi is not None and chi.active:
         return SignalStrength.strong
@@ -112,7 +117,9 @@ def rank_suggestions(
                     strength=classify_strength(ev, chi),
                     ev=ev,
                     ev_theoretical=expected_value(f.theoretical_probability, f.payout),
-                    chi_square_pvalue=chi.p_value if chi and chi.active else None,
+                    chi_square_pvalue_adjusted=(
+                        chi.p_value_adjusted if chi and chi.active else None
+                    ),
                     payout=f.payout,
                     raw_count=f.raw_count,
                     raw_total=f.raw_total,

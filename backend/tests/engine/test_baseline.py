@@ -25,7 +25,7 @@ def _sugerencia(category_id: str, group_id: str) -> Suggestion:
         strength=SignalStrength.weak,
         ev=0.0,
         ev_theoretical=0.0,
-        chi_square_pvalue=None,
+        chi_square_pvalue_adjusted=None,
         payout=1,
         raw_count=0,
         raw_total=0,

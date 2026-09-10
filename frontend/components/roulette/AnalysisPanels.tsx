@@ -164,9 +164,10 @@ function SignalRow({
         />
       </div>
 
-      {!compact && item.chi_square_pvalue !== null ? (
+      {!compact && item.chi_square_pvalue_adjusted !== null ? (
         <p className="mt-2 text-xs text-muted">
-          Respaldo de sesgo global: χ² p = {item.chi_square_pvalue.toFixed(3)}
+          Respaldo de sesgo global: χ² p = {item.chi_square_pvalue_adjusted.toFixed(3)},
+          corregido por las pruebas de todas las categorías.
         </p>
       ) : null}
     </li>
