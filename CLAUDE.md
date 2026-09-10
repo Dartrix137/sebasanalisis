@@ -4,14 +4,14 @@ Este archivo guía a Claude Code en este repositorio. Léelo completo antes de e
 
 ## Qué es este proyecto
 
-Plataforma fullstack por suscripción que da a los usuarios **análisis estadístico descriptivo** (no predicciones) sobre juegos de casino, empezando por ruleta europea/americana, con arquitectura preparada para agregar más juegos (dados, etc.) desde un panel de administración sin escribir código nuevo por cada juego.
+Plataforma fullstack por suscripción que da a los usuarios **análisis estadístico descriptivo** sobre juegos de casino, empezando por ruleta europea/americana, con arquitectura preparada para agregar más juegos (dados, etc.) desde un panel de administración sin escribir código nuevo por cada juego.
 
 **Documento de referencia obligatorio**: `docs/ARQUITECTURA_Y_ESTADISTICA.md`. Contiene las fórmulas exactas del motor estadístico, el modelo de datos completo, los endpoints, y la definición cerrada del alcance del MVP. Si algo en este CLAUDE.md y ese documento parecen contradecirse, gana el documento de arquitectura — pídele al usuario que lo aclare antes de asumir.
 
 **Documentos fuente en `docs/reference/`** (no modificar, son insumo):
 
 - `ESTRATEGIA_DE_RULETA_CORREGIDA_Y_VERIFICADA.txt` — fuente de verdad matemática validada por un analista.
-- `explicacion_analisis_estadistico_ruleta.md` — boceto previo; se toman sus técnicas estadísticas (shrinkage, χ², recencia, EV), NO su lenguaje predictivo ni su arquitectura monolítica.
+- `explicacion_analisis_estadistico_ruleta.md` — boceto previo; se toman sus técnicas estadísticas (shrinkage, χ², recencia, EV).
 
 ## Regla de producto no negociable: lenguaje no-predictivo
 
@@ -65,7 +65,9 @@ Reglas que no se negocian:
 - El motor (`engine/`) opera únicamente sobre la estructura genérica `possible_outcomes` + `categories` (ver §3.2 del doc de arquitectura). **Nunca** hardcodees lógica específica de ruleta (docenas, colores) dentro del motor — eso vive solo en los datos de `game_variants.categories_json`. Esto es lo que permite agregar dados después sin tocar `engine/`.
 - Cada función del motor debe ser pura: recibe datos, devuelve resultado, sin efectos secundarios ni acceso a DB.
 - Toda sugerencia estadística debe traer siempre junto: `theoretical_probability` y `observed_frequency_shrunk` — nunca mostrar solo uno de los dos (ver §2 del doc de arquitectura, es una regla anti-falacia del jugador).
-- El χ² requiere mínimo 36 giros y p<0.05 para activarse — no lo actives con menos datos aunque el cálculo "funcione" matemáticamente con menos.
+- El χ² requiere mínimo 200 giros y p<0.05 para activarse — no lo actives con menos datos aunque el cálculo "funcione" matemáticamente con menos. Ese mínimo es un **piso de ruido, no un umbral de detección de sesgo**: detectar un sesgo explotable pediría del orden de 30.000 giros (ver §2.4 del doc de arquitectura). No describas esa señal como si detectara mesas sesgadas.
+- El p<0.05 del χ² se evalúa sobre el p-valor **ya corregido por comparaciones múltiples** (Benjamini-Hochberg), nunca sobre el crudo: la prueba corre sobre las 5 categorías a la vez, y sin corregir una de cada cuatro sesiones mostraría una señal FUERTE espuria.
+- Toda frecuencia observada viaja con su intervalo de Wilson (§2.2). No derives de él un veredicto por opción del tipo "esta desviación se distingue del azar" — serían 13 pruebas simultáneas y marcarían algo en un tercio de las mesas justas. El intervalo describe incertidumbre; afirmar es trabajo de `strength`, que sí está corregida.
 - La auto-evaluación (línea base ingenua vs. motor) es un requisito del MVP, no un nice-to-have — impleméntala desde el principio del motor, no la dejes para el final.
 
 ## Convenciones de código
