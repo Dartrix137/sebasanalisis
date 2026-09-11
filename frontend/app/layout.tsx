@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Barlow_Condensed, Inter } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Condensada como los números impresos en el paño y el cilindro de la ruleta.
+const display = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "Sebasanálisis",
@@ -13,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={inter.variable}>
+    <html lang="es" className={`${inter.variable} ${display.variable}`}>
       <body className="min-h-screen font-sans">
         <SessionProvider>{children}</SessionProvider>
       </body>

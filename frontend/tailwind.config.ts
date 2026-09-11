@@ -33,8 +33,20 @@ const config: Config = {
           weak: "#8d9ab4",
         },
       },
+      fontFamily: {
+        display: ["var(--font-display)", "Arial Narrow", "sans-serif"],
+      },
       borderRadius: { card: "0.875rem" },
       boxShadow: { card: "0 1px 0 0 rgba(255,255,255,0.03) inset" },
+      keyframes: {
+        "chip-in": {
+          from: { opacity: "0", transform: "translateX(-6px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+      },
+      animation: {
+        "chip-in": "chip-in 260ms ease-out both",
+      },
     },
   },
   plugins: [],
