@@ -16,7 +16,7 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
@@ -26,7 +26,7 @@ import {
 } from "@/components/roulette/AnalysisPanels";
 import { BankrollPanel } from "@/components/roulette/BankrollPanel";
 import { BankrollPlanCard } from "@/components/roulette/BankrollPlanCard";
-import type { StageChange } from "@/components/roulette/BankrollPlanCard";
+import type { LastRound } from "@/components/roulette/BankrollPlanCard";
 import { BetHistory, BetRow } from "@/components/roulette/BetRow";
 import { ESTRATEGIAS } from "@/components/roulette/NewSessionForm";
 import { SignalBoard } from "@/components/roulette/SignalBoard";
@@ -95,8 +95,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const [ajTableLimit, setAjTableLimit] = useState("");
   const [ajStrategy, setAjStrategy] = useState<BankrollStrategy>("flat");
   const [ajLossLimit, setAjLossLimit] = useState("");
-  const [stageChange, setStageChange] = useState<StageChange | null>(null);
-  const previo = useRef<{ spins: number; stage: number } | null>(null);
 
   const load = useCallback(async () => {
     const [s, eb] = await Promise.all([
@@ -146,23 +144,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
     load().catch((e) => setError(describe(e)));
   }, [loading, user, router, load]);
 
-  // El aviso de cambio de escalón solo se muestra cuando lo movió un giro nuevo:
-  // reiniciar la progresión o cambiar de estrategia también mueven el escalón, y
-  // decir "el último giro cerró a favor" en esos casos sería falso.
-  useEffect(() => {
-    if (!session) return;
-    const actual = { spins: spins.length, stage: session.strategy_stage };
-    const antes = previo.current;
-    if (antes && (actual.spins !== antes.spins || actual.stage !== antes.stage)) {
-      setStageChange(
-        actual.spins > antes.spins && actual.stage !== antes.stage
-          ? { from: antes.stage, to: actual.stage }
-          : null,
-      );
-    }
-    previo.current = actual;
-  }, [session, spins]);
-
   async function run(action: () => Promise<unknown>) {
     setPending(true);
     setError(null);
@@ -198,6 +179,21 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   );
   const ultimo = spins.at(-1) ?? null;
   const masRecientePrimero = [...spins].reverse();
+
+  // El resultado de la última ronda sale de los datos, no de lo que se vio en
+  // pantalla: sobrevive a recargar la página y aparece aunque el escalón no se
+  // haya movido (ganar en la apuesta base también es un resultado).
+  const apuestasDelUltimo = ultimo
+    ? bets.filter((b) => b.spin_id === ultimo.id && b.status === "resolved")
+    : [];
+  const ultimaRonda: LastRound | null =
+    ultimo && apuestasDelUltimo.length > 0
+      ? {
+          resultValue: ultimo.result_value,
+          net: apuestasDelUltimo.reduce((acc, b) => acc + (b.net_change ?? 0), 0),
+          stageBefore: ultimo.strategy_stage_before,
+        }
+      : null;
 
   const limiteActual = session.loss_limit;
   const limiteNuevo = ajLossLimit === "" ? null : Number(ajLossLimit);
@@ -328,7 +324,8 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
             <div className="mt-4 border-t border-edge pt-4">
               <BankrollPlanCard
                 suggestion={bankroll}
-                lastChange={stageChange}
+                progression={progression}
+                lastRound={ultimaRonda}
                 lossLimit={session.loss_limit}
                 lostSoFar={session.bankroll_start - session.bankroll_current}
               />

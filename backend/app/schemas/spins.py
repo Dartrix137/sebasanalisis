@@ -46,6 +46,9 @@ class SpinResponse(BaseModel):
     spin_index: int
     result_value: str
     source: SpinSource
+    # Escalón de la progresión antes de resolver este giro. Null si el giro no
+    # resolvió apuestas o si después se cambió de estrategia (§2.8.4).
+    strategy_stage_before: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

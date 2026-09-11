@@ -39,6 +39,11 @@ export interface SpinResponse {
   spin_index: number;
   result_value: string;
   source: SpinSource;
+  /**
+   * Escalón de la progresión antes de resolver este giro. null si no resolvió
+   * apuestas o si después se cambió de estrategia.
+   */
+  strategy_stage_before: number | null;
   created_at: string; // ISO 8601
 }
 

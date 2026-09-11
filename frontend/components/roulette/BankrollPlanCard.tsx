@@ -1,20 +1,24 @@
 "use client";
 
 /**
- * Plan de banca del giro en curso (§2.8), a la vista dentro del bucle de la mesa.
+ * Plan de banca del giro en curso (§2.8.1-2.8.2), a la vista en la mesa.
  *
- * Muestra lo que pide la progresión ahora, dónde queda en los dos casos posibles
- * y las alertas de banca. Todo es condicional —"si cierra en contra", "si cierra
- * a favor"—: nunca dice cuál de los dos va a pasar ni sugiere a qué apostar.
+ * Responde tres preguntas y nada más: cuánto apostar ahora, qué pasó en la
+ * última ronda y qué viene según cómo cierre la siguiente. El detalle (tabla de
+ * progresión, riesgo de ruina) vive en el panel plegado de gestión de banca.
+ *
+ * Todo es condicional —"si pierdes", "si ganas"—: nunca dice cuál de los dos va
+ * a pasar ni sugiere a qué apostar.
  */
 
-import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
 import type {
   BankrollAlertLevel,
   BankrollSuggestionResponse,
   NextStepResponse,
+  ProgressionTableResponse,
 } from "@/lib/types/suggestions";
 
 const MONEY = (n: number) =>
@@ -44,184 +48,253 @@ const ALERT_STYLES: Record<BankrollAlertLevel, { box: string; tag: string; label
   },
 };
 
-/** Alertas que ya dicen cuánto margen de banca queda: la línea de margen sobraría. */
-const MARGIN_ALERTS: ReadonlySet<string> = new Set([
-  "bankroll_insufficient",
-  "last_affordable_stage",
-  "few_stages_left",
-]);
-
-export interface StageChange {
-  from: number;
-  to: number;
+/** Resultado de la última ronda con apuestas, tal como quedó registrado. */
+export interface LastRound {
+  resultValue: string;
+  net: number;
+  /** Escalón antes de resolverse; null si se cambió de estrategia después. */
+  stageBefore: number | null;
 }
 
 export function BankrollPlanCard({
   suggestion,
-  lastChange,
+  progression,
+  lastRound,
   lossLimit,
   lostSoFar,
 }: {
   suggestion: BankrollSuggestionResponse | null;
-  lastChange: StageChange | null;
+  progression: ProgressionTableResponse | null;
+  lastRound: LastRound | null;
   lossLimit: number | null;
   /** Banca inicial menos banca actual; negativo si se va ganando. */
   lostSoFar: number;
 }) {
+  const [verTodas, setVerTodas] = useState(false);
   if (!suggestion) return null;
 
   const plana = suggestion.strategy === "flat";
-  const { next_if_lost: siPierde, next_if_won: siGana } = suggestion;
-  // Si la apuesta de este escalón no se puede colocar, los dos escenarios
-  // describirían un giro imposible (con banca negativa): solo quedan las alertas.
   const bloqueado = suggestion.exceeds_bankroll || suggestion.exceeds_table_limit;
-  const margenYaAvisado = suggestion.alerts.some((a) =>
-    MARGIN_ALERTS.has(a.code),
-  );
+  const [principal, ...resto] = suggestion.alerts;
 
   return (
     <section aria-label="Plan de banca" className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-bold text-white">
-          Plan de banca
-          <span className="ml-2 text-xs font-normal text-muted">
-            {STRATEGY_LABEL[suggestion.strategy]}
-            {plana ? "" : ` · escalón ${suggestion.stage + 1}`}
-          </span>
-        </h3>
-        <p className="text-xs text-muted">
-          Este giro pide{" "}
-          <span className="text-base font-bold tabular-nums text-gold">
+      {lastRound ? (
+        <RoundResult ronda={lastRound} suggestion={suggestion} plana={plana} />
+      ) : null}
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">
+            Próxima apuesta
+          </p>
+          <p className="text-2xl font-extrabold tabular-nums text-gold">
             {MONEY(suggestion.suggested_bet)}
-          </span>
+          </p>
           {suggestion.sectors > 1 ? (
-            <span className="ml-1">({MONEY(suggestion.bet_per_sector)} por sector)</span>
+            <p className="text-xs text-muted">
+              {MONEY(suggestion.bet_per_sector)} en cada uno de los {suggestion.sectors}{" "}
+              sectores
+            </p>
           ) : null}
+        </div>
+        <p className="text-right text-xs text-muted">
+          {STRATEGY_LABEL[suggestion.strategy]}
+          {plana ? null : (
+            <>
+              <br />
+              <span className="font-bold text-white">escalón {suggestion.stage + 1}</span>
+            </>
+          )}
         </p>
       </div>
 
+      {!plana && progression ? (
+        <Ladder
+          progression={progression}
+          stage={suggestion.stage}
+          stagesSupported={suggestion.stages_supported}
+        />
+      ) : null}
+
+      {bloqueado || plana ? null : (
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <span>
+            Si pierdes → <NextAmount paso={suggestion.next_if_lost} />
+          </span>
+          <span>
+            Si ganas → <NextAmount paso={suggestion.next_if_won} />
+          </span>
+        </p>
+      )}
+
+      {principal ? (
+        <div className="space-y-1.5">
+          <Alert alerta={principal} />
+          {verTodas ? resto.map((a) => <Alert key={a.code} alerta={a} />) : null}
+          {resto.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setVerTodas((v) => !v)}
+              className="text-xs text-muted underline-offset-2 hover:text-white hover:underline"
+            >
+              {verTodas
+                ? "Ver menos avisos"
+                : `Ver ${resto.length} ${resto.length === 1 ? "aviso más" : "avisos más"}`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <p className="text-xs text-muted">
         {lossLimit === null ? (
-          <>
-            Sin límite de pérdida. Fijarlo antes de seguir es lo más útil que puedes
-            hacer con tu banca: se hace en Ajustes de la sesión.
-          </>
+          "Sin límite de pérdida: puedes fijarlo en Ajustes de la sesión."
         ) : (
           <>
-            Límite de pérdida {MONEY(lossLimit)} · te quedan{" "}
+            Límite de pérdida: te quedan{" "}
             <span className="font-bold text-white">
-              {MONEY(Math.max(lossLimit - lostSoFar, 0))}
+              {/* Ir ganando no agranda el límite a la vista: "te quedan $110.000
+                  de $100.000" se lee como un error aunque la cuenta sea exacta. */}
+              {MONEY(Math.min(lossLimit, Math.max(lossLimit - lostSoFar, 0)))}
             </span>{" "}
-            de margen
+            de {MONEY(lossLimit)}.
           </>
         )}
       </p>
 
-      {lastChange ? (
-        <p
-          role="status"
-          className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-white"
-        >
-          {lastChange.to > lastChange.from
-            ? `El último giro cerró en contra: la progresión sube del escalón ${
-                lastChange.from + 1
-              } al ${lastChange.to + 1}.`
-            : `El último giro cerró a favor: la progresión ${
-                lastChange.to === 0 ? "vuelve" : "baja"
-              } del escalón ${lastChange.from + 1} al ${lastChange.to + 1}.`}
-        </p>
-      ) : null}
-
-      {bloqueado ? null : plana ? (
-        <p className="text-xs text-muted">
-          La apuesta plana no cambia: {MONEY(suggestion.suggested_bet)} gane o pierda.
-        </p>
-      ) : (
-        <>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <StepBox titulo="Si este giro cierra en contra" paso={siPierde}>
-              Perdido en la serie: {MONEY(suggestion.cumulative_risked)}
-            </StepBox>
-            <StepBox titulo="Si este giro cierra a favor" paso={siGana}>
-              {suggestion.recovers_only_to_break_even
-                ? "La serie vuelve a cero: recupera, no deja ganancia"
-                : `La serie cierra en ${SIGNED(suggestion.net_result_if_won)}`}
-            </StepBox>
-          </div>
-          <p className="text-xs text-muted">
-            {margenYaAvisado ? null : (
-              <>
-                Tu banca cubre{" "}
-                <span className="font-bold text-white">{suggestion.stages_supported}</span>{" "}
-                {suggestion.stages_supported === 1 ? "escalón" : "escalones"} seguidos
-                desde aquí, contando este.{" "}
-              </>
-            )}
-            Los montos suponen que apuestas lo que pide la progresión.
-          </p>
-        </>
-      )}
-
-      {suggestion.alerts.length > 0 ? (
-        <ul className="space-y-1.5">
-          {suggestion.alerts.map((a) => {
-            const estilo = ALERT_STYLES[a.level];
-            return (
-              <li
-                key={a.code}
-                role={a.level === "critical" ? "alert" : undefined}
-                className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${estilo.box}`}
-              >
-                <span className={`mr-1.5 font-bold uppercase tracking-wide ${estilo.tag}`}>
-                  {estilo.label}
-                </span>
-                {a.message}
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      <p className="text-xs leading-relaxed text-muted">{suggestion.disclaimer}</p>
+      <p className="text-[11px] leading-relaxed text-muted/80">{suggestion.disclaimer}</p>
     </section>
   );
 }
 
-function StepBox({
-  titulo,
-  paso,
-  children,
+function RoundResult({
+  ronda,
+  suggestion,
+  plana,
 }: {
-  titulo: string;
-  paso: NextStepResponse;
-  children: ReactNode;
+  ronda: LastRound;
+  suggestion: BankrollSuggestionResponse;
+  plana: boolean;
 }) {
-  const bloqueado = paso.exceeds_bankroll || paso.exceeds_table_limit;
-  const enRojo = bloqueado || paso.reaches_loss_limit;
+  const gano = ronda.net > 0;
+  const perdio = ronda.net < 0;
+  const ahora = suggestion.stage;
+
+  let progresion: string;
+  if (plana) {
+    progresion = "La apuesta plana no cambia.";
+  } else if (ronda.stageBefore === null || ronda.stageBefore === ahora) {
+    progresion =
+      ahora === 0 ? "Sigues en la apuesta base." : `Sigues en el escalón ${ahora + 1}.`;
+  } else if (ahora > ronda.stageBefore) {
+    progresion = `La progresión sube del escalón ${ronda.stageBefore + 1} al ${ahora + 1}.`;
+  } else if (ahora === 0) {
+    progresion = "La serie se cerró: vuelves a la apuesta base.";
+  } else {
+    progresion = `La progresión baja del escalón ${ronda.stageBefore + 1} al ${ahora + 1}.`;
+  }
+
   return (
     <div
-      className={`rounded-lg border px-3 py-2.5 ${
-        enRojo ? "border-table-red/40 bg-table-red/10" : "border-edge bg-ink"
+      role="status"
+      className={`rounded-lg border px-3 py-2.5 text-sm ${
+        gano
+          ? "border-signal-strong/50 bg-signal-strong/10"
+          : perdio
+            ? "border-table-red/40 bg-table-red/10"
+            : "border-edge bg-ink"
       }`}
     >
-      <p className="text-xs text-muted">{titulo}</p>
-      <p className="mt-0.5 text-sm font-bold text-white">
-        Escalón {paso.stage + 1} · <span className="tabular-nums">{MONEY(paso.suggested_bet)}</span>
+      <p className="font-bold text-white">
+        {gano
+          ? `Ganaste ${SIGNED(ronda.net)} con el ${ronda.resultValue}`
+          : perdio
+            ? `Perdiste ${SIGNED(ronda.net)} con el ${ronda.resultValue}`
+            : `El ${ronda.resultValue} dejó la ronda en $ 0`}
       </p>
       <p className="mt-0.5 text-xs text-muted">
-        Banca: <span className="tabular-nums">{MONEY(paso.bankroll_after)}</span> · {children}
+        {progresion} Próxima apuesta:{" "}
+        <span className="font-bold text-white">{MONEY(suggestion.suggested_bet)}</span>.
       </p>
-      {bloqueado ? (
-        <p className="mt-1 text-xs font-bold text-table-red">
-          {paso.exceeds_bankroll ? "Tu banca no alcanzaría para ese escalón. " : ""}
-          {paso.exceeds_table_limit ? "La mesa no aceptaría esa apuesta." : ""}
-        </p>
-      ) : null}
-      {paso.reaches_loss_limit ? (
-        <p className="mt-1 text-xs font-bold text-table-red">
-          Llegarías a tu límite de pérdida.
-        </p>
-      ) : null}
     </div>
+  );
+}
+
+/** Escalones de la progresión como una escalera: dónde estás y hasta dónde alcanza. */
+function Ladder({
+  progression,
+  stage,
+  stagesSupported,
+}: {
+  progression: ProgressionTableResponse;
+  stage: number;
+  stagesSupported: number;
+}) {
+  if (stage >= progression.rows.length) return null;
+  const ultimoAlcanzable = stage + stagesSupported - 1;
+
+  return (
+    <div>
+      <ol className="flex gap-1" aria-label="Escalones de la progresión">
+        {progression.rows.map((row) => {
+          const actual = row.stage === stage;
+          const fuera = row.stage > ultimoAlcanzable || row.exceeds_table_limit;
+          return (
+            <li
+              key={row.stage}
+              title={`Escalón ${row.stage + 1}: ${MONEY(row.total_bet)}${
+                fuera ? " · tu banca o la mesa ya no alcanzan" : ""
+              }`}
+              aria-current={actual ? "step" : undefined}
+              className={`flex h-7 min-w-0 flex-1 items-center justify-center rounded text-[11px] font-bold ${
+                actual
+                  ? "bg-gold text-gold-ink"
+                  : fuera
+                    ? "bg-table-red/15 text-table-red"
+                    : row.stage < stage
+                      ? "bg-ink-sunken text-muted/60"
+                      : "bg-ink-sunken text-muted"
+              }`}
+            >
+              {row.stage + 1}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-1 text-[11px] text-muted">
+        En rojo, los escalones que tu banca o la mesa ya no alcanzan.
+      </p>
+    </div>
+  );
+}
+
+function NextAmount({ paso }: { paso: NextStepResponse }) {
+  const aviso = paso.exceeds_bankroll
+    ? "tu banca no alcanza"
+    : paso.exceeds_table_limit
+      ? "la mesa no lo acepta"
+      : paso.reaches_loss_limit
+        ? "llegas a tu límite"
+        : null;
+  return (
+    <span className={`font-bold ${aviso ? "text-table-red" : "text-white"}`}>
+      {MONEY(paso.suggested_bet)}
+      {aviso ? ` (${aviso})` : ""}
+    </span>
+  );
+}
+
+function Alert({ alerta }: { alerta: BankrollSuggestionResponse["alerts"][number] }) {
+  const estilo = ALERT_STYLES[alerta.level];
+  return (
+    <p
+      role={alerta.level === "critical" ? "alert" : undefined}
+      className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${estilo.box}`}
+    >
+      <span className={`mr-1.5 font-bold uppercase tracking-wide ${estilo.tag}`}>
+        {estilo.label}
+      </span>
+      {alerta.message}
+    </p>
   );
 }

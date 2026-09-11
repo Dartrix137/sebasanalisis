@@ -468,6 +468,20 @@ def test_deshacer_el_giro_devuelve_la_banca_y_el_escalon(
     assert despues["strategy_stage"] == 0
 
 
+def test_cada_giro_dice_en_que_escalon_estaba_antes_de_resolverse(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """La UI arma el "subes del escalon 1 al 2" con este dato."""
+    _apostar(client, user_token, sesion)
+    _girar(client, user_token, sesion, "2")
+    _apostar(client, user_token, sesion, amount=2_000)
+    _girar(client, user_token, sesion, "2")
+
+    giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
+    assert [g["strategy_stage_before"] for g in giros] == [0, 1]
+    assert _sesion(client, user_token, sesion)["strategy_stage"] == 2
+
+
 # ---------- Editar la sesion con una serie abierta ----------
 
 
