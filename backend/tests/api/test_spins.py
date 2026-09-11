@@ -295,6 +295,53 @@ def test_cambiar_modo_y_estrategia_juntos_si_funciona(
     assert r.json()["strategy_mode"] == "two_sector"
 
 
+# ---------- Limite de perdida ----------
+
+
+def test_la_sesion_guarda_el_limite_de_perdida(
+    client: TestClient, user_token: str, variant_id: str
+) -> None:
+    r = _crear_sesion(client, user_token, variant_id, loss_limit=20_000)
+    assert r.status_code == 201
+    assert r.json()["loss_limit"] == 20_000
+
+
+def test_el_limite_de_perdida_es_opcional(
+    client: TestClient, user_token: str, variant_id: str
+) -> None:
+    assert _crear_sesion(client, user_token, variant_id).json()["loss_limit"] is None
+
+
+def test_el_limite_de_perdida_no_puede_superar_la_banca(
+    client: TestClient, user_token: str, variant_id: str
+) -> None:
+    r = _crear_sesion(client, user_token, variant_id, loss_limit=150_000)
+    assert r.status_code == 422
+
+
+def test_se_puede_fijar_y_bajar_el_limite_con_la_sesion_abierta(
+    client: TestClient, user_token: str, variant_id: str
+) -> None:
+    sid = _crear_sesion(client, user_token, variant_id).json()["id"]
+    r = client.patch(f"/sessions/{sid}", json={"loss_limit": 30_000}, headers=auth(user_token))
+    assert r.status_code == 200
+    r = client.patch(f"/sessions/{sid}", json={"loss_limit": 10_000}, headers=auth(user_token))
+    assert r.status_code == 200
+    assert r.json()["loss_limit"] == 10_000
+
+
+@pytest.mark.parametrize("nuevo", [40_000, None])
+def test_no_se_puede_subir_ni_quitar_el_limite_con_la_sesion_abierta(
+    client: TestClient, user_token: str, variant_id: str, nuevo: float | None
+) -> None:
+    """§9 del documento verificado: no aumentes el limite para recuperar."""
+    sid = _crear_sesion(client, user_token, variant_id, loss_limit=20_000).json()["id"]
+    r = client.patch(f"/sessions/{sid}", json={"loss_limit": nuevo}, headers=auth(user_token))
+    assert r.status_code == 422
+    assert "no subir" in r.text
+    assert client.get(f"/sessions/{sid}", headers=auth(user_token)).json()["loss_limit"] == 20_000
+
+
 def test_reset_de_estrategia_no_toca_los_giros(
     client: TestClient, user_token: str, variant_id: str
 ) -> None:

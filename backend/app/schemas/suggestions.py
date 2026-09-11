@@ -66,6 +66,33 @@ class BankrollUpdate(BaseModel):
     next_suggested_bet: float
 
 
+class BankrollAlertLevel(str, Enum):
+    info = "info"
+    caution = "caution"
+    critical = "critical"
+
+
+class BankrollAlertResponse(BaseModel):
+    """Alerta de gestión de banca: habla del dinero, nunca del próximo resultado."""
+    code: str
+    level: BankrollAlertLevel
+    message: str
+
+
+class NextStepResponse(BaseModel):
+    """Dónde queda la progresión si el giro cierra en contra o a favor.
+
+    Es condicional: describe los dos casos, nunca cuál va a ocurrir.
+    """
+    stage: int
+    bet_per_sector: float
+    suggested_bet: float
+    bankroll_after: float         # suponiendo que se apostó lo que pide la progresión
+    exceeds_table_limit: bool
+    exceeds_bankroll: bool
+    reaches_loss_limit: bool      # False si la sesión no tiene límite de pérdida
+
+
 class BankrollSuggestionResponse(BaseModel):
     """Tamaño de apuesta que exige el escalón actual de la progresión.
 
@@ -88,6 +115,12 @@ class BankrollSuggestionResponse(BaseModel):
     ruin_probability_estimate: Optional[float] = None
     # Recordatorio fijo: ninguna progresión altera la ventaja de la casa (§2.8).
     disclaimer: str
+    next_if_lost: NextStepResponse
+    next_if_won: NextStepResponse
+    # Escalones seguidos, contando el actual, que la banca actual puede pagar.
+    stages_supported: int
+    # Ordenadas de la más grave a la menos grave.
+    alerts: list[BankrollAlertResponse] = []
 
 
 class EligibleBetResponse(BaseModel):

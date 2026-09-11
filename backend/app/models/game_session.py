@@ -23,6 +23,10 @@ class GameSession(Base):
             "(strategy_mode = 'two_sector') = (strategy_selected = 'two_sector_recovery')",
             name="ck_session_strategy_mode_matches_strategy",
         ),
+        CheckConstraint(
+            "loss_limit IS NULL OR (loss_limit > 0 AND loss_limit <= bankroll_start)",
+            name="ck_session_loss_limit_within_bankroll",
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -47,6 +51,9 @@ class GameSession(Base):
     bankroll_current: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     base_bet: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     table_limit: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    # Perdida neta (banca inicial - banca actual) en la que el usuario decidio
+    # detenerse (§2.8). Opcional: sin el, las alertas usan umbrales por defecto.
+    loss_limit: Mapped[float | None] = mapped_column(Numeric(14, 2))
 
     strategy_selected: Mapped[str] = mapped_column(
         enum_col(*STRATEGIES, name="strategy_selected"), default="flat", nullable=False

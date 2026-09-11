@@ -15,8 +15,11 @@ from app.engine import bankroll as engine
 from app.models import GameVariant
 from app.schemas.sessions import BankrollStrategy
 from app.schemas.suggestions import (
+    BankrollAlertLevel,
+    BankrollAlertResponse,
     BankrollSuggestionResponse,
     EligibleBetResponse,
+    NextStepResponse,
     ProgressionRowResponse,
     ProgressionTableResponse,
 )
@@ -33,8 +36,20 @@ def _to_engine_strategy(strategy: BankrollStrategy) -> engine.Strategy:
     return engine.Strategy(strategy.value)
 
 
+def _to_next_step(step: engine.NextStep) -> NextStepResponse:
+    return NextStepResponse(
+        stage=step.stage,
+        bet_per_sector=step.bet_per_sector,
+        suggested_bet=step.suggested_bet,
+        bankroll_after=step.bankroll_after,
+        exceeds_table_limit=step.exceeds_table_limit,
+        exceeds_bankroll=step.exceeds_bankroll,
+        reaches_loss_limit=step.reaches_loss_limit,
+    )
+
+
 def _to_advice_response(
-    advice: engine.BankrollAdvice, base_bet: float
+    advice: engine.BankrollAdvice, plan: engine.BankrollPlan, base_bet: float
 ) -> BankrollSuggestionResponse:
     neto = engine.net_result_if_won(advice.strategy, base_bet, advice.stage)
     return BankrollSuggestionResponse(
@@ -51,6 +66,15 @@ def _to_advice_response(
         risk_warning=advice.risk_warning,
         ruin_probability_estimate=advice.ruin_probability_estimate,
         disclaimer=engine.BANKROLL_DISCLAIMER,
+        next_if_lost=_to_next_step(plan.if_lost),
+        next_if_won=_to_next_step(plan.if_won),
+        stages_supported=plan.stages_supported,
+        alerts=[
+            BankrollAlertResponse(
+                code=a.code, level=BankrollAlertLevel(a.level.value), message=a.message
+            )
+            for a in plan.alerts
+        ],
     )
 
 
@@ -155,15 +179,26 @@ def bankroll_suggestion(
     win_probability = _probability_for_bet(
         _load_config(db, session.game_variant_id), engine.mode_for(strategy), bet
     )
+    base_bet = float(session.base_bet)
+    table_limit = float(session.table_limit) if session.table_limit else None
     advice = engine.suggest_bet(
         strategy,
-        float(session.base_bet),
+        base_bet,
         session.strategy_stage,
         bankroll_current=float(session.bankroll_current),
-        table_limit=float(session.table_limit) if session.table_limit else None,
+        table_limit=table_limit,
         probability_of_winning_the_bet=win_probability,
     )
-    return _to_advice_response(advice, float(session.base_bet))
+    plan = engine.bankroll_plan(
+        strategy,
+        base_bet,
+        session.strategy_stage,
+        bankroll_current=float(session.bankroll_current),
+        bankroll_start=float(session.bankroll_start),
+        table_limit=table_limit,
+        loss_limit=float(session.loss_limit) if session.loss_limit is not None else None,
+    )
+    return _to_advice_response(advice, plan, base_bet)
 
 
 @router.get(

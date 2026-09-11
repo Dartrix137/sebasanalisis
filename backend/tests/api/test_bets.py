@@ -468,6 +468,62 @@ def test_deshacer_el_giro_devuelve_la_banca_y_el_escalon(
     assert despues["strategy_stage"] == 0
 
 
+# ---------- Editar la sesion con una serie abierta ----------
+
+
+def _perder(client, token, sid, veces):
+    for _ in range(veces):
+        monto = client.get(
+            f"/sessions/{sid}/bankroll/suggestion", headers=auth(token)
+        ).json()["suggested_bet"]
+        _apostar(client, token, sid, amount=monto)
+        _girar(client, token, sid, "2")
+
+
+def test_editar_otro_campo_con_la_misma_estrategia_no_reinicia_el_escalon(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """El formulario reenvia la estrategia aunque solo cambie el limite de mesa."""
+    _perder(client, user_token, sesion, 2)
+    assert _sesion(client, user_token, sesion)["strategy_stage"] == 2
+
+    r = client.patch(
+        f"/sessions/{sesion}",
+        json={"table_limit": 400_000, "strategy": "martingale", "strategy_mode": "single"},
+        headers=auth(user_token),
+    )
+    assert r.status_code == 200
+    assert r.json()["strategy_stage"] == 2
+
+
+def test_cambiar_de_estrategia_reinicia_el_escalon_pero_no_la_banca(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    _perder(client, user_token, sesion, 2)
+    r = client.patch(
+        f"/sessions/{sesion}", json={"strategy": "dalembert"}, headers=auth(user_token)
+    )
+    assert r.json()["strategy_stage"] == 0
+    assert r.json()["bankroll_current"] == 97_000
+
+
+def test_deshacer_tras_cambiar_de_estrategia_no_restaura_un_escalon_ajeno(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """El escalon 2 de la martingala no significa nada en D'Alembert."""
+    _perder(client, user_token, sesion, 2)
+    client.patch(f"/sessions/{sesion}", json={"strategy": "dalembert"}, headers=auth(user_token))
+
+    giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
+    client.delete(f"/sessions/{sesion}/spins/{giros[-1]['id']}", headers=auth(user_token))
+
+    s = _sesion(client, user_token, sesion)
+    assert s["strategy_selected"] == "dalembert"
+    assert s["strategy_stage"] == 0
+    # La banca si se devuelve: el dinero no depende de la estrategia.
+    assert s["bankroll_current"] == 99_000
+
+
 def test_al_deshacer_la_apuesta_vuelve_a_estar_pendiente(
     client: TestClient, user_token: str, sesion: str
 ) -> None:

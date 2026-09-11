@@ -26,6 +26,8 @@ export interface CreateSessionRequest {
   table_limit: number;
   strategy: BankrollStrategy;
   strategy_mode: StrategyMode;
+  /** Pérdida neta en la que el usuario decide detenerse. Opcional. */
+  loss_limit?: number | null;
 }
 
 export interface UpdateSessionRequest {
@@ -34,6 +36,8 @@ export interface UpdateSessionRequest {
   strategy?: BankrollStrategy | null;
   strategy_mode?: StrategyMode | null;
   table_limit?: number | null;
+  /** Se puede fijar o bajar; subirlo o quitarlo con la sesión abierta da 422. */
+  loss_limit?: number | null;
 }
 
 export interface SessionResponse {
@@ -47,6 +51,7 @@ export interface SessionResponse {
   bankroll_current: number;
   base_bet: number;
   table_limit: number;
+  loss_limit: number | null;
   strategy_selected: BankrollStrategy;
   strategy_mode: StrategyMode;
   strategy_stage: number;

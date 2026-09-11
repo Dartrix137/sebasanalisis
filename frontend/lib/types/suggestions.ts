@@ -46,6 +46,28 @@ export interface BankrollUpdate {
   next_suggested_bet: number;
 }
 
+export type BankrollAlertLevel = "info" | "caution" | "critical";
+
+/** Alerta de gestión de banca: habla del dinero, nunca del próximo resultado. */
+export interface BankrollAlertResponse {
+  code: string;
+  level: BankrollAlertLevel;
+  message: string;
+}
+
+/** Dónde queda la progresión si el giro cierra en contra o a favor. Condicional. */
+export interface NextStepResponse {
+  stage: number;
+  bet_per_sector: number;
+  suggested_bet: number;
+  /** Suponiendo que se apostó lo que pide la progresión. */
+  bankroll_after: number;
+  exceeds_table_limit: boolean;
+  exceeds_bankroll: boolean;
+  /** false si la sesión no tiene límite de pérdida. */
+  reaches_loss_limit: boolean;
+}
+
 /**
  * Tamaño de apuesta que exige el escalón actual de la progresión.
  * Sugiere *cuánto* arriesgar, nunca a qué apostar ni qué resultado esperar.
@@ -73,6 +95,12 @@ export interface BankrollSuggestionResponse {
   ruin_probability_estimate: number | null;
   /** Recordatorio fijo: ninguna progresión altera la ventaja de la casa (§2.8). */
   disclaimer: string;
+  next_if_lost: NextStepResponse;
+  next_if_won: NextStepResponse;
+  /** Escalones seguidos, contando el actual, que la banca actual puede pagar. */
+  stages_supported: number;
+  /** Ordenadas de la más grave a la menos grave. */
+  alerts: BankrollAlertResponse[];
 }
 
 /**

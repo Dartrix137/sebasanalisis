@@ -59,20 +59,24 @@ class PerformanceReport:
 
 
 VERDICT_NO_DATA = (
-    "Todavia no hay giros suficientes para comparar el motor con la linea base."
+    "Todavia no hay giros suficientes para evaluar el desempeno del motor."
 )
 VERDICT_BELOW = (
-    "El motor no supera a la linea base ingenua en esta mesa. Lo honesto es "
-    "concluir que la secuencia observada no muestra estructura aprovechable."
+    "La tasa de coincidencia del motor en esta muestra no muestra evidencia de "
+    "estructura aprovechable en esta mesa. Es una observacion retrospectiva sobre "
+    "los giros ya ocurridos y no implica ventaja sobre los proximos: la ventaja de "
+    "la casa no cambia."
 )
 VERDICT_EQUAL = (
-    "El motor coincide con el resultado observado tan a menudo como la linea base "
-    "ingenua. No hay evidencia de que aporte informacion sobre esta mesa."
+    "La tasa de coincidencia del motor en esta muestra no muestra evidencia de "
+    "aportar informacion adicional sobre esta mesa. Es una observacion "
+    "retrospectiva sobre los giros ya ocurridos y no implica ventaja sobre los "
+    "proximos: la ventaja de la casa no cambia."
 )
 VERDICT_ABOVE = (
-    "El motor coincide con el resultado observado mas a menudo que la linea base "
-    "ingenua en esta muestra. Es una observacion sobre los giros ya ocurridos y "
-    "no implica ventaja sobre los proximos: la ventaja de la casa no cambia."
+    "La tasa de coincidencia del motor en esta muestra es una observacion "
+    "retrospectiva sobre los giros ya ocurridos y no implica ventaja sobre los "
+    "proximos: la ventaja de la casa no cambia."
 )
 
 

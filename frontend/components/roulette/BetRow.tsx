@@ -41,7 +41,6 @@ export function BetRow({
   bets,
   bankrollCurrent,
   suggestedBet,
-  riskWarning,
   abierta,
   pending,
   onPlace,
@@ -51,7 +50,6 @@ export function BetRow({
   bets: BetResponse[];
   bankrollCurrent: number;
   suggestedBet: number | null;
-  riskWarning: string | null;
   abierta: boolean;
   pending: boolean;
   onPlace: (body: {
@@ -202,12 +200,6 @@ export function BetRow({
           Elegí esto tras ver una señal
         </label>
       </div>
-
-      {riskWarning ? (
-        <p className="rounded-lg border border-signal-medium/40 bg-signal-medium/10 px-3 py-2 text-xs leading-relaxed text-white">
-          {riskWarning}
-        </p>
-      ) : null}
 
         {excedeDisponible ? (
           <ErrorBox

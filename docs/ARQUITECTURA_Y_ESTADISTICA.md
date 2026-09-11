@@ -185,6 +185,59 @@ Todas las estrategias deben mostrar, antes de que el usuario las active, la tabl
 
 **Regla de validación cruzada** (aplica en el schema y debe replicarse en el endpoint/DB): `strategy_mode='single'` solo admite `strategy` ∈ {martingale, dalembert, fibonacci, flat}; `strategy_mode='two_sector'` solo admite `strategy='two_sector_recovery'`. Nunca se puede mezclar un modo con una estrategia del otro modo — el backend debe rechazar la combinación inválida con 422, no intentar interpretarla.
 
+#### 2.8.1 Plan del giro: siguiente paso de la progresión
+
+Durante la sesión, `GET /sessions/:id/bankroll/suggestion` devuelve, además del monto que pide el escalón actual, **dónde queda la progresión en los dos casos posibles** (`engine.bankroll.bankroll_plan`):
+
+- `next_if_lost` / `next_if_won`: escalón siguiente, apuesta que pediría y banca resultante, más tres banderas: `exceeds_bankroll` (la banca ya no la cubriría), `exceeds_table_limit` (la mesa no la aceptaría) y `reaches_loss_limit` (se alcanzaría el límite de pérdida del usuario).
+- `stages_supported`: escalones seguidos, contando el actual, que la banca actual puede pagar (se detiene también en el límite de mesa).
+
+Reglas que la UI respeta:
+
+- **Es condicional, nunca un pronóstico.** El copy dice "si este giro cierra en contra / a favor"; jamás cuál de los dos va a ocurrir.
+- **El escalón avanza por el neto de la ronda**, no por apuesta: solo se mueve cuando el giro tenía apuestas registradas (`advance_stage_by_round`). Los montos del plan suponen que se apuesta lo que pide la progresión; si el usuario apuesta otro monto, la banca resultante cambia, pero el escalón avanza igual.
+- **Si la apuesta del escalón actual no se puede colocar** (banca o mesa), la UI no muestra los dos casos —describirían un giro imposible, con banca negativa— y deja solo las alertas.
+- Tras cada giro que mueve el escalón se muestra un aviso del cambio ("el último giro cerró en contra: la progresión sube del escalón 2 al 3"). Reiniciar la progresión o cambiar de estrategia también mueven el escalón, pero no generan ese aviso: atribuírselo a un giro sería falso.
+
+#### 2.8.2 Alertas de gestión de banca
+
+La misma respuesta trae `alerts`: lista ordenada de la más grave a la menos grave, con `level` ∈ {`critical`, `caution`, `info`}, un `code` estable y un `message` listo para mostrar. Se apoyan en las reglas de disciplina del documento verificado (§9: fijar un límite de pérdida, no subirlo para recuperar, detenerse si la progresión llega a un monto incómodo, revisar el límite de la mesa, no leer una racha a favor como prueba de que la estrategia venció a la casa). Ninguna dice a qué apostar ni qué resultado esperar.
+
+| `code` | Nivel | Cuándo |
+| --- | --- | --- |
+| `bankroll_insufficient` | crítico | La banca actual no cubre la apuesta del escalón actual. |
+| `last_affordable_stage` | crítico | Es el último escalón que la banca cubre. |
+| `few_stages_left` | atención | La banca cubre 2 escalones o menos desde aquí (`FEW_STAGES_LEFT`). |
+| `table_limit_exceeded` | crítico | La apuesta por sector del escalón actual supera el límite de la mesa. |
+| `table_limit_near` | atención | El límite de la mesa se alcanza en 1 o 2 escalones (`TABLE_LIMIT_LOOKAHEAD`). No aplica a la plana. |
+| `loss_limit_reached` | crítico | La pérdida neta de la sesión ya alcanzó el límite del usuario. |
+| `loss_limit_next` | crítico | Perder el giro actual alcanzaría el límite del usuario. |
+| `loss_limit_near` | atención | Se perdió el 75 % o más del límite (`LOSS_LIMIT_NEAR`). |
+| `drawdown` | atención / crítico | **Solo si la sesión no tiene límite propio**: pérdida ≥ 25 % / ≥ 50 % de la banca inicial. |
+| `in_profit` | nota | La banca actual supera la inicial: recordatorio de que eso no prueba nada y de fijar un punto de retiro. |
+| `exponential_growth` | atención | Martingala o dos sectores desde el escalón 4: cuánto pediría el siguiente. |
+
+Los umbrales (`DRAWDOWN_*`, `FEW_STAGES_LEFT`, `TABLE_LIMIT_LOOKAHEAD`, `LOSS_LIMIT_NEAR`, `EXPONENTIAL_STAGE_WARNING`) son constantes de `engine/bankroll.py`: valores por defecto conservadores, no calibrados contra datos. Todos los textos tienen test de lenguaje no-predictivo.
+
+#### 2.8.3 Límite de pérdida por sesión
+
+`game_sessions.loss_limit` (opcional) es la pérdida neta —`bankroll_start - bankroll_current`— en la que el usuario decidió detenerse. Se fija al crear la sesión o después, desde "Ajustes de la sesión".
+
+- **Validación**: `0 < loss_limit ≤ bankroll_start` (schema, endpoint y `CHECK` en DB). No se puede perder más de lo que se trajo a la mesa.
+- **Se puede fijar o bajar, nunca subir ni quitar con la sesión abierta.** El `PATCH` rechaza con 422 un valor mayor al actual o `null` si ya había uno. Es la regla literal del documento verificado ("no aumentes el límite para recuperar pérdidas"): si se pudiera subir a mitad de sesión, dejaría de ser una decisión tomada antes de jugar. Para otro límite, se cierra la sesión y se abre otra.
+- **No bloquea el registro de apuestas.** La app anota lo que el usuario apostó de verdad en la mesa; negarse a registrarlo solo haría que el historial mintiera. El límite actúa a través de las alertas y del paso siguiente (`reaches_loss_limit`).
+- Con límite propio, las alertas genéricas de caída (`drawdown`) no se emiten: el usuario ya dijo dónde quiere detenerse y dos avisos de caída distintos confunden.
+
+#### 2.8.4 Editar la sesión con una serie abierta
+
+`PATCH /sessions/:id` permite cambiar estrategia, límite de mesa y límite de pérdida con la sesión abierta. La banca inicial y la apuesta base no se editan: cambiarlas invalidaría toda la progresión calculada.
+
+- **Cambiar de estrategia (o de modo) reinicia el escalón a 0.** El escalón de una progresión no significa nada en otra (el escalón 3 de la martingala son 4 unidades; en D'Alembert serían otras). La serie abierta no se traslada; lo ya perdido sigue contando en la banca y en el límite de pérdida.
+- **El reinicio solo ocurre si la estrategia cambia de verdad.** El backend compara contra lo persistido: reenviar la misma estrategia junto con otro campo (por ejemplo, al editar solo el límite de mesa) no toca el escalón.
+- **Deshacer un giro anterior al cambio no restaura un escalón ajeno.** Al cambiar de estrategia se borra `spins.strategy_stage_before` de los giros existentes; deshacerlos devuelve la banca y deja pendientes sus apuestas, pero ya no restaura un escalón de la progresión vieja.
+- **Apuestas pendientes**: si se cambia de estrategia con una apuesta registrada y aún sin resolver, esa apuesta se resuelve normalmente con el giro siguiente y el escalón avanza según la estrategia nueva, desde 0.
+- **Cambio de modo (1:1 ↔ dos sectores)**: las apuestas elegibles para estimar el riesgo de ruina cambian. Si la que el usuario tenía elegida deja de existir, la UI la descarta y sigue sin estimación, en lugar de pedir una apuesta incompatible (que daría 422).
+
 ### 2.9 Alcance del motor: qué entra al MVP y qué queda para después
 
 El boceto de referencia (`explicacion_analisis_estadistico_ruleta.md`) tiene 9 señales (transición, patrón k-grama, racha, alternancia, ciclo, sesgo χ², y 3 de pleno vía Markov/ciclo/caliente). Implementar las 9 en el primer sprint es demasiado alcance. División:
@@ -288,12 +341,15 @@ game_variants (id, game_id, name, house_edge, categories_json, active)
 game_sessions (
   id, user_id, game_variant_id, status, window_size,
   bankroll_start, bankroll_current, base_bet, table_limit,
+  loss_limit,                          -- nullable; 0 < loss_limit <= bankroll_start (§2.8.3)
   strategy_selected, strategy_stage, strategy_mode,   -- 'single' (1:1) | 'two_sector' (docenas/columnas dobles)
   started_at, closed_at
 )
 
-spins (id, session_id, spin_index, result_value, source, created_at)
+spins (id, session_id, spin_index, result_value, source, strategy_stage_before, created_at)
    -- source: 'manual' (giro a giro) | 'initial_batch' (carga inicial al abrir la sesión)
+   -- strategy_stage_before: escalón antes de resolver el giro, para deshacerlo;
+   --   se borra al cambiar de estrategia (§2.8.4)
 
 bets (id, session_id, spin_id, category, option_label, amount, followed_suggestion,
       status, won, payout, net_change, created_at, resolved_at)
@@ -336,6 +392,9 @@ Spins:      POST /sessions/:id/spins  DELETE /sessions/:id/spins/:spin_id
             GET /sessions/:id/spins
             POST /sessions/:id/spins/bulk        (carga inicial de números, 3.5)
 Bets:       POST /sessions/:id/bets
+Bankroll:   GET /sessions/:id/bankroll/suggestion   (monto del escalón, plan del giro y alertas, §2.8.1-2.8.2)
+            GET /sessions/:id/bankroll/eligible-bets  GET /sessions/:id/bankroll/progression
+            GET /bankroll/progression            (tabla previa, sin sesión)
 Suggestions: GET /sessions/:id/suggestions/latest  GET /sessions/:id/suggestions/history
 Admin:      POST /admin/games  PATCH /admin/games/:id  POST /admin/games/:id/variants
             PATCH /admin/games/:id/variants/:variant_id  GET /admin/users
@@ -379,6 +438,8 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
    - Señal de sesgo χ² cuando la sesión tiene ≥200 giros, corregida por comparaciones múltiples (§2.4).
    - Cada frecuencia observada con su intervalo de Wilson, para que la desviación se lea a escala del ruido (§2.2).
    - Motor de bankroll (modo 1:1 y modo dos-sectores) con tabla de progresión visible antes de activar.
+   - Plan de banca a la vista en la mesa: siguiente paso de la progresión si el giro cierra en contra o a favor, y alertas de gestión de banca por severidad (§2.8.1-2.8.2).
+   - Límite de pérdida opcional por sesión, que se puede bajar pero no subir con la sesión abierta (§2.8.3).
    - Registro de apuesta real (categoría + monto) y resolución automática win/loss al ingresar el siguiente número.
    - Auto-evaluación: tasa de coincidencia del motor vs. línea base ingenua, visible en vivo y en el resumen de cierre.
 

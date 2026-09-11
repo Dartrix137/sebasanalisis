@@ -258,7 +258,7 @@ export function PerformancePanel({
     <Card>
       <CardHeader
         title="Auto-evaluación"
-        subtitle="Compara el motor con una línea base ingenua que se limita a repetir la última categoría ganadora."
+        subtitle="Revisa, giro a giro, si el resultado que salió después coincidió con lo que señalaba el motor."
       />
       {!performance || performance.total_suggestions === 0 ? (
         <p className="rounded-lg border border-dashed border-edge py-6 text-center text-xs text-muted">
@@ -266,18 +266,11 @@ export function PerformancePanel({
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <RateBox
-              label="Tasa de coincidencia del motor"
-              rate={performance.match_rate}
-              detail={`${performance.matched_suggestions} de ${performance.total_suggestions}`}
-            />
-            <RateBox
-              label="Línea base ingenua"
-              rate={performance.baseline_match_rate}
-              detail={`${performance.baseline_matched} coincidencias`}
-            />
-          </div>
+          <RateBox
+            label="Tasa de coincidencia del motor"
+            rate={performance.match_rate}
+            detail={`${performance.matched_suggestions} de ${performance.total_suggestions}`}
+          />
           <p className="mt-3 rounded-lg border border-edge bg-ink px-3 py-2.5 text-xs leading-relaxed text-muted">
             {performance.verdict}
           </p>

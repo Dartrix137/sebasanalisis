@@ -36,7 +36,7 @@ function parseValues(raw: string): string[] {
   return raw.trim().split(SEPARATORS).filter(Boolean);
 }
 
-const ESTRATEGIAS: {
+export const ESTRATEGIAS: {
   value: BankrollStrategy;
   label: string;
   nota: string;
@@ -97,6 +97,7 @@ export function NewSessionForm({
   const [bankroll, setBankroll] = useState("100000");
   const [baseBet, setBaseBet] = useState("1000");
   const [tableLimit, setTableLimit] = useState("500000");
+  const [lossLimit, setLossLimit] = useState("");
   const [strategy, setStrategy] = useState<BankrollStrategy>("flat");
   const [initialRaw, setInitialRaw] = useState("");
   const [initialOrder, setInitialOrder] = useState<EntryOrder | null>(null);
@@ -110,6 +111,7 @@ export function NewSessionForm({
 
   const esDosSectores = strategy === "two_sector_recovery";
   const apuestaExcedeBanca = Number(baseBet) > Number(bankroll);
+  const limiteExcedeBanca = lossLimit !== "" && Number(lossLimit) > Number(bankroll);
 
   const { withToken } = useSession();
   const [progression, setProgression] = useState<ProgressionTableResponse | null>(null);
@@ -165,6 +167,7 @@ export function NewSessionForm({
           bankroll_start: Number(bankroll),
           base_bet: Number(baseBet),
           table_limit: Number(tableLimit),
+          loss_limit: lossLimit === "" ? null : Number(lossLimit),
           strategy,
           // §2.8: el modo se deriva de la estrategia, nunca se eligen por separado.
           strategy_mode: esDosSectores ? "two_sector" : "single",
@@ -211,6 +214,16 @@ export function NewSessionForm({
           hint="Revísalo dentro del juego antes de usar una progresión."
         />
       </div>
+
+      <Field
+        label="Límite de pérdida"
+        type="number"
+        min={1}
+        placeholder="Por ejemplo 30000"
+        value={lossLimit}
+        onChange={(e) => setLossLimit(e.target.value)}
+        hint="Cuánto estás dispuesto a perder en esta sesión antes de detenerte. Opcional, pero recomendado: una vez abierta la sesión se puede bajar, no subir."
+      />
 
       <label className="block">
         <span className="mb-1.5 block text-sm font-bold text-white">Gestión de banca</span>
@@ -339,6 +352,9 @@ export function NewSessionForm({
       {apuestaExcedeBanca ? (
         <ErrorBox message="La apuesta base no puede superar la banca inicial." />
       ) : null}
+      {limiteExcedeBanca ? (
+        <ErrorBox message="El límite de pérdida no puede superar la banca inicial." />
+      ) : null}
       {faltaOrden ? (
         <ErrorBox message="Indica en qué orden escribiste los números antes de empezar." />
       ) : null}
@@ -347,7 +363,13 @@ export function NewSessionForm({
       <div className="flex gap-2">
         <Button
           type="submit"
-          disabled={pending || apuestaExcedeBanca || faltaOrden || invalidos.length > 0}
+          disabled={
+            pending ||
+            apuestaExcedeBanca ||
+            limiteExcedeBanca ||
+            faltaOrden ||
+            invalidos.length > 0
+          }
         >
           {pending ? "Creando…" : "Empezar sesión"}
         </Button>

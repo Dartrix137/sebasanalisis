@@ -61,10 +61,17 @@ class CreateSessionRequest(BaseModel):
     table_limit: float = Field(gt=0)
     strategy: BankrollStrategy = BankrollStrategy.flat
     strategy_mode: StrategyMode = StrategyMode.single
+    # Pérdida neta en la que el usuario decide detenerse (§2.8). Opcional.
+    loss_limit: Optional[float] = Field(default=None, gt=0)
 
     def validate_bet_within_bankroll(self):
         if self.base_bet > self.bankroll_start:
             raise ValueError("La apuesta base no puede superar el bankroll inicial")
+        if self.loss_limit is not None and self.loss_limit > self.bankroll_start:
+            raise ValueError(
+                "El límite de pérdida no puede superar la banca inicial: no se puede "
+                "perder más de lo que se trae a la mesa"
+            )
 
     @model_validator(mode="after")
     def check_mode_matches_strategy(self) -> "CreateSessionRequest":
@@ -78,6 +85,10 @@ class UpdateSessionRequest(BaseModel):
     strategy: Optional[BankrollStrategy] = None
     strategy_mode: Optional[StrategyMode] = None
     table_limit: Optional[float] = Field(default=None, gt=0)
+    # Solo se puede fijar si no había uno, o bajar. Subirlo o quitarlo con la
+    # sesión abierta es "aumentar el límite para recuperar" (§9 del documento
+    # verificado); el endpoint lo rechaza con 422.
+    loss_limit: Optional[float] = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def check_mode_matches_strategy(self) -> "UpdateSessionRequest":
@@ -101,6 +112,7 @@ class SessionResponse(BaseModel):
     bankroll_current: float
     base_bet: float
     table_limit: float
+    loss_limit: Optional[float] = None
     strategy_selected: BankrollStrategy
     strategy_mode: StrategyMode
     strategy_stage: int

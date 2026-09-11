@@ -16,7 +16,7 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
@@ -25,7 +25,10 @@ import {
   PerformancePanel,
 } from "@/components/roulette/AnalysisPanels";
 import { BankrollPanel } from "@/components/roulette/BankrollPanel";
+import { BankrollPlanCard } from "@/components/roulette/BankrollPlanCard";
+import type { StageChange } from "@/components/roulette/BankrollPlanCard";
 import { BetHistory, BetRow } from "@/components/roulette/BetRow";
+import { ESTRATEGIAS } from "@/components/roulette/NewSessionForm";
 import { SignalBoard } from "@/components/roulette/SignalBoard";
 import { SummaryPanel } from "@/components/roulette/SummaryPanel";
 import { DISCLAIMER_TEXT } from "@/components/Disclaimer";
@@ -43,9 +46,11 @@ import { TONE_CLASSES, describeOutcome, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
 import type { GameVariantResponse } from "@/lib/types/games";
 import type {
+  BankrollStrategy,
   SessionPerformanceResponse,
   SessionResponse,
   SessionSummaryResponse,
+  UpdateSessionRequest,
 } from "@/lib/types/sessions";
 import type { SpinResponse } from "@/lib/types/spins";
 import type { BetResponse } from "@/lib/types/bets";
@@ -86,10 +91,27 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const [pending, setPending] = useState(false);
   const [manual, setManual] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [editingAjustes, setEditingAjustes] = useState(false);
+  const [ajTableLimit, setAjTableLimit] = useState("");
+  const [ajStrategy, setAjStrategy] = useState<BankrollStrategy>("flat");
+  const [ajLossLimit, setAjLossLimit] = useState("");
+  const [stageChange, setStageChange] = useState<StageChange | null>(null);
+  const previo = useRef<{ spins: number; stage: number } | null>(null);
 
   const load = useCallback(async () => {
-    const s = await withToken((t) => sessionsApi.get(t, sessionId));
-    const [v, sp, pn, st, pf, bk, pg, eb, bt, sm] = await Promise.all([
+    const [s, eb] = await Promise.all([
+      withToken((t) => sessionsApi.get(t, sessionId)),
+      withToken((t) => bankrollApi.eligibleBets(t, sessionId)),
+    ]);
+    // Al pasar de modo 1:1 a dos sectores (o al revés) la apuesta elegida para
+    // estimar el riesgo deja de existir, y pedirla daría un 422 que tumbaría
+    // toda la pantalla. Se descarta y se sigue sin estimación.
+    const betId =
+      selectedBetId !== null && eb.some((b) => b.id === selectedBetId)
+        ? selectedBetId
+        : undefined;
+    if (selectedBetId !== null && betId === undefined) setSelectedBetId(null);
+    const [v, sp, pn, st, pf, bk, pg, bt, sm] = await Promise.all([
       // La variante se pide por id, no listando los juegos: listar con
       // `include_inactive` exige rol admin y daba 403 a un usuario normal.
       withToken((t) => gamesApi.variant(t, s.game_variant_id)),
@@ -97,14 +119,8 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
       withToken((t) => analysisApi.suggestions(t, sessionId)),
       withToken((t) => analysisApi.streak(t, sessionId)),
       withToken((t) => analysisApi.performance(t, sessionId)),
-      withToken((t) => bankrollApi.suggestion(t, sessionId, selectedBetId ?? undefined)),
-      withToken((t) =>
-        bankrollApi.progression(t, sessionId, {
-          stages: 10,
-          betId: selectedBetId ?? undefined,
-        }),
-      ),
-      withToken((t) => bankrollApi.eligibleBets(t, sessionId)),
+      withToken((t) => bankrollApi.suggestion(t, sessionId, betId)),
+      withToken((t) => bankrollApi.progression(t, sessionId, { stages: 10, betId })),
       withToken((t) => betsApi.list(t, sessionId)),
       withToken((t) => sessionsApi.summary(t, sessionId)),
     ]);
@@ -129,6 +145,23 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
     }
     load().catch((e) => setError(describe(e)));
   }, [loading, user, router, load]);
+
+  // El aviso de cambio de escalón solo se muestra cuando lo movió un giro nuevo:
+  // reiniciar la progresión o cambiar de estrategia también mueven el escalón, y
+  // decir "el último giro cerró a favor" en esos casos sería falso.
+  useEffect(() => {
+    if (!session) return;
+    const actual = { spins: spins.length, stage: session.strategy_stage };
+    const antes = previo.current;
+    if (antes && (actual.spins !== antes.spins || actual.stage !== antes.stage)) {
+      setStageChange(
+        actual.spins > antes.spins && actual.stage !== antes.stage
+          ? { from: antes.stage, to: actual.stage }
+          : null,
+      );
+    }
+    previo.current = actual;
+  }, [session, spins]);
 
   async function run(action: () => Promise<unknown>) {
     setPending(true);
@@ -165,6 +198,38 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   );
   const ultimo = spins.at(-1) ?? null;
   const masRecientePrimero = [...spins].reverse();
+
+  const limiteActual = session.loss_limit;
+  const limiteNuevo = ajLossLimit === "" ? null : Number(ajLossLimit);
+  // §9 del documento verificado: el límite se puede fijar o bajar, nunca subir
+  // ni quitar con la sesión abierta. El backend lo rechaza igual; esto avisa antes.
+  const limiteInvalido =
+    limiteNuevo !== null &&
+    (!(limiteNuevo > 0) ||
+      limiteNuevo > session.bankroll_start ||
+      (limiteActual !== null && limiteNuevo > limiteActual));
+  const quitaLimite = limiteActual !== null && limiteNuevo === null;
+
+  const persistida = session;
+  function guardarAjustes() {
+    const cambios: UpdateSessionRequest = {};
+    if (Number(ajTableLimit) !== persistida.table_limit) {
+      cambios.table_limit = Number(ajTableLimit);
+    }
+    // La estrategia solo viaja si cambió: reenviarla igual es pedir un cambio de
+    // progresión que no existe.
+    if (ajStrategy !== persistida.strategy_selected) {
+      cambios.strategy = ajStrategy;
+      cambios.strategy_mode = ajStrategy === "two_sector_recovery" ? "two_sector" : "single";
+    }
+    if (limiteNuevo !== limiteActual) cambios.loss_limit = limiteNuevo;
+    run(async () => {
+      if (Object.keys(cambios).length > 0) {
+        await withToken((t) => sessionsApi.update(t, sessionId, cambios));
+      }
+      setEditingAjustes(false);
+    });
+  }
 
   function addSpin(value: string) {
     if (!abierta) return;
@@ -261,12 +326,22 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
 
           {abierta ? (
             <div className="mt-4 border-t border-edge pt-4">
+              <BankrollPlanCard
+                suggestion={bankroll}
+                lastChange={stageChange}
+                lossLimit={session.loss_limit}
+                lostSoFar={session.bankroll_start - session.bankroll_current}
+              />
+            </div>
+          ) : null}
+
+          {abierta ? (
+            <div className="mt-4 border-t border-edge pt-4">
               <BetRow
                 config={variant.config}
                 bets={bets}
                 bankrollCurrent={session.bankroll_current}
                 suggestedBet={bankroll?.suggested_bet ?? null}
-                riskWarning={bankroll?.risk_warning ?? null}
                 abierta={abierta}
                 pending={pending}
                 onPlace={(body) =>
@@ -362,7 +437,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
           cuando, no a cada giro: va plegado y a ancho completo.
         */}
         <div className="space-y-3 lg:col-span-2">
-          <Detalle titulo="Cómo va el motor frente a una línea base ingenua">
+          <Detalle titulo="Tasa de coincidencia del motor">
             <PerformancePanel performance={performance} />
           </Detalle>
 
@@ -388,38 +463,164 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
 
           <Detalle titulo="Ajustes de la sesión">
             <Card>
-              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                <Stat label="Banca inicial" value={CURRENCY.format(session.bankroll_start)} />
-                <Stat label="Apuesta base" value={CURRENCY.format(session.base_bet)} />
-                <Stat label="Límite de mesa" value={CURRENCY.format(session.table_limit)} />
-                <Stat
-                  label="Progresión"
-                  value={`${session.strategy_selected}${
-                    session.strategy_mode === "two_sector" ? " · dos sectores" : ""
-                  }`}
-                />
-                <Stat label="Escalón actual" value={String(session.strategy_stage + 1)} />
-              </dl>
-              {abierta ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    variant="ghost"
-                    disabled={pending || session.strategy_stage === 0}
-                    onClick={() =>
-                      run(() => withToken((t) => sessionsApi.resetStrategy(t, sessionId)))
+              {editingAjustes ? (
+                <form
+                  className="space-y-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    guardarAjustes();
+                  }}
+                >
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <Stat label="Banca inicial" value={CURRENCY.format(session.bankroll_start)} />
+                    <Stat label="Apuesta base" value={CURRENCY.format(session.base_bet)} />
+                  </dl>
+                  <p className="text-xs text-muted">
+                    La banca inicial y la apuesta base no se pueden editar: cambiarlas a mitad de
+                    sesión invalidaría la progresión ya calculada.
+                  </p>
+
+                  <Field
+                    label="Límite de mesa"
+                    required
+                    type="number"
+                    min={1}
+                    value={ajTableLimit}
+                    onChange={(e) => setAjTableLimit(e.target.value)}
+                  />
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-bold text-white">
+                      Progresión
+                    </span>
+                    <select
+                      value={ajStrategy}
+                      onChange={(e) => setAjStrategy(e.target.value as BankrollStrategy)}
+                      className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none focus:border-gold/60"
+                    >
+                      {ESTRATEGIAS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">
+                      {ESTRATEGIAS.find((s) => s.value === ajStrategy)?.nota}
+                    </span>
+                  </label>
+
+                  {ajStrategy !== session.strategy_selected ? (
+                    <p className="rounded-lg border border-signal-medium/40 bg-signal-medium/10 px-3 py-2 text-xs leading-relaxed text-white">
+                      Cambiar la progresión la reinicia desde el escalón 1: la serie
+                      abierta no se traslada a la nueva. Lo perdido hasta ahora sigue
+                      contando para tu banca y tu límite de pérdida.
+                    </p>
+                  ) : null}
+
+                  <Field
+                    label="Límite de pérdida"
+                    type="number"
+                    min={1}
+                    max={limiteActual ?? session.bankroll_start}
+                    placeholder="Sin límite"
+                    value={ajLossLimit}
+                    onChange={(e) => setAjLossLimit(e.target.value)}
+                    hint={
+                      limiteActual === null
+                        ? "Cuánto estás dispuesto a perder en esta sesión. Una vez fijado se puede bajar, no subir."
+                        : `Puedes bajarlo, pero no subirlo ni quitarlo con la sesión abierta (hoy: ${CURRENCY.format(
+                            limiteActual,
+                          )}).`
                     }
-                  >
-                    Reiniciar progresión
-                  </Button>
-                  <Button
-                    variant="danger"
-                    disabled={pending}
-                    onClick={() => run(() => withToken((t) => sessionsApi.close(t, sessionId)))}
-                  >
-                    Cerrar sesión de mesa
-                  </Button>
-                </div>
-              ) : null}
+                  />
+                  {limiteInvalido || quitaLimite ? (
+                    <ErrorBox
+                      message={
+                        quitaLimite || (limiteActual !== null && limiteNuevo! > limiteActual)
+                          ? "El límite de pérdida no se puede subir ni quitar con la sesión abierta: aumentarlo para recuperar es justo lo que busca evitar."
+                          : "El límite de pérdida debe ser mayor que cero y no superar la banca inicial."
+                      }
+                    />
+                  ) : null}
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={
+                        pending || !(Number(ajTableLimit) > 0) || limiteInvalido || quitaLimite
+                      }
+                    >
+                      Guardar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setEditingAjustes(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                    <Stat label="Banca inicial" value={CURRENCY.format(session.bankroll_start)} />
+                    <Stat label="Apuesta base" value={CURRENCY.format(session.base_bet)} />
+                    <Stat label="Límite de mesa" value={CURRENCY.format(session.table_limit)} />
+                    <Stat
+                      label="Límite de pérdida"
+                      value={
+                        session.loss_limit === null
+                          ? "Sin fijar"
+                          : CURRENCY.format(session.loss_limit)
+                      }
+                    />
+                    <Stat
+                      label="Progresión"
+                      value={`${
+                        ESTRATEGIAS.find((s) => s.value === session.strategy_selected)?.label ??
+                        session.strategy_selected
+                      }${session.strategy_mode === "two_sector" ? " · dos sectores" : ""}`}
+                    />
+                    <Stat label="Escalón actual" value={String(session.strategy_stage + 1)} />
+                  </dl>
+                  {abierta ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setAjTableLimit(String(session.table_limit));
+                          setAjStrategy(session.strategy_selected);
+                          setAjLossLimit(
+                            session.loss_limit === null ? "" : String(session.loss_limit),
+                          );
+                          setEditingAjustes(true);
+                        }}
+                      >
+                        Editar ajustes
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={pending || session.strategy_stage === 0}
+                        onClick={() =>
+                          run(() => withToken((t) => sessionsApi.resetStrategy(t, sessionId)))
+                        }
+                      >
+                        Reiniciar progresión
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={pending}
+                        onClick={() =>
+                          run(() => withToken((t) => sessionsApi.close(t, sessionId)))
+                        }
+                      >
+                        Cerrar sesión de mesa
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </Card>
           </Detalle>
         </div>

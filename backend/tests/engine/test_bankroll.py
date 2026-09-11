@@ -8,10 +8,13 @@ import pytest
 
 from app.engine.bankroll import (
     BANKROLL_DISCLAIMER,
+    AlertLevel,
     Strategy,
     StrategyMode,
     advance_stage,
     advance_stage_by_round,
+    bankroll_alerts,
+    bankroll_plan,
     bet_for_stage,
     cumulative_risked,
     eligible_bets,
@@ -22,6 +25,7 @@ from app.engine.bankroll import (
     recovers_only_to_break_even,
     ruin_probability_estimate,
     stage_multiplier,
+    stages_supported_from,
     suggest_bet,
     validate_combination,
 )
@@ -549,3 +553,350 @@ def test_coincide_con_el_avance_simple_cuando_hay_una_sola_apuesta() -> None:
             assert advance_stage_by_round(strategy, stage, -100) == advance_stage(
                 strategy, stage, False
             )
+
+
+# ---------- Siguiente paso de la progresion ----------
+
+
+def test_siguiente_paso_de_martingala_con_la_tabla_del_documento() -> None:
+    """Escalon 3 de la tabla ($400) tras perder $100 y $200 de una banca de $10.000."""
+    plan = bankroll_plan(
+        Strategy.martingale, 100, 2, bankroll_current=9_700, bankroll_start=10_000
+    )
+    assert plan.if_lost.stage == 3
+    assert plan.if_lost.suggested_bet == 800
+    assert plan.if_lost.bankroll_after == 9_300
+    assert plan.if_won.stage == 0
+    assert plan.if_won.suggested_bet == 100
+    # Ganar el escalon 3 deja la serie en +$100: la banca termina en $10.100.
+    assert plan.if_won.bankroll_after == 10_100
+
+
+def test_siguiente_paso_de_dos_sectores_con_la_tabla_del_documento() -> None:
+    """Escalon 2 ($200 por docena): perder lleva a $600 por docena, $1.200 el giro."""
+    plan = bankroll_plan(
+        Strategy.two_sector_recovery,
+        100,
+        1,
+        bankroll_current=9_800,
+        bankroll_start=10_000,
+    )
+    assert plan.if_lost.stage == 2
+    assert plan.if_lost.bet_per_sector == 600
+    assert plan.if_lost.suggested_bet == 1_200
+    assert plan.if_lost.bankroll_after == 9_400
+    # Una docena acierta (+$400) y la otra se pierde (-$200): la banca sube $200 y
+    # vuelve a $10.000, que es justo lo que dice "recupera, no deja ganancia".
+    assert plan.if_won.stage == 0
+    assert plan.if_won.bankroll_after == 10_000
+
+
+@pytest.mark.parametrize(
+    ("strategy", "stage", "si_gana", "si_pierde"),
+    [
+        (Strategy.dalembert, 3, 2, 4),
+        (Strategy.fibonacci, 4, 2, 5),
+        (Strategy.flat, 0, 0, 0),
+    ],
+)
+def test_el_siguiente_paso_sigue_el_avance_de_escalon(
+    strategy: Strategy, stage: int, si_gana: int, si_pierde: int
+) -> None:
+    plan = bankroll_plan(
+        strategy, 100, stage, bankroll_current=50_000, bankroll_start=50_000
+    )
+    assert plan.if_won.stage == si_gana
+    assert plan.if_lost.stage == si_pierde
+
+
+def test_la_plana_pide_lo_mismo_gane_o_pierda() -> None:
+    plan = bankroll_plan(
+        Strategy.flat, 500, 0, bankroll_current=10_000, bankroll_start=10_000
+    )
+    assert plan.if_won.suggested_bet == plan.if_lost.suggested_bet == 500
+
+
+def test_el_siguiente_paso_marca_si_la_banca_ya_no_alcanzaria() -> None:
+    """Escalon 4 ($800) con $1.500: perdido, quedan $700 y el 5 pide $1.600."""
+    plan = bankroll_plan(
+        Strategy.martingale, 100, 3, bankroll_current=1_500, bankroll_start=3_000
+    )
+    assert plan.if_lost.bankroll_after == 700
+    assert plan.if_lost.exceeds_bankroll
+    assert not plan.if_won.exceeds_bankroll
+
+
+def test_el_siguiente_paso_marca_si_la_mesa_no_lo_aceptaria() -> None:
+    plan = bankroll_plan(
+        Strategy.martingale,
+        100,
+        5,
+        bankroll_current=1_000_000,
+        bankroll_start=1_000_000,
+        table_limit=5_000,
+    )
+    # Escalon 7 de la tabla: $6.400, por encima de $5.000.
+    assert plan.if_lost.suggested_bet == 6_400
+    assert plan.if_lost.exceeds_table_limit
+
+
+def test_escalones_soportados_desde_el_inicio_coinciden_con_la_tabla() -> None:
+    assert stages_supported_from(Strategy.martingale, 100, 0, 102_300) == 10
+    assert stages_supported_from(
+        Strategy.martingale, 100, 0, 102_300
+    ) == max_affordable_stages(Strategy.martingale, 100, 102_300)
+
+
+def test_escalones_soportados_desde_mitad_de_la_serie() -> None:
+    # Desde el escalon 4: $800 + $1.600 = $2.400.
+    assert stages_supported_from(Strategy.martingale, 100, 3, 2_400) == 2
+    assert stages_supported_from(Strategy.martingale, 100, 3, 2_399) == 1
+
+
+# ---------- Alertas de banca ----------
+
+
+def _codigos(alertas: tuple) -> list[str]:
+    return [a.code for a in alertas]
+
+
+def test_sin_alertas_al_empezar_una_plana_con_banca_holgada() -> None:
+    assert bankroll_alerts(
+        Strategy.flat, 100, 0, bankroll_current=100_000, bankroll_start=100_000
+    ) == ()
+
+
+def test_alerta_critica_si_la_banca_no_cubre_el_escalon() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale, 100, 9, bankroll_current=1_000, bankroll_start=1_000
+    )
+    assert alertas[0].code == "bankroll_insufficient"
+    assert alertas[0].level is AlertLevel.critical
+    assert "$51.200" in alertas[0].message
+
+
+def test_alerta_critica_en_el_ultimo_escalon_que_cubre_la_banca() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale, 100, 3, bankroll_current=1_500, bankroll_start=1_500
+    )
+    alerta = next(a for a in alertas if a.code == "last_affordable_stage")
+    assert alerta.level is AlertLevel.critical
+
+
+def test_aviso_cuando_quedan_pocos_escalones() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale, 100, 3, bankroll_current=2_400, bankroll_start=2_400
+    )
+    alerta = next(a for a in alertas if a.code == "few_stages_left")
+    assert alerta.level is AlertLevel.caution
+    assert "2 escalones" in alerta.message
+
+
+def test_alerta_critica_si_el_escalon_supera_el_limite_de_mesa() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale,
+        100,
+        9,
+        bankroll_current=1_000_000,
+        bankroll_start=1_000_000,
+        table_limit=5_000,
+    )
+    assert "table_limit_exceeded" in _codigos(alertas)
+    assert "table_limit_near" not in _codigos(alertas)
+
+
+@pytest.mark.parametrize(("stage", "distancia"), [(4, 2), (5, 1)])
+def test_aviso_cuando_el_limite_de_mesa_esta_cerca(stage: int, distancia: int) -> None:
+    """Con tope $5.000, el escalon 7 de la tabla ($6.400) ya no entra."""
+    alertas = bankroll_alerts(
+        Strategy.martingale,
+        100,
+        stage,
+        bankroll_current=1_000_000,
+        bankroll_start=1_000_000,
+        table_limit=5_000,
+    )
+    alerta = next(a for a in alertas if a.code == "table_limit_near")
+    assert alerta.level is AlertLevel.caution
+    assert f"A {distancia} escal" in alerta.message
+    assert "$6.400" in alerta.message
+
+
+def test_la_plana_nunca_se_acerca_al_limite_de_mesa() -> None:
+    alertas = bankroll_alerts(
+        Strategy.flat,
+        4_000,
+        0,
+        bankroll_current=1_000_000,
+        bankroll_start=1_000_000,
+        table_limit=5_000,
+    )
+    assert "table_limit_near" not in _codigos(alertas)
+
+
+@pytest.mark.parametrize(
+    ("banca", "nivel"),
+    [(90_000, None), (70_000, AlertLevel.caution), (40_000, AlertLevel.critical)],
+)
+def test_alerta_de_perdida_sobre_la_banca_inicial(
+    banca: float, nivel: AlertLevel | None
+) -> None:
+    alertas = bankroll_alerts(
+        Strategy.flat, 100, 0, bankroll_current=banca, bankroll_start=100_000
+    )
+    caida = [a for a in alertas if a.code == "drawdown"]
+    if nivel is None:
+        assert caida == []
+    else:
+        assert caida[0].level is nivel
+        assert "ventaja de la casa" in caida[0].message
+
+
+def test_ir_arriba_no_se_presenta_como_haber_vencido_a_la_casa() -> None:
+    alertas = bankroll_alerts(
+        Strategy.flat, 100, 0, bankroll_current=120_000, bankroll_start=100_000
+    )
+    alerta = next(a for a in alertas if a.code == "in_profit")
+    assert alerta.level is AlertLevel.info
+    assert "$20.000" in alerta.message
+    assert "no indica" in alerta.message
+
+
+def test_la_progresion_exponencial_avisa_cuanto_pediria_el_siguiente_escalon() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale, 100, 3, bankroll_current=100_000, bankroll_start=100_000
+    )
+    alerta = next(a for a in alertas if a.code == "exponential_growth")
+    assert "$1.600" in alerta.message
+
+
+def test_las_alertas_van_de_la_mas_grave_a_la_menos_grave() -> None:
+    alertas = bankroll_alerts(
+        Strategy.martingale,
+        100,
+        4,
+        bankroll_current=2_000,
+        bankroll_start=10_000,
+        table_limit=5_000,
+    )
+    niveles = [a.level for a in alertas]
+    orden = {AlertLevel.critical: 0, AlertLevel.caution: 1, AlertLevel.info: 2}
+    assert niveles == sorted(niveles, key=orden.__getitem__)
+    assert niveles[0] is AlertLevel.critical
+
+
+def test_las_alertas_nunca_usan_lenguaje_predictivo() -> None:
+    prohibidas = ("predic", "va a salir", "seguro", "garantiz", "proximo numero", "le toca")
+    escenarios = [
+        (Strategy.martingale, 9, 1_000, 1_000, None),
+        (Strategy.martingale, 3, 1_500, 10_000, 5_000),
+        (Strategy.two_sector_recovery, 4, 20_000, 30_000, 10_000),
+        (Strategy.flat, 0, 150_000, 100_000, None),
+    ]
+    for strategy, stage, banca, inicial, limite in escenarios:
+        for alerta in bankroll_alerts(
+            strategy,
+            100,
+            stage,
+            bankroll_current=banca,
+            bankroll_start=inicial,
+            table_limit=limite,
+        ):
+            texto = alerta.message.lower()
+            for palabra in prohibidas:
+                assert palabra not in texto, f"{alerta.code} usa {palabra!r}"
+
+
+# ---------- Limite de perdida del usuario ----------
+
+
+def test_alerta_critica_al_alcanzar_el_limite_de_perdida() -> None:
+    alertas = bankroll_alerts(
+        Strategy.flat,
+        100,
+        0,
+        bankroll_current=8_900,
+        bankroll_start=10_000,
+        loss_limit=1_000,
+    )
+    alerta = next(a for a in alertas if a.code == "loss_limit_reached")
+    assert alerta.level is AlertLevel.critical
+    assert "$1.100" in alerta.message
+    assert "ventaja de la casa" in alerta.message
+
+
+def test_avisa_si_el_giro_actual_puede_llevar_al_limite() -> None:
+    """Martingala $100: tras $100+$200+$400 perdidos el escalon 4 pide $800 y al
+    limite de $1.000 solo le quedan $300."""
+    plan = bankroll_plan(
+        Strategy.martingale,
+        100,
+        3,
+        bankroll_current=9_300,
+        bankroll_start=10_000,
+        loss_limit=1_000,
+    )
+    alerta = next(a for a in plan.alerts if a.code == "loss_limit_next")
+    assert alerta.level is AlertLevel.critical
+    assert "$300" in alerta.message
+    assert plan.if_lost.reaches_loss_limit
+    assert not plan.if_won.reaches_loss_limit
+
+
+def test_avisa_cuando_se_acerca_al_limite() -> None:
+    alertas = bankroll_alerts(
+        Strategy.flat,
+        100,
+        0,
+        bankroll_current=9_200,
+        bankroll_start=10_000,
+        loss_limit=1_000,
+    )
+    alerta = next(a for a in alertas if a.code == "loss_limit_near")
+    assert alerta.level is AlertLevel.caution
+    assert "$200" in alerta.message
+
+
+def test_con_limite_propio_no_aparecen_los_umbrales_por_defecto() -> None:
+    """40% de caida disparaba el aviso por defecto; con limite de $5.000 manda el del usuario."""
+    alertas = bankroll_alerts(
+        Strategy.flat,
+        100,
+        0,
+        bankroll_current=6_000,
+        bankroll_start=10_000,
+        loss_limit=5_000,
+    )
+    codigos = _codigos(alertas)
+    assert "drawdown" not in codigos
+    assert "loss_limit_near" in codigos
+
+
+def test_sin_limite_el_siguiente_paso_nunca_lo_alcanza() -> None:
+    plan = bankroll_plan(
+        Strategy.martingale, 100, 3, bankroll_current=9_300, bankroll_start=10_000
+    )
+    assert not plan.if_lost.reaches_loss_limit
+
+
+def test_las_alertas_del_limite_nunca_usan_lenguaje_predictivo() -> None:
+    prohibidas = ("predic", "va a salir", "seguro", "garantiz", "proximo numero", "le toca")
+    for banca in (9_900, 9_200, 9_000, 8_000):
+        for alerta in bankroll_alerts(
+            Strategy.martingale,
+            100,
+            2,
+            bankroll_current=banca,
+            bankroll_start=10_000,
+            loss_limit=1_000,
+        ):
+            texto = alerta.message.lower()
+            for palabra in prohibidas:
+                assert palabra not in texto, f"{alerta.code} usa {palabra!r}"
+
+
+def test_el_plan_es_una_funcion_pura() -> None:
+    kwargs = {"bankroll_current": 5_000, "bankroll_start": 8_000, "table_limit": 3_000}
+    assert bankroll_plan(Strategy.fibonacci, 100, 4, **kwargs) == bankroll_plan(
+        Strategy.fibonacci, 100, 4, **kwargs
+    )

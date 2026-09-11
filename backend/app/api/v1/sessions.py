@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import Bet, GameSession, GameVariant, Spin
@@ -89,6 +89,7 @@ def create_session(payload: CreateSessionRequest, db: DbSession, user: CurrentUs
         bankroll_current=payload.bankroll_start,
         base_bet=payload.base_bet,
         table_limit=payload.table_limit,
+        loss_limit=payload.loss_limit,
         strategy_selected=payload.strategy.value,
         strategy_mode=payload.strategy_mode.value,
         strategy_stage=0,
@@ -124,6 +125,30 @@ def get_session(session_id: UUID, db: DbSession, user: CurrentUser) -> GameSessi
     return get_owned_session(db, user.id, session_id)
 
 
+def _check_loss_limit_change(session: GameSession, nuevo: float | None) -> None:
+    """Un limite de perdida se puede fijar o bajar, nunca subir ni quitar.
+
+    Es la regla del documento verificado (§9): "no aumentes el limite para
+    recuperar perdidas". Si se pudiera subir a mitad de sesion, el limite dejaria
+    de ser una decision tomada antes de jugar.
+    """
+    actual = float(session.loss_limit) if session.loss_limit is not None else None
+    if actual is not None and (nuevo is None or nuevo > actual):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "El límite de pérdida se puede bajar, pero no subir ni quitar con la "
+                "sesión abierta: aumentarlo para recuperar es justo lo que el límite "
+                "busca evitar. Si quieres otro límite, cierra esta sesión y abre una nueva."
+            ),
+        )
+    if nuevo is not None and nuevo > float(session.bankroll_start):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El límite de pérdida no puede superar la banca inicial",
+        )
+
+
 @router.patch("/{session_id}", response_model=SessionResponse)
 def update_session(
     session_id: UUID, payload: UpdateSessionRequest, db: DbSession, user: CurrentUser
@@ -149,14 +174,30 @@ def update_session(
             ),
         )
 
-    if "strategy" in cambios:
-        session.strategy_selected = cambios.pop("strategy")
+    cambia_progresion = (
+        nueva_estrategia.value != session.strategy_selected
+        or nuevo_modo.value != session.strategy_mode
+    )
+    cambios.pop("strategy", None)
+    cambios.pop("strategy_mode", None)
+    if cambia_progresion:
+        session.strategy_selected = nueva_estrategia.value
+        session.strategy_mode = nuevo_modo.value
         # Cambiar de estrategia reinicia la progresion: mantener el escalon de la
         # anterior daria un tamano de apuesta que no corresponde a ninguna serie.
+        # Se compara contra lo persistido porque el formulario reenvia la
+        # estrategia aunque solo se haya tocado otro campo.
         session.strategy_stage = 0
-    if "strategy_mode" in cambios:
-        session.strategy_mode = cambios.pop("strategy_mode")
-        session.strategy_stage = 0
+        # Por lo mismo, deshacer un giro anterior al cambio no puede devolver un
+        # escalon de la progresion vieja: esos giros dejan de restaurarlo.
+        db.execute(
+            update(Spin)
+            .where(Spin.session_id == session.id)
+            .values(strategy_stage_before=None)
+        )
+
+    if "loss_limit" in cambios:
+        _check_loss_limit_change(session, cambios["loss_limit"])
 
     for campo, valor in cambios.items():
         setattr(session, campo, valor)

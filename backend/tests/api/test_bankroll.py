@@ -51,6 +51,7 @@ def _crear_sesion(
     base_bet: float = 100,
     bankroll: float = 100_000,
     table_limit: float = 500_000,
+    loss_limit: float | None = None,
 ) -> str:
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
@@ -73,6 +74,7 @@ def _crear_sesion(
             "table_limit": table_limit,
             "strategy": strategy,
             "strategy_mode": strategy_mode,
+            "loss_limit": loss_limit,
         },
         headers=auth(user_token),
     ).json()["id"]
@@ -99,6 +101,61 @@ def test_la_sugerencia_arranca_en_la_apuesta_base(
     assert cuerpo["suggested_bet"] == 100
     assert cuerpo["sectors"] == 1
     assert cuerpo["cumulative_risked"] == 100
+
+
+def test_la_sugerencia_trae_el_siguiente_paso_en_los_dos_casos(
+    client: TestClient, user_token: str, sesion_martingala: str
+) -> None:
+    cuerpo = client.get(
+        f"/sessions/{sesion_martingala}/bankroll/suggestion", headers=auth(user_token)
+    ).json()
+    assert cuerpo["next_if_lost"]["stage"] == 1
+    assert cuerpo["next_if_lost"]["suggested_bet"] == 200
+    assert cuerpo["next_if_lost"]["bankroll_after"] == 99_900
+    assert cuerpo["next_if_won"]["stage"] == 0
+    assert cuerpo["next_if_won"]["bankroll_after"] == 100_100
+    # $100.000 cubren 9 escalones de la tabla ($51.100); el 10 ya exige $102.300.
+    assert cuerpo["stages_supported"] == 9
+    assert cuerpo["alerts"] == []
+
+
+def test_la_sugerencia_alerta_cuando_la_banca_queda_corta(
+    client: TestClient, user_token: str, admin_token: str
+) -> None:
+    sid = _crear_sesion(client, user_token, admin_token, bankroll=150)
+    alertas = client.get(
+        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+    ).json()["alerts"]
+    assert alertas[0]["code"] == "last_affordable_stage"
+    assert alertas[0]["level"] == "critical"
+    assert alertas[0]["message"]
+
+
+def test_la_sugerencia_usa_el_limite_de_perdida_de_la_sesion(
+    client: TestClient, user_token: str, admin_token: str
+) -> None:
+    """Con $300 de limite, perder el primer escalon ($100) no lo alcanza; el
+    segundo ($200) si."""
+    sid = _crear_sesion(client, user_token, admin_token, loss_limit=300)
+    cuerpo = client.get(
+        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+    ).json()
+    assert cuerpo["next_if_lost"]["reaches_loss_limit"] is False
+    assert cuerpo["alerts"] == []
+
+    client.post(
+        f"/sessions/{sid}/bets",
+        json={"category": "color", "option_label": "Rojo", "amount": 100},
+        headers=auth(user_token),
+    )
+    client.post(
+        f"/sessions/{sid}/spins", json={"result_value": "2"}, headers=auth(user_token)
+    )
+    cuerpo = client.get(
+        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+    ).json()
+    assert cuerpo["next_if_lost"]["reaches_loss_limit"] is True
+    assert cuerpo["alerts"][0]["code"] == "loss_limit_next"
 
 
 def test_la_sugerencia_siempre_trae_el_disclaimer_de_la_progresion(
