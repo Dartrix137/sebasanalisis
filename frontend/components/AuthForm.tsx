@@ -16,9 +16,9 @@ import { useEffect, useState } from "react";
 import { ApiError, authApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 
-import { BrandMark, Button, Card, ErrorBox, Field } from "./ui";
+import { BrandMark, Button, Card, ErrorBox, Field, PasswordField } from "./ui";
 
-const SUBTITLE = "Análisis estadístico descriptivo · tu progreso guardado en tu cuenta";
+const SUBTITLE = "Registra los números de tu mesa y revisa lo que ya salió. Tu progreso queda guardado en tu cuenta.";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const isRegister = mode === "register";
@@ -66,10 +66,10 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
       <BrandMark />
-      <h1 className="mt-4 text-2xl font-extrabold tracking-tight">
+      <h1 className="mt-5 font-display text-5xl font-semibold leading-none tracking-tight">
         Sebas<span className="text-gold">análisis</span>
       </h1>
-      <p className="mt-2 max-w-md text-center text-sm text-muted">{SUBTITLE}</p>
+      <p className="mt-3 max-w-sm text-center text-sm leading-relaxed text-muted">{SUBTITLE}</p>
 
       <Card className="mt-7 w-full max-w-md">
         <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-ink-sunken p-1">
@@ -103,13 +103,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          <Field
+          <PasswordField
+            id="password"
             label="Contraseña"
-            type="password"
             required
             minLength={8}
             autoComplete={isRegister ? "new-password" : "current-password"}
-            placeholder="Mínimo 8 caracteres"
+            hint={isRegister ? "Mínimo 8 caracteres." : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -146,6 +146,7 @@ function Tab({
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={`rounded-md px-4 py-2 text-center text-sm font-bold transition-colors ${
         active ? "bg-gold text-gold-ink" : "text-white hover:text-gold"
       }`}

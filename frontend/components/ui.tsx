@@ -69,6 +69,68 @@ export function Field({
   );
 }
 
+/**
+ * Campo de contraseña con botón para verla. Escribir a ciegas en el celular es
+ * la causa más común de "contraseña incorrecta" en un registro recién hecho.
+ */
+export function PasswordField({
+  label,
+  hint,
+  id,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
+  label: string;
+  hint?: string;
+  id: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  const hintId = hint ? `${id}-hint` : undefined;
+
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold text-white">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          {...props}
+          id={id}
+          type={visible ? "text" : "password"}
+          aria-describedby={hintId}
+          className="w-full rounded-lg border border-edge bg-ink-sunken py-2.5 pl-3.5 pr-24 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-controls={id}
+          aria-pressed={visible}
+          className="absolute inset-y-1 right-1 flex items-center gap-1.5 rounded-md px-2.5 text-xs font-bold text-muted transition-colors hover:bg-ink hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            {visible ? (
+              <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            ) : null}
+          </svg>
+          {visible ? "Ocultar" : "Mostrar"}
+        </button>
+      </div>
+      {hint ? (
+        <span id={hintId} className="mt-1 block text-xs text-muted">
+          {hint}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function Badge({
   children,
   tone = "neutral",
