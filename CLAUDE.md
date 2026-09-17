@@ -61,6 +61,13 @@ Reglas no negociables al implementarlo:
 - El acceso se decide **siempre en el servidor** a partir de `access_type` y `current_period_end`. Nada que dependa de lo que mande el cliente.
 - Copy de las pantallas de suscripción: ninguna promesa de resultados o de "ventaja" — aplica la misma regla no-predictiva que el resto del producto.
 
+El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que distinguen "funciona con el caso feliz" de "aguanta producción":
+
+- Firma inválida → se rechaza, sin tocar el acceso.
+- Evento duplicado (mismo `provider_event_id`) → se otorga un solo período.
+- Transacción declinada → no se concede acceso.
+- Suscripción vencida (`current_period_end` en el pasado) → el acceso queda revocado.
+
 Las señales avanzadas del motor (§2.9) siguen fuera hasta que el usuario las pida explícitamente, una por una. También siguen fuera el builder visual del admin, el juego de dados y exportar CSV.
 
 ## Ingreso de números
@@ -91,7 +98,8 @@ Reglas que no se negocian:
 - Python: type hints en todo, Pydantic para validación de I/O, nombres de funciones y variables en español o inglés de forma consistente dentro de cada módulo (no mezclar en el mismo archivo).
 - Nombres de tablas/campos en `snake_case`, en español donde ya están definidos en el doc de arquitectura (ej. `bankroll_current`), no los traduzcas.
 - Tests: cada módulo de `engine/` necesita tests unitarios con pytest antes de conectarse a un endpoint. Usa casos conocidos del documento de estrategia verificado (ej. la tabla de martingala $100→$102.300 en 10 pérdidas) como test de regresión.
-- Frontend: componentes tipados, sin `any`. Usa el contrato de `schemas/` (Pydantic) como referencia para los tipos TypeScript del cliente API — mantenlos sincronizados manualmente por ahora (no hay generador automático en el MVP).
+- Frontend: componentes tipados, sin `any`. Usa el contrato de `schemas/` (Pydantic) como referencia para los tipos TypeScript del cliente API — mantenlos sincronizados manualmente por ahora (no hay generador automático en el MVP). Ojo con esto: `apiFetch` castea la respuesta (`as T`) sin validarla en runtime, así que un tipo desincronizado **no rompe `npm run typecheck` ni los tests** — se ve como `undefined` en pantalla, en producción. Por eso la skill `api-schema-sync` se corre en el mismo commit que el cambio de schema, no después.
+- Migraciones: una por cambio lógico, con `down_revision` correcto y un downgrade que de verdad funcione. Antes de darla por terminada, `alembic upgrade head` sobre una base limpia y después `alembic downgrade -1`: una migración que no baja no está terminada. Nunca edites una migración ya aplicada en producción — agrega una nueva. Los backfills de datos van en su propia migración, separados del DDL.
 
 ## Diseños de referencia
 
