@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/check_terminologia.py\"",
+            "shell": "bash",
+            "timeout": 20,
+            "statusMessage": "Verificando terminologia no-predictiva"
+          }
+        ]
+      }
+    ]
+  }
+}

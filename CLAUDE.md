@@ -47,6 +47,22 @@ Sigue exactamente la estructura definida en `docs/ARQUITECTURA_Y_ESTADISTICA.md`
 
 No avances a un paso sin que el anterior tenga al menos un test o una verificación manual funcionando. Si vas a saltarte este orden por alguna razón, dilo explícitamente y pide confirmación.
 
+## Fase 2 — alcance vigente (decidido el 2026-09-17)
+
+Los pasos 1-8 están construidos. La Fase 2 incorpora **pagos y suscripciones con Wompi**, que antes estaban fuera de alcance. Las tablas `subscriptions` y `payment_events` existen desde el MVP sin lógica asociada; la Fase 2 es la que las usa.
+
+Reglas no negociables al implementarlo:
+
+- La verificación de firma (integridad de la transacción y checksum del webhook) se lee de la **documentación oficial vigente de Wompi**, nunca de memoria. Deja en un comentario de dónde salió el algoritmo. Una firma mal verificada es una puerta abierta a conceder acceso gratis.
+- **El webhook no es fuente de verdad por sí solo**: tras verificarlo, vuelve a consultar el estado de la transacción contra la API de Wompi antes de mover `subscriptions.status` o `users.access_type`.
+- **Idempotencia** por `payment_events.provider_event_id` (único). Los webhooks se reintentan: reprocesar el mismo evento no puede otorgar dos períodos de acceso.
+- Secretos solo por variable de entorno — `.env` está en `.gitignore` y Dokploy las inyecta. `.env.example` lista los nombres, nunca los valores.
+- Montos en enteros (centavos), nunca `float`, con la moneda explícita en el campo.
+- El acceso se decide **siempre en el servidor** a partir de `access_type` y `current_period_end`. Nada que dependa de lo que mande el cliente.
+- Copy de las pantallas de suscripción: ninguna promesa de resultados o de "ventaja" — aplica la misma regla no-predictiva que el resto del producto.
+
+Las señales avanzadas del motor (§2.9) siguen fuera hasta que el usuario las pida explícitamente, una por una. También siguen fuera el builder visual del admin, el juego de dados y exportar CSV.
+
 ## Ingreso de números
 
 Todos los números de una sesión los ingresa el usuario. Hay dos momentos, y ambos son manuales:
@@ -83,7 +99,7 @@ Reglas que no se negocian:
 
 ## Qué NO hacer
 
-- No implementes pagos/Wompi todavía — solo deja los campos de DB ya definidos en el schema, sin lógica.
+- No implementes la verificación de firma de Wompi de memoria, ni concedas acceso confiando solo en el cuerpo del webhook — lee las reglas de la sección "Fase 2" más arriba antes de tocar pagos.
 - No construyas el builder visual de categorías del admin en el MVP — usa un formulario estructurado simple.
 - No implementes las señales avanzadas (transición condicional, k-gramas, ciclo, señales de pleno) sin que el usuario lo pida explícitamente — están fuera del scope del MVP (ver §2.9 del doc de arquitectura).
 - No uses SQLite ni Prisma (eso era del boceto de referencia) — este proyecto usa PostgreSQL + SQLAlchemy/Alembic.

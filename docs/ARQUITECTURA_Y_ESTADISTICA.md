@@ -273,7 +273,7 @@ Backend:   FastAPI (Python) — motor estadístico puro en engine/, sin efectos 
 Frontend:  Next.js (React + TypeScript)
 DB:        PostgreSQL
 Auth:      JWT (access + refresh), hash de contraseñas con bcrypt/argon2
-Pagos:     Wompi (Colombia) — fuera de scope del MVP, campos de DB preparados
+Pagos:     Wompi (Colombia) — fase 2 (en alcance); campos de DB preparados desde el MVP
 ```
 
 **Por qué separado (Backend Python + Frontend Next.js) y no monolítico como el boceto de referencia:** el ecosistema Python (numpy/scipy para χ², shrinkage, distribución binomial) es más natural para el motor estadístico que TypeScript, y mantiene el motor testeable de forma aislada, igual que en el boceto (`roulette-v3.ts` como módulo puro) pero en Python.
@@ -427,7 +427,7 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
 
 ### En scope (MVP v1)
 
-1. **Auth**: registro, login, refresh, perfil. Acceso inicial: `access_type` en `'trial' | 'invited' | 'full'` — sin pagos aún.
+1. **Auth**: registro, login, refresh, perfil. Acceso inicial: `access_type` en `'trial' | 'invited' | 'full'` — sin pagos en el MVP; Wompi entra en la Fase 2.
 2. **Admin dashboard**: gestión de usuarios (cambiar access_type), CRUD de juegos/variantes vía formulario estructurado (NO builder visual drag-and-drop — se pospone).
 3. **Menú principal**: selector de juegos activos + shortcut a sesión activa si existe.
 4. **Juego de Ruleta** (europea y americana como variantes precargadas):
@@ -443,11 +443,15 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
    - Registro de apuesta real (categoría + monto) y resolución automática win/loss al ingresar el siguiente número.
    - Auto-evaluación: tasa de coincidencia del motor vs. línea base ingenua, visible en vivo y en el resumen de cierre.
 
+### Fase 2 (en alcance, decidido el 2026-09-17)
+
+- **Pagos/suscripciones con Wompi.** El MVP dejó `subscriptions` y `payment_events` con el modelo de datos preparado y sin lógica; la Fase 2 los implementa. Reglas: firma (integridad de la transacción y checksum del webhook) verificada contra la documentación oficial vigente de Wompi y nunca de memoria; el webhook no es fuente de verdad por sí solo, se reconsulta la transacción contra la API antes de mover `subscriptions.status` o `users.access_type`; idempotencia por `provider_event_id`, que es único, porque los webhooks se reintentan; montos en centavos con moneda explícita; secretos solo por variable de entorno; acceso decidido siempre en el servidor a partir de `access_type` y `current_period_end`.
+- **Señales avanzadas del motor** (§2.9): entran una por una, solo cuando el usuario las pida explícitamente.
+
 ### Fuera de scope (post-MVP, ya identificado)
 
-- Pagos/suscripciones con Wompi (queda con el modelo de datos preparado, sin lógica).
 - Builder visual de categorías en el admin (se usa formulario simple primero).
-- Señales avanzadas: transición condicional, k-gramas, ciclo, señales de pleno (sección 2.9).
+- Señales avanzadas: transición condicional, k-gramas, ciclo, señales de pleno (sección 2.9) — fuera del MVP; pasan a la Fase 2 solo cuando el usuario pida cada una.
 - Juego de dados u otros — el modelo ya lo soporta, pero no se construye la UI/seed en el MVP.
 - Exportar CSV, migración de datos locales, notificaciones.
 

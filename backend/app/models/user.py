@@ -1,8 +1,11 @@
 """Usuarios, suscripciones y eventos de pago.
 
 Las tablas de suscripciones/pagos existen en el schema desde el MVP (decision de
-`docs/ARQUITECTURA_Y_ESTADISTICA.md` §3.3) pero NO tienen logica asociada todavia:
-Wompi esta fuera del alcance del MVP.
+`docs/ARQUITECTURA_Y_ESTADISTICA.md` §3.3) y todavia no tienen logica asociada.
+Wompi entra en la Fase 2, que ya esta en alcance: antes de escribir esa logica lee
+las reglas de §4 del doc de arquitectura y de la seccion "Fase 2" de CLAUDE.md
+(firma verificada contra la documentacion oficial vigente, el webhook no es fuente
+de verdad por si solo, idempotencia por `provider_event_id`).
 """
 
 import uuid
@@ -42,7 +45,9 @@ class User(Base):
 
 
 class Subscription(Base):
-    """Fase 2 (Wompi). Sin logica en el MVP: solo estructura."""
+    """Estado de la suscripcion de un usuario. Estructura creada en el MVP; la
+    logica de Wompi se implementa en la Fase 2 (ver el docstring del modulo).
+    """
 
     __tablename__ = "subscriptions"
 
@@ -60,7 +65,10 @@ class Subscription(Base):
 
 
 class PaymentEvent(Base):
-    """Fase 2 (Wompi). Sin logica en el MVP: solo estructura."""
+    """Bitacora de eventos del proveedor de pagos. Estructura creada en el MVP;
+    la logica de Wompi se implementa en la Fase 2. `provider_event_id` es unico
+    a proposito: es la clave de idempotencia frente a reintentos del webhook.
+    """
 
     __tablename__ = "payment_events"
 
