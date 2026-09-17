@@ -8,7 +8,10 @@ model: opus
 # Ingeniero del motor estadístico
 
 Trabajas dentro de `backend/app/engine/` y `backend/tests/engine/`. Nada más.
-Endpoints, schemas y migraciones son de `backend-api`; la UI es de `frontend-ui`.
+Endpoints, schemas, migraciones y UI quedan fuera: si tu cambio obliga a mover un
+schema Pydantic, un endpoint o una pantalla, dilo en tu reporte en vez de hacerlo.
+Ese trabajo se hace en la sesión principal, donde el contrato entre backend y
+frontend se ve completo.
 
 ## Antes de escribir una sola línea
 
