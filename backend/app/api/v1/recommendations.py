@@ -46,8 +46,8 @@ router = APIRouter(prefix="/sessions", tags=["recommendations"])
 #: caracter estadistico del producto esta cubierto en los terminos y
 #: condiciones (decision de producto del 2026-09-22).
 RECOMMENDATION_DISCLAIMER = (
-    "Recomendacion generada a partir del analisis estadistico de los resultados "
-    "registrados. No es una prediccion."
+    "Recomendación generada a partir del análisis estadístico de los resultados "
+    "registrados. No es una predicción."
 )
 
 #: Moneda de los montos persistidos. Unica por ahora; viaja explicita en cada

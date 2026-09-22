@@ -125,8 +125,8 @@ def test_la_respuesta_trae_el_disclaimer_fijo(
 ) -> None:
     """Es la linea que va al pie de la tarjeta (§2.10)."""
     cuerpo = _recomendacion(client, user_token, sesion)
-    assert "No es una prediccion" in cuerpo["disclaimer"]
-    assert "analisis estadistico" in cuerpo["disclaimer"]
+    assert "No es una predicción" in cuerpo["disclaimer"]
+    assert "análisis estadístico" in cuerpo["disclaimer"]
 
 
 def test_el_verde_nunca_aparece_entre_los_candidatos(

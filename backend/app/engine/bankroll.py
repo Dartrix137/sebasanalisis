@@ -898,7 +898,7 @@ def applies_to_market(strategy: Strategy, sectors: int) -> str | None:
     """
     if strategy is Strategy.two_sector_recovery and sectors != SECTORS_IN_TWO_SECTOR_MODE:
         return (
-            "La recuperacion de dos sectores solo aplica cuando la recomendacion "
+            "La recuperación de dos sectores solo aplica cuando la recomendación "
             "cubre dos zonas a la vez, como dos docenas o dos columnas."
         )
     return None
