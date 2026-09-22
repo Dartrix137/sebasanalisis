@@ -42,10 +42,15 @@ class Spin(Base):
         default="manual",
         nullable=False,
     )
-    # Escalon de la progresion ANTES de que este giro resolviera apuestas.
-    # Deshacer el giro lo restaura: `advance_stage` no es invertible y recalcular
-    # replicando la partida pisaria un "reiniciar progresion" hecho a mano.
-    strategy_stage_before: Mapped[int | None] = mapped_column(Integer)
+    # Escalones de cada progresion ANTES de que este giro resolviera la
+    # recomendacion pendiente. Deshacer el giro los restaura: `advance_stage` no
+    # es invertible y recalcular replicando la partida pisaria un "reiniciar
+    # progresion" hecho a mano.
+    #
+    # Son dos desde la Fase 3 porque la mesa lleva las tres progresiones a la vez
+    # y cada una tiene su escalon (la plana no necesita columna: siempre es 0).
+    stage_martingale_before: Mapped[int | None] = mapped_column(Integer)
+    stage_two_sector_before: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = created_at_col()
 
     session: Mapped["GameSession"] = relationship(back_populates="spins")

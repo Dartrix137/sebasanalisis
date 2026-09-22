@@ -12,6 +12,7 @@
 import { useState } from "react";
 
 import type {
+  AllowedCombination,
   CategoryGroup,
   GameCategory,
   GameVariantConfig,
@@ -38,6 +39,8 @@ interface GroupDraft {
   label: string;
   outcomes: string;
   payout: string;
+  /** Si el grupo entra al catálogo de mercados del motor (§2.10). */
+  market: boolean;
 }
 
 interface CategoryDraft {
@@ -64,11 +67,18 @@ function toDrafts(config?: GameVariantConfig): CategoryDraft[] {
       label: g.label ?? "",
       outcomes: g.outcomes.join(", "),
       payout: String(g.payout),
+      market: g.market,
     })),
   }));
 }
 
-const emptyGroup = (): GroupDraft => ({ key: "", label: "", outcomes: "", payout: "1" });
+const emptyGroup = (): GroupDraft => ({
+  key: "",
+  label: "",
+  outcomes: "",
+  payout: "1",
+  market: true,
+});
 const emptyCategory = (): CategoryDraft => ({
   id: "",
   label: "",
@@ -84,6 +94,16 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
     initial?.config.possible_outcomes.join(", ") ?? "",
   );
   const [categories, setCategories] = useState<CategoryDraft[]>(toDrafts(initial?.config));
+  const [threshold, setThreshold] = useState(
+    String(initial?.config.recommendation_threshold ?? 60),
+  );
+  /*
+    Las combinaciones permitidas (dos docenas, dos columnas) se conservan tal
+    como están: editarlas pediría el builder visual que CLAUDE.md deja fuera del
+    MVP. Lo que no se puede hacer es perderlas al guardar — sin ellas el motor
+    se queda sin los mercados combinados de §2.10.
+  */
+  const combinations: AllowedCombination[] = initial?.config.allowed_combinations ?? [];
 
   function patchCategory(index: number, patch: Partial<CategoryDraft>) {
     setCategories((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -119,10 +139,13 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
                 label: g.label.trim() || null,
                 outcomes: splitList(g.outcomes),
                 payout: Number(g.payout),
+                market: g.market,
               },
             ]),
         ),
       })),
+      allowed_combinations: combinations,
+      recommendation_threshold: Number(threshold),
     };
     onSubmit({ name: name.trim(), house_edge: Number(houseEdge), config, active });
   }
@@ -149,6 +172,18 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
           onChange={(e) => setHouseEdge(e.target.value)}
         />
       </div>
+
+      <Field
+        label="Umbral de recomendación"
+        required
+        type="number"
+        step="1"
+        min={0}
+        max={100}
+        hint="Puntuación de señal a partir de la cual se recomienda apostar (§2.10). Por debajo, la decisión es NO APOSTAR. Por defecto 60: subirlo hace que el motor hable menos, bajarlo que hable más."
+        value={threshold}
+        onChange={(e) => setThreshold(e.target.value)}
+      />
 
       <label className="block">
         <span className="mb-1.5 block text-sm font-bold text-white">Resultados posibles</span>
@@ -228,6 +263,21 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
                     value={g.payout}
                     onChange={(e) => patchGroup(ci, gi, { payout: e.target.value })}
                   />
+                  <label className="flex items-end gap-2 pb-2.5 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={g.market}
+                      onChange={(e) => patchGroup(ci, gi, { market: e.target.checked })}
+                      className="h-4 w-4 accent-gold"
+                    />
+                    <span>
+                      Recomendable
+                      <span className="block text-muted/80">
+                        Desmárcalo para grupos que no son una zona de apuesta, como
+                        el verde del 0.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               ))}
             </div>

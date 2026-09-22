@@ -12,18 +12,16 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
-from app.models import Bet, GameSession, GameVariant, Spin
+from app.models import Bet, GameSession, GameVariant, Spin, StatisticalSuggestion
 from app.schemas.games import GameVariantConfig
 from app.schemas.sessions import (
-    BankrollStrategy,
     CreateSessionRequest,
     SessionResponse,
     SessionStatus,
     SessionSummaryResponse,
-    StrategyMode,
     UpdateSessionRequest,
 )
 from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
@@ -90,9 +88,10 @@ def create_session(payload: CreateSessionRequest, db: DbSession, user: CurrentUs
         base_bet=payload.base_bet,
         table_limit=payload.table_limit,
         loss_limit=payload.loss_limit,
-        strategy_selected=payload.strategy.value,
-        strategy_mode=payload.strategy_mode.value,
-        strategy_stage=0,
+        # Los tres escalones arrancan en 0: la mesa muestra las tres progresiones
+        # a la vez y el usuario sigue la que quiera (§2.10).
+        stage_martingale=0,
+        stage_two_sector=0,
     )
     db.add(session)
     db.commit()
@@ -155,46 +154,6 @@ def update_session(
 ) -> GameSession:
     session = require_active(get_owned_session(db, user.id, session_id))
     cambios = payload.model_dump(exclude_unset=True)
-
-    # El validador del schema solo cruza modo y estrategia cuando el request trae
-    # ambos. Si viene uno solo hay que combinarlo con lo ya persistido, o el
-    # CHECK de §2.8 rechazaria el UPDATE con un 500 en vez de un 422 explicativo.
-    nuevo_modo = payload.strategy_mode or StrategyMode(session.strategy_mode)
-    nueva_estrategia = payload.strategy or BankrollStrategy(session.strategy_selected)
-    if (nuevo_modo is StrategyMode.two_sector) != (
-        nueva_estrategia is BankrollStrategy.two_sector_recovery
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"La combinacion strategy_mode='{nuevo_modo.value}' con "
-                f"strategy='{nueva_estrategia.value}' no es valida (§2.8): el modo "
-                "dos-sectores exige la progresion 'two_sector_recovery' y esa "
-                "progresion no aplica en modo 1:1"
-            ),
-        )
-
-    cambia_progresion = (
-        nueva_estrategia.value != session.strategy_selected
-        or nuevo_modo.value != session.strategy_mode
-    )
-    cambios.pop("strategy", None)
-    cambios.pop("strategy_mode", None)
-    if cambia_progresion:
-        session.strategy_selected = nueva_estrategia.value
-        session.strategy_mode = nuevo_modo.value
-        # Cambiar de estrategia reinicia la progresion: mantener el escalon de la
-        # anterior daria un tamano de apuesta que no corresponde a ninguna serie.
-        # Se compara contra lo persistido porque el formulario reenvia la
-        # estrategia aunque solo se haya tocado otro campo.
-        session.strategy_stage = 0
-        # Por lo mismo, deshacer un giro anterior al cambio no puede devolver un
-        # escalon de la progresion vieja: esos giros dejan de restaurarlo.
-        db.execute(
-            update(Spin)
-            .where(Spin.session_id == session.id)
-            .values(strategy_stage_before=None)
-        )
 
     if "loss_limit" in cambios:
         _check_loss_limit_change(session, cambios["loss_limit"])
@@ -277,7 +236,6 @@ def session_summary(
         bankroll_start=inicial,
         bankroll_final=actual,
         net_change=round(actual - inicial, 2),
-        strategy_used=BankrollStrategy(session.strategy_selected),
         max_drawdown=round(caida_maxima, 2),
         followed_suggestion_rate=seguidas / len(apuestas) if apuestas else 0.0,
     )
@@ -285,9 +243,14 @@ def session_summary(
 
 @router.post("/{session_id}/reset-strategy", response_model=SessionResponse)
 def reset_strategy(session_id: UUID, db: DbSession, user: CurrentUser) -> GameSession:
-    """Vuelve la progresion al escalon inicial sin tocar la banca ni los giros."""
+    """Vuelve las progresiones al escalon inicial sin tocar la banca ni los giros.
+
+    Se reinician las tres a la vez porque las tres estan corriendo a la vez: el
+    usuario no tiene una elegida que reiniciar por separado (§2.10).
+    """
     session = require_active(get_owned_session(db, user.id, session_id))
-    session.strategy_stage = 0
+    session.stage_martingale = 0
+    session.stage_two_sector = 0
     db.commit()
     db.refresh(session)
     return session
@@ -335,17 +298,48 @@ def create_spin(
         spin_index=0 if ultimo is None else ultimo + 1,
         result_value=payload.result_value,
         source=payload.source.value,
-        # Se guarda antes de resolver nada, para poder volver aqui si se deshace.
-        strategy_stage_before=session.strategy_stage,
+        # Se guardan antes de resolver nada, para poder volver aqui si se deshace.
+        stage_martingale_before=session.stage_martingale,
+        stage_two_sector_before=session.stage_two_sector,
     )
     db.add(spin)
     db.flush()  # asigna el id del giro, que la resolucion necesita
 
-    # Las apuestas pendientes se resuelven contra este giro. Importado aqui y no
-    # arriba porque `bets` importa este modulo: es una dependencia circular.
+    # Importados aqui y no arriba porque ambos modulos importan este: es una
+    # dependencia circular.
     from app.api.v1.bets import resolve_pending_bets
+    from app.api.v1.recommendations import (
+        build_recommendation,
+        persist_recommendation,
+        resolve_pending_recommendation,
+        stakes_for,
+    )
 
-    resolve_pending_bets(db, session, GameConfig.from_dict(variant.categories_json), spin)
+    motor_config = GameConfig.from_dict(variant.categories_json)
+
+    # Las apuestas reales del usuario se resuelven contra este giro y mueven la
+    # banca. Las progresiones, en cambio, las mueve el cierre de la recomendacion
+    # anterior (§2.10): son dos cosas distintas y avanzan por motivos distintos.
+    resolve_pending_bets(db, session, motor_config, spin)
+    resolve_pending_recommendation(db, session, motor_config, spin)
+
+    # Con el giro ya dentro, se emite la recomendacion del giro siguiente. Es lo
+    # que hace que la tarjeta se recalcule sola al ingresar cada numero.
+    historial = list(
+        db.scalars(
+            select(Spin.result_value)
+            .where(Spin.session_id == session.id)
+            .order_by(Spin.spin_index.asc())
+        )
+    )
+    siguiente = build_recommendation(motor_config, session, historial)
+    montos = stakes_for(session, siguiente)
+    # El monto que se guarda es el de la progresion que el mercado admite y que
+    # mas se usa como referencia: la primera aplicable del menu.
+    aplicable = next((m for m in montos if m.applicable), None)
+    persist_recommendation(
+        db, session, siguiente, spin, aplicable.total_bet if aplicable else None
+    )
 
     db.commit()
     db.refresh(spin)
@@ -404,6 +398,33 @@ def create_spins_bulk(
         for i, valor in enumerate(resultado.values)
     ]
     db.add_all(giros)
+    db.flush()
+
+    # Con el historial ya cargado se emite la primera recomendacion de la mesa,
+    # para que la tarjeta tenga algo que decir antes del primer giro nuevo. La
+    # carga inicial no resuelve nada: son numeros que ya habian salido cuando no
+    # habia ninguna recomendacion emitida contra ellos.
+    from app.api.v1.recommendations import (
+        build_recommendation,
+        persist_recommendation,
+        stakes_for,
+    )
+
+    historial = list(
+        db.scalars(
+            select(Spin.result_value)
+            .where(Spin.session_id == session.id)
+            .order_by(Spin.spin_index.asc())
+        )
+    )
+    siguiente = build_recommendation(config, session, historial)
+    montos = stakes_for(session, siguiente)
+    aplicable = next((m for m in montos if m.applicable), None)
+    persist_recommendation(
+        db, session, siguiente, giros[-1] if giros else None,
+        aplicable.total_bet if aplicable else None,
+    )
+
     db.commit()
     for g in giros:
         db.refresh(g)
@@ -456,8 +477,31 @@ def delete_spin(
         bet.net_change = None
         bet.resolved_at = None
 
-    if spin.strategy_stage_before is not None:
-        session.strategy_stage = spin.strategy_stage_before
+    if spin.stage_martingale_before is not None:
+        session.stage_martingale = spin.stage_martingale_before
+    if spin.stage_two_sector_before is not None:
+        session.stage_two_sector = spin.stage_two_sector_before
+
+    # Las recomendaciones tambien se deshacen, y en los dos sentidos:
+    #
+    # - la que este giro resolvio vuelve a quedar pendiente, porque el resultado
+    #   contra el que se marco deja de existir;
+    # - la que se emitio despues de este giro se borra, porque describia un
+    #   historial que ya no es el que hay.
+    #
+    # Sin esto, deshacer un numero mal tecleado dejaria un HIT o un MISS falso en
+    # el historico, que es justo lo que el backtest mide.
+    for rec in db.scalars(
+        select(StatisticalSuggestion).where(
+            StatisticalSuggestion.resolved_spin_id == spin.id
+        )
+    ):
+        rec.outcome = "PENDING"
+        rec.resolved_spin_id = None
+    for rec in db.scalars(
+        select(StatisticalSuggestion).where(StatisticalSuggestion.spin_id == spin.id)
+    ):
+        db.delete(rec)
 
     db.delete(spin)
     db.commit()

@@ -23,7 +23,6 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.api.v1.sessions import get_owned_session, require_active
-from app.engine import bankroll as bankroll_engine
 from app.engine.probability import GameConfig
 from app.engine.settlement import settle
 from app.models import Bet, GameSession, GameVariant, Spin
@@ -76,14 +75,19 @@ def resolve_pending_bets(
 ) -> list[BetResolution]:
     """Resuelve todas las apuestas pendientes contra el giro que acaba de entrar.
 
-    Cada una se resuelve por su cuenta, pero el escalon de la progresion avanza
-    por el **neto del giro completo**: con varias apuestas a la vez, "gano" o
-    "perdio" no es un booleano, y lo que le importa a quien usa una progresion es
-    si la ronda cerro adelante o atras.
+    Mueve `bankroll_current` y nada mas. **Los escalones de las progresiones no
+    se tocan aqui** desde la Fase 3: los mueve el cierre de la recomendacion
+    (`recommendations.resolve_pending_recommendation`), no el neto de las
+    apuestas reales.
 
-    Es el unico lugar donde `bankroll_current` y `strategy_stage` cambian por
-    juego. No hace commit: lo hace quien la llama, para que el giro y sus
-    resoluciones entren o no entren juntos.
+    Son dos cosas distintas y conviene no volver a juntarlas. La banca refleja lo
+    que el usuario apostó de verdad en la mesa, que puede ser cualquier cosa; el
+    escalon refleja donde estaria quien hubiera seguido al motor. Hacerlo avanzar
+    con las apuestas reales significaba que apostar por fuera de la recomendacion
+    —o no apostar -- corria la progresion que la mesa muestra.
+
+    No hace commit: lo hace quien la llama, para que el giro y sus resoluciones
+    entren o no entren juntos.
     """
     apuestas = pending_bets(db, session.id)
     if not apuestas:
@@ -120,12 +124,6 @@ def resolve_pending_bets(
         )
 
     session.bankroll_current = float(session.bankroll_current) + neto_del_giro
-    session.strategy_stage = bankroll_engine.advance_stage_by_round(
-        bankroll_engine.Strategy(session.strategy_selected),
-        session.strategy_stage,
-        neto_del_giro,
-    )
-
     return resoluciones
 
 

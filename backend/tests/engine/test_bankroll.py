@@ -8,7 +8,14 @@ import pytest
 
 from app.engine.bankroll import (
     BANKROLL_DISCLAIMER,
+    OFFERED_STRATEGIES,
     AlertLevel,
+    advance_stages_on_outcome,
+    applies_to_market,
+    cumulative_risked_on_market,
+    net_if_won_on_market,
+    stake_for_market,
+    stakes_for_market,
     Strategy,
     StrategyMode,
     advance_stage,
@@ -113,28 +120,6 @@ def test_flat_no_cambia_nunca_la_apuesta() -> None:
     assert [stage_multiplier(Strategy.flat, s) for s in range(5)] == [1.0] * 5
 
 
-def test_dalembert_sube_de_a_una_unidad() -> None:
-    assert [bet_for_stage(Strategy.dalembert, 100, s) for s in range(5)] == [
-        100,
-        200,
-        300,
-        400,
-        500,
-    ]
-
-
-def test_fibonacci_sigue_la_secuencia() -> None:
-    assert [bet_for_stage(Strategy.fibonacci, 100, s) for s in range(7)] == [
-        100,
-        100,
-        200,
-        300,
-        500,
-        800,
-        1_300,
-    ]
-
-
 # ---------- Avance de escalon ----------
 
 
@@ -147,12 +132,6 @@ def test_fibonacci_sigue_la_secuencia() -> None:
         (Strategy.martingale, 3, True, 0),
         (Strategy.two_sector_recovery, 2, False, 3),
         (Strategy.two_sector_recovery, 2, True, 0),
-        (Strategy.dalembert, 3, False, 4),
-        (Strategy.dalembert, 3, True, 2),
-        (Strategy.dalembert, 0, True, 0),
-        (Strategy.fibonacci, 4, False, 5),
-        (Strategy.fibonacci, 4, True, 2),
-        (Strategy.fibonacci, 1, True, 0),
     ],
 )
 def test_avance_de_escalon(
@@ -166,7 +145,7 @@ def test_avance_de_escalon(
 
 @pytest.mark.parametrize(
     "strategy",
-    [Strategy.flat, Strategy.martingale, Strategy.dalembert, Strategy.fibonacci],
+    [Strategy.flat, Strategy.martingale],
 )
 def test_las_estrategias_1a1_son_de_modo_single(strategy: Strategy) -> None:
     assert mode_for(strategy) is StrategyMode.single
@@ -250,7 +229,7 @@ def test_la_progresion_no_mejora_la_probabilidad_del_giro() -> None:
     p = 18 / 37
     riesgos = {
         s: ruin_probability_estimate(s, 100, 10_000, p)
-        for s in (Strategy.flat, Strategy.martingale, Strategy.dalembert)
+        for s in (Strategy.flat, Strategy.martingale)
     }
     # La martingala se agota mucho antes que la plana con la misma banca.
     assert riesgos[Strategy.martingale] > riesgos[Strategy.flat]
@@ -364,12 +343,6 @@ def test_ganar_en_dos_sectores_solo_recupera_no_deja_ganancia() -> None:
 
 def test_el_primer_escalon_de_dos_sectores_si_deja_ganancia() -> None:
     assert not recovers_only_to_break_even(Strategy.two_sector_recovery, 100, 0)
-
-
-def test_dalembert_y_fibonacci_pueden_cerrar_en_negativo_aunque_se_gane() -> None:
-    """No recuperan la serie completa: ganar tarde no borra lo perdido antes."""
-    assert net_result_if_won(Strategy.dalembert, 100, 3) < 0
-    assert net_result_if_won(Strategy.fibonacci, 100, 3) < 0
 
 
 # ---------- Apuestas elegibles segun el modo ----------
@@ -514,15 +487,10 @@ def test_probabilidad_combinada_de_dos_docenas(europea: GameConfig) -> None:
     [
         # Giro en positivo: cuenta como victoria.
         (Strategy.martingale, 3, 500, 0),
-        (Strategy.dalembert, 3, 500, 2),
-        (Strategy.fibonacci, 4, 500, 2),
         # Giro en negativo: cuenta como derrota.
         (Strategy.martingale, 3, -500, 4),
-        (Strategy.dalembert, 3, -500, 4),
         # Giro que cierra en cero: el escalon no se mueve.
         (Strategy.martingale, 3, 0, 3),
-        (Strategy.dalembert, 2, 0, 2),
-        (Strategy.fibonacci, 5, 0, 5),
         # La plana no tiene escalon que mover.
         (Strategy.flat, 0, -500, 0),
         (Strategy.flat, 0, 0, 0),
@@ -545,7 +513,7 @@ def test_ganar_una_pequena_y_perder_una_grande_es_derrota() -> None:
 
 def test_coincide_con_el_avance_simple_cuando_hay_una_sola_apuesta() -> None:
     """Una apuesta suelta tiene que comportarse igual que antes."""
-    for strategy in (Strategy.martingale, Strategy.dalembert, Strategy.fibonacci):
+    for strategy in (Strategy.martingale, Strategy.two_sector_recovery):
         for stage in range(4):
             assert advance_stage_by_round(strategy, stage, 100) == advance_stage(
                 strategy, stage, True
@@ -594,8 +562,6 @@ def test_siguiente_paso_de_dos_sectores_con_la_tabla_del_documento() -> None:
 @pytest.mark.parametrize(
     ("strategy", "stage", "si_gana", "si_pierde"),
     [
-        (Strategy.dalembert, 3, 2, 4),
-        (Strategy.fibonacci, 4, 2, 5),
         (Strategy.flat, 0, 0, 0),
     ],
 )
@@ -897,6 +863,155 @@ def test_las_alertas_del_limite_nunca_usan_lenguaje_predictivo() -> None:
 
 def test_el_plan_es_una_funcion_pura() -> None:
     kwargs = {"bankroll_current": 5_000, "bankroll_start": 8_000, "table_limit": 3_000}
-    assert bankroll_plan(Strategy.fibonacci, 100, 4, **kwargs) == bankroll_plan(
-        Strategy.fibonacci, 100, 4, **kwargs
+    assert bankroll_plan(Strategy.martingale, 100, 4, **kwargs) == bankroll_plan(
+        Strategy.martingale, 100, 4, **kwargs
     )
+
+
+# ---------- Gestion aplicada al mercado recomendado (§2.10) ----------
+#
+# Desde la Fase 3 los sectores los pone el mercado que recomendo el motor, no la
+# progresion, y el escalon avanza con el HIT/MISS de la recomendacion.
+
+
+def test_las_tres_progresiones_de_la_mesa() -> None:
+    """La mesa ofrece plana, martingala y recuperacion de dos sectores."""
+    assert OFFERED_STRATEGIES == (
+        Strategy.flat,
+        Strategy.martingale,
+        Strategy.two_sector_recovery,
+    )
+
+
+def test_dos_docenas_con_martingala_da_el_monto_por_sector() -> None:
+    """El mercado manda: dos docenas son dos sectores aunque la progresion
+    elegida sea la martingala, que por si sola cubriria uno."""
+    stake = stake_for_market(
+        Strategy.martingale,
+        100,
+        3,
+        sectors=2,
+        payout=2,
+        bankroll_current=100_000,
+    )
+    assert stake.applicable
+    assert stake.sectors == 2
+    assert stake.bet_per_sector == 800      # 100 x 2^3, por docena
+    assert stake.total_bet == 1_600         # las dos docenas del giro
+
+
+def test_dos_docenas_con_recuperacion_sigue_la_tabla_verificada() -> None:
+    """Tabla del documento verificado, unidad $100: 1-1, 2-2, 6-6, 18-18, 54-54."""
+    stakes = [
+        stake_for_market(
+            Strategy.two_sector_recovery,
+            100,
+            s,
+            sectors=2,
+            payout=2,
+            bankroll_current=1_000_000,
+        )
+        for s in range(5)
+    ]
+    assert [s.bet_per_sector for s in stakes] == [100, 200, 600, 1_800, 5_400]
+    assert [s.total_bet for s in stakes] == [200, 400, 1_200, 3_600, 10_800]
+    assert [s.cumulative_risked for s in stakes] == [200, 600, 1_800, 5_400, 16_200]
+
+
+def test_la_recuperacion_de_dos_sectores_no_aplica_a_un_mercado_de_uno() -> None:
+    """Su aritmetica asume que el otro sector se pierde y que el acertado paga
+    2:1. Sobre "Negro" no describe nada, asi que no se ofrece en vez de dar un
+    monto inventado."""
+    stake = stake_for_market(
+        Strategy.two_sector_recovery,
+        100,
+        2,
+        sectors=1,
+        payout=1,
+        bankroll_current=100_000,
+    )
+    assert not stake.applicable
+    assert stake.reason is not None
+    assert stake.total_bet == 0.0
+
+    assert applies_to_market(Strategy.two_sector_recovery, 2) is None
+    assert applies_to_market(Strategy.flat, 1) is None
+    assert applies_to_market(Strategy.martingale, 2) is None
+
+
+def test_la_mesa_devuelve_las_tres_aunque_alguna_no_aplique() -> None:
+    stakes = stakes_for_market(
+        100,
+        {Strategy.flat: 0, Strategy.martingale: 2, Strategy.two_sector_recovery: 1},
+        sectors=1,
+        payout=1,
+        bankroll_current=50_000,
+    )
+    assert [s.strategy for s in stakes] == list(OFFERED_STRATEGIES)
+    assert [s.applicable for s in stakes] == [True, True, False]
+    # Cada progresion lleva su propio escalon.
+    assert [s.stage for s in stakes] == [0, 2, 1]
+    assert stakes[0].total_bet == 100        # plana
+    assert stakes[1].total_bet == 400        # martingala, escalon 2
+
+
+def test_ganar_dos_docenas_en_recuperacion_solo_recupera() -> None:
+    """Del escalon 2 en adelante acertar devuelve la serie a cero, no deja
+    ganancia: la apuesta por sector es justo lo perdido antes."""
+    assert net_if_won_on_market(Strategy.two_sector_recovery, 100, 0, 2, 2) == 100
+    for stage in (1, 2, 3, 4):
+        assert net_if_won_on_market(Strategy.two_sector_recovery, 100, stage, 2, 2) == 0
+
+
+def test_no_apostar_no_avanza_la_martingala() -> None:
+    """Con NO APOSTAR ninguna progresion se mueve: no hubo serie que continuar."""
+    escalones = {
+        Strategy.flat: 0,
+        Strategy.martingale: 3,
+        Strategy.two_sector_recovery: 2,
+    }
+    assert advance_stages_on_outcome(escalones, hit=None) == escalones
+
+
+def test_un_fallo_sube_todas_las_progresiones_y_un_acierto_las_cierra() -> None:
+    """Los tres contadores se mueven con el mismo cierre de la recomendacion, de
+    modo que cada uno refleja el escalon de haber seguido siempre al motor."""
+    escalones = {
+        Strategy.flat: 0,
+        Strategy.martingale: 3,
+        Strategy.two_sector_recovery: 2,
+    }
+    assert advance_stages_on_outcome(escalones, hit=False) == {
+        Strategy.flat: 0,               # la plana nunca escala
+        Strategy.martingale: 4,
+        Strategy.two_sector_recovery: 3,
+    }
+    assert advance_stages_on_outcome(escalones, hit=True) == {
+        Strategy.flat: 0,
+        Strategy.martingale: 0,
+        Strategy.two_sector_recovery: 0,
+    }
+
+
+def test_martingala_sobre_el_mercado_respeta_la_tabla_de_102300() -> None:
+    """Regresion de la skill: base $100, 10 perdidas seguidas sobre un mercado
+    de un sector => $102.300 arriesgados, no $100.000."""
+    acumulado = cumulative_risked_on_market(Strategy.martingale, 100, 9, 1)
+    assert acumulado == 102_300
+    assert acumulado == cumulative_risked(Strategy.martingale, 100, 9)
+
+
+def test_el_mercado_marca_los_limites_de_banca_y_de_mesa() -> None:
+    stake = stake_for_market(
+        Strategy.martingale,
+        100,
+        5,
+        sectors=2,
+        payout=2,
+        bankroll_current=5_000,
+        table_limit=1_000,
+    )
+    assert stake.bet_per_sector == 3_200
+    assert stake.total_bet == 6_400
+    assert stake.exceeds_bankroll          # 6.400 > 5.000
+    assert stake.exceeds_table_limit       # 3.200 por sector > 1.000

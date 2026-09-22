@@ -62,8 +62,6 @@ def _crear_sesion(client: TestClient, token: str, variant_id: str, **extra) -> d
         "bankroll_start": 100000,
         "base_bet": 1000,
         "table_limit": 500000,
-        "strategy": "flat",
-        "strategy_mode": "single",
         **extra,
     }
     return client.post("/sessions", json=body, headers=auth(token))
@@ -82,7 +80,7 @@ def test_crear_sesion_inicializa_la_banca(
     assert s["name"] == "Mesa 1"
     # La banca actual arranca igual a la inicial.
     assert s["bankroll_current"] == s["bankroll_start"] == 100000.0
-    assert s["strategy_stage"] == 0
+    assert s["stage_martingale"] == s["stage_two_sector"] == 0
 
 
 def test_apuesta_base_mayor_que_la_banca_es_rechazada(
@@ -95,24 +93,15 @@ def test_apuesta_base_mayor_que_la_banca_es_rechazada(
     assert "no puede superar" in r.text
 
 
-def test_modo_dos_sectores_con_estrategia_incoherente_es_rechazado(
+def test_crear_sesion_no_pide_una_progresion(
     client: TestClient, user_token: str, variant_id: str
 ) -> None:
-    """§2.8, validado por el schema antes de llegar a la base."""
-    r = _crear_sesion(client, user_token, variant_id, strategy_mode="two_sector")
-    assert r.status_code == 422
-    r = _crear_sesion(client, user_token, variant_id, strategy="two_sector_recovery")
-    assert r.status_code == 422
-
-
-def test_modo_dos_sectores_coherente_se_acepta(
-    client: TestClient, user_token: str, variant_id: str
-) -> None:
-    r = _crear_sesion(
-        client, user_token, variant_id,
-        strategy="two_sector_recovery", strategy_mode="two_sector",
-    )
+    """Desde la Fase 3 la mesa muestra las tres progresiones a la vez, asi que
+    no hay nada que elegir al abrirla: mandar una se ignora (§2.10)."""
+    r = _crear_sesion(client, user_token, variant_id, strategy="martingale")
     assert r.status_code == 201, r.text
+    assert "strategy_selected" not in r.json()
+    assert r.json()["stage_martingale"] == 0
 
 
 def test_variante_inexistente_da_404(client: TestClient, user_token: str) -> None:
@@ -259,40 +248,18 @@ def test_renombrar_sesion(client: TestClient, user_token: str, variant_id: str) 
     assert r.json()["name"] == "Mesa VIP"
 
 
-def test_cambiar_de_estrategia_reinicia_el_escalon(
+def test_el_patch_no_cambia_progresiones(
     client: TestClient, user_token: str, variant_id: str
 ) -> None:
-    sid = _crear_sesion(client, user_token, variant_id).json()["id"]
-    r = client.patch(f"/sessions/{sid}", json={"strategy": "martingale"}, headers=auth(user_token))
-    assert r.status_code == 200
-    assert r.json()["strategy_selected"] == "martingale"
-    assert r.json()["strategy_stage"] == 0
-
-
-def test_cambiar_solo_el_modo_sin_la_estrategia_es_rechazado_con_422(
-    client: TestClient, user_token: str, variant_id: str
-) -> None:
-    """El validador del schema solo cruza ambos si vienen juntos; el endpoint
-    tiene que combinar con lo persistido o el CHECK daria un 500."""
+    """Ya no hay progresion elegida que cambiar; el PATCH sigue sirviendo para
+    el limite de mesa y el de perdida."""
     sid = _crear_sesion(client, user_token, variant_id).json()["id"]
     r = client.patch(
-        f"/sessions/{sid}", json={"strategy_mode": "two_sector"}, headers=auth(user_token)
-    )
-    assert r.status_code == 422
-    assert "2.8" in r.text or "dos-sectores" in r.text
-
-
-def test_cambiar_modo_y_estrategia_juntos_si_funciona(
-    client: TestClient, user_token: str, variant_id: str
-) -> None:
-    sid = _crear_sesion(client, user_token, variant_id).json()["id"]
-    r = client.patch(
-        f"/sessions/{sid}",
-        json={"strategy_mode": "two_sector", "strategy": "two_sector_recovery"},
-        headers=auth(user_token),
+        f"/sessions/{sid}", json={"table_limit": 400_000}, headers=auth(user_token)
     )
     assert r.status_code == 200
-    assert r.json()["strategy_mode"] == "two_sector"
+    assert r.json()["table_limit"] == 400_000
+    assert r.json()["stage_martingale"] == 0
 
 
 # ---------- Limite de perdida ----------
@@ -350,7 +317,8 @@ def test_reset_de_estrategia_no_toca_los_giros(
 
     r = client.post(f"/sessions/{sid}/reset-strategy", headers=auth(user_token))
     assert r.status_code == 200
-    assert r.json()["strategy_stage"] == 0
+    # Se reinician las tres a la vez: las tres estan corriendo a la vez.
+    assert r.json()["stage_martingale"] == r.json()["stage_two_sector"] == 0
     assert len(client.get(f"/sessions/{sid}/spins", headers=auth(user_token)).json()) == 1
 
 

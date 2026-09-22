@@ -31,6 +31,33 @@ router = APIRouter(tags=["bankroll"])
 MAX_PROGRESSION_STAGES = 20
 
 
+def _stage_for(session, strategy: engine.Strategy) -> int:
+    """Escalon de esa progresion en la sesion.
+
+    Desde la Fase 3 no hay un escalon unico: las tres progresiones corren a la
+    vez y cada una lleva el suyo (§2.10). La plana no tiene escalon porque no
+    tiene progresion.
+    """
+    if strategy is engine.Strategy.martingale:
+        return session.stage_martingale
+    if strategy is engine.Strategy.two_sector_recovery:
+        return session.stage_two_sector
+    return 0
+
+
+#: La progresion sobre la que responden los endpoints de banca cuando el cliente
+#: no pide una. La plana es la lectura mas conservadora: no escala nada.
+DEFAULT_STRATEGY = BankrollStrategy.flat
+
+STRATEGY_QUERY = Query(
+    default=DEFAULT_STRATEGY,
+    description=(
+        "Progresion sobre la que calcular. La mesa muestra las tres a la vez "
+        "(§2.10), asi que el cliente pide la que quiere ver."
+    ),
+)
+
+
 def _to_engine_strategy(strategy: BankrollStrategy) -> engine.Strategy:
     """Los valores de ambos enums coinciden carater por caracter a proposito."""
     return engine.Strategy(strategy.value)
@@ -168,6 +195,7 @@ def bankroll_suggestion(
             "que se apuesta: sin ella no se estima el riesgo de agotar la banca."
         ),
     ),
+    strategy_key: BankrollStrategy = STRATEGY_QUERY,
 ) -> BankrollSuggestionResponse:
     """Tamano de apuesta que exige el escalon actual de la progresion.
 
@@ -175,7 +203,8 @@ def bankroll_suggestion(
     siguiente: solo traduce la progresion elegida a un monto y su advertencia.
     """
     session = get_owned_session(db, user.id, session_id)
-    strategy = _to_engine_strategy(BankrollStrategy(session.strategy_selected))
+    strategy = _to_engine_strategy(strategy_key)
+    stage = _stage_for(session, strategy)
     win_probability = _probability_for_bet(
         _load_config(db, session.game_variant_id), engine.mode_for(strategy), bet
     )
@@ -184,7 +213,7 @@ def bankroll_suggestion(
     advice = engine.suggest_bet(
         strategy,
         base_bet,
-        session.strategy_stage,
+        stage,
         bankroll_current=float(session.bankroll_current),
         table_limit=table_limit,
         probability_of_winning_the_bet=win_probability,
@@ -192,7 +221,7 @@ def bankroll_suggestion(
     plan = engine.bankroll_plan(
         strategy,
         base_bet,
-        session.strategy_stage,
+        stage,
         bankroll_current=float(session.bankroll_current),
         bankroll_start=float(session.bankroll_start),
         table_limit=table_limit,
@@ -206,16 +235,19 @@ def bankroll_suggestion(
     response_model=list[EligibleBetResponse],
 )
 def eligible_bets(
-    session_id: UUID, db: DbSession, user: CurrentUser
+    session_id: UUID,
+    db: DbSession,
+    user: CurrentUser,
+    strategy_key: BankrollStrategy = STRATEGY_QUERY,
 ) -> list[EligibleBetResponse]:
-    """Apuestas de la variante compatibles con el modo de esta sesion.
+    """Apuestas de la variante compatibles con el modo de esa progresion.
 
     Cada una viene con su probabilidad teorica ya calculada por el motor, para
     que la interfaz no tenga que derivarla y no se abra una segunda fuente de
     verdad sobre las probabilidades.
     """
     session = get_owned_session(db, user.id, session_id)
-    strategy = _to_engine_strategy(BankrollStrategy(session.strategy_selected))
+    strategy = _to_engine_strategy(strategy_key)
     apuestas = engine.eligible_bets(
         _load_config(db, session.game_variant_id), engine.mode_for(strategy)
     )
@@ -241,10 +273,11 @@ def session_progression_table(
     user: CurrentUser,
     stages: int = Query(default=engine.DEFAULT_PROGRESSION_STAGES, ge=1, le=MAX_PROGRESSION_STAGES),
     bet: str | None = Query(default=None),
+    strategy_key: BankrollStrategy = STRATEGY_QUERY,
 ) -> ProgressionTableResponse:
     """Tabla de progresion con los montos reales de esta sesion."""
     session = get_owned_session(db, user.id, session_id)
-    strategy = _to_engine_strategy(BankrollStrategy(session.strategy_selected))
+    strategy = _to_engine_strategy(strategy_key)
     win_probability = _probability_for_bet(
         _load_config(db, session.game_variant_id), engine.mode_for(strategy), bet
     )

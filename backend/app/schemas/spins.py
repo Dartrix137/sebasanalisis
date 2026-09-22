@@ -46,9 +46,12 @@ class SpinResponse(BaseModel):
     spin_index: int
     result_value: str
     source: SpinSource
-    # Escalón de la progresión antes de resolver este giro. Null si el giro no
-    # resolvió apuestas o si después se cambió de estrategia (§2.8.4).
-    strategy_stage_before: Optional[int] = None
+    # Escalones de las progresiones antes de resolver este giro. La UI arma con
+    # ellos el aviso "la progresión sube del escalón 2 al 3", y deshacer el giro
+    # los restaura. Son dos porque las tres progresiones corren a la vez (§2.10);
+    # la plana no tiene escalón, siempre está en 0.
+    stage_martingale_before: Optional[int] = None
+    stage_two_sector_before: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -23,8 +23,6 @@ class Strategy(str, Enum):
 
     flat = "flat"
     martingale = "martingale"
-    dalembert = "dalembert"
-    fibonacci = "fibonacci"
     two_sector_recovery = "two_sector_recovery"
 
 
@@ -35,9 +33,7 @@ class StrategyMode(str, Enum):
 
 #: Estrategias validas por modo (§2.8, regla de validacion cruzada).
 STRATEGIES_BY_MODE: dict[StrategyMode, frozenset[Strategy]] = {
-    StrategyMode.single: frozenset(
-        {Strategy.flat, Strategy.martingale, Strategy.dalembert, Strategy.fibonacci}
-    ),
+    StrategyMode.single: frozenset({Strategy.flat, Strategy.martingale}),
     StrategyMode.two_sector: frozenset({Strategy.two_sector_recovery}),
 }
 
@@ -86,14 +82,6 @@ def _round_money(amount: float) -> float:
 # --------------------------------------------------------------------------
 
 
-def _fibonacci_multiplier(stage: int) -> int:
-    """Fibonacci de apuesta: 1, 1, 2, 3, 5, 8, ... (`stage` es 0-indexado)."""
-    previous, current = 1, 1
-    for _ in range(stage):
-        previous, current = current, previous + current
-    return previous
-
-
 def stage_multiplier(strategy: Strategy, stage: int) -> float:
     """Cuantas veces la apuesta base se arriesga en `stage` (0-indexado).
 
@@ -107,10 +95,6 @@ def stage_multiplier(strategy: Strategy, stage: int) -> float:
         return 1.0
     if strategy is Strategy.martingale:
         return float(2**stage)
-    if strategy is Strategy.dalembert:
-        return float(1 + stage)
-    if strategy is Strategy.fibonacci:
-        return float(_fibonacci_multiplier(stage))
     if strategy is Strategy.two_sector_recovery:
         # a_1 = 1; a_k = perdida acumulada tras el escalon k-1, que triplica en
         # cada paso => 1, 2, 6, 18, 54, 162, ...
@@ -179,8 +163,6 @@ def net_result_if_won(
       serie a **cero**, no deja ganancia. La apuesta por sector de un escalon es
       justo la perdida acumulada del anterior, asi que acertar recupera lo
       perdido y nada mas.
-    - D'Alembert y Fibonacci no recuperan la serie completa: pueden cerrar en
-      negativo aunque el giro se gane.
 
     `payout` se toma del modo de la estrategia si no se pasa explicito.
     """
@@ -288,10 +270,6 @@ def advance_stage(strategy: Strategy, stage: int, won: bool) -> int:
         return 0
     if not won:
         return stage + 1
-    if strategy is Strategy.dalembert:
-        return max(0, stage - 1)
-    if strategy is Strategy.fibonacci:
-        return max(0, stage - 2)
     # Martingala y recuperacion de dos sectores: una victoria cierra la serie.
     return 0
 
@@ -859,3 +837,200 @@ def bankroll_plan(
             loss_limit=loss_limit,
         ),
     )
+
+
+# --------------------------------------------------------------------------
+# Gestion aplicada a un mercado recomendado (§2.10)
+# --------------------------------------------------------------------------
+#
+# Desde la Fase 3 la sesion ya no elige una progresion al crearse: la mesa
+# muestra las tres a la vez y el usuario sigue la que quiera. Eso cambia de
+# donde salen dos cosas:
+#
+# - **Los sectores los pone el mercado, no la estrategia.** `sectors_covered`
+#   los deriva de la progresion porque antes la sesion se abria en un modo fijo.
+#   Aqui manda lo que el motor recomendo: si la recomendacion es "1a + 2a
+#   docena" son dos sectores, la siga quien la siga.
+# - **El escalon avanza por como cerro la recomendacion**, no por el neto de las
+#   apuestas reales del giro. Cada progresion lleva su propio contador y los tres
+#   se mueven con el mismo HIT/MISS, asi que el escalon que ve el usuario es el
+#   que le corresponderia por haber seguido cada recomendacion.
+
+
+@dataclass(frozen=True)
+class MarketStake:
+    """Lo que una progresion pide para el mercado recomendado.
+
+    `applicable=False` no es un error: es la respuesta honesta cuando la
+    progresion no encaja con la forma del mercado, y la UI la muestra apagada en
+    vez de inventar un monto.
+    """
+
+    strategy: Strategy
+    applicable: bool
+    reason: str | None
+    stage: int
+    bet_per_sector: float
+    total_bet: float
+    sectors: int
+    cumulative_risked: float
+    net_result_if_won: float
+    recovers_only_to_break_even: bool
+    exceeds_bankroll: bool
+    exceeds_table_limit: bool
+
+
+#: Progresiones que la mesa ofrece, en el orden en que se muestran.
+OFFERED_STRATEGIES: tuple[Strategy, ...] = (
+    Strategy.flat,
+    Strategy.martingale,
+    Strategy.two_sector_recovery,
+)
+
+
+def applies_to_market(strategy: Strategy, sectors: int) -> str | None:
+    """Motivo por el que la progresion no encaja con el mercado, o None si encaja.
+
+    La recuperacion de dos sectores no es una martingala con otro nombre: cada
+    escalon apuesta la perdida acumulada del anterior *contando que el otro
+    sector se pierde* y que el acertado paga 2:1. Sobre un mercado de un solo
+    sector esa aritmetica no describe nada, asi que no se ofrece.
+    """
+    if strategy is Strategy.two_sector_recovery and sectors != SECTORS_IN_TWO_SECTOR_MODE:
+        return (
+            "La recuperacion de dos sectores solo aplica cuando la recomendacion "
+            "cubre dos zonas a la vez, como dos docenas o dos columnas."
+        )
+    return None
+
+
+def _total_for(strategy: Strategy, base_bet: float, stage: int, sectors: int) -> float:
+    return _round_money(base_bet * stage_multiplier(strategy, stage) * sectors)
+
+
+def cumulative_risked_on_market(
+    strategy: Strategy, base_bet: float, stage: int, sectors: int
+) -> float:
+    """Perdido si fallaron todos los escalones hasta `stage`, sobre este mercado."""
+    return _round_money(
+        sum(_total_for(strategy, base_bet, s, sectors) for s in range(stage + 1))
+    )
+
+
+def net_if_won_on_market(
+    strategy: Strategy, base_bet: float, stage: int, sectors: int, payout: float
+) -> float:
+    """Con cuanto queda la serie si se acierta en `stage` apostando a este mercado.
+
+    El sector acertado devuelve lo puesto mas su pago; los demas se pierden
+    enteros. Restar lo arriesgado en los escalones anteriores es lo que convierte
+    el neto del giro en el neto de la serie.
+    """
+    por_sector = base_bet * stage_multiplier(strategy, stage)
+    neto_giro = por_sector * payout - por_sector * (sectors - 1)
+    perdido_antes = (
+        cumulative_risked_on_market(strategy, base_bet, stage - 1, sectors)
+        if stage > 0
+        else 0.0
+    )
+    return _round_money(neto_giro - perdido_antes)
+
+
+def stake_for_market(
+    strategy: Strategy,
+    base_bet: float,
+    stage: int,
+    *,
+    sectors: int,
+    payout: float,
+    bankroll_current: float,
+    table_limit: float | None = None,
+) -> MarketStake:
+    """Cuanto pide esta progresion para el mercado recomendado, en este escalon."""
+    if base_bet <= 0:
+        raise ValueError("La apuesta base debe ser positiva")
+    if stage < 0:
+        raise ValueError("El escalon no puede ser negativo")
+    if sectors < 1:
+        raise ValueError("Un mercado cubre al menos un sector")
+
+    motivo = applies_to_market(strategy, sectors)
+    if motivo is not None:
+        return MarketStake(
+            strategy=strategy,
+            applicable=False,
+            reason=motivo,
+            stage=stage,
+            bet_per_sector=0.0,
+            total_bet=0.0,
+            sectors=sectors,
+            cumulative_risked=0.0,
+            net_result_if_won=0.0,
+            recovers_only_to_break_even=False,
+            exceeds_bankroll=False,
+            exceeds_table_limit=False,
+        )
+
+    por_sector = _round_money(base_bet * stage_multiplier(strategy, stage))
+    total = _round_money(por_sector * sectors)
+    neto = net_if_won_on_market(strategy, base_bet, stage, sectors, payout)
+
+    return MarketStake(
+        strategy=strategy,
+        applicable=True,
+        reason=None,
+        stage=stage,
+        bet_per_sector=por_sector,
+        total_bet=total,
+        sectors=sectors,
+        cumulative_risked=cumulative_risked_on_market(strategy, base_bet, stage, sectors),
+        net_result_if_won=neto,
+        recovers_only_to_break_even=neto == 0.0,
+        exceeds_bankroll=total > bankroll_current,
+        exceeds_table_limit=table_limit is not None and por_sector > table_limit,
+    )
+
+
+def stakes_for_market(
+    base_bet: float,
+    stages: dict[Strategy, int],
+    *,
+    sectors: int,
+    payout: float,
+    bankroll_current: float,
+    table_limit: float | None = None,
+) -> list[MarketStake]:
+    """Las tres progresiones sobre el mercado recomendado, en orden de menu.
+
+    Se devuelven todas, tambien las que no aplican: la mesa las muestra juntas
+    para que el usuario compare lo que pide cada una antes de seguir una.
+    """
+    return [
+        stake_for_market(
+            s,
+            base_bet,
+            stages.get(s, 0),
+            sectors=sectors,
+            payout=payout,
+            bankroll_current=bankroll_current,
+            table_limit=table_limit,
+        )
+        for s in OFFERED_STRATEGIES
+    ]
+
+
+def advance_stages_on_outcome(
+    stages: dict[Strategy, int], *, hit: bool | None
+) -> dict[Strategy, int]:
+    """Mueve los contadores de las tres progresiones con el cierre de la
+    recomendacion anterior.
+
+    `hit=None` es el NO APOSTAR: **ninguna progresion avanza y el saldo no
+    cambia**. No hubo serie que continuar ni que cerrar, y hacerla avanzar
+    cobraria un escalon por un giro que el motor pidio no jugar.
+    """
+    if hit is None:
+        return dict(stages)
+    return {
+        s: advance_stage(s, stages.get(s, 0), won=hit) for s in OFFERED_STRATEGIES
+    }

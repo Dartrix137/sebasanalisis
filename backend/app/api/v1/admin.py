@@ -6,17 +6,20 @@ por `validate_game_config` antes de persistir: una configuracion mal formada que
 se guarda en silencio rompe `engine/probability.py` sin error visible.
 """
 
+from enum import Enum
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.api.deps import AdminUser, DbSession
+from app.engine.probability import GameConfig
+from app.engine.recommendation import SignalBand as EngineSignalBand
 from app.core.game_config_validation import (
     check_payouts_against_house_edge,
     validate_game_config,
 )
-from app.models import Game, GameVariant, User
+from app.models import Game, GameSession, GameVariant, Spin, User
 from app.schemas.auth import UpdateUserAccessRequest, UserResponse
 from app.schemas.games import (
     CreateGameRequest,
@@ -27,8 +30,22 @@ from app.schemas.games import (
     UpdateGameRequest,
     UpdateGameVariantRequest,
 )
+from app.engine.backtest import WARMUP, backtest, fair_wheel_histories
+from app.schemas.suggestions import BacktestBandRow, BacktestReport, BacktestTally
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class BacktestSource(str, Enum):
+    """Sobre que historiales corre el backtest.
+
+    `sessions` son datos reales, fuera de calibracion por construccion.
+    `simulated` es la linea base: ruedas justas donde el ROI tiene que quedarse
+    en la ventaja de la casa.
+    """
+
+    sessions = "sessions"
+    simulated = "simulated"
 
 
 def _validate_config_or_422(config: GameVariantConfig, house_edge: float) -> list[str]:
@@ -174,3 +191,105 @@ def update_user_access(
     db.commit()
     db.refresh(user)
     return user
+
+
+# ---------- Metricas internas del motor (§2.10) ----------
+
+
+@router.get("/recommendations/backtest", response_model=BacktestReport)
+def recommendation_backtest(
+    db: DbSession,
+    admin: AdminUser,
+    variant_id: UUID | None = Query(
+        default=None, description="Variante a evaluar. Por defecto, la primera activa."
+    ),
+    source: BacktestSource = Query(
+        default=BacktestSource.sessions,
+        description=(
+            "`sessions` corre sobre las sesiones reales de los usuarios; "
+            "`simulated` sobre ruedas justas generadas, como linea base."
+        ),
+    ),
+    limit: int = Query(default=50, ge=1, le=500),
+    spins: int = Query(default=150, ge=20, le=500),
+    threshold: float | None = Query(default=None, ge=0, le=100),
+) -> BacktestReport:
+    """Backtest del motor: cuanto recomienda, cuanto acierta y con que ROI.
+
+    Es la validacion de §9 del comparativo y **no se muestra al cliente**.
+
+    La honestidad de la medicion depende de una sola cosa: que los historiales no
+    sean los que se usaron para calibrar los pesos. Las sesiones reales lo
+    cumplen por construccion (los pesos se fijaron sobre simulaciones, antes de
+    que existieran). Las ruedas simuladas usan una semilla propia y sirven de
+    linea base: ahi el ROI TIENE que quedarse en la ventaja de la casa, y si no
+    lo hace es que algo esta mal medido.
+    """
+    variant = (
+        db.get(GameVariant, variant_id)
+        if variant_id is not None
+        else db.scalars(select(GameVariant).where(GameVariant.active)).first()
+    )
+    if variant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada"
+        )
+
+    config = GameConfig.from_dict(variant.categories_json)
+    umbral = threshold if threshold is not None else config.recommendation_threshold
+
+    if source is BacktestSource.simulated:
+        historiales = fair_wheel_histories(config, limit, spins, seed=90_217)
+        origen = f"{limit} ruedas justas simuladas de {spins} giros"
+    else:
+        sesiones = db.scalars(
+            select(GameSession.id)
+            .where(GameSession.game_variant_id == variant.id)
+            .limit(limit)
+        ).all()
+        historiales = []
+        for sid in sesiones:
+            giros = list(
+                db.scalars(
+                    select(Spin.result_value)
+                    .where(Spin.session_id == sid)
+                    .order_by(Spin.spin_index.asc())
+                )
+            )
+            if len(giros) > WARMUP:
+                historiales.append(giros)
+        origen = f"{len(historiales)} sesiones reales de {variant.name}"
+
+    informe = backtest(config, historiales, threshold=umbral)
+
+    def _tally(t) -> dict:
+        return {
+            "recommendations": t.recommendations,
+            "hits": t.hits,
+            "misses": t.misses,
+            "hit_rate": t.hit_rate,
+            "units": round(t.units, 2),
+            "roi": t.roi,
+            "max_drawdown": round(t.max_drawdown, 2),
+        }
+
+    return BacktestReport(
+        source=origen,
+        sessions=len(historiales),
+        spins_evaluated=informe.spins_evaluated,
+        decisions=informe.decisions,
+        recommendations=informe.overall.recommendations,
+        no_bets=informe.no_bets,
+        no_bet_rate=informe.no_bet_rate,
+        threshold=umbral,
+        overall=BacktestTally(**_tally(informe.overall)),
+        by_band=[
+            BacktestBandRow(
+                band=banda.value,
+                no_bets=informe.no_bet_by_band[banda],
+                **_tally(informe.by_band[banda]),
+            )
+            for banda in EngineSignalBand
+        ],
+        house_edge_reference=-1 / len(config.possible_outcomes),
+    )

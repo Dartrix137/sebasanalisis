@@ -39,9 +39,13 @@ import type {
   SpinResponse,
 } from "./types/spins";
 import type {
+  BacktestReport,
+  BacktestSource,
   BankrollSuggestionResponse,
   EligibleBetResponse,
   ProgressionTableResponse,
+  RecommendationRecord,
+  RecommendationResponse,
   StatisticalSuggestionsPanel,
   StreakAlert,
 } from "./types/suggestions";
@@ -254,6 +258,23 @@ export const analysisApi = {
 };
 
 /**
+ * Motor de recomendación (§2.10): qué apostar en el giro siguiente, o no
+ * apostar. Es lo que la vista de ruleta muestra en grande; las estadísticas
+ * pasan a ser el respaldo, dentro de la misma respuesta.
+ */
+export const recommendationApi = {
+  /** La recomendación vigente. Se recalcula al ingresar cada número. */
+  latest: (token: string, sessionId: UUID) =>
+    apiFetch<RecommendationResponse>(`/sessions/${sessionId}/recommendation`, { token }),
+
+  /** Las recomendaciones emitidas en la sesión y cómo cerró cada una. */
+  history: (token: string, sessionId: UUID) =>
+    apiFetch<RecommendationRecord[]>(`/sessions/${sessionId}/recommendation/history`, {
+      token,
+    }),
+};
+
+/**
  * Gestión de banca (§2.8). Todo lo que devuelve describe el tamaño de la
  * apuesta que exige la progresión elegida y su riesgo — nunca a qué apostar.
  */
@@ -262,8 +283,15 @@ export const bankrollApi = {
    * Monto del escalón actual. `betId` es opcional porque el motor no decide a
    * qué se apuesta: sin él no se estima el riesgo de agotar la banca.
    */
-  suggestion: (token: string, sessionId: UUID, betId?: string) => {
-    const qs = betId === undefined ? "" : `?bet=${encodeURIComponent(betId)}`;
+  suggestion: (
+    token: string,
+    sessionId: UUID,
+    options: { betId?: string; strategy?: BankrollStrategy } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.betId !== undefined) params.set("bet", options.betId);
+    if (options.strategy !== undefined) params.set("strategy_key", options.strategy);
+    const qs = params.toString() ? `?${params}` : "";
     return apiFetch<BankrollSuggestionResponse>(
       `/sessions/${sessionId}/bankroll/suggestion${qs}`,
       { token },
@@ -274,20 +302,24 @@ export const bankrollApi = {
    * Apuestas compatibles con el modo de la sesión, con su probabilidad teórica.
    * El riesgo de agotar la banca se estima sobre la que el usuario elija.
    */
-  eligibleBets: (token: string, sessionId: UUID) =>
-    apiFetch<EligibleBetResponse[]>(`/sessions/${sessionId}/bankroll/eligible-bets`, {
-      token,
-    }),
+  eligibleBets: (token: string, sessionId: UUID, strategy?: BankrollStrategy) => {
+    const qs = strategy === undefined ? "" : `?strategy_key=${strategy}`;
+    return apiFetch<EligibleBetResponse[]>(
+      `/sessions/${sessionId}/bankroll/eligible-bets${qs}`,
+      { token },
+    );
+  },
 
   /** Tabla de progresión con los montos reales de esta sesión. */
   progression: (
     token: string,
     sessionId: UUID,
-    options: { stages?: number; betId?: string } = {},
+    options: { stages?: number; betId?: string; strategy?: BankrollStrategy } = {},
   ) => {
     const params = new URLSearchParams();
     if (options.stages !== undefined) params.set("stages", String(options.stages));
     if (options.betId !== undefined) params.set("bet", options.betId);
+    if (options.strategy !== undefined) params.set("strategy_key", options.strategy);
     const qs = params.toString() ? `?${params}` : "";
     return apiFetch<ProgressionTableResponse>(
       `/sessions/${sessionId}/bankroll/progression${qs}`,
@@ -324,6 +356,30 @@ export const bankrollApi = {
 };
 
 export const adminApi = {
+  /**
+   * Backtest del motor (§2.10). Métrica interna: no se muestra al cliente, y es
+   * lo que dice si el motor aporta información útil o sólo describe el pasado.
+   */
+  backtest: (
+    token: string,
+    options: {
+      variantId?: UUID;
+      source?: BacktestSource;
+      limit?: number;
+      spins?: number;
+      threshold?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.variantId !== undefined) qs.set("variant_id", options.variantId);
+    if (options.source !== undefined) qs.set("source", options.source);
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.spins !== undefined) qs.set("spins", String(options.spins));
+    if (options.threshold !== undefined) qs.set("threshold", String(options.threshold));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<BacktestReport>(`/admin/recommendations/backtest${sufijo}`, { token });
+  },
+
   createGame: (token: string, body: CreateGameRequest) =>
     apiFetch<GameResponse>("/admin/games", {
       method: "POST",

@@ -41,8 +41,8 @@ def _insert_session(
     variant_id: str,
     *,
     status: str = "active",
-    strategy: str = "flat",
-    mode: str = "single",
+    stage_martingale: int = 0,
+    stage_two_sector: int = 0,
 ) -> str:
     session_id = str(uuid.uuid4())
     engine = create_engine(db_url)
@@ -51,16 +51,16 @@ def _insert_session(
             text(
                 "INSERT INTO game_sessions (id, user_id, game_variant_id, name, status,"
                 " window_size, bankroll_start, bankroll_current, base_bet, table_limit,"
-                " strategy_selected, strategy_stage, strategy_mode, started_at)"
+                " stage_martingale, stage_two_sector, started_at)"
                 " SELECT :sid, u.id, :vid, 'Mesa 1', :st, 50, 100000, 100000, 1000, 500000,"
-                " :strat, 0, :mode, now() FROM users u WHERE u.email = :email"
+                " :mart, :dos, now() FROM users u WHERE u.email = :email"
             ),
             {
                 "sid": session_id,
                 "vid": variant_id,
                 "st": status,
-                "strat": strategy,
-                "mode": mode,
+                "mart": stage_martingale,
+                "dos": stage_two_sector,
                 "email": email,
             },
         )
@@ -95,7 +95,8 @@ def test_lista_las_sesiones_del_usuario(
     s = sesiones[0]
     assert s["status"] == "active"
     assert s["name"] == "Mesa 1"
-    assert s["strategy_mode"] == "single"
+    assert s["stage_martingale"] == 0
+    assert s["stage_two_sector"] == 0
     assert s["bankroll_current"] == 100000.0
     assert s["window_size"] == 50
 
@@ -142,29 +143,26 @@ def test_sesion_inexistente_da_404(client: TestClient, user_token: str) -> None:
     assert r.status_code == 404
 
 
-def test_modo_dos_sectores_incoherente_es_rechazado_por_la_base(
+def test_un_escalon_negativo_es_rechazado_por_la_base(
     test_database: str, owner: dict, variant_id: str
 ) -> None:
-    """El CHECK de §2.8 sigue vivo tras pasar las columnas a NOT NULL."""
+    """El CHECK que reemplaza al de modo/estrategia: los escalones son
+    contadores de progresion y no pueden ir hacia atras de cero."""
     from sqlalchemy.exc import IntegrityError
 
     with pytest.raises(IntegrityError):
-        _insert_session(
-            test_database, owner["email"], variant_id, strategy="martingale", mode="two_sector"
-        )
+        _insert_session(test_database, owner["email"], variant_id, stage_martingale=-1)
 
 
-def test_modo_dos_sectores_coherente_se_acepta(
+def test_los_dos_escalones_viajan_en_la_respuesta(
     client: TestClient, test_database: str, owner: dict, variant_id: str
 ) -> None:
+    """Las tres progresiones corren a la vez, asi que cada una expone el suyo
+    (la plana no tiene: siempre esta en 0)."""
     sid = _insert_session(
-        test_database,
-        owner["email"],
-        variant_id,
-        strategy="two_sector_recovery",
-        mode="two_sector",
+        test_database, owner["email"], variant_id, stage_martingale=3, stage_two_sector=2
     )
     r = client.get(f"/sessions/{sid}", headers=auth(owner["token"]))
     assert r.status_code == 200
-    assert r.json()["strategy_selected"] == "two_sector_recovery"
-    assert r.json()["strategy_mode"] == "two_sector"
+    assert r.json()["stage_martingale"] == 3
+    assert r.json()["stage_two_sector"] == 2

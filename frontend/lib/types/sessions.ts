@@ -8,14 +8,12 @@ import type { UUID } from "./auth";
 
 export type SessionStatus = "active" | "closed" | "abandoned";
 
-export type BankrollStrategy =
-  | "martingale"
-  | "dalembert"
-  | "fibonacci"
-  | "flat"
-  | "two_sector_recovery";
-
-export type StrategyMode = "single" | "two_sector";
+/**
+ * Las tres progresiones que ofrece la mesa (§2.10). Desde la Fase 3 la sesión
+ * no elige una al crearse: la vista de ruleta las muestra a la vez con lo que
+ * pide cada una. D'Alembert y Fibonacci salieron del producto.
+ */
+export type BankrollStrategy = "flat" | "martingale" | "two_sector_recovery";
 
 export interface CreateSessionRequest {
   game_variant_id: UUID;
@@ -24,8 +22,6 @@ export interface CreateSessionRequest {
   bankroll_start: number;
   base_bet: number;
   table_limit: number;
-  strategy: BankrollStrategy;
-  strategy_mode: StrategyMode;
   /** Pérdida neta en la que el usuario decide detenerse. Opcional. */
   loss_limit?: number | null;
 }
@@ -33,8 +29,6 @@ export interface CreateSessionRequest {
 export interface UpdateSessionRequest {
   name?: string | null;
   window_size?: number | null;
-  strategy?: BankrollStrategy | null;
-  strategy_mode?: StrategyMode | null;
   table_limit?: number | null;
   /** Se puede fijar o bajar; subirlo o quitarlo con la sesión abierta da 422. */
   loss_limit?: number | null;
@@ -52,9 +46,12 @@ export interface SessionResponse {
   base_bet: number;
   table_limit: number;
   loss_limit: number | null;
-  strategy_selected: BankrollStrategy;
-  strategy_mode: StrategyMode;
-  strategy_stage: number;
+  /**
+   * Un escalón por progresión: las tres corren a la vez y el usuario sigue la
+   * que quiera (§2.10). La plana no tiene escalón porque no tiene progresión.
+   */
+  stage_martingale: number;
+  stage_two_sector: number;
   started_at: string; // ISO 8601
   closed_at: string | null;
 }
@@ -70,7 +67,6 @@ export interface SessionSummaryResponse {
   bankroll_start: number;
   bankroll_final: number;
   net_change: number;
-  strategy_used: BankrollStrategy;
   /** Peor caída desde un pico previo: un neto final en cero puede esconderla. */
   max_drawdown: number;
   followed_suggestion_rate: number;

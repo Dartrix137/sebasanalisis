@@ -9,6 +9,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { BacktestPanel } from "@/components/admin/BacktestPanel";
 import { VariantForm } from "@/components/admin/VariantForm";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi, gamesApi } from "@/lib/api-client";
@@ -219,6 +220,9 @@ export default function AdminPage() {
           ) : null}
         </Card>
       ))}
+
+      {/* Métricas internas del motor (§2.10). Sólo admin: no las ve el cliente. */}
+      <BacktestPanel variants={games.flatMap((g) => g.variants)} />
 
       <Card>
         <CardHeader title="Usuarios" subtitle="Cambia el tipo de acceso de cada cuenta." />

@@ -24,6 +24,15 @@ class Group:
     label: str
     outcomes: frozenset[str]
     payout: float
+    #: Si el grupo entra al catalogo de mercados del motor de recomendacion
+    #: (§2.10). Por defecto si. El verde de la ruleta lo pone en False: cubre el
+    #: 0/00 y no es una de las zonas que el producto recomienda, pero se sigue
+    #: necesitando como grupo para que las frecuencias de `color` sumen 1 y para
+    #: que el chi-cuadrado tenga todas sus celdas.
+    #:
+    #: Es configuracion del juego y no una regla del motor: un juego nuevo que
+    #: no declare nada tiene todos sus grupos como mercados.
+    market: bool = True
 
 
 @dataclass(frozen=True)
@@ -49,9 +58,34 @@ class Category:
 
 
 @dataclass(frozen=True)
+class AllowedCombination:
+    """Una apuesta a varios grupos de la misma categoria a la vez.
+
+    Existe en los datos y no en el motor porque "dos docenas" es una regla de la
+    mesa, no una verdad matematica: un juego nuevo declara las suyas y el motor
+    no cambia (§2.10).
+    """
+
+    id: str
+    label: str
+    category_id: str
+    group_ids: tuple[str, ...]
+
+
+#: Umbral de `signal_score` a partir del cual el motor recomienda apostar,
+#: cuando la variante no declara el suyo (§2.10).
+DEFAULT_RECOMMENDATION_THRESHOLD = 60.0
+
+
+@dataclass(frozen=True)
 class GameConfig:
     possible_outcomes: tuple[str, ...]
     categories: tuple[Category, ...]
+    #: Combinaciones permitidas, en el orden declarado. Es una lista y no un
+    #: diccionario a proposito: JSONB no conserva el orden de las claves de un
+    #: objeto, y el desempate del motor necesita un orden de catalogo estable.
+    allowed_combinations: tuple[AllowedCombination, ...] = ()
+    recommendation_threshold: float = DEFAULT_RECOMMENDATION_THRESHOLD
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> GameConfig:
@@ -64,6 +98,7 @@ class GameConfig:
                     label=g.get("label") or gid,
                     outcomes=frozenset(g["outcomes"]),
                     payout=float(g["payout"]),
+                    market=bool(g.get("market", True)),
                 )
                 for gid, g in cat["groups"].items()
             )
@@ -75,9 +110,33 @@ class GameConfig:
                     groups=grupos,
                 )
             )
+        combinaciones = tuple(
+            AllowedCombination(
+                id=c["id"],
+                label=c.get("label") or c["id"],
+                category_id=c["category_id"],
+                group_ids=tuple(c["group_ids"]),
+            )
+            for c in raw.get("allowed_combinations", [])
+        )
         return cls(
             possible_outcomes=tuple(raw["possible_outcomes"]),
             categories=tuple(categorias),
+            allowed_combinations=combinaciones,
+            recommendation_threshold=float(
+                raw.get("recommendation_threshold", DEFAULT_RECOMMENDATION_THRESHOLD)
+            ),
+        )
+
+    def category_index(self, category_id: str) -> int:
+        """Posicion de la categoria en el orden declarado.
+
+        Es parte del desempate del motor (§2.10): `categories` es un array JSON,
+        asi que su orden sobrevive a JSONB, al contrario que el de `groups`.
+        """
+        return next(
+            (i for i, c in enumerate(self.categories) if c.id == category_id),
+            len(self.categories),
         )
 
     @property

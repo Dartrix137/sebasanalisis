@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SessionStatus(str, Enum):
@@ -15,39 +15,22 @@ class SessionStatus(str, Enum):
 
 
 class BankrollStrategy(str, Enum):
-    martingale = "martingale"
-    dalembert = "dalembert"
-    fibonacci = "fibonacci"
+    """Las tres progresiones que ofrece la mesa (§2.10).
+
+    Desde la Fase 3 la sesión no elige una al crearse: la vista de ruleta las
+    muestra a la vez con lo que pide cada una, y el usuario sigue la que quiera.
+    Por eso no hay `strategy_selected` ni `strategy_mode` — cada progresión
+    lleva su propio escalón y las tres avanzan con el mismo cierre de la
+    recomendación.
+
+    D'Alembert y Fibonacci salieron del producto en la Fase 3.
+    """
     flat = "flat"
+    martingale = "martingale"
     # Progresión de recuperación para dos docenas/columnas (§2.8). No es una
     # martingala clásica: el beneficio neto al acertar es solo una fracción de
     # lo apostado, así que la progresión es 1-1, 2-2, 6-6, 18-18, 54-54.
     two_sector_recovery = "two_sector_recovery"
-
-
-class StrategyMode(str, Enum):
-    single = "single"          # apuestas de pago 1:1 (color, paridad, alto/bajo)
-    two_sector = "two_sector"  # dos docenas o dos columnas simultáneas
-
-
-def _validate_mode_strategy(mode: "StrategyMode", strategy: BankrollStrategy) -> None:
-    """Regla cruzada de `docs/ARQUITECTURA_Y_ESTADISTICA.md` §2.8.
-
-    El modo dos-sectores solo admite la progresión de recuperación, y esa
-    progresión no tiene sentido en modo 1:1. La misma regla se replica en el
-    endpoint y en un CHECK de base de datos: el schema es la primera barrera,
-    no la única.
-    """
-    if mode is StrategyMode.single and strategy is BankrollStrategy.two_sector_recovery:
-        raise ValueError(
-            "La estrategia 'two_sector_recovery' requiere strategy_mode='two_sector' "
-            "(§2.8: su progresión asume apostar a dos sectores a la vez)"
-        )
-    if mode is StrategyMode.two_sector and strategy is not BankrollStrategy.two_sector_recovery:
-        raise ValueError(
-            "strategy_mode='two_sector' solo admite la estrategia 'two_sector_recovery' "
-            "(§2.8: la martingala clásica no aplica a pagos 2:1 sobre dos sectores)"
-        )
 
 
 # ---------- Requests ----------
@@ -59,8 +42,6 @@ class CreateSessionRequest(BaseModel):
     bankroll_start: float = Field(gt=0)
     base_bet: float = Field(gt=0)
     table_limit: float = Field(gt=0)
-    strategy: BankrollStrategy = BankrollStrategy.flat
-    strategy_mode: StrategyMode = StrategyMode.single
     # Pérdida neta en la que el usuario decide detenerse (§2.8). Opcional.
     loss_limit: Optional[float] = Field(default=None, gt=0)
 
@@ -73,30 +54,15 @@ class CreateSessionRequest(BaseModel):
                 "perder más de lo que se trae a la mesa"
             )
 
-    @model_validator(mode="after")
-    def check_mode_matches_strategy(self) -> "CreateSessionRequest":
-        _validate_mode_strategy(self.strategy_mode, self.strategy)
-        return self
-
 
 class UpdateSessionRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=100)
     window_size: Optional[int] = Field(default=None, ge=5, le=500)
-    strategy: Optional[BankrollStrategy] = None
-    strategy_mode: Optional[StrategyMode] = None
     table_limit: Optional[float] = Field(default=None, gt=0)
     # Solo se puede fijar si no había uno, o bajar. Subirlo o quitarlo con la
     # sesión abierta es "aumentar el límite para recuperar" (§9 del documento
     # verificado); el endpoint lo rechaza con 422.
     loss_limit: Optional[float] = Field(default=None, gt=0)
-
-    @model_validator(mode="after")
-    def check_mode_matches_strategy(self) -> "UpdateSessionRequest":
-        # Solo valida si el request trae ambos. Si viene uno solo, el endpoint
-        # debe combinarlo con el valor ya persistido antes de aceptar el cambio.
-        if self.strategy_mode is not None and self.strategy is not None:
-            _validate_mode_strategy(self.strategy_mode, self.strategy)
-        return self
 
 
 # ---------- Responses ----------
@@ -113,9 +79,10 @@ class SessionResponse(BaseModel):
     base_bet: float
     table_limit: float
     loss_limit: Optional[float] = None
-    strategy_selected: BankrollStrategy
-    strategy_mode: StrategyMode
-    strategy_stage: int
+    # Un escalón por progresión: las tres corren a la vez y el usuario sigue la
+    # que quiera (§2.10). La plana no tiene escalón porque no tiene progresión.
+    stage_martingale: int
+    stage_two_sector: int
     started_at: datetime
     closed_at: Optional[datetime] = None
 
@@ -131,7 +98,6 @@ class SessionSummaryResponse(BaseModel):
     bankroll_start: float
     bankroll_final: float
     net_change: float
-    strategy_used: BankrollStrategy
     max_drawdown: float
     followed_suggestion_rate: float
 

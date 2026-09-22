@@ -40,10 +40,13 @@ export interface SpinResponse {
   result_value: string;
   source: SpinSource;
   /**
-   * Escalón de la progresión antes de resolver este giro. null si no resolvió
-   * apuestas o si después se cambió de estrategia.
+   * Escalones de las progresiones antes de resolver este giro. La UI arma con
+   * ellos el aviso "la progresión sube del escalón 2 al 3", y deshacer el giro
+   * los restaura. Son dos porque las tres corren a la vez (§2.10); la plana no
+   * tiene escalón. null en los giros anteriores a la Fase 3.
    */
-  strategy_stage_before: number | null;
+  stage_martingale_before: number | null;
+  stage_two_sector_before: number | null;
   created_at: string; // ISO 8601
 }
 

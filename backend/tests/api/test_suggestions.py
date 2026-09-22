@@ -50,8 +50,6 @@ def sesion(client: TestClient, user_token: str, admin_token: str) -> str:
             "bankroll_start": 100000,
             "base_bet": 1000,
             "table_limit": 500000,
-            "strategy": "flat",
-            "strategy_mode": "single",
         },
         headers=auth(user_token),
     ).json()["id"]

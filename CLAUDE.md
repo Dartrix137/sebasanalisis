@@ -41,8 +41,8 @@ Sigue exactamente la estructura definida en `docs/ARQUITECTURA_Y_ESTADISTICA.md`
 3. Admin: CRUD de juegos/variantes con formulario simple (sin builder visual todavía).
 4. Menú principal / selector de juegos.
 5. Flujo de ruleta con ingreso manual de números giro a giro — esto ya debe ser una demo jugable end-to-end.
-6. Motor estadístico núcleo: frecuencia+shrinkage, recencia, χ², racha, EV, ranking top-3, auto-evaluación.
-7. Motor de bankroll: martingala, d'Alembert, Fibonacci, flat, y modo dos-sectores.
+6. Motor estadístico núcleo: frecuencia+shrinkage, recencia, χ², racha, EV, ranking top-3, auto-evaluación. *(La Fase 3 saca el top-3 de la vista principal; sigue calculándose y se muestra plegado.)*
+7. Motor de bankroll: martingala, d'Alembert, Fibonacci, flat, y modo dos-sectores. *(La Fase 3 retira d'Alembert y Fibonacci del producto y deja las tres que ofrece la mesa — ver más abajo.)*
 8. Carga inicial de números al abrir una sesión: el usuario pega o escribe los números que ya observó en la mesa, y quedan registrados como historial de la sesión antes del primer giro nuevo.
 
 No avances a un paso sin que el anterior tenga al menos un test o una verificación manual funcionando. Si vas a saltarte este orden por alguna razón, dilo explícitamente y pide confirmación.
@@ -70,6 +70,51 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 
 Las señales avanzadas del motor (§2.9) siguen fuera hasta que el usuario las pida explícitamente, una por una. También siguen fuera el builder visual del admin, el juego de dados y exportar CSV.
 
+## Fase 3 — motor de recomendación (decidido el 2026-09-22)
+
+El producto deja de ser un analizador descriptivo y pasa a ser un **motor de recomendación**. Después de cada giro, la pantalla principal de ruleta dice **qué apostar en el siguiente giro** o **NO APOSTAR**, con un Signal Score 0-100 y su banda. Esa tarjeta es la pieza central; las estadísticas son el respaldo.
+
+El detalle completo (fórmula, pesos, calibración, desempate) vive en `docs/ARQUITECTURA_Y_ESTADISTICA.md` §2.10. Lo que sigue es lo que hay que tener presente al escribir código.
+
+### Lenguaje
+
+- **Permitido**: "Recomendación", "Apostar: …", "No apostar este giro", "Fuerza de señal", "Signal Score".
+- **Sigue prohibido**: "predicción", "va a salir", "seguro", "garantizado", "infalible", "ventaja sobre la casa".
+- En código: `recommendation`, `signal_score`, `signal_band`. Nunca `prediction`.
+- El panel de admin es la única excepción a la terminología: son métricas internas que no ve el cliente, y ahí "aciertos" y "fallos" se usan tal cual.
+
+### Reglas del motor de recomendación
+
+- Vive en `backend/app/engine/recommendation.py`. Python puro, **genérico**: los mercados salen de `categories_json` (grupos con `market != false` más `allowed_combinations`). Nunca hardcodees docenas ni colores ahí.
+- **Dirección de la señal: a favor = salió MÁS de lo esperado.** Es la misma que ya usaba el EV del ranking top-3. Un mercado que salió menos da componentes en 0, nunca negativos — recomendar lo que no ha salido es la falacia del jugador.
+- `allowed_combinations` es un **array**, no un objeto: JSONB no conserva el orden de las claves de un objeto y el desempate necesita orden estable. Por lo mismo, el orden de catálogo nunca sale de iterar `groups`.
+- **Una sola recomendación.** Desempate determinista: mayor score → menor cobertura → índice de la categoría en `categories` → `group_ids` alfabético → clave.
+- Umbral por variante (`recommendation_threshold`, por defecto 60), inclusivo. Por debajo, `NO_APOSTAR`.
+- El χ² entra sólo como **bono** (+10) y sólo con ≥200 giros y p corregido por Benjamini-Hochberg < 0.05. Ojo: a diferencia de §2.6, aquí una señal puede llegar a FUERTE sin χ². Es deliberado y está anotado en el doc.
+- **`Z_MAX` no es un umbral de significancia.** Es la escala con la que el producto decide cada cuánto habla. Con la calibración vigente, el motor recomienda en ~1 de cada 3 giros de una mesa perfectamente justa. Si cambias `Z_MAX` o los pesos, vuelve a medirlo con el backtest antes de darlo por bueno.
+
+### Gestión de banca
+
+- **La sesión ya no elige una progresión.** La mesa muestra las tres a la vez — plana, martingala, recuperación de dos sectores — con lo que pide cada una. D'Alembert y Fibonacci salieron del producto.
+- Los **sectores los pone el mercado recomendado**, no la estrategia. La recuperación de dos sectores no se ofrece sobre un mercado de un solo sector.
+- Cada progresión lleva su escalón (`stage_martingale`, `stage_two_sector`; la plana no tiene) y **las tres avanzan con el cierre de la recomendación**, no con el neto de las apuestas reales. La banca sí se mueve con las apuestas reales: son dos cosas distintas y no hay que volver a juntarlas.
+- **Con `NO_APOSTAR` ninguna progresión avanza y el saldo no cambia.**
+
+### Persistencia
+
+- `statistical_suggestions` **ya se escribe**: una fila por recomendación emitida, incluido el `NO_BET` (con los datos del mejor candidato, que siempre existe). Sin esas filas el backtest no puede comparar cuándo el motor habló con cuándo calló.
+- Montos en **centavos** (`stake_cents`), nunca float, con la moneda explícita.
+- Deshacer un giro deshace también su recomendación: la que ese giro resolvió vuelve a `PENDING` y la emitida después se borra. Si no, quedaría un HIT o un MISS falso en lo que el backtest mide.
+
+### Disclaimer
+
+- **El banner fijo de §0 se retiró de todas las pantallas**: el carácter estadístico y no predictivo del producto está cubierto en los términos y condiciones.
+- Lo que queda, y es obligatorio, son dos líneas en la tarjeta de recomendación: bajo el score, _"81/100 es la fuerza del criterio interno, no la probabilidad de acertar."_; al pie, fija, _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_
+
+### Métricas internas
+
+`engine/backtest.py` (puro), `scripts/backtest_recommendations.py` (CLI) y `GET /admin/recommendations/backtest`. **No se muestran al cliente.** La regla que las hace útiles: los pesos se calibraron sobre simulaciones, así que el backtest tiene que correr sobre historiales que el motor no haya visto. Si alguna vez ajustas los pesos contra un conjunto de datos, ese conjunto deja de servir para medir.
+
 ## Ingreso de números
 
 Todos los números de una sesión los ingresa el usuario. Hay dos momentos, y ambos son manuales:
@@ -87,7 +132,7 @@ Reglas que no se negocian:
 
 - El motor (`engine/`) opera únicamente sobre la estructura genérica `possible_outcomes` + `categories` (ver §3.2 del doc de arquitectura). **Nunca** hardcodees lógica específica de ruleta (docenas, colores) dentro del motor — eso vive solo en los datos de `game_variants.categories_json`. Esto es lo que permite agregar dados después sin tocar `engine/`.
 - Cada función del motor debe ser pura: recibe datos, devuelve resultado, sin efectos secundarios ni acceso a DB.
-- Toda sugerencia estadística debe traer siempre junto: `theoretical_probability` y `observed_frequency_shrunk` — nunca mostrar solo uno de los dos (ver §2 del doc de arquitectura, es una regla anti-falacia del jugador).
+- Toda sugerencia estadística debe traer siempre juntos `theoretical_probability` y `observed_frequency_shrunk` — nunca uno solo (regla anti-falacia del jugador, §2 del doc de arquitectura). **Desde la Fase 3 la regla aplica a la respuesta de la API y a la sección desplegable "¿Por qué recomienda esto?", no a la vista principal de ruleta**: ahí el protagonista es la recomendación (mercado + Signal Score + banda + monto), y las frecuencias son el respaldo. Lo que no cambia es que los dos valores viajen siempre en pareja y que ninguno se muestre sin el otro allí donde se muestren.
 - El χ² requiere mínimo 200 giros y p<0.05 para activarse — no lo actives con menos datos aunque el cálculo "funcione" matemáticamente con menos. Ese mínimo es un **piso de ruido, no un umbral de detección de sesgo**: detectar un sesgo explotable pediría del orden de 30.000 giros (ver §2.4 del doc de arquitectura). No describas esa señal como si detectara mesas sesgadas.
 - El p<0.05 del χ² se evalúa sobre el p-valor **ya corregido por comparaciones múltiples** (Benjamini-Hochberg), nunca sobre el crudo: la prueba corre sobre las 5 categorías a la vez, y sin corregir una de cada cuatro sesiones mostraría una señal FUERTE espuria.
 - Toda frecuencia observada viaja con su intervalo de Wilson (§2.2). No derives de él un veredicto por opción del tipo "esta desviación se distingue del azar" — serían 13 pruebas simultáneas y marcarían algo en un tercio de las mesas justas. El intervalo describe incertidumbre; afirmar es trabajo de `strength`, que sí está corregida.

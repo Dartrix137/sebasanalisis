@@ -15,6 +15,15 @@ class CategoryGroup(BaseModel):
     label: Optional[str] = None  # nombre legible del grupo, ej 'Rojo'; lo trae el seed
     outcomes: list[str] = Field(min_length=1)
     payout: float = Field(gt=0, description="Multiplicador de pago, ej 1 para rojo/negro, 35 para pleno")
+    market: bool = Field(
+        default=True,
+        description=(
+            "Si el grupo entra al catálogo de mercados del motor de recomendación "
+            "(§2.10). El verde de la ruleta lo pone en false: cubre el 0/00 y no es "
+            "una zona que el producto recomiende, pero se conserva como grupo para "
+            "que las frecuencias de color sumen 1 y el χ² tenga todas sus celdas."
+        ),
+    )
 
 
 class GameCategory(BaseModel):
@@ -37,10 +46,30 @@ class GameCategory(BaseModel):
         return v
 
 
+class AllowedCombination(BaseModel):
+    """Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).
+
+    Vive en los datos y no en el motor porque "dos docenas" es una regla de la
+    mesa, no una verdad matemática: un juego nuevo declara las suyas y
+    `engine/recommendation.py` no cambia (§2.10).
+    """
+    id: str
+    label: str
+    category_id: str
+    group_ids: list[str] = Field(min_length=2)
+
+
 class GameVariantConfig(BaseModel):
     """El contenido completo de game_variants.categories_json + metadata."""
     possible_outcomes: list[str] = Field(min_length=1)
     categories: list[GameCategory] = Field(min_length=1)
+    # Lista y no diccionario a propósito: JSONB no conserva el orden de las
+    # claves de un objeto, y el desempate del motor necesita un orden de
+    # catálogo estable (§2.10).
+    allowed_combinations: list[AllowedCombination] = []
+    # `signal_score` a partir del cual el motor recomienda apostar. Configurable
+    # por variante desde el admin; por debajo la decisión es NO APOSTAR.
+    recommendation_threshold: float = Field(default=60, ge=0, le=100)
 
     @field_validator("categories")
     @classmethod

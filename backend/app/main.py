@@ -3,7 +3,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import admin, auth, bankroll, bets, games, sessions, suggestions
+from app.api.v1 import (
+    admin,
+    auth,
+    bankroll,
+    bets,
+    games,
+    recommendations,
+    sessions,
+    suggestions,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -25,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(games.router)
 app.include_router(sessions.router)
 app.include_router(suggestions.router)
+app.include_router(recommendations.router)
 app.include_router(bankroll.router)
 app.include_router(bets.router)
 app.include_router(admin.router)

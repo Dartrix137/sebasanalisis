@@ -10,6 +10,24 @@ export interface CategoryGroup {
   label: string | null;
   outcomes: string[];
   payout: number;
+  /**
+   * Si el grupo entra al catálogo de mercados del motor de recomendación
+   * (§2.10). El verde de la ruleta lo pone en false: cubre el 0/00 y no es una
+   * zona que el producto recomiende, pero se conserva como grupo para que las
+   * frecuencias de color sumen 1 y el χ² tenga todas sus celdas.
+   */
+  market: boolean;
+}
+
+/**
+ * Una apuesta a varios grupos de la misma categoría a la vez (dos docenas, dos
+ * columnas). Vive en los datos porque es una regla de la mesa, no del motor.
+ */
+export interface AllowedCombination {
+  id: string;
+  label: string;
+  category_id: string;
+  group_ids: string[];
 }
 
 export interface GameCategory {
@@ -23,6 +41,10 @@ export interface GameCategory {
 export interface GameVariantConfig {
   possible_outcomes: string[];
   categories: GameCategory[];
+  /** Orden significativo: es el orden de catálogo del desempate (§2.10). */
+  allowed_combinations: AllowedCombination[];
+  /** `signal_score` a partir del cual se recomienda apostar. 60 por defecto. */
+  recommendation_threshold: number;
 }
 
 export interface CreateGameRequest {

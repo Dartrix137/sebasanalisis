@@ -55,8 +55,6 @@ def sesion(client: TestClient, user_token: str, admin_token: str) -> str:
             "bankroll_start": 100_000,
             "base_bet": 1_000,
             "table_limit": 500_000,
-            "strategy": "martingale",
-            "strategy_mode": "single",
         },
         headers=auth(user_token),
     ).json()["id"]
@@ -163,7 +161,7 @@ def test_ganar_las_dos_suma_los_dos_netos(
     assert _sesion(client, user_token, sesion)["bankroll_current"] == 103_000
 
 
-def test_el_giro_cierra_adelante_y_la_progresion_lo_cuenta_como_victoria(
+def test_el_giro_cierra_adelante_y_la_banca_sube(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
     """Rojo pierde -1.000, el tercio gana +2.000: el giro cerro en +1.000."""
@@ -174,23 +172,24 @@ def test_el_giro_cierra_adelante_y_la_progresion_lo_cuenta_como_victoria(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 101_000
-    assert s["strategy_stage"] == 0  # martingala: la serie se cierra
 
 
-def test_el_giro_cierra_atras_y_la_progresion_avanza(
+def test_el_giro_cierra_atras_y_la_banca_baja(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    """Rojo pierde -3.000 y el tercio gana +2.000: el giro cerro en -1.000."""
+    """Rojo pierde -3.000 y el tercio gana +2.000: el giro cerro en -1.000.
+
+    El escalon NO se mira aqui: desde la Fase 3 lo mueve el cierre de la
+    recomendacion, no el neto de las apuestas reales (§2.10)."""
     _apostar(client, user_token, sesion, amount=3_000)  # Rojo
     _apostar(client, user_token, sesion, category="tercio", option_label="Bajo")
     _girar(client, user_token, sesion, "2")
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 99_000
-    assert s["strategy_stage"] == 1
 
 
-def test_un_giro_que_cierra_en_cero_no_mueve_el_escalon(
+def test_un_giro_que_cierra_en_cero_no_mueve_la_banca(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
     """No hubo nada que recuperar ni nada que cerrar."""
@@ -200,7 +199,6 @@ def test_un_giro_que_cierra_en_cero_no_mueve_el_escalon(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 100_000
-    assert s["strategy_stage"] == 0
 
 
 def test_cerrar_la_sesion_cancela_todas_las_pendientes(
@@ -217,7 +215,7 @@ def test_cerrar_la_sesion_cancela_todas_las_pendientes(
 # ---------- Resolucion automatica ----------
 
 
-def test_ganar_suma_a_la_banca_y_reinicia_la_progresion(
+def test_ganar_suma_a_la_banca(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
     _apostar(client, user_token, sesion)
@@ -231,10 +229,9 @@ def test_ganar_suma_a_la_banca_y_reinicia_la_progresion(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 101_000
-    assert s["strategy_stage"] == 0
 
 
-def test_perder_resta_de_la_banca_y_avanza_la_progresion(
+def test_perder_resta_de_la_banca(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
     _apostar(client, user_token, sesion)
@@ -247,7 +244,6 @@ def test_perder_resta_de_la_banca_y_avanza_la_progresion(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 99_000
-    assert s["strategy_stage"] == 1  # martingala: siguiente escalon
 
 
 def test_el_cero_hace_perder_una_apuesta_a_color(
@@ -285,7 +281,6 @@ def test_un_giro_sin_apuesta_no_toca_la_banca(
     _girar(client, user_token, sesion, "3")
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 100_000
-    assert s["strategy_stage"] == 0
 
 
 def test_una_apuesta_ya_resuelta_no_se_vuelve_a_resolver(
@@ -391,7 +386,6 @@ def test_el_resumen_describe_lo_que_paso(
     assert c["bankroll_final"] == 100_000
     assert c["net_change"] == 0
     assert c["followed_suggestion_rate"] == 0.5
-    assert c["strategy_used"] == "martingale"
 
 
 def test_la_caida_maxima_no_la_esconde_un_neto_final_en_cero(
@@ -455,7 +449,6 @@ def test_deshacer_el_giro_devuelve_la_banca_y_el_escalon(
 
     antes = _sesion(client, user_token, sesion)
     assert antes["bankroll_current"] == 99_000
-    assert antes["strategy_stage"] == 1
 
     giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
     r = client.delete(
@@ -465,77 +458,52 @@ def test_deshacer_el_giro_devuelve_la_banca_y_el_escalon(
 
     despues = _sesion(client, user_token, sesion)
     assert despues["bankroll_current"] == 100_000
-    assert despues["strategy_stage"] == 0
+    assert despues["stage_martingale"] == 0
 
 
-def test_cada_giro_dice_en_que_escalon_estaba_antes_de_resolverse(
+def test_cada_giro_guarda_los_escalones_previos_de_las_dos_progresiones(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    """La UI arma el "subes del escalon 1 al 2" con este dato."""
-    _apostar(client, user_token, sesion)
+    """La UI arma el "subes del escalon 1 al 2" con este dato, y deshacer un giro
+    lo usa para restaurar. Son dos porque las progresiones corren a la vez."""
     _girar(client, user_token, sesion, "2")
-    _apostar(client, user_token, sesion, amount=2_000)
     _girar(client, user_token, sesion, "2")
 
     giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
-    assert [g["strategy_stage_before"] for g in giros] == [0, 1]
-    assert _sesion(client, user_token, sesion)["strategy_stage"] == 2
+    for g in giros:
+        assert g["stage_martingale_before"] is not None
+        assert g["stage_two_sector_before"] is not None
 
 
 # ---------- Editar la sesion con una serie abierta ----------
 
 
-def _perder(client, token, sid, veces):
-    for _ in range(veces):
-        monto = client.get(
-            f"/sessions/{sid}/bankroll/suggestion", headers=auth(token)
-        ).json()["suggested_bet"]
-        _apostar(client, token, sid, amount=monto)
-        _girar(client, token, sid, "2")
-
-
-def test_editar_otro_campo_con_la_misma_estrategia_no_reinicia_el_escalon(
+def test_editar_el_limite_de_mesa_no_toca_los_escalones(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    """El formulario reenvia la estrategia aunque solo cambie el limite de mesa."""
-    _perder(client, user_token, sesion, 2)
-    assert _sesion(client, user_token, sesion)["strategy_stage"] == 2
+    """Ya no hay progresion elegida que reiniciar: editar otro campo deja las
+    tres donde estaban."""
+    _girar(client, user_token, sesion, "2")
+    antes = _sesion(client, user_token, sesion)
 
     r = client.patch(
-        f"/sessions/{sesion}",
-        json={"table_limit": 400_000, "strategy": "martingale", "strategy_mode": "single"},
-        headers=auth(user_token),
+        f"/sessions/{sesion}", json={"table_limit": 400_000}, headers=auth(user_token)
     )
     assert r.status_code == 200
-    assert r.json()["strategy_stage"] == 2
+    assert r.json()["stage_martingale"] == antes["stage_martingale"]
+    assert r.json()["stage_two_sector"] == antes["stage_two_sector"]
 
 
-def test_cambiar_de_estrategia_reinicia_el_escalon_pero_no_la_banca(
+def test_reiniciar_la_progresion_no_toca_la_banca(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    _perder(client, user_token, sesion, 2)
-    r = client.patch(
-        f"/sessions/{sesion}", json={"strategy": "dalembert"}, headers=auth(user_token)
-    )
-    assert r.json()["strategy_stage"] == 0
-    assert r.json()["bankroll_current"] == 97_000
+    _apostar(client, user_token, sesion)
+    _girar(client, user_token, sesion, "2")  # pierde -1.000
 
-
-def test_deshacer_tras_cambiar_de_estrategia_no_restaura_un_escalon_ajeno(
-    client: TestClient, user_token: str, sesion: str
-) -> None:
-    """El escalon 2 de la martingala no significa nada en D'Alembert."""
-    _perder(client, user_token, sesion, 2)
-    client.patch(f"/sessions/{sesion}", json={"strategy": "dalembert"}, headers=auth(user_token))
-
-    giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
-    client.delete(f"/sessions/{sesion}/spins/{giros[-1]['id']}", headers=auth(user_token))
-
-    s = _sesion(client, user_token, sesion)
-    assert s["strategy_selected"] == "dalembert"
-    assert s["strategy_stage"] == 0
-    # La banca si se devuelve: el dinero no depende de la estrategia.
-    assert s["bankroll_current"] == 99_000
+    r = client.post(f"/sessions/{sesion}/reset-strategy", headers=auth(user_token))
+    assert r.status_code == 200
+    assert r.json()["stage_martingale"] == r.json()["stage_two_sector"] == 0
+    assert r.json()["bankroll_current"] == 99_000
 
 
 def test_al_deshacer_la_apuesta_vuelve_a_estar_pendiente(
@@ -567,7 +535,6 @@ def test_tras_deshacer_el_giro_correcto_resuelve_la_misma_apuesta(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 101_000
-    assert s["strategy_stage"] == 0
     apuesta = client.get(f"/sessions/{sesion}/bets", headers=auth(user_token)).json()[0]
     assert apuesta["won"] is True
 
@@ -596,7 +563,7 @@ def test_deshacer_un_giro_sin_apuestas_no_toca_nada(
 
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 100_000
-    assert s["strategy_stage"] == 0
+    assert s["stage_martingale"] == 0
 
 
 def test_se_puede_deshacer_hasta_dejar_la_mesa_vacia(

@@ -24,12 +24,14 @@ Lo que la plataforma sí hace, y que es legítimo:
 | "Precisión del modelo"                     | "Tasa de coincidencia" (nunca implicar causalidad)                    |
 | "Confianza" (en sentido de certeza futura) | "Fuerza de la señal" (FUERTE/MEDIA/DÉBIL, basada en evidencia pasada) |
 | "Va a salir"                               | "Ha salido con mayor/menor frecuencia que lo esperado"                |
+| "Va a salir" / "seguro" / "garantizado"      | "Recomendación" / "Apostar: …" / "No apostar este giro" (§2.10)        |
+| "Ventaja sobre la casa"                     | "Fuerza de señal" / "Signal Score" — describe el criterio interno      |
 
 Todo endpoint, componente de UI y texto de marketing debe pasar este filtro. Si Claude Code genera copy que suene predictivo, debe corregirse antes de continuar.
 
 ### Disclaimers estructurales (obligatorios, no opcionales)
 
-- Banner fijo y visible en toda pantalla donde se muestren sugerencias: _"La ruleta no tiene memoria. Cada giro es independiente. Este análisis es descriptivo, no predictivo."_
+- ~~Banner fijo y visible en toda pantalla donde se muestren sugerencias.~~ **Retirado en la Fase 3** (2026-09-22): el carácter estadístico y no predictivo del producto está cubierto en los términos y condiciones. Lo que queda en la vista de ruleta es la línea fija al pie de la tarjeta de recomendación (§2.10): _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_
 - Onboarding con scroll-to-accept explicando esto antes de dar acceso.
 - Página de "Juego responsable": límites de tiempo/dinero, nunca usar dinero de obligaciones, detenerse ante progresiones incómodas (contenido tomado del documento de estrategia verificado).
 
@@ -238,6 +240,115 @@ Los umbrales (`DRAWDOWN_*`, `FEW_STAGES_LEFT`, `TABLE_LIMIT_LOOKAHEAD`, `LOSS_LI
 - **Apuestas pendientes**: si se cambia de estrategia con una apuesta registrada y aún sin resolver, esa apuesta se resuelve normalmente con el giro siguiente y el escalón avanza según la estrategia nueva, desde 0.
 - **Cambio de modo (1:1 ↔ dos sectores)**: las apuestas elegibles para estimar el riesgo de ruina cambian. Si la que el usuario tenía elegida deja de existir, la UI la descarta y sigue sin estimación, en lugar de pedir una apuesta incompatible (que daría 422).
 
+### 2.10 Motor de recomendación (Fase 3, decidido el 2026-09-22)
+
+El producto deja de ser un analizador descriptivo y pasa a ser un **motor de recomendación**: después de cada giro dice qué apostar en el siguiente, o `NO_APOSTAR`. Vive en `engine/recommendation.py`, es Python puro y genérico — los mercados salen de `categories_json`, nunca hardcodeados.
+
+#### Catálogo de mercados
+
+Dos fuentes, ambas en los datos:
+
+- cada grupo con `market != false`. El verde de la ruleta lo pone en `false`: cubre el 0/00 y no es una zona que el producto recomiende, pero se conserva como grupo para que las frecuencias de color sumen 1 y el χ² tenga todas sus celdas.
+- cada entrada de `allowed_combinations` (dos docenas, dos columnas).
+
+`allowed_combinations` es un **array y no un objeto** a propósito: JSONB no conserva el orden de las claves de un objeto, y el desempate necesita un orden de catálogo estable. Por el mismo motivo el orden de los mercados simples no sale de iterar `groups`, sino de la posición de la categoría en el array `categories` y de `group_ids` ordenados alfabéticamente.
+
+#### Dirección de la señal
+
+Un mercado juega a favor cuando su frecuencia observada con shrinkage quedó **por encima** de su teórica. Es la misma dirección que ya usaba el ranking top-3: allí la lleva el EV (`expected_value(observed_frequency_shrunk, payout)`), monótono creciente en la frecuencia observada, así que sólo un grupo que salió más de lo esperado podía alcanzar MEDIA o FUERTE. Aquí se hace explícita con el signo de `z`. Un mercado que salió **menos** de lo esperado da componentes en 0, nunca negativos: recomendar lo que no ha salido sería la falacia del jugador.
+
+#### Signal Score
+
+Por cada mercado y cada ventana, una desviación estandarizada con signo:
+
+```
+z_v = (p̂_v − p_teórica) / √( p_teórica(1−p_teórica) / N_v )
+```
+
+`p̂_v` es el shrinkage + recencia de §2.2-2.3 y `N_v` el total ponderado. No es una métrica nueva: es el `significance_score` de §2.6 con signo y dividido por la desviación típica binomial. Ese divisor es lo que vuelve comparables coberturas distintas (18/37 frente a 24/37) y variantes distintas (18/37 frente a 18/38).
+
+Ventanas: 10, 20, 50 y 100 giros; con menos giros que la ventana más corta, el historial entero como ventana única.
+
+```
+signal_score = 100 × (0.45·D + 0.25·R + 0.30·C) + 10·[χ² activo]      acotado a [0, 100]
+```
+
+| Componente | Qué mide | Cálculo | Peso |
+| --- | --- | --- | --- |
+| **D** desviación | cuánto se separó con la muestra más grande | `clamp(z_ventana_larga / Z_MAX, 0, 1)` | 0.45 |
+| **R** recencia | cuánto se está separando ahora | `clamp(z_ventana_corta / Z_MAX, 0, 1)` | 0.25 |
+| **C** consistencia | si la inclinación aguanta en tramos distintos | `clamp(media(z) / media(abs z), 0, 1)` | 0.30 |
+
+**C se calcula sobre tramos disjuntos** (0-10, 10-20, 20-50, 50-100), no sobre las ventanas acumuladas. Las ventanas están anidadas: los 10 giros más recientes caen dentro de las cuatro, y medir "consistencia" sobre ellas premiaría a un mercado por un único tramo caliente contado cuatro veces. La explicación que ve el usuario sigue mostrando las ventanas acumuladas; los tramos son sólo para este componente.
+
+**Con un solo tramo, C queda indefinida** y su peso se reparte entre D y R. Un tramo no tiene con qué ser consistente; darla por 1 regalaría 30 puntos a cualquier mercado que asome por encima de la teórica en los primeros giros.
+
+El χ² suma sus 10 puntos sólo con ≥200 giros y p corregido por Benjamini-Hochberg < 0.05 (§2.4). Es un **bono, no un requisito**: a diferencia de §2.6, donde el χ² activo era condición necesaria para la etiqueta FUERTE, aquí un mercado puede llegar a FUERTE o MUY FUERTE sin él. Es consecuencia directa de que las bandas se deriven del score, y conviene tenerlo presente al comparar las dos etiquetas: no significan lo mismo.
+
+#### Z_MAX y qué compra el umbral
+
+`Z_MAX = 2.0`. **No es un umbral de significancia.** Un z de 2 sobre una prueba aislada sería el clásico "dos sigmas", pero aquí se evalúa sobre ~18 mercados solapados a la vez y sin corregir por comparaciones múltiples, así que llegar a 2 no dice que la desviación se distinga del azar. Es la escala con la que el producto decide cada cuánto habla.
+
+Medido por simulación sobre ruedas europeas **justas** (150 sesiones × 150 giros, umbral 60):
+
+| Z_MAX | % NO APOSTAR por giro | coincidencia | ROI/unidad |
+| --- | --- | --- | --- |
+| **2.0** | **69 %** | 45.7 % | −0.055 |
+| 2.5 | 88 % | 45.3 % | −0.034 |
+| 3.0 | 96 % | 44.6 % | −0.031 |
+
+Es decir: con la calibración vigente, **el motor recomienda en aproximadamente uno de cada tres giros de una mesa perfectamente justa**. Es lo que corresponde a la decisión de producto de dar una instrucción clara en cada giro. Lo que el umbral regula es cuánto habla el producto, no cuánto separa señal de ruido: la tasa de coincidencia y el ROI se quedan en la ventaja de la casa en toda la tabla, que es lo esperado y lo que el backtest confirma.
+
+#### Bandas, umbral y desempate
+
+- **0-39 DÉBIL · 40-59 MEDIA · 60-79 FUERTE · 80-100 MUY FUERTE.**
+- Umbral de recomendación configurable por variante (`recommendation_threshold`, por defecto 60), editable desde el admin. Es inclusivo: alcanzarlo exacto basta. Si ninguna alternativa lo alcanza, la decisión es `NO_APOSTAR`.
+- Se devuelve **una sola** recomendación. Desempate determinista: mayor score → menor cobertura → índice de la categoría en el array `categories` → `group_ids` alfabético → clave del mercado. Ninguna parte de la clave depende del orden de un objeto JSON.
+
+#### Gestión de apuesta
+
+El flujo es: primero la recomendación, después el monto. Desde la Fase 3 **la sesión no elige una progresión al crearse**: la mesa muestra las tres (plana, martingala, recuperación de dos sectores) con lo que pide cada una, y el usuario sigue la que quiera. D'Alembert y Fibonacci salen del producto.
+
+- **Los sectores los pone el mercado, no la estrategia.** Si la recomendación cubre dos docenas son dos sectores, la siga quien la siga.
+- La recuperación de dos sectores **no se ofrece** sobre un mercado de un solo sector: su aritmética asume que el otro sector se pierde y que el acertado paga 2:1, así que sobre "Negro" no describe nada.
+- Cada progresión lleva su propio escalón (`game_sessions.stage_martingale`, `stage_two_sector`; la plana no tiene, siempre es 0) y **las tres avanzan con el mismo cierre de la recomendación**. Así el escalón que se muestra es el que le correspondería a quien hubiera seguido siempre al motor.
+- **El escalón ya no avanza por el neto de las apuestas reales.** La banca refleja lo que el usuario apostó de verdad en la mesa; el escalón refleja dónde estaría quien siguiera al motor. Son dos cosas distintas, y juntarlas significaba que apostar por fuera de la recomendación corría la progresión que la mesa muestra.
+- **Con `NO_APOSTAR` ninguna progresión avanza y el saldo no cambia.** Cobrar un escalón por un giro que el motor pidió no jugar sería cobrar por una apuesta que no se hizo.
+- **Resolución**: al llegar el siguiente resultado, la recomendación anterior se marca `HIT` o `MISS` y las progresiones se mueven con eso. Un `NO_BET` se queda en `PENDING` para siempre: no hubo nada que acertar ni que fallar.
+
+#### Persistencia
+
+`statistical_suggestions` **se escribe desde la Fase 3**, una fila por recomendación emitida — hasta el MVP estaba creada y vacía a propósito (§3.3). El motivo del cambio: `outcome` y `resolved_spin_id` son hechos del pasado que no se pueden re-simular, porque dependen de qué recomendó el motor con la fórmula de ese momento, no con la de hoy.
+
+Antes de la primera fila se aplicó la alineación que §3.3 exigía: `chi_square_pvalue` pasó a `chi_square_pvalue_adjusted` y se agregaron `observed_ci_low` / `observed_ci_high`. Salieron `significance_score`, `strength` e `is_top3`, que describían el ranking top-3.
+
+**El `NO_APOSTAR` también se guarda**, con los datos del mejor candidato: siempre hay uno, sólo que por debajo del umbral. Sin esa fila el backtest no podría comparar los giros en los que el motor habló con los que calló, que es la mitad de lo que §9 del comparativo pide medir.
+
+Montos en **centavos** (`stake_cents`), nunca float, con la moneda explícita.
+
+#### Qué muestra la pantalla
+
+La vista principal de ruleta muestra una sola recomendación grande: mercado + score + banda + monto por gestión. **Salieron de la vista principal** el ranking top-3 con porcentajes y el porcentaje de mesa como dato principal; siguen disponibles, plegados, como respaldo.
+
+La regla anti-falacia del jugador de §2 **se mantiene**, con un cambio de sitio: `theoretical_probability` y `observed_frequency_shrunk` siguen viajando siempre juntas en la respuesta de la API y se muestran en la sección desplegable "¿Por qué recomienda esto?", no en la tarjeta principal.
+
+Dos textos obligatorios:
+
+- Bajo el score: _"81/100 es la fuerza del criterio interno, no la probabilidad de acertar."_
+- Al pie de la tarjeta, fijo: _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_
+
+**El banner fijo de §0 se retiró de todas las pantallas** (decisión de producto del 2026-09-22): el carácter estadístico y no predictivo del producto está cubierto en los términos y condiciones. La línea al pie de la tarjeta es el recordatorio que queda en la vista de ruleta.
+
+#### Lenguaje
+
+Permitido: "Recomendación", "Apostar: …", "No apostar este giro", "Fuerza de señal", "Signal Score". Sigue prohibido: "predicción", "va a salir", "seguro", "garantizado", "infalible", "ventaja sobre la casa". En código: `recommendation`, `signal_score`, `signal_band`; nunca `prediction`.
+
+#### Métricas internas (sólo admin)
+
+`engine/backtest.py` (puro) más `scripts/backtest_recommendations.py` (CLI) y `GET /admin/recommendations/backtest`. Reporta número de recomendaciones, % de NO APOSTAR, aciertos y fallos, ROI con pagos reales (1:1, 2:1, y **1:2 para dos docenas** — se apuesta 1 unidad en cada docena, el sector acertado paga 2 y el otro se pierde, o sea +1 neto sobre 2 arriesgadas), resultado por unidad y caída máxima, todo desglosado por banda.
+
+**La regla que hace que esto sirva de algo**: los pesos se fijaron mirando simulaciones de ruedas justas, no historiales concretos. El backtest corre sobre sesiones reales —fuera de muestra por construcción— y las ruedas simuladas quedan como línea base, donde el ROI tiene que quedarse en la ventaja de la casa. Si ahí apareciera una ventaja, sería un error de medición y no un hallazgo.
+
 ### 2.9 Alcance del motor: qué entra al MVP y qué queda para después
 
 El boceto de referencia (`explicacion_analisis_estadistico_ruleta.md`) tiene 9 señales (transición, patrón k-grama, racha, alternancia, ciclo, sesgo χ², y 3 de pleno vía Markov/ciclo/caliente). Implementar las 9 en el primer sprint es demasiado alcance. División:
@@ -295,6 +406,8 @@ backend/
       ranking.py                      # significance_score + top-3 + fuerza (FUERTE/MEDIA/DÉBIL)
       bankroll.py                      # martingala, d'alembert, fibonacci, flat, dos-sectores
       baseline.py                       # línea base ingenua para auto-evaluación
+      recommendation.py                  # catálogo de mercados, signal_score, decisión (§2.10)
+      backtest.py                         # métricas del motor sobre historiales (§2.10)
     models/                              # SQLAlchemy
     schemas/                             # Pydantic (ya definidos, ver /schemas del proyecto)
     db/
@@ -342,24 +455,31 @@ game_sessions (
   id, user_id, game_variant_id, status, window_size,
   bankroll_start, bankroll_current, base_bet, table_limit,
   loss_limit,                          -- nullable; 0 < loss_limit <= bankroll_start (§2.8.3)
-  strategy_selected, strategy_stage, strategy_mode,   -- 'single' (1:1) | 'two_sector' (docenas/columnas dobles)
+  stage_martingale, stage_two_sector,  -- un escalón por progresión (§2.10); la plana no tiene
   started_at, closed_at
 )
+   -- Desde la Fase 3 NO hay strategy_selected ni strategy_mode: la mesa muestra
+   -- las tres progresiones a la vez y el usuario sigue la que quiera (§2.10).
 
-spins (id, session_id, spin_index, result_value, source, strategy_stage_before, created_at)
+spins (id, session_id, spin_index, result_value, source,
+       stage_martingale_before, stage_two_sector_before, created_at)
    -- source: 'manual' (giro a giro) | 'initial_batch' (carga inicial al abrir la sesión)
-   -- strategy_stage_before: escalón antes de resolver el giro, para deshacerlo;
-   --   se borra al cambiar de estrategia (§2.8.4)
+   -- stage_*_before: escalones antes de resolver el giro, para deshacerlo (§2.10)
 
 bets (id, session_id, spin_id, category, option_label, amount, followed_suggestion,
       status, won, payout, net_change, created_at, resolved_at)
 
-statistical_suggestions (              -- TABLA LATENTE: hoy nada la escribe (ver nota)
-  id, session_id, spin_id, category, option_label,
+statistical_suggestions (              -- una fila por recomendación emitida (§2.10)
+  id, session_id, spin_id,
+  decision,                               -- 'RECOMMEND' | 'NO_BET'
+  market_key, category, option_label,
+  signal_score, signal_band,              -- 'weak' | 'medium' | 'strong' | 'very_strong'
   theoretical_probability, observed_frequency_shrunk, deviation,
-  significance_score, strength,          -- 'strong' | 'medium' | 'weak'
-  ev, chi_square_pvalue,                  -- null si no aplica a esta categoría/momento
-  window_size_used, is_top3, created_at
+  observed_ci_low, observed_ci_high,       -- intervalo de Wilson (§2.2)
+  ev, chi_square_pvalue_adjusted,          -- null si el χ² no está activo
+  stake_cents, currency,                   -- dinero en enteros; stake null con NO_BET
+  outcome, resolved_spin_id,               -- 'PENDING' | 'HIT' | 'MISS'
+  window_size_used, created_at
 )
 
 bankroll_suggestions (id, session_id, spin_id, strategy, suggested_bet, stage,
@@ -371,14 +491,12 @@ session_performance (            -- nuevo, soporta la auto-evaluación (2.7)
 )
 ```
 
-**Nota sobre `statistical_suggestions` y `session_performance`.** Ambas están creadas pero **hoy nada las escribe**: los endpoints recalculan desde los giros en cada llamada. Es deliberado y está explicado en `api/v1/suggestions.py` — el motor es determinista, así que re-simular da el mismo resultado que haber acumulado fila a fila, y evita que un cambio de fórmula deje conteos viejos e incomparables en la base.
+**Nota sobre `statistical_suggestions` y `session_performance`.** Las dos nacieron latentes: creadas y sin que nada las escribiera, con los endpoints recalculando desde los giros en cada llamada.
 
-Consecuencia práctica: **la lista de campos de arriba no es el contrato de la API**, que vive en `schemas/suggestions.py`. Divergen a propósito en dos puntos, y por eso no se hizo migración para alinearlos:
+- **`statistical_suggestions` se escribe desde la Fase 3** (§2.10), una fila por recomendación emitida. El motivo: `outcome` y `resolved_spin_id` son hechos del pasado que no se pueden re-simular — dependen de qué recomendó el motor con la fórmula de ese momento, no con la de hoy. Antes de la primera fila se aplicó la alineación que esta nota exigía: `chi_square_pvalue` pasó a `chi_square_pvalue_adjusted` y se agregaron `observed_ci_low` / `observed_ci_high`.
+- **`session_performance` sigue latente**, y por el motivo original: el motor es determinista, así que re-simular da el mismo resultado que haber acumulado fila a fila, y evita que un cambio de fórmula deje conteos viejos e incomparables en la base. Está explicado en `api/v1/suggestions.py`.
 
-- La columna se llama `chi_square_pvalue`; el campo de la API es `chi_square_pvalue_adjusted`, porque lo que se expone es el p-valor ya corregido (§2.4).
-- La API agrega `observed_ci_low` / `observed_ci_high` (§2.2); la tabla no los tiene.
-
-Si alguna vez se empieza a persistir, hay que alinear ambas cosas con una migración antes de escribir la primera fila.
+La recomendación vigente (`GET /sessions/:id/recommendation`) **sí se recalcula** en cada llamada, por lo mismo: leerla o recalcularla da igual, y recalcular evita servir una recomendación vieja si entretanto se deshizo un giro. Lo que se persiste es el histórico, no el estado.
 
 ### 3.4 Endpoints (consolidado de la conversación)
 
@@ -396,9 +514,12 @@ Bankroll:   GET /sessions/:id/bankroll/suggestion   (monto del escalón, plan de
             GET /sessions/:id/bankroll/eligible-bets  GET /sessions/:id/bankroll/progression
             GET /bankroll/progression            (tabla previa, sin sesión)
 Suggestions: GET /sessions/:id/suggestions/latest  GET /sessions/:id/suggestions/history
+Recommend.:  GET /sessions/:id/recommendation          (qué apostar en el giro siguiente, §2.10)
+             GET /sessions/:id/recommendation/history  (emitidas y cómo cerró cada una)
 Admin:      POST /admin/games  PATCH /admin/games/:id  POST /admin/games/:id/variants
             PATCH /admin/games/:id/variants/:variant_id  GET /admin/users
             PATCH /admin/users/:id/access
+            GET /admin/recommendations/backtest       (métricas internas, §2.10)
 ```
 
 ### 3.5 Carga inicial de números — ingreso manual, sin IA
@@ -447,6 +568,22 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
 
 - **Pagos/suscripciones con Wompi.** El MVP dejó `subscriptions` y `payment_events` con el modelo de datos preparado y sin lógica; la Fase 2 los implementa. Reglas: firma (integridad de la transacción y checksum del webhook) verificada contra la documentación oficial vigente de Wompi y nunca de memoria; el webhook no es fuente de verdad por sí solo, se reconsulta la transacción contra la API antes de mover `subscriptions.status` o `users.access_type`; idempotencia por `provider_event_id`, que es único, porque los webhooks se reintentan; montos en centavos con moneda explícita; secretos solo por variable de entorno; acceso decidido siempre en el servidor a partir de `access_type` y `current_period_end`.
 - **Señales avanzadas del motor** (§2.9): entran una por una, solo cuando el usuario las pida explícitamente.
+
+### Fase 3 (en alcance, decidido el 2026-09-22)
+
+**El producto pasa de analizador descriptivo a motor de recomendación** (§2.10). Después de cada giro, la pantalla de ruleta dice qué apostar o que no se apueste, con un Signal Score 0-100 y su banda. Las estadísticas pasan a ser el respaldo.
+
+Lo que cambia respecto del MVP:
+
+- Sale de la vista principal el ranking top-3 con porcentajes y el porcentaje de mesa como dato principal. Siguen disponibles, plegados.
+- La sesión ya no elige una progresión al crearse: la mesa muestra las tres (plana, martingala, recuperación de dos sectores) y el usuario sigue la que quiera. **D'Alembert y Fibonacci salen del producto.**
+- `statistical_suggestions` se empieza a escribir; las progresiones avanzan con el cierre de la recomendación, no con las apuestas reales.
+- El banner fijo de §0 se retira de todas las pantallas.
+- Métricas internas de validación (§9 del comparativo) en el panel de admin.
+
+Fuera de esta fase, igual que antes: las señales avanzadas de §2.9, el builder visual, los dados y el CSV. No se toca nada de pagos ni de Wompi.
+
+Documento que define la fase: `docs/reference/Comparativo_Software_Actual_vs_Software_Deseado.md`.
 
 ### Fuera de scope (post-MVP, ya identificado)
 

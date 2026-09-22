@@ -58,22 +58,8 @@ export const ESTRATEGIAS: {
       "Duplica la apuesta después de cada pérdida y vuelve a la apuesta base tras ganar. Solo tiene sentido en apuestas que pagan 1:1 (color, par/impar, alto/bajo): ahí, ganar en cualquier escalón recupera toda la serie y deja como ganancia neta exactamente la apuesta base. El riesgo crece de forma exponencial — pocas pérdidas seguidas ya exigen apuestas muy altas, y el límite de la mesa o la banca disponible pueden cortar la serie antes de que llegue la recuperación.",
   },
   {
-    value: "dalembert",
-    label: "D'Alembert",
-    nota: "Sube y baja una unidad.",
-    detalle:
-      "Sube una unidad tras cada pérdida y baja una unidad tras cada victoria. Crece mucho más despacio que la martingala, pero por eso mismo tampoco recupera toda la serie con una sola victoria — solo la compensa parcialmente. Es un punto intermedio entre el crecimiento plano y el exponencial.",
-  },
-  {
-    value: "fibonacci",
-    label: "Fibonacci",
-    nota: "Avanza por la secuencia al perder.",
-    detalle:
-      "Avanza por la secuencia de Fibonacci (1, 1, 2, 3, 5, 8, 13…) tras cada pérdida, y retrocede dos posiciones tras ganar. Crece más rápido que D'Alembert pero más lento que la martingala. Igual que D'Alembert, ganar no siempre recupera toda la serie: depende del escalón en el que ocurra la victoria.",
-  },
-  {
     value: "two_sector_recovery",
-    label: "Recuperación dos sectores",
+    label: "Recuperación de 2 sectores",
     nota: "Para dos docenas o dos columnas. El riesgo crece muy rápido.",
     detalle:
       "Pensada para apostar a la vez a dos docenas o dos columnas (pago 2:1). Como la ganancia neta al acertar es solo una fracción de lo apostado, la progresión de recuperación es distinta a la martingala clásica: duplicar no alcanza. El riesgo crece de forma extremadamente rápida — pocos escalones ya representan montos muy altos frente a la apuesta base.",
@@ -98,7 +84,6 @@ export function NewSessionForm({
   const [baseBet, setBaseBet] = useState("1000");
   const [tableLimit, setTableLimit] = useState("500000");
   const [lossLimit, setLossLimit] = useState("");
-  const [strategy, setStrategy] = useState<BankrollStrategy>("flat");
   const [initialRaw, setInitialRaw] = useState("");
   const [initialOrder, setInitialOrder] = useState<EntryOrder | null>(null);
 
@@ -109,7 +94,6 @@ export function NewSessionForm({
   const invalidos = [...new Set(initialValues.filter((v) => !posibles.has(v)))];
   const faltaOrden = initialValues.length > 0 && initialOrder === null;
 
-  const esDosSectores = strategy === "two_sector_recovery";
   const apuestaExcedeBanca = Number(baseBet) > Number(bankroll);
   const limiteExcedeBanca = lossLimit !== "" && Number(lossLimit) > Number(bankroll);
 
@@ -132,7 +116,7 @@ export function NewSessionForm({
     const t = setTimeout(() => {
       withToken((token) =>
         bankrollApi.progressionPreview(token, {
-          strategy,
+          strategy: "martingale",
           baseBet: baseBetNum,
           bankroll: bankrollNum,
           tableLimit: tableLimitNum > 0 ? tableLimitNum : undefined,
@@ -152,7 +136,7 @@ export function NewSessionForm({
       cancelado = true;
       clearTimeout(t);
     };
-  }, [withToken, strategy, baseBet, bankroll, tableLimit]);
+  }, [withToken, baseBet, bankroll, tableLimit]);
 
   return (
     <form
@@ -168,9 +152,6 @@ export function NewSessionForm({
           base_bet: Number(baseBet),
           table_limit: Number(tableLimit),
           loss_limit: lossLimit === "" ? null : Number(lossLimit),
-          strategy,
-          // §2.8: el modo se deriva de la estrategia, nunca se eligen por separado.
-          strategy_mode: esDosSectores ? "two_sector" : "single",
           },
           initialValues.length > 0 && initialOrder !== null
             ? { values: initialValues, order: initialOrder }
@@ -225,27 +206,9 @@ export function NewSessionForm({
         hint="Cuánto estás dispuesto a perder en esta sesión antes de detenerte. Opcional, pero recomendado: una vez abierta la sesión se puede bajar, no subir."
       />
 
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-bold text-white">Gestión de banca</span>
-        <select
-          value={strategy}
-          onChange={(e) => setStrategy(e.target.value as BankrollStrategy)}
-          className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none focus:border-gold/60"
-        >
-          {ESTRATEGIAS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <span className="mt-1 block text-xs text-muted">
-          {ESTRATEGIAS.find((s) => s.value === strategy)?.nota}
-        </span>
-      </label>
-
       <details className="rounded-lg border border-edge bg-ink px-3.5 py-3">
         <summary className="cursor-pointer text-xs font-bold text-muted hover:text-white">
-          ¿Qué es cada tipo de gestión de banca?
+          ¿Qué gestiones de banca vas a ver en la mesa?
         </summary>
         <div className="mt-3 space-y-3">
           {ESTRATEGIAS.map((s) => (
@@ -255,6 +218,10 @@ export function NewSessionForm({
             </div>
           ))}
           <p className="text-xs leading-relaxed text-muted">
+            No hace falta elegir una ahora: la mesa muestra las tres a la vez con lo
+            que pediría cada una, y sigues la que quieras.
+          </p>
+          <p className="text-xs leading-relaxed text-muted">
             Ninguna de estas progresiones cambia la probabilidad del giro ni la ventaja
             matemática de la casa: solo cambian el tamaño y la distribución de las apuestas.
           </p>
@@ -262,7 +229,7 @@ export function NewSessionForm({
       </details>
 
       {progression ? (
-        <ProgressionDetails progression={progression} open={esDosSectores} />
+        <ProgressionDetails progression={progression} open={false} />
       ) : null}
 
       {/*

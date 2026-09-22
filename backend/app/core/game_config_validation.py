@@ -81,7 +81,90 @@ def validate_game_config(config: GameVariantConfig) -> ConfigValidationResult:
                     f"Categoria '{cat.id}': sus grupos suman una probabilidad de {suma:.4f}"
                 )
 
+    _validate_allowed_combinations(config, result)
+    _validate_market_flags(config, result)
     return result
+
+
+def _validate_allowed_combinations(
+    config: GameVariantConfig, result: ConfigValidationResult
+) -> None:
+    """Combinaciones permitidas del motor de recomendacion (§2.10).
+
+    Una combinacion mal formada no revienta al guardarse: revienta giros despues,
+    cuando el motor arma el catalogo y encuentra un grupo que no existe. Por eso
+    se valida aqui, antes de persistir.
+    """
+    vistos: set[str] = set()
+    for combo in config.allowed_combinations:
+        if combo.id in vistos:
+            result.errors.append(
+                f"Hay dos combinaciones con el id '{combo.id}': el desempate del "
+                "motor dejaria de ser determinista"
+            )
+        vistos.add(combo.id)
+
+        categoria = next((c for c in config.categories if c.id == combo.category_id), None)
+        if categoria is None:
+            result.errors.append(
+                f"La combinacion '{combo.id}' referencia la categoria "
+                f"'{combo.category_id}', que no existe"
+            )
+            continue
+
+        faltantes = [g for g in combo.group_ids if g not in categoria.groups]
+        if faltantes:
+            result.errors.append(
+                f"La combinacion '{combo.id}': los grupos {sorted(faltantes)} no "
+                f"existen en la categoria '{combo.category_id}'"
+            )
+            continue
+
+        if len(set(combo.group_ids)) != len(combo.group_ids):
+            result.errors.append(
+                f"La combinacion '{combo.id}' repite un grupo: su cobertura "
+                "contaria resultados dos veces"
+            )
+            continue
+
+        # Grupos disjuntos: si se solaparan, la probabilidad teorica de la
+        # combinacion saldria mas alta que la cobertura real.
+        cubiertos: set[str] = set()
+        for gid in combo.group_ids:
+            outcomes = set(categoria.groups[gid].outcomes)
+            if cubiertos & outcomes:
+                result.errors.append(
+                    f"La combinacion '{combo.id}' tiene grupos que se solapan en "
+                    f"{sorted(cubiertos & outcomes)}"
+                )
+            cubiertos |= outcomes
+
+        pagos = {categoria.groups[g].payout for g in combo.group_ids}
+        if len(pagos) > 1:
+            result.errors.append(
+                f"La combinacion '{combo.id}' mezcla grupos de pagos distintos "
+                f"({sorted(pagos)}): el monto por sector no estaria definido"
+            )
+
+
+def _validate_market_flags(
+    config: GameVariantConfig, result: ConfigValidationResult
+) -> None:
+    """Avisa si una variante se queda sin mercados que recomendar.
+
+    No es un error —una configuracion puede existir solo para describir— pero si
+    todos los grupos llevan `market: false`, el motor responderia NO APOSTAR para
+    siempre y nadie sabria por que.
+    """
+    mercados = sum(
+        1 for c in config.categories for g in c.groups.values() if g.market
+    )
+    if mercados == 0 and not config.allowed_combinations:
+        result.warnings.append(
+            "Ningun grupo esta marcado como mercado y no hay combinaciones: el "
+            "motor de recomendacion no tendria nada que evaluar y siempre "
+            "responderia NO APOSTAR"
+        )
 
 
 def group_expected_value(n_outcomes: int, total_outcomes: int, payout: float) -> float:

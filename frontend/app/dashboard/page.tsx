@@ -309,14 +309,24 @@ function NumberChip({
   );
 }
 
-/** "Europea, con D'Alembert en el escalón 2": variante y progresión en una frase. */
+/**
+ * "Europea, martingala en el escalón 2": variante y progresiones en una frase.
+ *
+ * Desde la Fase 3 la sesión no elige una progresión — corren las tres a la vez
+ * (§2.10)—, así que se nombran las que tienen una serie abierta. Si ninguna la
+ * tiene, no hay nada que contar más allá de la variante.
+ */
 function tableDescription(s: SessionResponse, v: GameVariantResponse | undefined): string {
-  const nombre = STRATEGY_LABEL[s.strategy_selected] ?? s.strategy_selected;
-  const progresion =
-    s.strategy_selected === "flat"
-      ? `con ${nombre.toLowerCase()}`
-      : `con ${nombre} en el escalón ${s.strategy_stage + 1}`;
-  return `${variantLabel(v)}, ${progresion}`;
+  const abiertas: string[] = [];
+  if (s.stage_martingale > 0) {
+    abiertas.push(`martingala en el escalón ${s.stage_martingale + 1}`);
+  }
+  if (s.stage_two_sector > 0) {
+    abiertas.push(`2 sectores en el escalón ${s.stage_two_sector + 1}`);
+  }
+  return abiertas.length === 0
+    ? `${variantLabel(v)}, sin serie abierta`
+    : `${variantLabel(v)}, ${abiertas.join(" y ")}`;
 }
 
 /** La mesa abierta más reciente: lo primero que se busca al entrar. */
@@ -521,7 +531,17 @@ function ClosedTableRow({ session, onOpen }: { session: SessionResponse; onOpen:
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold">{session.name ?? "Mesa sin nombre"}</p>
         <p className="text-xs text-muted">
-          {STRATEGY_LABEL[session.strategy_selected] ?? session.strategy_selected}
+          {session.name ? "" : null}
+          {[
+            session.stage_martingale > 0
+              ? `martingala, escalón ${session.stage_martingale + 1}`
+              : null,
+            session.stage_two_sector > 0
+              ? `2 sectores, escalón ${session.stage_two_sector + 1}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "sin serie abierta"}
         </p>
       </div>
       <p

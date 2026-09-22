@@ -9,23 +9,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, enum_col, uuid_pk
 
 SESSION_STATUSES = ("active", "closed", "abandoned")
-STRATEGY_MODES = ("single", "two_sector")
-STRATEGIES = ("flat", "martingale", "dalembert", "fibonacci", "two_sector_recovery")
 
 
 class GameSession(Base):
     __tablename__ = "game_sessions"
     __table_args__ = (
-        # Regla cruzada de `docs/ARQUITECTURA_Y_ESTADISTICA.md` §2.8, replicada en DB:
-        # el modo dos-sectores exige la progresion de recuperacion, y esa progresion
-        # no aplica en modo 1:1. El schema Pydantic la valida primero; esto es la red.
-        CheckConstraint(
-            "(strategy_mode = 'two_sector') = (strategy_selected = 'two_sector_recovery')",
-            name="ck_session_strategy_mode_matches_strategy",
-        ),
         CheckConstraint(
             "loss_limit IS NULL OR (loss_limit > 0 AND loss_limit <= bankroll_start)",
             name="ck_session_loss_limit_within_bankroll",
+        ),
+        # Los escalones son contadores de progresion: nunca negativos.
+        CheckConstraint(
+            "stage_martingale >= 0 AND stage_two_sector >= 0",
+            name="ck_session_stages_not_negative",
         ),
     )
 
@@ -55,13 +51,19 @@ class GameSession(Base):
     # detenerse (§2.8). Opcional: sin el, las alertas usan umbrales por defecto.
     loss_limit: Mapped[float | None] = mapped_column(Numeric(14, 2))
 
-    strategy_selected: Mapped[str] = mapped_column(
-        enum_col(*STRATEGIES, name="strategy_selected"), default="flat", nullable=False
-    )
-    strategy_stage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    strategy_mode: Mapped[str] = mapped_column(
-        enum_col(*STRATEGY_MODES, name="strategy_mode"), default="single", nullable=False
-    )
+    # Desde la Fase 3 la sesion no elige una progresion al crearse: la mesa
+    # muestra las tres a la vez (plana, martingala, recuperacion de dos sectores)
+    # y el usuario sigue la que quiera. Por eso cada una lleva su propio
+    # contador en vez de haber un `strategy_selected` con un escalon unico.
+    #
+    # La plana no tiene contador porque no tiene progresion: siempre esta en el
+    # escalon 0. Guardarlo seria una columna que solo puede valer 0.
+    #
+    # Los tres avanzan con el mismo cierre de la recomendacion anterior
+    # (`engine.bankroll.advance_stages_on_outcome`), asi que cada escalon dice
+    # donde estaria quien hubiera seguido siempre al motor con esa progresion.
+    stage_martingale: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    stage_two_sector: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default="now()"

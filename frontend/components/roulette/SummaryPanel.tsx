@@ -82,10 +82,6 @@ export function SummaryPanel({ summary }: { summary: SessionSummaryResponse | nu
           valor={MONEY(summary.max_drawdown)}
           tono={summary.max_drawdown > 0 ? "alerta" : undefined}
         />
-        <Dato
-          label="Progresión usada"
-          valor={STRATEGY_LABEL[summary.strategy_used] ?? summary.strategy_used}
-        />
         <Dato label="Duración" valor={duracion(summary.duration_minutes)} />
       </dl>
 

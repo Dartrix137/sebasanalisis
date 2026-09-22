@@ -97,7 +97,8 @@
           "outcomes": [
             "0"
           ],
-          "payout": 35
+          "payout": 35,
+          "market": false
         }
       }
     },
@@ -333,5 +334,62 @@
         }
       }
     }
-  ]
+  ],
+  "allowed_combinations": [
+    {
+      "id": "dozen:first+second",
+      "label": "1ª + 2ª docena",
+      "category_id": "dozen",
+      "group_ids": [
+        "first",
+        "second"
+      ]
+    },
+    {
+      "id": "dozen:first+third",
+      "label": "1ª + 3ª docena",
+      "category_id": "dozen",
+      "group_ids": [
+        "first",
+        "third"
+      ]
+    },
+    {
+      "id": "dozen:second+third",
+      "label": "2ª + 3ª docena",
+      "category_id": "dozen",
+      "group_ids": [
+        "second",
+        "third"
+      ]
+    },
+    {
+      "id": "column:first+second",
+      "label": "1ª + 2ª columna",
+      "category_id": "column",
+      "group_ids": [
+        "first",
+        "second"
+      ]
+    },
+    {
+      "id": "column:first+third",
+      "label": "1ª + 3ª columna",
+      "category_id": "column",
+      "group_ids": [
+        "first",
+        "third"
+      ]
+    },
+    {
+      "id": "column:second+third",
+      "label": "2ª + 3ª columna",
+      "category_id": "column",
+      "group_ids": [
+        "second",
+        "third"
+      ]
+    }
+  ],
+  "recommendation_threshold": 60
 }

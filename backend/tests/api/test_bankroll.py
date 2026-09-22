@@ -46,8 +46,6 @@ def _crear_sesion(
     user_token: str,
     admin_token: str,
     *,
-    strategy: str = "martingale",
-    strategy_mode: str = "single",
     base_bet: float = 100,
     bankroll: float = 100_000,
     table_limit: float = 500_000,
@@ -72,8 +70,6 @@ def _crear_sesion(
             "bankroll_start": bankroll,
             "base_bet": base_bet,
             "table_limit": table_limit,
-            "strategy": strategy,
-            "strategy_mode": strategy_mode,
             "loss_limit": loss_limit,
         },
         headers=auth(user_token),
@@ -92,7 +88,9 @@ def test_la_sugerencia_arranca_en_la_apuesta_base(
     client: TestClient, user_token: str, sesion_martingala: str
 ) -> None:
     r = client.get(
-        f"/sessions/{sesion_martingala}/bankroll/suggestion", headers=auth(user_token)
+        f"/sessions/{sesion_martingala}/bankroll/suggestion",
+        params={"strategy_key": "martingale"},
+        headers=auth(user_token),
     )
     assert r.status_code == 200
     cuerpo = r.json()
@@ -107,7 +105,9 @@ def test_la_sugerencia_trae_el_siguiente_paso_en_los_dos_casos(
     client: TestClient, user_token: str, sesion_martingala: str
 ) -> None:
     cuerpo = client.get(
-        f"/sessions/{sesion_martingala}/bankroll/suggestion", headers=auth(user_token)
+        f"/sessions/{sesion_martingala}/bankroll/suggestion",
+        params={"strategy_key": "martingale"},
+        headers=auth(user_token),
     ).json()
     assert cuerpo["next_if_lost"]["stage"] == 1
     assert cuerpo["next_if_lost"]["suggested_bet"] == 200
@@ -134,11 +134,17 @@ def test_la_sugerencia_alerta_cuando_la_banca_queda_corta(
 def test_la_sugerencia_usa_el_limite_de_perdida_de_la_sesion(
     client: TestClient, user_token: str, admin_token: str
 ) -> None:
-    """Con $300 de limite, perder el primer escalon ($100) no lo alcanza; el
-    segundo ($200) si."""
-    sid = _crear_sesion(client, user_token, admin_token, loss_limit=300)
+    """Con $200 de limite y apuesta base $100, la primera perdida no lo alcanza
+    y la segunda si.
+
+    Se mide sobre el escalon 0 a proposito: desde la Fase 3 el escalon lo mueve
+    el cierre de la recomendacion, no las apuestas reales (§2.10), asi que una
+    apuesta perdida ya no sube la progresion por si sola."""
+    sid = _crear_sesion(client, user_token, admin_token, loss_limit=200)
     cuerpo = client.get(
-        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+        f"/sessions/{sid}/bankroll/suggestion",
+        params={"strategy_key": "martingale"},
+        headers=auth(user_token),
     ).json()
     assert cuerpo["next_if_lost"]["reaches_loss_limit"] is False
     assert cuerpo["alerts"] == []
@@ -152,7 +158,9 @@ def test_la_sugerencia_usa_el_limite_de_perdida_de_la_sesion(
         f"/sessions/{sid}/spins", json={"result_value": "2"}, headers=auth(user_token)
     )
     cuerpo = client.get(
-        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+        f"/sessions/{sid}/bankroll/suggestion",
+        params={"strategy_key": "martingale"},
+        headers=auth(user_token),
     ).json()
     assert cuerpo["next_if_lost"]["reaches_loss_limit"] is True
     assert cuerpo["alerts"][0]["code"] == "loss_limit_next"
@@ -233,7 +241,7 @@ def test_la_tabla_de_la_sesion_reproduce_la_martingala_del_documento(
 ) -> None:
     cuerpo = client.get(
         f"/sessions/{sesion_martingala}/bankroll/progression",
-        params={"stages": 10},
+        params={"stages": 10, "strategy_key": "martingale"},
         headers=auth(user_token),
     ).json()
     acumulados = [f["cumulative_loss"] for f in cuerpo["rows"]]
@@ -248,7 +256,7 @@ def test_la_tabla_marca_donde_la_banca_no_alcanza(
     )
     cuerpo = client.get(
         f"/sessions/{sid}/bankroll/progression",
-        params={"stages": 10},
+        params={"stages": 10, "strategy_key": "martingale"},
         headers=auth(user_token),
     ).json()
     superan = [f["stage"] for f in cuerpo["rows"] if f["exceeds_bankroll"]]
@@ -264,7 +272,7 @@ def test_la_tabla_marca_donde_la_mesa_no_acepta(
     )
     cuerpo = client.get(
         f"/sessions/{sid}/bankroll/progression",
-        params={"stages": 10},
+        params={"stages": 10, "strategy_key": "martingale"},
         headers=auth(user_token),
     ).json()
     superan = [f["stage"] for f in cuerpo["rows"] if f["exceeds_table_limit"]]
@@ -292,12 +300,12 @@ def test_la_sesion_de_dos_sectores_devuelve_apuesta_por_sector(
         client,
         user_token,
         admin_token,
-        strategy="two_sector_recovery",
-        strategy_mode="two_sector",
         base_bet=100,
     )
     cuerpo = client.get(
-        f"/sessions/{sid}/bankroll/suggestion", headers=auth(user_token)
+        f"/sessions/{sid}/bankroll/suggestion",
+        params={"strategy_key": "two_sector_recovery"},
+        headers=auth(user_token),
     ).json()
     assert cuerpo["sectors"] == 2
     assert cuerpo["bet_per_sector"] == 100
@@ -311,13 +319,11 @@ def test_la_tabla_de_dos_sectores_reproduce_el_documento(
         client,
         user_token,
         admin_token,
-        strategy="two_sector_recovery",
-        strategy_mode="two_sector",
         base_bet=100,
     )
     cuerpo = client.get(
         f"/sessions/{sid}/bankroll/progression",
-        params={"stages": 5},
+        params={"stages": 5, "strategy_key": "two_sector_recovery"},
         headers=auth(user_token),
     ).json()
     assert [f["bet_per_sector"] for f in cuerpo["rows"]] == [100, 200, 600, 1800, 5400]
@@ -408,11 +414,11 @@ def test_las_apuestas_elegibles_de_dos_sectores_son_parejas(
         client,
         user_token,
         admin_token,
-        strategy="two_sector_recovery",
-        strategy_mode="two_sector",
     )
     apuestas = client.get(
-        f"/sessions/{sid}/bankroll/eligible-bets", headers=auth(user_token)
+        f"/sessions/{sid}/bankroll/eligible-bets",
+        params={"strategy_key": "two_sector_recovery"},
+        headers=auth(user_token),
     ).json()
     assert {a["id"] for a in apuestas} == {
         "tercio:t1+t2",
@@ -431,8 +437,6 @@ def test_ganar_en_dos_sectores_solo_recupera_desde_el_segundo_escalon(
         client,
         user_token,
         admin_token,
-        strategy="two_sector_recovery",
-        strategy_mode="two_sector",
         base_bet=100,
     )
     # Escalon 1: si deja ganancia.

@@ -34,9 +34,7 @@ const MONEY = (n: number) =>
 export const STRATEGY_LABEL: Record<BankrollStrategy, string> = {
   flat: "Apuesta plana",
   martingale: "Martingala",
-  dalembert: "D'Alembert",
-  fibonacci: "Fibonacci",
-  two_sector_recovery: "Recuperación de dos sectores",
+  two_sector_recovery: "Recuperación de 2 sectores",
 };
 
 /** Las progresiones que multiplican el dinero expuesto en cada escalón. */

@@ -1,13 +1,21 @@
 "use client";
 
 /**
- * Vista de sesión de ruleta: ingreso manual (paso 5), los paneles del motor
- * estadístico núcleo (paso 6) y el de gestión de banca (paso 7).
+ * Vista de sesión de ruleta. Desde la Fase 3 (§2.10) la pieza central es la
+ * recomendación: qué apostar en el siguiente giro, o no apostar.
  *
- * Sigue la composición de `docs/design/ruleta.jpeg` y `ruleta2.jpeg`, que son
- * dos secciones de la misma pantalla: columna izquierda con la sesión, el
- * teclado de números y la secuencia; columna derecha con los paneles de
- * análisis.
+ * Lo que cambió respecto del analizador:
+ *
+ * - El ranking top-3 con porcentajes y el porcentaje de mesa salieron de la
+ *   vista principal. Las frecuencias y las probabilidades teóricas siguen
+ *   viajando y se muestran, pero dentro de "¿Por qué recomienda esto?" y en el
+ *   bloque plegado de todas las categorías: son el respaldo, no el protagonista.
+ * - La recomendación se recalcula sola al ingresar cada número.
+ * - La gestión de banca no se elige: la mesa muestra las tres progresiones con
+ *   lo que pediría cada una para el mercado recomendado.
+ *
+ * Sigue la composición de `docs/design/ruleta.jpeg` y `ruleta2.jpeg` en lo que
+ * queda vigente: columna izquierda con el análisis, derecha con la mesa.
  *
  * El copy se aparta de los mockups a propósito. El original decía "Predicciones
  * — próxima tirada", "Precisión verificada" y "el motor empezará a medir tus
@@ -28,10 +36,9 @@ import { BankrollPanel } from "@/components/roulette/BankrollPanel";
 import { BankrollPlanCard } from "@/components/roulette/BankrollPlanCard";
 import type { LastRound } from "@/components/roulette/BankrollPlanCard";
 import { BetHistory, BetRow } from "@/components/roulette/BetRow";
-import { ESTRATEGIAS } from "@/components/roulette/NewSessionForm";
+import { RecommendationCard } from "@/components/roulette/RecommendationCard";
 import { SignalBoard } from "@/components/roulette/SignalBoard";
 import { SummaryPanel } from "@/components/roulette/SummaryPanel";
-import { DISCLAIMER_TEXT } from "@/components/Disclaimer";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import {
   ApiError,
@@ -39,6 +46,7 @@ import {
   bankrollApi,
   betsApi,
   gamesApi,
+  recommendationApi,
   sessionsApi,
   spinsApi,
 } from "@/lib/api-client";
@@ -46,7 +54,6 @@ import { TONE_CLASSES, describeOutcome, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
 import type { GameVariantResponse } from "@/lib/types/games";
 import type {
-  BankrollStrategy,
   SessionPerformanceResponse,
   SessionResponse,
   SessionSummaryResponse,
@@ -58,6 +65,7 @@ import type {
   BankrollSuggestionResponse,
   EligibleBetResponse,
   ProgressionTableResponse,
+  RecommendationResponse,
   StatisticalSuggestionsPanel,
   StreakAlert,
 } from "@/lib/types/suggestions";
@@ -83,6 +91,9 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const [eligibleBets, setEligibleBets] = useState<EligibleBetResponse[]>([]);
   const [bets, setBets] = useState<BetResponse[]>([]);
   const [summary, setSummary] = useState<SessionSummaryResponse | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(
+    null,
+  );
   // Sobre qué apuesta se estima el riesgo de agotar la banca. Null a propósito
   // al abrir: el motor no decide a qué se apuesta, así que hasta que el usuario
   // elija no se muestra ninguna estimación.
@@ -93,7 +104,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [editingAjustes, setEditingAjustes] = useState(false);
   const [ajTableLimit, setAjTableLimit] = useState("");
-  const [ajStrategy, setAjStrategy] = useState<BankrollStrategy>("flat");
   const [ajLossLimit, setAjLossLimit] = useState("");
 
   const load = useCallback(async () => {
@@ -101,15 +111,15 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
       withToken((t) => sessionsApi.get(t, sessionId)),
       withToken((t) => bankrollApi.eligibleBets(t, sessionId)),
     ]);
-    // Al pasar de modo 1:1 a dos sectores (o al revés) la apuesta elegida para
-    // estimar el riesgo deja de existir, y pedirla daría un 422 que tumbaría
-    // toda la pantalla. Se descarta y se sigue sin estimación.
+    // Si la apuesta elegida para estimar el riesgo ya no está en la lista,
+    // pedirla daría un 422 que tumbaría toda la pantalla. Se descarta y se sigue
+    // sin estimación.
     const betId =
       selectedBetId !== null && eb.some((b) => b.id === selectedBetId)
         ? selectedBetId
         : undefined;
     if (selectedBetId !== null && betId === undefined) setSelectedBetId(null);
-    const [v, sp, pn, st, pf, bk, pg, bt, sm] = await Promise.all([
+    const [v, sp, pn, st, pf, bk, pg, bt, sm, rc] = await Promise.all([
       // La variante se pide por id, no listando los juegos: listar con
       // `include_inactive` exige rol admin y daba 403 a un usuario normal.
       withToken((t) => gamesApi.variant(t, s.game_variant_id)),
@@ -117,10 +127,12 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
       withToken((t) => analysisApi.suggestions(t, sessionId)),
       withToken((t) => analysisApi.streak(t, sessionId)),
       withToken((t) => analysisApi.performance(t, sessionId)),
-      withToken((t) => bankrollApi.suggestion(t, sessionId, betId)),
+      withToken((t) => bankrollApi.suggestion(t, sessionId, { betId })),
       withToken((t) => bankrollApi.progression(t, sessionId, { stages: 10, betId })),
       withToken((t) => betsApi.list(t, sessionId)),
       withToken((t) => sessionsApi.summary(t, sessionId)),
+      // La recomendación se recalcula sola: `load()` corre tras cada giro.
+      withToken((t) => recommendationApi.latest(t, sessionId)),
     ]);
     setSession(s);
     setVariant(v);
@@ -133,6 +145,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
     setEligibleBets(eb);
     setBets(bt);
     setSummary(sm);
+    setRecommendation(rc);
   }, [withToken, sessionId, selectedBetId]);
 
   useEffect(() => {
@@ -191,7 +204,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
       ? {
           resultValue: ultimo.result_value,
           net: apuestasDelUltimo.reduce((acc, b) => acc + (b.net_change ?? 0), 0),
-          stageBefore: ultimo.strategy_stage_before,
+          stageBefore: ultimo.stage_martingale_before,
         }
       : null;
 
@@ -211,12 +224,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
     const cambios: UpdateSessionRequest = {};
     if (Number(ajTableLimit) !== persistida.table_limit) {
       cambios.table_limit = Number(ajTableLimit);
-    }
-    // La estrategia solo viaja si cambió: reenviarla igual es pedir un cambio de
-    // progresión que no existe.
-    if (ajStrategy !== persistida.strategy_selected) {
-      cambios.strategy = ajStrategy;
-      cambios.strategy_mode = ajStrategy === "two_sector_recovery" ? "two_sector" : "single";
     }
     if (limiteNuevo !== limiteActual) cambios.loss_limit = limiteNuevo;
     run(async () => {
@@ -241,14 +248,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
         <Badge tone={abierta ? "ok" : "off"}>{abierta ? "sesión abierta" : "cerrada"}</Badge>
       </AppHeader>
 
-      {/* Banner fijo: obligatorio en toda pantalla que muestre análisis (§0). */}
-      <p
-        role="note"
-        className="border-b border-edge bg-gold/10 px-6 py-2 text-center text-xs text-white"
-      >
-        {DISCLAIMER_TEXT}
-      </p>
-
       <main className="mx-auto grid max-w-6xl items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
         {error ? (
           <div className="lg:col-span-2">
@@ -257,12 +256,13 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
         ) : null}
 
         {/*
-          Izquierda: las señales. Es lo primero que se mira y lo único que no
-          comparte tarjeta con nada más.
+          La recomendación: lo primero y lo más grande de la pantalla. Responde
+          la pregunta que el analizador dejaba abierta — qué apostar en el
+          siguiente giro, o no apostar (§2.10).
         */}
         <div className="space-y-5">
           {!abierta ? <SummaryPanel summary={summary} /> : null}
-          <SignalBoard panel={panel} streak={streak} categoryLabels={categoryLabels} />
+          {abierta ? <RecommendationCard recommendation={recommendation} /> : null}
         </div>
 
         {/*
@@ -450,6 +450,14 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
             </Detalle>
           ) : null}
 
+          {/*
+            Las señales del motor núcleo siguen aquí, plegadas: desde la Fase 3
+            son el respaldo de la recomendación, no el protagonista (§2.10).
+          */}
+          <Detalle titulo="Señales por categoría y racha activa">
+            <SignalBoard panel={panel} streak={streak} categoryLabels={categoryLabels} />
+          </Detalle>
+
           <Detalle titulo="Todas las categorías, incluidas las señales débiles">
             <AllCategoriesPanel panel={panel} categoryLabels={categoryLabels} />
           </Detalle>
@@ -485,34 +493,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                     value={ajTableLimit}
                     onChange={(e) => setAjTableLimit(e.target.value)}
                   />
-
-                  <label className="block">
-                    <span className="mb-1.5 block text-sm font-bold text-white">
-                      Progresión
-                    </span>
-                    <select
-                      value={ajStrategy}
-                      onChange={(e) => setAjStrategy(e.target.value as BankrollStrategy)}
-                      className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none focus:border-gold/60"
-                    >
-                      {ESTRATEGIAS.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="mt-1 block text-xs text-muted">
-                      {ESTRATEGIAS.find((s) => s.value === ajStrategy)?.nota}
-                    </span>
-                  </label>
-
-                  {ajStrategy !== session.strategy_selected ? (
-                    <p className="rounded-lg border border-signal-medium/40 bg-signal-medium/10 px-3 py-2 text-xs leading-relaxed text-white">
-                      Cambiar la progresión la reinicia desde el escalón 1: la serie
-                      abierta no se traslada a la nueva. Lo perdido hasta ahora sigue
-                      contando para tu banca y tu límite de pérdida.
-                    </p>
-                  ) : null}
 
                   <Field
                     label="Límite de pérdida"
@@ -572,14 +552,19 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                           : CURRENCY.format(session.loss_limit)
                       }
                     />
+                    {/*
+                      Un escalón por progresión: las tres corren a la vez y el
+                      usuario sigue la que quiera (§2.10). La plana no aparece
+                      porque no tiene progresión: siempre es la apuesta base.
+                    */}
                     <Stat
-                      label="Progresión"
-                      value={`${
-                        ESTRATEGIAS.find((s) => s.value === session.strategy_selected)?.label ??
-                        session.strategy_selected
-                      }${session.strategy_mode === "two_sector" ? " · dos sectores" : ""}`}
+                      label="Escalón martingala"
+                      value={String(session.stage_martingale + 1)}
                     />
-                    <Stat label="Escalón actual" value={String(session.strategy_stage + 1)} />
+                    <Stat
+                      label="Escalón 2 sectores"
+                      value={String(session.stage_two_sector + 1)}
+                    />
                   </dl>
                   {abierta ? (
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -587,7 +572,6 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                         variant="ghost"
                         onClick={() => {
                           setAjTableLimit(String(session.table_limit));
-                          setAjStrategy(session.strategy_selected);
                           setAjLossLimit(
                             session.loss_limit === null ? "" : String(session.loss_limit),
                           );
@@ -598,12 +582,15 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                       </Button>
                       <Button
                         variant="ghost"
-                        disabled={pending || session.strategy_stage === 0}
+                        disabled={
+                          pending ||
+                          (session.stage_martingale === 0 && session.stage_two_sector === 0)
+                        }
                         onClick={() =>
                           run(() => withToken((t) => sessionsApi.resetStrategy(t, sessionId)))
                         }
                       >
-                        Reiniciar progresión
+                        Reiniciar progresiones
                       </Button>
                       <Button
                         variant="danger"
