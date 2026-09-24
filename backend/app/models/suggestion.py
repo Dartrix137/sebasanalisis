@@ -24,9 +24,10 @@ from app.models.base import Base, created_at_col, enum_col, uuid_pk
 #: Que decidio el motor para el giro siguiente (§2.10).
 DECISIONS = ("RECOMMEND", "NO_BET")
 
-#: Banda de fuerza del `signal_score`. Describe el criterio interno sobre la
-#: muestra ya ocurrida, no una probabilidad de acertar.
-SIGNAL_BANDS = ("weak", "medium", "strong", "very_strong")
+#: Estado de salida del motor (§2.10): 'weak' es SIN SEÑAL (bajo el umbral
+#: minimo), 'medium' SEÑAL MEDIA y 'strong' SEÑAL FUERTE. Describe el criterio
+#: interno sobre la muestra ya ocurrida, no una probabilidad de acertar.
+SIGNAL_BANDS = ("weak", "medium", "strong")
 
 #: Como cerro la recomendacion contra el giro siguiente. Un `NO_BET` se queda en
 #: PENDING para siempre: no hubo nada que acertar ni que fallar.
@@ -57,7 +58,10 @@ class StatisticalSuggestion(Base):
     #: 0-100. Fuerza del criterio interno, NO probabilidad de acertar (§2.10).
     signal_score: Mapped[float] = mapped_column(Float, nullable=False)
     signal_band: Mapped[str] = mapped_column(
-        enum_col(*SIGNAL_BANDS, name="signal_band"), nullable=False
+        # length=11: el ancho con el que se creo la columna, cuando existia
+        # 'very_strong'. Sin fijarlo, SQLAlchemy lo deriva de 'medium'/'strong'
+        # y `alembic check` reporta un cambio pendiente eterno.
+        enum_col(*SIGNAL_BANDS, name="signal_band", length=11), nullable=False
     )
 
     # Regla anti-falacia del jugador: la probabilidad teorica y la frecuencia

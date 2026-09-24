@@ -74,7 +74,7 @@ class AllowedCombination:
 
 #: Umbral de `signal_score` a partir del cual el motor recomienda apostar,
 #: cuando la variante no declara el suyo (§2.10).
-DEFAULT_RECOMMENDATION_THRESHOLD = 60.0
+DEFAULT_RECOMMENDATION_THRESHOLD = 50.0
 
 
 @dataclass(frozen=True)

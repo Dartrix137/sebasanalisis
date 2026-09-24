@@ -31,10 +31,9 @@ const PCT = (n: number) => `${(n * 100).toFixed(1)} %`;
 const SIGNED = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(3)}`;
 
 const BAND_LABEL: Record<SignalBand, string> = {
-  weak: "Débil",
+  weak: "Sin señal",
   medium: "Media",
   strong: "Fuerte",
-  very_strong: "Muy fuerte",
 };
 
 export function BacktestPanel({ variants }: { variants: GameVariantResponse[] }) {

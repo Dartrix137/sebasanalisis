@@ -23,10 +23,11 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.api.v1.sessions import get_owned_session, require_active
+from app.engine.bankroll import StopReason, stop_reason
 from app.engine.probability import GameConfig
 from app.engine.settlement import settle
 from app.models import Bet, GameSession, GameVariant, Spin
-from app.schemas.bets import BetResolution, BetResponse, CreateBetRequest
+from app.schemas.bets import BetResponse, CreateBetRequest
 
 router = APIRouter(prefix="/sessions", tags=["bets"])
 
@@ -72,28 +73,19 @@ def committed_amount(db: DbSession, session_id: UUID) -> float:
 
 def resolve_pending_bets(
     db: DbSession, session: GameSession, config: GameConfig, spin: Spin
-) -> list[BetResolution]:
+) -> list[Bet]:
     """Resuelve todas las apuestas pendientes contra el giro que acaba de entrar.
 
-    Mueve `bankroll_current` y nada mas. **Los escalones de las progresiones no
-    se tocan aqui** desde la Fase 3: los mueve el cierre de la recomendacion
-    (`recommendations.resolve_pending_recommendation`), no el neto de las
-    apuestas reales.
-
-    Son dos cosas distintas y conviene no volver a juntarlas. La banca refleja lo
-    que el usuario apostó de verdad en la mesa, que puede ser cualquier cosa; el
-    escalon refleja donde estaria quien hubiera seguido al motor. Hacerlo avanzar
-    con las apuestas reales significaba que apostar por fuera de la recomendacion
-    —o no apostar -- corria la progresion que la mesa muestra.
+    Mueve `bankroll_current` y nada mas. **Los escalones no se tocan aqui**: los
+    mueve `recommendations.resolve_pending_recommendation`, con el cierre de la
+    recomendacion y solo para las gestiones con las que se aposto (`strategy`).
+    Una apuesta manual por fuera de las progresiones mueve la banca, no un
+    escalon.
 
     No hace commit: lo hace quien la llama, para que el giro y sus resoluciones
     entren o no entren juntos.
     """
     apuestas = pending_bets(db, session.id)
-    if not apuestas:
-        return []
-
-    resoluciones: list[BetResolution] = []
     neto_del_giro = 0.0
 
     for bet in apuestas:
@@ -110,21 +102,9 @@ def resolve_pending_bets(
         bet.resolved_at = datetime.now(UTC)
 
         neto_del_giro += resultado.net_change
-        resoluciones.append(
-            BetResolution(
-                bet_id=bet.id,
-                category=bet.category,
-                option_label=bet.option_label,
-                won=resultado.won,
-                amount=float(bet.amount),
-                payout=resultado.payout,
-                net_change=resultado.net_change,
-                followed_suggestion=bet.followed_suggestion,
-            )
-        )
 
     session.bankroll_current = float(session.bankroll_current) + neto_del_giro
-    return resoluciones
+    return apuestas
 
 
 @router.post(
@@ -145,6 +125,22 @@ def create_bet(
 
     _group_id_for_label(config, payload.category, payload.option_label)
 
+    motivo = stop_reason(
+        float(session.bankroll_current),
+        float(session.bankroll_start),
+        float(session.base_bet),
+        float(session.loss_limit) if session.loss_limit is not None else None,
+    )
+    if motivo is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "La banca ya no cubre la apuesta base: esta mesa no acepta más apuestas"
+                if motivo is StopReason.bankroll_exhausted
+                else "Alcanzaste tu límite de pérdida: esta mesa no acepta más apuestas"
+            ),
+        )
+
     comprometido = committed_amount(db, session.id)
     disponible = float(session.bankroll_current) - comprometido
     if payload.amount > disponible:
@@ -162,6 +158,7 @@ def create_bet(
         option_label=payload.option_label,
         amount=payload.amount,
         followed_suggestion=payload.followed_suggestion,
+        strategy=payload.strategy.value if payload.strategy is not None else None,
         status="pending",
     )
     db.add(bet)

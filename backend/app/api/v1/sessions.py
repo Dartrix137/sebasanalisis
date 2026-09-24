@@ -24,6 +24,7 @@ from app.schemas.sessions import (
     SessionSummaryResponse,
     UpdateSessionRequest,
 )
+from app.engine import bankroll as bk
 from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
 from app.engine.probability import GameConfig
 from app.schemas.spins import BulkSpinsRequest, BulkSpinsResponse, CreateSpinRequest, SpinResponse
@@ -317,11 +318,13 @@ def create_spin(
 
     motor_config = GameConfig.from_dict(variant.categories_json)
 
-    # Las apuestas reales del usuario se resuelven contra este giro y mueven la
-    # banca. Las progresiones, en cambio, las mueve el cierre de la recomendacion
-    # anterior (§2.10): son dos cosas distintas y avanzan por motivos distintos.
-    resolve_pending_bets(db, session, motor_config, spin)
-    resolve_pending_recommendation(db, session, motor_config, spin)
+    # Las apuestas reales se resuelven contra este giro y mueven la banca. Los
+    # escalones los mueve el cierre de la recomendacion anterior, pero solo el de
+    # las gestiones con las que se aposto en este giro: sin apuesta, la serie no
+    # continua ni se cierra.
+    resueltas = resolve_pending_bets(db, session, motor_config, spin)
+    seguidas = frozenset(bk.Strategy(b.strategy) for b in resueltas if b.strategy)
+    resolve_pending_recommendation(db, session, motor_config, spin, seguidas)
 
     # Con el giro ya dentro, se emite la recomendacion del giro siguiente. Es lo
     # que hace que la tarjeta se recalcule sola al ingresar cada numero.

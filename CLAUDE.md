@@ -41,7 +41,7 @@ Sigue exactamente la estructura definida en `docs/ARQUITECTURA_Y_ESTADISTICA.md`
 3. Admin: CRUD de juegos/variantes con formulario simple (sin builder visual todavía).
 4. Menú principal / selector de juegos.
 5. Flujo de ruleta con ingreso manual de números giro a giro — esto ya debe ser una demo jugable end-to-end.
-6. Motor estadístico núcleo: frecuencia+shrinkage, recencia, χ², racha, EV, ranking top-3, auto-evaluación. *(La Fase 3 saca el top-3 de la vista principal; sigue calculándose y se muestra plegado.)*
+6. Motor estadístico núcleo: frecuencia+shrinkage, recencia, χ², racha, EV, ranking top-3, auto-evaluación. *(Desde el 2026-09-23 la vista de ruleta ya no muestra el top-3, las señales por categoría, la racha activa ni la tasa de coincidencia. Se siguen calculando en sus endpoints —`/suggestions/latest`, `/streak`, `/performance`— y la auto-evaluación sigue siendo requisito del motor, pero el cliente no los pinta.)*
 7. Motor de bankroll: martingala, d'Alembert, Fibonacci, flat, y modo dos-sectores. *(La Fase 3 retira d'Alembert y Fibonacci del producto y deja las tres que ofrece la mesa — ver más abajo.)*
 8. Carga inicial de números al abrir una sesión: el usuario pega o escribe los números que ya observó en la mesa, y quedan registrados como historial de la sesión antes del primer giro nuevo.
 
@@ -89,16 +89,17 @@ El detalle completo (fórmula, pesos, calibración, desempate) vive en `docs/ARQ
 - **Dirección de la señal: a favor = salió MÁS de lo esperado.** Es la misma que ya usaba el EV del ranking top-3. Un mercado que salió menos da componentes en 0, nunca negativos — recomendar lo que no ha salido es la falacia del jugador.
 - `allowed_combinations` es un **array**, no un objeto: JSONB no conserva el orden de las claves de un objeto y el desempate necesita orden estable. Por lo mismo, el orden de catálogo nunca sale de iterar `groups`.
 - **Una sola recomendación.** Desempate determinista: mayor score → menor cobertura → índice de la categoría en `categories` → `group_ids` alfabético → clave.
-- Umbral por variante (`recommendation_threshold`, por defecto 60), inclusivo. Por debajo, `NO_APOSTAR`.
+- **Tres estados de salida** (decidido el 2026-09-24): SEÑAL FUERTE (score ≥ 80, `STRONG_THRESHOLD`), SEÑAL MEDIA (umbral mínimo ≤ score < 80) y SIN SEÑAL (bajo el mínimo → `NO_APOSTAR`). El mínimo es el umbral por variante (`recommendation_threshold`, por defecto 50 desde el 2026-09-24; antes 60). Los dos umbrales son inclusivos. Con menos de 10 giros en la sesión (`MIN_SPINS_FOR_SIGNAL`) no hay recomendación aunque el score llegue al umbral. La banda (`strong`/`medium`/`weak`) sale de los mismos umbrales que la decisión, así que nunca la contradice. La pantalla muestra solo la jugada elegida: nunca un segundo mercado con su banda al lado, y con SIN SEÑAL no se nombra ninguna alternativa.
 - El χ² entra sólo como **bono** (+10) y sólo con ≥200 giros y p corregido por Benjamini-Hochberg < 0.05. Ojo: a diferencia de §2.6, aquí una señal puede llegar a FUERTE sin χ². Es deliberado y está anotado en el doc.
-- **`Z_MAX` no es un umbral de significancia.** Es la escala con la que el producto decide cada cuánto habla. Con la calibración vigente, el motor recomienda en ~1 de cada 3 giros de una mesa perfectamente justa. Si cambias `Z_MAX` o los pesos, vuelve a medirlo con el backtest antes de darlo por bueno.
+- **`Z_MAX` no es un umbral de significancia.** Es la escala con la que el producto decide cada cuánto habla. Con la calibración vigente (2026-09-24: `Z_MAX` 1.6, pesos 0.58/0.32/0.10), con el umbral por defecto (50) el motor recomienda en ~6 de cada 10 giros de una mesa perfectamente justa, y ~1 de cada 9 recomendaciones es FUERTE (con 60: ~1 de cada 3 giros y ~1 de cada 5). FUERTE no acierta más que MEDIA (backtest en §2.10). Si cambias `Z_MAX` o los pesos, vuelve a medir las dos cifras con el backtest antes de darlo por bueno.
 
 ### Gestión de banca
 
 - **La sesión ya no elige una progresión.** La mesa muestra las tres a la vez — plana, martingala, recuperación de dos sectores — con lo que pide cada una. D'Alembert y Fibonacci salieron del producto.
 - Los **sectores los pone el mercado recomendado**, no la estrategia. La recuperación de dos sectores no se ofrece sobre un mercado de un solo sector.
-- Cada progresión lleva su escalón (`stage_martingale`, `stage_two_sector`; la plana no tiene) y **las tres avanzan con el cierre de la recomendación**, no con el neto de las apuestas reales. La banca sí se mueve con las apuestas reales: son dos cosas distintas y no hay que volver a juntarlas.
-- **Con `NO_APOSTAR` ninguna progresión avanza y el saldo no cambia.**
+- Cada progresión lleva su escalón (`stage_martingale`, `stage_two_sector`; la plana no tiene). **Un escalón solo avanza si el usuario apostó con esa gestión** (`bets.strategy`, que anota el botón "Aposté esto"), y lo hace según el cierre de la recomendación. Sin apuesta con esa gestión, su escalón no se mueve (decidido el 2026-09-23; antes avanzaban las tres apostara o no). Una apuesta manual por fuera de las progresiones (`strategy` null) mueve la banca pero ningún escalón, y una progresión que no aplica al mercado recomendado (dos sectores sobre un mercado de una zona) tampoco se mueve.
+- **Estado de parar** (decidido el 2026-09-24): cuando la banca ya no cubre la apuesta base, o se alcanza el límite de pérdida, la mesa deja de aceptar apuestas (lo rechaza el servidor) y en lugar de la recomendación muestra BANCA AGOTADA / LÍMITE DE PÉRDIDA ALCANZADO, con la sugerencia de dejar de apostar y los botones "Cerrar mesa" y "Abrir una mesa nueva". **No se cierra sola**: una sesión cerrada no deja deshacer su último número, y un número mal ingresado quedaría sin arreglo. El estado se deriva de la banca (`engine/bankroll.stop_reason`, expuesto como `SessionResponse.stop_reason`), así que deshacer el giro que lo provocó lo levanta solo.
+- **Con `NO_APOSTAR` ninguna progresión avanza.** La recomendación se resuelve siempre (HIT/MISS), se haya apostado o no: el backtest mide al motor, no al usuario.
 
 ### Persistencia
 

@@ -10,8 +10,8 @@
 
 import { useEffect, useState } from "react";
 
-import { ProgressionDetails } from "@/components/roulette/BankrollPanel";
-import { Button, ErrorBox, Field } from "@/components/ui";
+import { ProgressionPreviewTabs, STRATEGY_ORDER } from "@/components/roulette/BankrollPanel";
+import { Button, ErrorBox, Field, InfoTip } from "@/components/ui";
 import { bankrollApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import type { ProgressionTableResponse } from "@/lib/types/suggestions";
@@ -35,6 +35,21 @@ const WINDOW_SIZE = 50;
 function parseValues(raw: string): string[] {
   return raw.trim().split(SEPARATORS).filter(Boolean);
 }
+
+/** Qué es cada dato de la mesa. Se reusa en los ajustes de la sesión abierta. */
+export const AYUDA = {
+  nombre: "Solo sirve para distinguir tus mesas en el menú. No afecta ningún cálculo.",
+  banca:
+    "El dinero total que traes a esta sesión. Se actualiza sola con las apuestas que registres, y las gestiones la usan para calcular hasta qué escalón te alcanza.",
+  apuestaBase:
+    "Tu unidad de apuesta. Es lo que pide siempre la gestión plana, y el primer escalón de la martingala y de la recuperación de 2 sectores (en esa, por cada sector).",
+  limiteMesa:
+    "La apuesta máxima que la mesa acepta en una sola casilla (un color, una docena…). Lo fija el casino y aparece en la información de la mesa dentro del juego. Los escalones que lo superan se marcan en rojo: ahí la mesa no te dejaría apostar el monto y la progresión se rompe.",
+  limitePerdida:
+    "Cuánto estás dispuesto a perder en esta sesión, contado desde la banca inicial. La mesa te avisa al acercarte. Con la sesión abierta se puede bajar, pero no subir ni quitar.",
+  numerosObservados:
+    "Los resultados que ya muestra el historial de la mesa antes de que empieces a registrar. Le dan al motor datos desde el primer giro, en vez de empezar de cero.",
+} as const;
 
 export const ESTRATEGIAS: {
   value: BankrollStrategy;
@@ -98,37 +113,45 @@ export function NewSessionForm({
   const limiteExcedeBanca = lossLimit !== "" && Number(lossLimit) > Number(bankroll);
 
   const { withToken } = useSession();
-  const [progression, setProgression] = useState<ProgressionTableResponse | null>(null);
+  const [progressions, setProgressions] = useState<
+    Partial<Record<BankrollStrategy, ProgressionTableResponse>> | null
+  >(null);
 
   // §2.8: la tabla de progresión con montos reales debe poder verse ANTES de
-  // activar la estrategia, no después de comprometerse con ella. Se recalcula
-  // en el backend para no duplicar aquí las fórmulas del motor.
+  // abrir la mesa, una por gestión. Se calcula en el backend para no duplicar
+  // aquí las fórmulas del motor.
   useEffect(() => {
     const baseBetNum = Number(baseBet);
     const bankrollNum = Number(bankroll);
     const tableLimitNum = Number(tableLimit);
     if (!(baseBetNum > 0) || !(bankrollNum > 0)) {
-      setProgression(null);
+      setProgressions(null);
       return;
     }
 
     let cancelado = false;
     const t = setTimeout(() => {
-      withToken((token) =>
-        bankrollApi.progressionPreview(token, {
-          strategy: "martingale",
-          baseBet: baseBetNum,
-          bankroll: bankrollNum,
-          tableLimit: tableLimitNum > 0 ? tableLimitNum : undefined,
-          stages: 10,
-        }),
+      Promise.all(
+        STRATEGY_ORDER.map((strategy) =>
+          withToken((token) =>
+            bankrollApi.progressionPreview(token, {
+              strategy,
+              baseBet: baseBetNum,
+              bankroll: bankrollNum,
+              tableLimit: tableLimitNum > 0 ? tableLimitNum : undefined,
+              stages: 10,
+            }),
+          ),
+        ),
       )
-        .then((tabla) => {
-          if (!cancelado) setProgression(tabla);
+        .then((tablas) => {
+          if (!cancelado) {
+            setProgressions(Object.fromEntries(tablas.map((tb) => [tb.strategy, tb])));
+          }
         })
         // La vista previa es informativa: si falla, el formulario sigue usable.
         .catch(() => {
-          if (!cancelado) setProgression(null);
+          if (!cancelado) setProgressions(null);
         });
     }, 300);
 
@@ -165,7 +188,8 @@ export function NewSessionForm({
         maxLength={100}
         value={name}
         onChange={(e) => setName(e.target.value)}
-        hint="Opcional. Sirve para distinguir varias mesas abiertas."
+        hint="Opcional."
+        info={AYUDA.nombre}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -176,6 +200,7 @@ export function NewSessionForm({
           min={1}
           value={bankroll}
           onChange={(e) => setBankroll(e.target.value)}
+          info={AYUDA.banca}
         />
         <Field
           label="Apuesta base"
@@ -184,6 +209,7 @@ export function NewSessionForm({
           min={1}
           value={baseBet}
           onChange={(e) => setBaseBet(e.target.value)}
+          info={AYUDA.apuestaBase}
         />
         <Field
           label="Límite de mesa"
@@ -192,7 +218,9 @@ export function NewSessionForm({
           min={1}
           value={tableLimit}
           onChange={(e) => setTableLimit(e.target.value)}
-          hint="Revísalo dentro del juego antes de usar una progresión."
+          hint="Apuesta máxima por casilla."
+          info={AYUDA.limiteMesa}
+          infoAlign="right"
         />
       </div>
 
@@ -203,7 +231,8 @@ export function NewSessionForm({
         placeholder="Por ejemplo 30000"
         value={lossLimit}
         onChange={(e) => setLossLimit(e.target.value)}
-        hint="Cuánto estás dispuesto a perder en esta sesión antes de detenerte. Opcional, pero recomendado: una vez abierta la sesión se puede bajar, no subir."
+        hint="Opcional, pero recomendado."
+        info={AYUDA.limitePerdida}
       />
 
       <details className="rounded-lg border border-edge bg-ink px-3.5 py-3">
@@ -228,9 +257,7 @@ export function NewSessionForm({
         </div>
       </details>
 
-      {progression ? (
-        <ProgressionDetails progression={progression} open={false} />
-      ) : null}
+      {progressions ? <ProgressionPreviewTabs tables={progressions} /> : null}
 
       {/*
         Carga inicial (§3.5). Los números los escribe el usuario: el proyecto no
@@ -239,6 +266,7 @@ export function NewSessionForm({
       <label className="block">
         <span className="mb-1.5 block text-sm font-bold text-white">
           Números ya observados en la mesa
+          <InfoTip label="Números ya observados en la mesa">{AYUDA.numerosObservados}</InfoTip>
         </span>
         <textarea
           value={initialRaw}

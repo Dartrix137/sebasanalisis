@@ -27,10 +27,9 @@ from app.engine.probability import GameConfig
 from app.engine.recommendation import Decision, Market, SignalBand, recommend
 
 BAND_LABEL: dict[SignalBand, str] = {
-    SignalBand.weak: "DEBIL",
+    SignalBand.weak: "SIN SEÑAL",
     SignalBand.medium: "MEDIA",
     SignalBand.strong: "FUERTE",
-    SignalBand.very_strong: "MUY FUERTE",
 }
 
 #: Giros iniciales que se usan solo como historial, sin evaluar. Sin ellos las

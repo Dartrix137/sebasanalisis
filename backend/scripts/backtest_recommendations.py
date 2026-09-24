@@ -150,21 +150,11 @@ def print_report(informe: Report, config: GameConfig, threshold: float) -> None:
     print(_fmt_tally("todas", informe.overall))
     print()
     print("  POR BANDA DE SEÑAL")
-    for banda in (
-        SignalBand.weak,
-        SignalBand.medium,
-        SignalBand.strong,
-        SignalBand.very_strong,
-    ):
+    for banda in SignalBand:
         print(_fmt_tally(BAND_LABEL[banda], informe.by_band[banda]))
     print()
     print("  NO APOSTAR, por banda del mejor candidato")
-    for banda in (
-        SignalBand.weak,
-        SignalBand.medium,
-        SignalBand.strong,
-        SignalBand.very_strong,
-    ):
+    for banda in SignalBand:
         print(f"    {BAND_LABEL[banda]:<12} {informe.no_bet_by_band[banda]:>8}")
     print()
     print(

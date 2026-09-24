@@ -270,40 +270,67 @@ z_v = (p̂_v − p_teórica) / √( p_teórica(1−p_teórica) / N_v )
 Ventanas: 10, 20, 50 y 100 giros; con menos giros que la ventana más corta, el historial entero como ventana única.
 
 ```
-signal_score = 100 × (0.45·D + 0.25·R + 0.30·C) + 10·[χ² activo]      acotado a [0, 100]
+signal_score = 100 × (0.58·D + 0.32·R + 0.10·C) + 10·[χ² activo]      acotado a [0, 100]
 ```
 
 | Componente | Qué mide | Cálculo | Peso |
 | --- | --- | --- | --- |
-| **D** desviación | cuánto se separó con la muestra más grande | `clamp(z_ventana_larga / Z_MAX, 0, 1)` | 0.45 |
-| **R** recencia | cuánto se está separando ahora | `clamp(z_ventana_corta / Z_MAX, 0, 1)` | 0.25 |
-| **C** consistencia | si la inclinación aguanta en tramos distintos | `clamp(media(z) / media(abs z), 0, 1)` | 0.30 |
+| **D** desviación | cuánto se separó con la muestra más grande | `clamp(z_ventana_larga / Z_MAX, 0, 1)` | 0.58 |
+| **R** recencia | cuánto se está separando ahora | `clamp(z_ventana_corta / Z_MAX, 0, 1)` | 0.32 |
+| **C** consistencia | si la inclinación aguanta en tramos distintos | `clamp(media(z) / media(abs z), 0, 1)` | 0.10 |
 
 **C se calcula sobre tramos disjuntos** (0-10, 10-20, 20-50, 50-100), no sobre las ventanas acumuladas. Las ventanas están anidadas: los 10 giros más recientes caen dentro de las cuatro, y medir "consistencia" sobre ellas premiaría a un mercado por un único tramo caliente contado cuatro veces. La explicación que ve el usuario sigue mostrando las ventanas acumuladas; los tramos son sólo para este componente.
 
-**Con un solo tramo, C queda indefinida** y su peso se reparte entre D y R. Un tramo no tiene con qué ser consistente; darla por 1 regalaría 30 puntos a cualquier mercado que asome por encima de la teórica en los primeros giros.
+**Con un solo tramo, C queda indefinida** y su peso se reparte entre D y R. Un tramo no tiene con qué ser consistente; darla por 1 regalaría sus puntos a cualquier mercado que asome por encima de la teórica en los primeros giros.
 
-El χ² suma sus 10 puntos sólo con ≥200 giros y p corregido por Benjamini-Hochberg < 0.05 (§2.4). Es un **bono, no un requisito**: a diferencia de §2.6, donde el χ² activo era condición necesaria para la etiqueta FUERTE, aquí un mercado puede llegar a FUERTE o MUY FUERTE sin él. Es consecuencia directa de que las bandas se deriven del score, y conviene tenerlo presente al comparar las dos etiquetas: no significan lo mismo.
+El χ² suma sus 10 puntos sólo con ≥200 giros y p corregido por Benjamini-Hochberg < 0.05 (§2.4). Es un **bono, no un requisito**: a diferencia de §2.6, donde el χ² activo era condición necesaria para la etiqueta FUERTE, aquí un mercado puede llegar a SEÑAL FUERTE sin él. Es consecuencia directa de que las bandas se deriven del score, y conviene tenerlo presente al comparar las dos etiquetas: no significan lo mismo.
 
 #### Z_MAX y qué compra el umbral
 
-`Z_MAX = 2.0`. **No es un umbral de significancia.** Un z de 2 sobre una prueba aislada sería el clásico "dos sigmas", pero aquí se evalúa sobre ~18 mercados solapados a la vez y sin corregir por comparaciones múltiples, así que llegar a 2 no dice que la desviación se distinga del azar. Es la escala con la que el producto decide cada cuánto habla.
+`Z_MAX = 1.6`. **No es un umbral de significancia.** Un z de 2 sobre una prueba aislada sería el clásico "dos sigmas", pero aquí se evalúa sobre ~18 mercados solapados a la vez y sin corregir por comparaciones múltiples, así que llegar a 2 no dice que la desviación se distinga del azar. Es la escala con la que el producto decide cada cuánto habla, y junto con los pesos, cuántas de esas veces la señal llega a FUERTE.
 
-Medido por simulación sobre ruedas europeas **justas** (150 sesiones × 150 giros, umbral 60):
+**Recalibración del 2026-09-24.** La calibración anterior (Z_MAX 2.0, pesos 0.45/0.25/0.30) recomendaba en ~35 % de los giros, pero solo ~5 % de esas recomendaciones llegaba a 80: la consistencia, que es un cociente y no una magnitud, daba sus 30 puntos a cualquier inclinación pareja por chica que fuera, y apelotonaba los scores entre 60 y 79. Con los tres estados de salida (MEDIA 60-79, FUERTE 80+), eso dejaba FUERTE prácticamente fuera de alcance. Bajar el peso de C a 0.10 y Z_MAX a 1.6 conserva cuánto habla el motor y abre el tramo de arriba.
 
-| Z_MAX | % NO APOSTAR por giro | coincidencia | ROI/unidad |
-| --- | --- | --- | --- |
-| **2.0** | **69 %** | 45.7 % | −0.055 |
-| 2.5 | 88 % | 45.3 % | −0.034 |
-| 3.0 | 96 % | 44.6 % | −0.031 |
+Se barrió Z_MAX (1.0-3.0) × peso de C (0-0.40) sobre ruedas europeas justas con una semilla de calibración (200 sesiones × 150 giros), y se validó en dos conjuntos no vistos (otras 200 × 150, y 40 × 400 con el χ² activo). Con el peso de C fijo, la frecuencia con que habla el motor y la parte FUERTE no se mueven por separado: para hablar en ~1 de cada 3 giros, FUERTE queda entre ~6 % (C 0.30) y ~21 % (C 0). Se eligió C 0.10 porque todavía descuenta las inclinaciones que se cancelan entre tramos.
 
-Es decir: con la calibración vigente, **el motor recomienda en aproximadamente uno de cada tres giros de una mesa perfectamente justa**. Es lo que corresponde a la decisión de producto de dar una instrucción clara en cada giro. Lo que el umbral regula es cuánto habla el producto, no cuánto separa señal de ruido: la tasa de coincidencia y el ROI se quedan en la ventaja de la casa en toda la tabla, que es lo esperado y lo que el backtest confirma.
+Backtest fuera de muestra (`scripts/backtest_recommendations.py`, semilla 90217, 150 × 150, umbral 60):
+
+| Calibración | variante | % NO APOSTAR por giro | FUERTE / recomendaciones | coincidencia MEDIA | coincidencia FUERTE | ROI/unidad |
+| --- | --- | --- | --- | --- | --- | --- |
+| anterior (2.0; .45/.25/.30) | europea | 64.6 % | 4.6 % | — | — | −0.018 |
+| **vigente (1.6; .58/.32/.10)** | europea | **64.2 %** | **18.4 %** | 46.9 % | 45.3 % | −0.022 |
+| **vigente (1.6; .58/.32/.10)** | americana | **64.4 %** | **20.0 %** | 45.6 % | 45.2 % | −0.050 |
+
+**FUERTE no acierta más que MEDIA**, y ninguna de las dos se aparta de la ventaja de la casa (−0.027 europea, −0.053 americana). FUERTE dice que la muestra ya ocurrida se separó más, no que el giro siguiente cambie de probabilidad. Esa es la razón por la que el texto bajo el score es obligatorio.
+
+**Lo que cambió en el comportamiento.** Con C pesando menos, una desviación reciente y grande pesa más que el hecho de que la inclinación se sostenga en tramos distintos. Ejemplo concreto (test `test_una_racha_reciente_da_señal_aunque_el_total_este_parejo`): un barrido ordenado 0→36 repetido seis veces, donde cada número sale lo mismo pero los últimos diez son 27-36, antes quedaba en 58.7 (NO APOSTAR) y ahora marca "Alto" con 82.8 (FUERTE).
+
+**Umbral por defecto 50 (2026-09-24).** Con 60, en mesa real el motor pasaba la mayoría de los giros en SIN SEÑAL: las señales llegan en bloques de ~4 giros seguidos y una sesión corta puede quedar muy por debajo del promedio. Se bajó el umbral por defecto a 50. Los pesos y Z_MAX no cambian. Mismo backtest fuera de muestra:
+
+| Umbral | variante | % NO APOSTAR por giro | FUERTE / recomendaciones | coincidencia MEDIA | coincidencia FUERTE | ROI/unidad |
+| --- | --- | --- | --- | --- | --- | --- |
+| **50** | europea | **39.8 %** | **11.0 %** | 47.2 % | 45.3 % | −0.023 |
+| **50** | americana | **41.8 %** | **12.3 %** | 45.9 % | 45.2 % | −0.050 |
+
+Bajar el umbral agrega recomendaciones MEDIA con desviaciones más chicas. Las FUERTE son las mismas (el umbral alto no se movió) y la coincidencia no cambia.
+
+Es decir: con la calibración vigente y el umbral por defecto, **el motor recomienda en aproximadamente seis de cada diez giros de una mesa perfectamente justa**. Es lo que corresponde a la decisión de producto de dar una instrucción clara en cada giro. Lo que el umbral regula es cuánto habla el producto, no cuánto separa señal de ruido: la tasa de coincidencia y el ROI se quedan en la ventaja de la casa en toda la tabla, que es lo esperado y lo que el backtest confirma.
 
 #### Bandas, umbral y desempate
 
-- **0-39 DÉBIL · 40-59 MEDIA · 60-79 FUERTE · 80-100 MUY FUERTE.**
-- Umbral de recomendación configurable por variante (`recommendation_threshold`, por defecto 60), editable desde el admin. Es inclusivo: alcanzarlo exacto basta. Si ninguna alternativa lo alcanza, la decisión es `NO_APOSTAR`.
-- Se devuelve **una sola** recomendación. Desempate determinista: mayor score → menor cobertura → índice de la categoría en el array `categories` → `group_ids` alfabético → clave del mercado. Ninguna parte de la clave depende del orden de un objeto JSON.
+Tres estados de salida y nada más (decidido el 2026-09-24):
+
+| Estado | Condición | Salida |
+| --- | --- | --- |
+| **SEÑAL FUERTE** (`strong`) | score ≥ umbral alto (80) | APOSTAR: mercado, fuerza interna y monto por gestión |
+| **SEÑAL MEDIA** (`medium`) | umbral mínimo ≤ score < umbral alto | Igual, indicando que la fuerza es media |
+| **SIN SEÑAL** (`weak`) | score < umbral mínimo | NO APOSTAR ESTE GIRO. Esperar el siguiente resultado y volver a analizar |
+
+- El umbral mínimo es el de recomendación, configurable por variante (`recommendation_threshold`, por defecto 50; era 60 hasta el 2026-09-24, migración `9e3f61a0c7d2`) y editable desde el admin. El alto es fijo (`STRONG_THRESHOLD = 80`). Los dos son inclusivos. Si el admin sube el mínimo por encima de 80, desaparece la MEDIA: todo lo que se recomienda es FUERTE.
+- **La banda sale de los mismos umbrales que la decisión**, así que nunca la contradice: una recomendación es MEDIA o FUERTE, y un NO APOSTAR es SIN SEÑAL, también en el mejor candidato que se guarda. Antes la banda era una escala absoluta de cuatro tramos (0-39 DÉBIL, 40-59 MEDIA, 60-79 FUERTE, 80+ MUY FUERTE) que no coincidía con el umbral: un NO APOSTAR podía salir "MEDIA" y toda recomendación salía "FUERTE". Las filas ya guardadas se reetiquetaron (migración `221b8df05052`).
+- El motor no está obligado a recomendar en cada giro: la mejor alternativa disponible **no se asciende** a señal si no pasa el mínimo.
+- **Con menos de 10 giros en la sesión no hay recomendación**, aunque el score pase el umbral (`MIN_SPINS_FOR_SIGNAL`, la ventana más corta). Con el umbral en 50, cinco rojos seguidos ya daban 51 puntos. La pantalla lo muestra como FALTA INFORMACIÓN.
+- Se devuelve **una sola** recomendación, y la pantalla muestra solo esa: aunque otro mercado también pase el umbral, no aparece como segunda jugada. Con SIN SEÑAL no se nombra ninguna alternativa. Desempate determinista: mayor score → menor cobertura → índice de la categoría en el array `categories` → `group_ids` alfabético → clave del mercado. Ninguna parte de la clave depende del orden de un objeto JSON.
 
 #### Gestión de apuesta
 
@@ -311,8 +338,9 @@ El flujo es: primero la recomendación, después el monto. Desde la Fase 3 **la 
 
 - **Los sectores los pone el mercado, no la estrategia.** Si la recomendación cubre dos docenas son dos sectores, la siga quien la siga.
 - La recuperación de dos sectores **no se ofrece** sobre un mercado de un solo sector: su aritmética asume que el otro sector se pierde y que el acertado paga 2:1, así que sobre "Negro" no describe nada.
-- Cada progresión lleva su propio escalón (`game_sessions.stage_martingale`, `stage_two_sector`; la plana no tiene, siempre es 0) y **las tres avanzan con el mismo cierre de la recomendación**. Así el escalón que se muestra es el que le correspondería a quien hubiera seguido siempre al motor.
+- Cada progresión lleva su propio escalón (`game_sessions.stage_martingale`, `stage_two_sector`; la plana no tiene, siempre es 0) y **solo avanza si el usuario apostó con esa gestión** en ese giro (`bets.strategy`), según el cierre de la recomendación. Así el escalón que se muestra es el de la serie que el usuario lleva de verdad. Sin apuesta con esa gestión, el escalón no se mueve; una apuesta manual por fuera de las progresiones mueve la banca pero ningún escalón; y una progresión que no aplica al mercado recomendado (la recuperación de dos sectores sobre un mercado de una sola zona) no se mueve aunque se anote. Decidido el 2026-09-23; antes avanzaban las tres con cada recomendación, se apostara o no.
 - **El escalón ya no avanza por el neto de las apuestas reales.** La banca refleja lo que el usuario apostó de verdad en la mesa; el escalón refleja dónde estaría quien siguiera al motor. Son dos cosas distintas, y juntarlas significaba que apostar por fuera de la recomendación corría la progresión que la mesa muestra.
+- **Estado de parar (2026-09-24).** Si la banca ya no cubre la apuesta base (`bankroll_exhausted`) o se alcanzó el límite de pérdida (`loss_limit_reached`), la mesa sigue abierta pero no acepta apuestas: el servidor las rechaza y la pantalla reemplaza la recomendación por la indicación de dejar de apostar, el resumen de la banca y los botones "Cerrar mesa" y "Abrir una mesa nueva". Si pasan las dos cosas, gana `bankroll_exhausted`. No hay cierre automático porque una sesión cerrada no deja deshacer su último número: si la banca se agotó por un error de ingreso, "Deshacer último" la restaura y el estado se levanta solo, ya que se deriva de la banca y no se guarda. Se pueden seguir anotando números; el motor sigue evaluando y guardando sus recomendaciones, porque el backtest mide al motor, no al usuario.
 - **Con `NO_APOSTAR` ninguna progresión avanza y el saldo no cambia.** Cobrar un escalón por un giro que el motor pidió no jugar sería cobrar por una apuesta que no se hizo.
 - **Resolución**: al llegar el siguiente resultado, la recomendación anterior se marca `HIT` o `MISS` y las progresiones se mueven con eso. Un `NO_BET` se queda en `PENDING` para siempre: no hubo nada que acertar ni que fallar.
 
@@ -328,7 +356,7 @@ Montos en **centavos** (`stake_cents`), nunca float, con la moneda explícita.
 
 #### Qué muestra la pantalla
 
-La vista principal de ruleta muestra una sola recomendación grande: mercado + score + banda + monto por gestión. **Salieron de la vista principal** el ranking top-3 con porcentajes y el porcentaje de mesa como dato principal; siguen disponibles, plegados, como respaldo.
+La vista principal de ruleta muestra una sola recomendación grande: estado (SEÑAL FUERTE / SEÑAL MEDIA / SIN SEÑAL) + mercado + fuerza interna + monto por gestión ("$X en cada docena" cuando el mercado cubre dos zonas). **Salieron de la vista principal** el ranking top-3 con porcentajes y el porcentaje de mesa como dato principal. La sección desplegable "¿Por qué recomienda esto?" aparece solo cuando hay recomendación, y desde el 2026-09-24 ya no lista "los demás mercados" con su banda: al lado de la jugada se leían como segundas apuestas. La API los sigue devolviendo en `candidates`.
 
 La regla anti-falacia del jugador de §2 **se mantiene**, con un cambio de sitio: `theoretical_probability` y `observed_frequency_shrunk` siguen viajando siempre juntas en la respuesta de la API y se muestran en la sección desplegable "¿Por qué recomienda esto?", no en la tarjeta principal.
 
@@ -473,7 +501,7 @@ statistical_suggestions (              -- una fila por recomendación emitida (�
   id, session_id, spin_id,
   decision,                               -- 'RECOMMEND' | 'NO_BET'
   market_key, category, option_label,
-  signal_score, signal_band,              -- 'weak' | 'medium' | 'strong' | 'very_strong'
+  signal_score, signal_band,              -- 'weak' (SIN SEÑAL) | 'medium' | 'strong'
   theoretical_probability, observed_frequency_shrunk, deviation,
   observed_ci_low, observed_ci_high,       -- intervalo de Wilson (§2.2)
   ev, chi_square_pvalue_adjusted,          -- null si el χ² no está activo
@@ -563,6 +591,8 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
    - Límite de pérdida opcional por sesión, que se puede bajar pero no subir con la sesión abierta (§2.8.3).
    - Registro de apuesta real (categoría + monto) y resolución automática win/loss al ingresar el siguiente número.
    - Auto-evaluación: tasa de coincidencia del motor vs. línea base ingenua, visible en vivo y en el resumen de cierre.
+
+   > **Actualización 2026-09-23:** la vista de ruleta ya no muestra el panel de sugerencias top-3, las señales por categoría, la alerta de racha ni la tasa de coincidencia. Los endpoints (`/suggestions/latest`, `/streak`, `/performance`) y sus cálculos se mantienen; lo que cambió es que el cliente no los pinta. Las frecuencias y probabilidades teóricas de la recomendación siguen visibles en "¿Por qué recomienda esto?".
 
 ### Fase 2 (en alcance, decidido el 2026-09-17)
 

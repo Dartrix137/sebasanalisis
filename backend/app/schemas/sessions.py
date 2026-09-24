@@ -5,7 +5,18 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.engine.bankroll import stop_reason as _stop_reason
+
+
+class StopReason(str, Enum):
+    """Por qué la mesa dejó de ofrecer apuestas. Debe coincidir con
+    `app.engine.bankroll.StopReason`."""
+    # La banca ya no cubre la apuesta base.
+    bankroll_exhausted = "bankroll_exhausted"
+    # Se alcanzó el límite de pérdida que el usuario fijó.
+    loss_limit_reached = "loss_limit_reached"
 
 
 class SessionStatus(str, Enum):
@@ -20,8 +31,8 @@ class BankrollStrategy(str, Enum):
     Desde la Fase 3 la sesión no elige una al crearse: la vista de ruleta las
     muestra a la vez con lo que pide cada una, y el usuario sigue la que quiera.
     Por eso no hay `strategy_selected` ni `strategy_mode` — cada progresión
-    lleva su propio escalón y las tres avanzan con el mismo cierre de la
-    recomendación.
+    lleva su propio escalón, que solo avanza cuando el usuario apostó con esa
+    gestión (`bets.strategy`).
 
     D'Alembert y Fibonacci salieron del producto en la Fase 3.
     """
@@ -87,6 +98,18 @@ class SessionResponse(BaseModel):
     closed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def stop_reason(self) -> Optional[StopReason]:
+        """null mientras se pueda apostar. Con valor, la mesa sigue abierta pero
+        no acepta apuestas: la banca no cubre la apuesta base o se alcanzó el
+        límite de pérdida. Se deriva de la banca, así que deshacer el giro que lo
+        provocó lo levanta solo. Lo decide el servidor, no el cliente."""
+        motivo = _stop_reason(
+            self.bankroll_current, self.bankroll_start, self.base_bet, self.loss_limit
+        )
+        return StopReason(motivo.value) if motivo is not None else None
 
 
 class SessionSummaryResponse(BaseModel):

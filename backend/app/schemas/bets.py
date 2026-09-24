@@ -7,6 +7,8 @@ from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.sessions import BankrollStrategy
+
 
 class BetStatus(str, Enum):
     pending = "pending"
@@ -23,6 +25,9 @@ class CreateBetRequest(BaseModel):
     option_label: str      # debe existir dentro de esa categoría
     amount: float = Field(gt=0)
     followed_suggestion: bool = False
+    # Gestión con la que se apostó. Solo esa progresión avanza de escalón al
+    # resolverse el giro; null en una apuesta manual por fuera de ellas.
+    strategy: Optional[BankrollStrategy] = None
 
 
 # ---------- Responses ----------
@@ -35,6 +40,7 @@ class BetResponse(BaseModel):
     option_label: str
     amount: float
     followed_suggestion: bool
+    strategy: Optional[BankrollStrategy] = None
     status: BetStatus
     won: Optional[bool] = None
     payout: Optional[float] = None

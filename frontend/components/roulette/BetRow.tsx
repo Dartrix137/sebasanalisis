@@ -1,30 +1,26 @@
 "use client";
 
 /**
- * Registro de la apuesta real, en una sola fila (§4).
+ * Las apuestas reales del giro en curso (§4).
  *
- * Es la segunda cosa que el usuario hace en el bucle de la mesa —leer señales,
- * apostar, registrar el número—, así que cabe en una línea y no en un panel.
- *
- * El monto que exige la progresión entra como un botón: era el único dato
- * accionable del panel de banca, y aquí se aplica de un toque en vez de leerse
- * en otra tarjeta y teclearse a mano. La tabla de progresión completa vive en
- * el detalle plegado, que es donde se consulta, no donde se actúa.
+ * Seguir la recomendación se anota con un toque desde su tarjeta ("Aposté
+ * esto"), con el mercado y el monto de la gestión elegida. Aquí queda lo demás:
+ * lo que ya está en juego y, plegado, el registro de cualquier otra apuesta —
+ * la que se hace por fuera de la recomendación, o igual cuando el motor pidió
+ * no apostar.
  *
  * Se admiten varias apuestas por giro, como en una mesa real. Cubrir más
  * opciones reparte el riesgo pero no lo reduce: la ventaja de la casa se aplica
  * a cada apuesta por separado, y el copy tiene que decirlo cuando el usuario
  * empieza a acumular.
- *
- * Registrar una apuesta es anotar lo que el usuario ya decidió: la app no
- * recomienda a qué apostar y el copy no debe sugerirlo.
  */
 
 import { useState } from "react";
 
+import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
 import { Button, ErrorBox } from "@/components/ui";
 import type { GameVariantConfig } from "@/lib/types/games";
-import type { BetResponse } from "@/lib/types/bets";
+import type { BetResponse, CreateBetRequest } from "@/lib/types/bets";
 
 const MONEY = (n: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -40,7 +36,8 @@ export function BetRow({
   config,
   bets,
   bankrollCurrent,
-  suggestedBet,
+  baseBet,
+  recommends,
   abierta,
   pending,
   onPlace,
@@ -49,17 +46,15 @@ export function BetRow({
   config: GameVariantConfig;
   bets: BetResponse[];
   bankrollCurrent: number;
-  suggestedBet: number | null;
+  baseBet: number;
+  /** Si hay una recomendación vigente: cambia el copy del registro manual. */
+  recommends: boolean;
   abierta: boolean;
   pending: boolean;
-  onPlace: (body: {
-    category: string;
-    option_label: string;
-    amount: number;
-    followed_suggestion: boolean;
-  }) => void;
+  onPlace: (body: CreateBetRequest) => void;
   onCancel: (betId: string) => void;
 }) {
+  const [formOpen, setFormOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(config.categories[0]?.id ?? "");
   const [optionLabel, setOptionLabel] = useState("");
   const [amount, setAmount] = useState("");
@@ -80,6 +75,27 @@ export function BetRow({
 
   return (
     <div className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-bold text-white">Tus apuestas en este giro</h3>
+        {formOpen ? null : (
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            className="text-xs font-bold text-muted transition-colors hover:text-white"
+          >
+            {recommends ? "+ Registrar otra apuesta" : "+ Registrar una apuesta igual"}
+          </button>
+        )}
+      </div>
+
+      {pendientes.length === 0 && !formOpen ? (
+        <p className="text-xs leading-relaxed text-muted">
+          {recommends
+            ? "Ninguna todavía. Si seguiste la recomendación, anótala con “Aposté esto” en su tarjeta."
+            : "Ninguna. Con el motor pidiendo no apostar, lo normal es dejar pasar el giro."}
+        </p>
+      ) : null}
+
       {pendientes.length > 0 ? (
         <div className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2.5">
           <ul className="space-y-1">
@@ -88,6 +104,9 @@ export function BetRow({
                 <span className="text-white">
                   <span className="font-bold">{b.option_label}</span>
                   <span className="ml-2 text-muted">{MONEY(b.amount)}</span>
+                  {b.strategy ? (
+                    <span className="ml-2 text-xs text-gold">{STRATEGY_LABEL[b.strategy]}</span>
+                  ) : null}
                 </span>
                 <button
                   type="button"
@@ -113,22 +132,24 @@ export function BetRow({
         </div>
       ) : null}
 
+      {formOpen ? (
       <form
-        className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!listo) return;
-        onPlace({
-          category: categoryId,
-          option_label: optionLabel,
-          amount: monto,
-          followed_suggestion: followed,
-        });
-        setOptionLabel("");
-        setAmount("");
-        setFollowed(false);
-      }}
-    >
+        className="space-y-2 rounded-lg border border-edge bg-ink px-3 py-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!listo) return;
+          onPlace({
+            category: categoryId,
+            option_label: optionLabel,
+            amount: monto,
+            followed_suggestion: followed,
+          });
+          setOptionLabel("");
+          setAmount("");
+          setFollowed(false);
+          setFormOpen(false);
+        }}
+      >
       {/* Dos filas: los selectores necesitan ancho para no truncar la etiqueta. */}
       <div className="grid gap-2 sm:grid-cols-2">
         <select
@@ -177,18 +198,19 @@ export function BetRow({
         <Button type="submit" disabled={pending || !listo}>
           Registrar
         </Button>
+        <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>
+          Cancelar
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        {suggestedBet !== null ? (
-          <button
-            type="button"
-            onClick={() => setAmount(String(suggestedBet))}
-            className="rounded-md border border-edge px-2 py-1 text-xs text-muted transition-colors hover:border-gold/50 hover:text-white"
-          >
-            Tu progresión pide {MONEY(suggestedBet)}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setAmount(String(baseBet))}
+          className="rounded-md border border-edge px-2 py-1 text-xs text-muted transition-colors hover:border-gold/50 hover:text-white"
+        >
+          Apuesta base {MONEY(baseBet)}
+        </button>
 
         <label className="flex items-center gap-1.5 text-xs text-muted">
           <input
@@ -213,6 +235,13 @@ export function BetRow({
           />
         ) : null}
       </form>
+      ) : null}
+
+      <p className="text-[11px] leading-relaxed text-muted/80">
+        Tu banca se mueve con todas las apuestas que anotes. El escalón de una
+        progresión solo avanza si apostaste con esa gestión (“Aposté esto”); una
+        apuesta registrada a mano no mueve ninguna progresión.
+      </p>
     </div>
   );
 }

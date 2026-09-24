@@ -21,12 +21,15 @@ from app.api.v1.sessions import get_owned_session
 from app.engine import bankroll as bk
 from app.engine.probability import GameConfig, expected_value
 from app.engine.recommendation import (
+    MIN_SPINS_FOR_SIGNAL,
     Decision,
     Market,
     Recommendation,
     ScoredMarket,
+    no_bet_reason,
     recommend,
     resolve,
+    strong_threshold_for,
 )
 from app.models import GameSession, GameVariant, Spin, StatisticalSuggestion
 from app.schemas.suggestions import (
@@ -130,15 +133,21 @@ def pending_recommendation(
 
 
 def resolve_pending_recommendation(
-    db: DbSession, session: GameSession, config: GameConfig, spin: Spin
+    db: DbSession,
+    session: GameSession,
+    config: GameConfig,
+    spin: Spin,
+    followed: frozenset[bk.Strategy],
 ) -> StatisticalSuggestion | None:
     """Marca la recomendacion anterior contra el giro que acaba de entrar y mueve
-    las progresiones.
+    las progresiones con las que se aposto (`followed`).
+
+    La recomendacion se resuelve siempre, se haya apostado o no: el backtest
+    mide al motor, no al usuario. Los escalones, en cambio, solo se mueven para
+    las gestiones que el usuario siguio de verdad en este giro.
 
     Un NO APOSTAR no llega aqui: se guarda con `outcome='PENDING'` y se queda
-    asi. **Ninguna progresion avanza y el saldo no cambia**, que es la regla de
-    §2.10 — cobrar un escalon por un giro que el motor pidio no jugar seria
-    cobrar por una apuesta que no se hizo.
+    asi, y ninguna progresion avanza.
     """
     pendiente = pending_recommendation(db, session.id)
     if pendiente is None:
@@ -159,7 +168,12 @@ def resolve_pending_recommendation(
 
     apply_stages(
         session,
-        bk.advance_stages_on_outcome(current_stages(session), hit=outcome.value == "HIT"),
+        bk.advance_stages_on_outcome(
+            current_stages(session),
+            hit=outcome.value == "HIT",
+            sectors=market.sectors,
+            followed=followed,
+        ),
     )
     return pendiente
 
@@ -308,10 +322,14 @@ def to_response(
     stakes: list[bk.MarketStake],
     total_spins: int,
 ) -> RecommendationResponse:
+    motivo = no_bet_reason(resultado.decision, total_spins)
     return RecommendationResponse(
         session_id=session.id,
         decision=resultado.decision.value,
+        no_bet_reason=motivo.value if motivo is not None else None,
+        min_spins_for_signal=MIN_SPINS_FOR_SIGNAL,
         threshold=resultado.threshold,
+        strong_threshold=strong_threshold_for(resultado.threshold),
         signal_score=resultado.signal_score,
         signal_band=resultado.signal_band.value,
         market=_market_response(resultado.market) if resultado.market else None,

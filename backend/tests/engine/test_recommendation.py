@@ -11,20 +11,21 @@ import pytest
 
 from app.engine.probability import GameConfig
 from app.engine.recommendation import (
-    BAND_MEDIUM,
-    BAND_STRONG,
-    BAND_VERY_STRONG,
     CHI_SQUARE_BONUS,
+    STRONG_THRESHOLD,
     WEIGHT_CONSISTENCY,
     WEIGHT_DEVIATION,
     WEIGHT_RECENCY,
+    MIN_SPINS_FOR_SIGNAL,
     Decision,
+    NoBetReason,
     Outcome,
     SignalBand,
     available_windows,
     band_for,
     market_catalog,
     market_for_key,
+    no_bet_reason,
     recommend,
     resolve,
     score_market,
@@ -158,25 +159,88 @@ def test_el_cero_y_el_doble_cero_no_suman_a_ningun_mercado(europea, americana) -
 
 
 def test_historial_uniforme_no_recomienda(europea) -> None:
-    """Una mesa que reparte todo por igual no da señal: NO APOSTAR."""
-    uniforme = list(europea.possible_outcomes) * 6  # 222 giros, uno por numero
+    """Una mesa que reparte todo por igual no da señal: SIN SEÑAL, NO APOSTAR.
+
+    "Por igual" en todas las ventanas que mira el motor, no solo en el total:
+    cada numero una vez por vuelta, en un orden (paso 16 modulo 37) que no
+    agrupa ningun mercado en los giros recientes.
+    """
+    numeros = list(europea.possible_outcomes)
+    vuelta = [numeros[(i * 16) % len(numeros)] for i in range(len(numeros))]
+    uniforme = vuelta * 6  # 222 giros, cada numero seis veces
+    # Precondicion: ningun mercado se separa de su teorica en ninguna ventana.
+    for m in market_catalog(europea):
+        for w in score_market(europea, m, uniforme).windows:
+            assert abs(w.z) < 0.5
+
     resultado = recommend(europea, uniforme)
     assert resultado.decision is Decision.no_bet
+    assert resultado.signal_band is SignalBand.weak
     assert resultado.signal_score < resultado.threshold
     # El mejor candidato viaja igual, para que el backtest pueda analizarlo.
     assert resultado.best is not None
     assert resultado.market is None
 
 
-def test_las_bandas_cortan_donde_dice_el_documento() -> None:
-    assert band_for(0) is SignalBand.weak
-    assert band_for(BAND_MEDIUM - 0.01) is SignalBand.weak
-    assert band_for(BAND_MEDIUM) is SignalBand.medium
-    assert band_for(BAND_STRONG - 0.01) is SignalBand.medium
-    assert band_for(BAND_STRONG) is SignalBand.strong
-    assert band_for(BAND_VERY_STRONG - 0.01) is SignalBand.strong
-    assert band_for(BAND_VERY_STRONG) is SignalBand.very_strong
-    assert band_for(100) is SignalBand.very_strong
+def test_una_racha_reciente_da_señal_aunque_el_total_este_parejo(europea) -> None:
+    """Cada numero sale seis veces, pero en orden: los ultimos diez giros son
+    27-36, todos altos. Desde la calibracion del 2026-09-24 la consistencia
+    pesa 0.10 y ya no frena una desviacion reciente grande aunque los tramos
+    viejos se cancelen: el motor lo marca.
+
+    Es una decision de calibracion, no un descubrimiento: en una mesa justa esa
+    racha no cambia la probabilidad del giro siguiente, que sigue siendo la
+    teorica.
+    """
+    barrido = list(europea.possible_outcomes) * 6
+    resultado = recommend(europea, barrido)
+    assert resultado.decision is Decision.recommend
+    assert resultado.market is not None
+    assert resultado.market.key == "high_low:high"
+    assert resultado.best is not None
+    assert resultado.best.components.consistency is not None
+    assert resultado.best.components.consistency < 0.5
+
+
+def test_las_bandas_cortan_en_los_dos_umbrales() -> None:
+    """Tres estados: SIN SEÑAL bajo el minimo, MEDIA del minimo al alto,
+    FUERTE desde el alto. Los dos pisos son inclusivos."""
+    assert STRONG_THRESHOLD == 80
+    assert band_for(0, 60) is SignalBand.weak
+    assert band_for(59.99, 60) is SignalBand.weak
+    assert band_for(60, 60) is SignalBand.medium
+    assert band_for(68, 60) is SignalBand.medium
+    assert band_for(79.99, 60) is SignalBand.medium
+    assert band_for(80, 60) is SignalBand.strong
+    assert band_for(100, 60) is SignalBand.strong
+
+
+def test_el_umbral_minimo_mueve_el_piso_de_la_media() -> None:
+    assert band_for(55, 50) is SignalBand.medium
+    assert band_for(65, 70) is SignalBand.weak
+
+
+def test_con_el_minimo_por_encima_del_alto_no_hay_media() -> None:
+    """Si el admin sube el umbral minimo por encima de 80, todo lo que se
+    recomienda es FUERTE, y lo que queda debajo del minimo es SIN SEÑAL aunque
+    pase de 80: la banda nunca contradice a la decision."""
+    assert band_for(84.99, 85) is SignalBand.weak
+    assert band_for(85, 85) is SignalBand.strong
+
+
+def test_la_banda_nunca_contradice_a_la_decision(europea) -> None:
+    """Una recomendacion es MEDIA o FUERTE; un NO_BET es siempre SIN SEÑAL,
+    tambien en el mejor candidato y en los demas mercados."""
+    giros = ["1"] * 30 + list(europea.possible_outcomes)
+    puntaje = recommend(europea, giros).signal_score
+    for umbral in (puntaje - 1, puntaje, puntaje + 1):
+        resultado = recommend(europea, giros, threshold=umbral)
+        if resultado.decision is Decision.recommend:
+            assert resultado.signal_band in (SignalBand.medium, SignalBand.strong)
+        else:
+            assert resultado.signal_band is SignalBand.weak
+        for c in resultado.candidates:
+            assert (c.signal_band is SignalBand.weak) == (c.signal_score < umbral)
 
 
 def test_justo_en_el_umbral_recomienda_y_un_punto_por_debajo_no(europea) -> None:
@@ -223,7 +287,7 @@ def test_solo_cuenta_la_desviacion_por_encima_de_la_teorica(europea) -> None:
 def test_la_consistencia_queda_indefinida_con_un_solo_tramo(europea) -> None:
     """Con menos de 10 giros hay un unico tramo, y un tramo no tiene con que ser
     consistente. Su peso se reparte entre desviacion y recencia en vez de
-    regalar 30 puntos a cualquier mercado que asome por encima de la teorica."""
+    regalar sus puntos a cualquier mercado que asome por encima de la teorica."""
     cinco_rojos = ["1", "3", "5", "7", "9"]
     resultado = score_market(europea, market_for_key(europea, "color:red"), cinco_rojos)
 
@@ -234,8 +298,27 @@ def test_la_consistencia_queda_indefinida_con_un_solo_tramo(europea) -> None:
         + WEIGHT_RECENCY * resultado.components.recency
     ) / (WEIGHT_DEVIATION + WEIGHT_RECENCY)
     assert resultado.signal_score == pytest.approx(esperado)
-    # No alcanza para recomendar: cinco giros no sostienen nada.
-    assert resultado.signal_score < BAND_STRONG
+
+
+def test_sin_los_giros_minimos_no_recomienda_aunque_llegue_al_umbral(europea) -> None:
+    """Cinco rojos seguidos pasan el umbral de 50, pero cinco giros no
+    sostienen nada: SIN SEÑAL por falta de informacion, tambien en la banda."""
+    cinco_rojos = ["1", "3", "5", "7", "9"]
+    resultado = recommend(europea, cinco_rojos)
+
+    assert resultado.best is not None
+    assert resultado.best.signal_score >= europea.recommendation_threshold
+    assert resultado.decision is Decision.no_bet
+    assert resultado.market is None
+    assert no_bet_reason(resultado.decision, len(cinco_rojos)) is NoBetReason.insufficient_data
+    assert all(c.signal_band is SignalBand.weak for c in resultado.candidates)
+
+
+def test_con_los_giros_minimos_ya_puede_recomendar(europea) -> None:
+    diez_rojos = ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19"]
+    assert len(diez_rojos) == MIN_SPINS_FOR_SIGNAL
+    resultado = recommend(europea, diez_rojos)
+    assert resultado.decision is Decision.recommend
 
 
 def test_con_varios_tramos_la_consistencia_entra_al_score(europea) -> None:
@@ -378,6 +461,26 @@ def test_sin_giros_no_hay_score_ni_ventanas(europea) -> None:
     assert resultado.decision is Decision.no_bet
     assert all(c.signal_score == 0.0 for c in resultado.candidates)
     assert all(c.windows == () for c in resultado.candidates)
+
+
+def test_el_minimo_de_giros_es_la_ventana_mas_corta() -> None:
+    assert MIN_SPINS_FOR_SIGNAL == 10
+
+
+def test_sin_giros_suficientes_el_no_apostar_es_por_falta_de_informacion() -> None:
+    assert no_bet_reason(Decision.no_bet, 0) is NoBetReason.insufficient_data
+    assert no_bet_reason(Decision.no_bet, 9) is NoBetReason.insufficient_data
+
+
+def test_con_giros_suficientes_el_no_apostar_es_por_el_umbral() -> None:
+    assert no_bet_reason(Decision.no_bet, 10) is NoBetReason.below_threshold
+    assert no_bet_reason(Decision.no_bet, 500) is NoBetReason.below_threshold
+
+
+def test_una_recomendacion_no_trae_motivo_de_no_apostar() -> None:
+    """El minimo explica el silencio; no bloquea una recomendacion."""
+    assert no_bet_reason(Decision.recommend, 3) is None
+    assert no_bet_reason(Decision.recommend, 100) is None
 
 
 # --------------------------------------------------------------------------

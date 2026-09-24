@@ -95,7 +95,7 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
   );
   const [categories, setCategories] = useState<CategoryDraft[]>(toDrafts(initial?.config));
   const [threshold, setThreshold] = useState(
-    String(initial?.config.recommendation_threshold ?? 60),
+    String(initial?.config.recommendation_threshold ?? 50),
   );
   /*
     Las combinaciones permitidas (dos docenas, dos columnas) se conservan tal

@@ -178,9 +178,20 @@ class RecommendationDecision(str, Enum):
     no_bet = "NO_BET"
 
 
+class NoBetReason(str, Enum):
+    """Por qué el motor no recomienda apostar. null cuando sí recomienda."""
+    # Menos giros que la ventana más corta: todavía no hay con qué medir.
+    insufficient_data = "insufficient_data"
+    # Hay datos, pero ningún mercado llega al umbral.
+    below_threshold = "below_threshold"
+
+
 class SignalBand(str, Enum):
-    """Banda del `signal_score`: 0-39 débil, 40-59 media, 60-79 fuerte,
-    80-100 muy fuerte.
+    """Estado de salida del motor según los dos umbrales de §2.10:
+
+    - `weak`: SIN SEÑAL — por debajo del umbral mínimo (`threshold`). No apostar.
+    - `medium`: SEÑAL MEDIA — del umbral mínimo al alto (`strong_threshold`).
+    - `strong`: SEÑAL FUERTE — desde el umbral alto.
 
     Describe la fuerza del criterio interno sobre la muestra ya ocurrida. No es
     la probabilidad de acertar el próximo giro — esa sigue siendo la teórica.
@@ -188,7 +199,6 @@ class SignalBand(str, Enum):
     weak = "weak"
     medium = "medium"
     strong = "strong"
-    very_strong = "very_strong"
 
 
 class RecommendationOutcome(str, Enum):
@@ -290,7 +300,14 @@ class RecommendationResponse(BaseModel):
     """
     session_id: UUID
     decision: RecommendationDecision
+    # null con RECOMMEND.
+    no_bet_reason: Optional[NoBetReason] = None
+    # Giros por debajo de los cuales un NO_BET es por falta de información.
+    min_spins_for_signal: int
+    # Umbral mínimo: desde aquí hay recomendación (SEÑAL MEDIA).
     threshold: float
+    # Umbral alto: desde aquí la señal es FUERTE.
+    strong_threshold: float
     signal_score: float
     signal_band: SignalBand
     # El mercado a apostar. null con NO_BET.

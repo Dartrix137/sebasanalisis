@@ -25,7 +25,6 @@ import type {
 import type {
   BankrollStrategy,
   CreateSessionRequest,
-  SessionPerformanceResponse,
   SessionResponse,
   SessionStatus,
   SessionSummaryResponse,
@@ -46,8 +45,6 @@ import type {
   ProgressionTableResponse,
   RecommendationRecord,
   RecommendationResponse,
-  StatisticalSuggestionsPanel,
-  StreakAlert,
 } from "./types/suggestions";
 
 export const API_BASE_URL =
@@ -240,21 +237,6 @@ export const spinsApi = {
   /** Deshacer: el backend solo permite borrar el último giro registrado. */
   remove: (token: string, sessionId: UUID, spinId: UUID) =>
     apiFetch<void>(`/sessions/${sessionId}/spins/${spinId}`, { method: "DELETE", token }),
-};
-
-export const analysisApi = {
-  /** Señales estadísticas de la secuencia ya ocurrida. No anticipa el próximo giro. */
-  suggestions: (token: string, sessionId: UUID) =>
-    apiFetch<StatisticalSuggestionsPanel>(`/sessions/${sessionId}/suggestions/latest`, {
-      token,
-    }),
-
-  streak: (token: string, sessionId: UUID) =>
-    apiFetch<StreakAlert | null>(`/sessions/${sessionId}/streak`, { token }),
-
-  /** Auto-evaluación contra la línea base ingenua (§2.7). */
-  performance: (token: string, sessionId: UUID) =>
-    apiFetch<SessionPerformanceResponse>(`/sessions/${sessionId}/performance`, { token }),
 };
 
 /**

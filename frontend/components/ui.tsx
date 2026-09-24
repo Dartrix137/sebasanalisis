@@ -55,11 +55,26 @@ export function Button({ variant = "primary", className = "", ...props }: Button
 export function Field({
   label,
   hint,
+  info,
+  infoAlign,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  hint?: string;
+  /** Explicación del campo, en un tooltip junto a la etiqueta. */
+  info?: ReactNode;
+  infoAlign?: "left" | "right";
+}) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-bold text-white">{label}</span>
+      <span className="mb-1.5 block text-sm font-bold text-white">
+        {label}
+        {info ? (
+          <InfoTip label={label} align={infoAlign}>
+            {info}
+          </InfoTip>
+        ) : null}
+      </span>
       <input
         {...props}
         className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
@@ -207,7 +222,16 @@ export function BrandMark({ size = 56 }: { size?: number }) {
  * y se cierra con Escape o al hacer clic fuera. El texto va en el DOM siempre,
  * así que un lector de pantalla lo alcanza aunque el panel esté plegado.
  */
-export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+export function InfoTip({
+  label,
+  align = "left",
+  children,
+}: {
+  label: string;
+  /** Hacia qué lado se abre; "right" para etiquetas pegadas al borde derecho. */
+  align?: "left" | "right";
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
 
@@ -241,7 +265,9 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
       <span
         role="tooltip"
         hidden={!open}
-        className="absolute left-0 top-5 z-20 w-60 rounded-lg border border-edge bg-ink-raised px-3 py-2.5 text-xs font-normal leading-relaxed text-muted shadow-lg"
+        className={`absolute ${
+          align === "right" ? "right-0" : "left-0"
+        } top-5 z-20 w-60 rounded-lg border border-edge bg-ink-raised px-3 py-2.5 text-xs font-normal leading-relaxed text-muted shadow-lg`}
       >
         {children}
       </span>

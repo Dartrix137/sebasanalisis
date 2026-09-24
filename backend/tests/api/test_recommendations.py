@@ -11,6 +11,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+from app.engine.recommendation import WEIGHT_DEVIATION, WEIGHT_RECENCY
 from tests.api.conftest import auth
 
 #: Ruleta reducida con dos categorias de pago 1:1 y una de 2:1, mas una
@@ -118,6 +119,37 @@ def test_una_mesa_vacia_no_recomienda(client: TestClient, user_token: str, sesio
     assert cuerpo["stakes"] == []
     assert cuerpo["total_spins"] == 0
     assert cuerpo["threshold"] == 60
+    assert cuerpo["strong_threshold"] == 80
+    assert cuerpo["signal_band"] == "weak"
+
+
+def test_la_banda_de_la_respuesta_sigue_a_la_decision(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """Tres estados de salida (§2.10): con recomendacion la banda es MEDIA o
+    FUERTE, sin ella SIN SEÑAL — tambien en lo que queda guardado."""
+    for valor in ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19", "21", "23"]:
+        _girar(client, user_token, sesion, valor)
+        cuerpo = _recomendacion(client, user_token, sesion)
+        if cuerpo["decision"] == "RECOMMEND":
+            esperada = "strong" if cuerpo["signal_score"] >= cuerpo["strong_threshold"] else "medium"
+        else:
+            esperada = "weak"
+        assert cuerpo["signal_band"] == esperada
+
+    for registro in _historial(client, user_token, sesion):
+        if registro["decision"] == "RECOMMEND":
+            assert registro["signal_band"] in ("medium", "strong")
+        else:
+            assert registro["signal_band"] == "weak"
+
+
+def test_una_mesa_vacia_no_recomienda_por_falta_de_informacion(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    cuerpo = _recomendacion(client, user_token, sesion)
+    assert cuerpo["no_bet_reason"] == "insufficient_data"
+    assert cuerpo["min_spins_for_signal"] == 10
 
 
 def test_la_respuesta_trae_el_disclaimer_fijo(
@@ -155,8 +187,8 @@ def test_la_explicacion_trae_teorica_y_observada_por_ventana(
         assert 0 <= ventana["observed_frequency_shrunk"] <= 1
         assert ventana["observed_ci_low"] <= ventana["observed_ci_high"]
     componentes = mejor["components"]
-    assert componentes["weight_deviation"] == 0.45
-    assert componentes["weight_recency"] == 0.25
+    assert componentes["weight_deviation"] == pytest.approx(WEIGHT_DEVIATION)
+    assert componentes["weight_recency"] == pytest.approx(WEIGHT_RECENCY)
 
 
 # ---------- Persistencia ----------
@@ -276,8 +308,8 @@ def test_no_apostar_no_avanza_ninguna_progresion(
 def test_las_apuestas_reales_no_mueven_las_progresiones(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    """La banca refleja lo que el usuario apostó de verdad; el escalon refleja
-    donde estaria quien hubiera seguido al motor. Son dos cosas distintas."""
+    """Una apuesta manual, sin gestion anotada, mueve la banca pero no el
+    escalon de ninguna progresion."""
     client.post(
         f"/sessions/{sesion}/bets",
         json={"category": "color", "option_label": "Rojo", "amount": 1_000},
@@ -288,6 +320,79 @@ def test_las_apuestas_reales_no_mueven_las_progresiones(
     s = _sesion(client, user_token, sesion)
     assert s["bankroll_current"] == 99_000   # la banca si se movio
     assert s["stage_martingale"] == 0        # el escalon no
+
+
+def _recomendacion_de_un_sector(client, token, sid) -> dict:
+    """Historial cargado a rojo hasta que el motor recomiende un mercado de una
+    zona, o salta el test si este historial no lo logra."""
+    for valor in ["1", "3", "5"] * 6:
+        _girar(client, token, sid, valor)
+    rec = _recomendacion(client, token, sid)
+    if rec["decision"] != "RECOMMEND" or rec["market"]["sectors"] != 1:
+        pytest.skip("este historial no dejo una recomendacion de un sector")
+    return rec
+
+
+def _apostar_al_mercado(client, token, sid, rec, strategy: str | None) -> None:
+    market = rec["market"]
+    r = client.post(
+        f"/sessions/{sid}/bets",
+        json={
+            "category": market["category_id"],
+            "option_label": market["group_ids"][0],
+            "amount": 1_000,
+            "followed_suggestion": True,
+            "strategy": strategy,
+        },
+        headers=auth(token),
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["strategy"] == strategy
+
+
+def test_sin_apuesta_ninguna_progresion_avanza(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """El escalon es el de la serie que el usuario lleva de verdad: si no aposto,
+    la serie no continuo, aunque la recomendacion haya cerrado en contra."""
+    _recomendacion_de_un_sector(client, user_token, sesion)
+    antes = _sesion(client, user_token, sesion)
+
+    _girar(client, user_token, sesion, "0")  # el 0 no es de ningun mercado: cierra en contra
+
+    despues = _sesion(client, user_token, sesion)
+    assert despues["stage_martingale"] == antes["stage_martingale"]
+    assert despues["stage_two_sector"] == antes["stage_two_sector"]
+    # La recomendacion se resuelve igual: el backtest mide al motor, no al usuario.
+    assert _historial(client, user_token, sesion)[-2]["outcome"] == "MISS"
+
+
+def test_solo_avanza_la_gestion_con_la_que_se_aposto(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    rec = _recomendacion_de_un_sector(client, user_token, sesion)
+    antes = _sesion(client, user_token, sesion)
+
+    _apostar_al_mercado(client, user_token, sesion, rec, "martingale")
+    _girar(client, user_token, sesion, "0")
+
+    despues = _sesion(client, user_token, sesion)
+    assert despues["stage_martingale"] == antes["stage_martingale"] + 1
+    assert despues["stage_two_sector"] == antes["stage_two_sector"]
+
+
+def test_dos_sectores_no_avanza_sobre_un_mercado_de_un_sector(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """Aunque la apuesta llegue marcada con esa gestion, sobre un mercado de una
+    sola zona la recuperacion de dos sectores no se pudo jugar."""
+    rec = _recomendacion_de_un_sector(client, user_token, sesion)
+    antes = _sesion(client, user_token, sesion)
+
+    _apostar_al_mercado(client, user_token, sesion, rec, "two_sector_recovery")
+    _girar(client, user_token, sesion, "0")
+
+    assert _sesion(client, user_token, sesion)["stage_two_sector"] == antes["stage_two_sector"]
 
 
 # ---------- Deshacer ----------
@@ -317,11 +422,12 @@ def test_deshacer_un_giro_deshace_su_recomendacion(
 def test_deshacer_restaura_los_escalones(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    for valor in ["1", "3", "5"] * 6:
-        _girar(client, user_token, sesion, valor)
+    rec = _recomendacion_de_un_sector(client, user_token, sesion)
     antes = _sesion(client, user_token, sesion)
 
-    _girar(client, user_token, sesion, "2")
+    _apostar_al_mercado(client, user_token, sesion, rec, "martingale")
+    _girar(client, user_token, sesion, "0")
+    assert _sesion(client, user_token, sesion)["stage_martingale"] == antes["stage_martingale"] + 1
     giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
     client.delete(f"/sessions/{sesion}/spins/{giros[-1]['id']}", headers=auth(user_token))
 

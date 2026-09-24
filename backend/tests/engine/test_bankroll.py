@@ -18,6 +18,7 @@ from app.engine.bankroll import (
     stakes_for_market,
     Strategy,
     StrategyMode,
+    StopReason,
     advance_stage,
     advance_stage_by_round,
     bankroll_alerts,
@@ -33,6 +34,7 @@ from app.engine.bankroll import (
     ruin_probability_estimate,
     stage_multiplier,
     stages_supported_from,
+    stop_reason,
     suggest_bet,
     validate_combination,
 )
@@ -970,27 +972,62 @@ def test_no_apostar_no_avanza_la_martingala() -> None:
         Strategy.martingale: 3,
         Strategy.two_sector_recovery: 2,
     }
-    assert advance_stages_on_outcome(escalones, hit=None) == escalones
+    todas = frozenset(Strategy)
+    assert advance_stages_on_outcome(escalones, hit=None, sectors=1, followed=todas) == escalones
+    assert advance_stages_on_outcome(escalones, hit=None, sectors=2, followed=todas) == escalones
 
 
-def test_un_fallo_sube_todas_las_progresiones_y_un_acierto_las_cierra() -> None:
-    """Los tres contadores se mueven con el mismo cierre de la recomendacion, de
-    modo que cada uno refleja el escalon de haber seguido siempre al motor."""
+def test_sin_apuesta_ninguna_progresion_avanza() -> None:
+    """El escalon es el de la serie que el usuario lleva de verdad: si no
+    aposto con ninguna gestion, ninguna serie continuo ni se cerro."""
     escalones = {
         Strategy.flat: 0,
         Strategy.martingale: 3,
         Strategy.two_sector_recovery: 2,
     }
-    assert advance_stages_on_outcome(escalones, hit=False) == {
-        Strategy.flat: 0,               # la plana nunca escala
-        Strategy.martingale: 4,
-        Strategy.two_sector_recovery: 3,
+    for hit in (True, False):
+        assert (
+            advance_stages_on_outcome(escalones, hit=hit, sectors=2, followed=frozenset())
+            == escalones
+        )
+
+
+def test_solo_avanza_la_gestion_con_la_que_se_aposto() -> None:
+    escalones = {
+        Strategy.flat: 0,
+        Strategy.martingale: 3,
+        Strategy.two_sector_recovery: 2,
     }
-    assert advance_stages_on_outcome(escalones, hit=True) == {
+    solo_martingala = frozenset({Strategy.martingale})
+    assert advance_stages_on_outcome(
+        escalones, hit=False, sectors=2, followed=solo_martingala
+    ) == {
+        Strategy.flat: 0,
+        Strategy.martingale: 4,
+        Strategy.two_sector_recovery: 2,
+    }
+    assert advance_stages_on_outcome(
+        escalones, hit=True, sectors=2, followed=solo_martingala
+    ) == {
         Strategy.flat: 0,
         Strategy.martingale: 0,
-        Strategy.two_sector_recovery: 0,
+        Strategy.two_sector_recovery: 2,
     }
+
+
+def test_dos_sectores_no_se_mueve_sobre_un_mercado_de_un_sector() -> None:
+    """Aunque llegue marcada como seguida, una gestion que no aplica al mercado
+    no pudo jugarse en ese giro: su escalon queda donde estaba."""
+    escalones = {
+        Strategy.flat: 0,
+        Strategy.martingale: 3,
+        Strategy.two_sector_recovery: 2,
+    }
+    for hit in (True, False):
+        resultado = advance_stages_on_outcome(
+            escalones, hit=hit, sectors=1, followed=frozenset(Strategy)
+        )
+        assert resultado[Strategy.two_sector_recovery] == 2
 
 
 def test_martingala_sobre_el_mercado_respeta_la_tabla_de_102300() -> None:
@@ -1015,3 +1052,39 @@ def test_el_mercado_marca_los_limites_de_banca_y_de_mesa() -> None:
     assert stake.total_bet == 6_400
     assert stake.exceeds_bankroll          # 6.400 > 5.000
     assert stake.exceeds_table_limit       # 3.200 por sector > 1.000
+
+
+# --------------------------------------------------------------------------
+# Estado de parar (decidido el 2026-09-24)
+# --------------------------------------------------------------------------
+
+
+def test_con_banca_para_la_apuesta_base_no_hay_que_parar() -> None:
+    assert stop_reason(100_000, 100_000, 1_000, None) is None
+    # Justo la apuesta base todavia alcanza.
+    assert stop_reason(1_000, 100_000, 1_000, None) is None
+
+
+def test_la_banca_que_no_cubre_la_base_para_la_mesa() -> None:
+    assert stop_reason(999.99, 100_000, 1_000, None) is StopReason.bankroll_exhausted
+    assert stop_reason(0, 100_000, 1_000, None) is StopReason.bankroll_exhausted
+
+
+def test_el_redondeo_no_para_la_mesa_antes_de_tiempo() -> None:
+    assert stop_reason(999.999999, 100_000, 1_000, None) is None
+
+
+def test_alcanzar_el_limite_de_perdida_para_la_mesa() -> None:
+    assert stop_reason(70_001, 100_000, 1_000, 30_000) is None
+    assert stop_reason(70_000, 100_000, 1_000, 30_000) is StopReason.loss_limit_reached
+    assert stop_reason(50_000, 100_000, 1_000, 30_000) is StopReason.loss_limit_reached
+
+
+def test_ir_ganando_no_activa_el_limite() -> None:
+    assert stop_reason(150_000, 100_000, 1_000, 30_000) is None
+
+
+def test_sin_banca_para_la_base_gana_sobre_el_limite() -> None:
+    """Si pasan las dos cosas, lo primero que hay que decir es que no queda con
+    que apostar."""
+    assert stop_reason(500, 100_000, 1_000, 30_000) is StopReason.bankroll_exhausted

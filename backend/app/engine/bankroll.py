@@ -637,6 +637,39 @@ def _loss_limit_alerts(
     return []
 
 
+class StopReason(str, Enum):
+    """Por que la mesa pasa al estado de parar (decidido el 2026-09-24)."""
+
+    #: La banca ya no cubre la apuesta base: no hay gestion que seguir.
+    bankroll_exhausted = "bankroll_exhausted"
+    #: Se alcanzo el limite de perdida que el usuario fijo antes de empezar.
+    loss_limit_reached = "loss_limit_reached"
+
+
+def stop_reason(
+    bankroll_current: float,
+    bankroll_start: float,
+    base_bet: float,
+    loss_limit: float | None,
+) -> StopReason | None:
+    """Si la mesa tiene que dejar de ofrecer apuestas, y por que.
+
+    No cierra la sesion: una sesion cerrada no se reabre ni deja deshacer su
+    ultimo numero, y un numero mal ingresado que agotara la banca quedaria sin
+    arreglo. Es un estado que se deriva de la banca, asi que deshacer el giro que
+    lo provoco lo levanta solo.
+
+    Se compara en centavos para que un saldo de 999.999999 por redondeo no
+    cuente distinto que 1000.
+    """
+    actual = _round_money(bankroll_current)
+    if actual < _round_money(base_bet):
+        return StopReason.bankroll_exhausted
+    if loss_limit is not None and _round_money(bankroll_start) - actual >= _round_money(loss_limit):
+        return StopReason.loss_limit_reached
+    return None
+
+
 def _stages_until_table_limit(
     strategy: Strategy, base_bet: float, stage: int, table_limit: float | None
 ) -> int | None:
@@ -851,10 +884,9 @@ def bankroll_plan(
 #   los deriva de la progresion porque antes la sesion se abria en un modo fijo.
 #   Aqui manda lo que el motor recomendo: si la recomendacion es "1a + 2a
 #   docena" son dos sectores, la siga quien la siga.
-# - **El escalon avanza por como cerro la recomendacion**, no por el neto de las
-#   apuestas reales del giro. Cada progresion lleva su propio contador y los tres
-#   se mueven con el mismo HIT/MISS, asi que el escalon que ve el usuario es el
-#   que le corresponderia por haber seguido cada recomendacion.
+# - **El escalon avanza por como cerro la recomendacion**, pero solo el de las
+#   gestiones con las que el usuario aposto en ese giro. Sin apuesta, la serie
+#   no continuo ni se cerro, asi que su escalon no se mueve.
 
 
 @dataclass(frozen=True)
@@ -1020,17 +1052,30 @@ def stakes_for_market(
 
 
 def advance_stages_on_outcome(
-    stages: dict[Strategy, int], *, hit: bool | None
+    stages: dict[Strategy, int],
+    *,
+    hit: bool | None,
+    sectors: int,
+    followed: frozenset[Strategy],
 ) -> dict[Strategy, int]:
-    """Mueve los contadores de las tres progresiones con el cierre de la
-    recomendacion anterior.
+    """Mueve los contadores de las progresiones con el cierre de la
+    recomendacion anterior, sobre un mercado de `sectors` sectores.
 
-    `hit=None` es el NO APOSTAR: **ninguna progresion avanza y el saldo no
-    cambia**. No hubo serie que continuar ni que cerrar, y hacerla avanzar
-    cobraria un escalon por un giro que el motor pidio no jugar.
+    Solo avanzan las de `followed`: las gestiones con las que el usuario aposto
+    de verdad en ese giro. **Sin apuesta, ninguna serie continuo ni se cerro**,
+    asi que su escalon no se mueve.
+
+    `hit=None` es el NO APOSTAR: tampoco avanza nada. Y una progresion que no
+    aplica al mercado (`applies_to_market`) no se mueve aunque llegue en
+    `followed`: no se pudo jugar en ese giro.
     """
     if hit is None:
         return dict(stages)
     return {
-        s: advance_stage(s, stages.get(s, 0), won=hit) for s in OFFERED_STRATEGIES
+        s: (
+            advance_stage(s, stages.get(s, 0), won=hit)
+            if s in followed and applies_to_market(s, sectors) is None
+            else stages.get(s, 0)
+        )
+        for s in OFFERED_STRATEGIES
     }

@@ -5,8 +5,15 @@
  *
  * Es lo primero y lo más grande de la pantalla, y responde la pregunta que el
  * analizador dejaba abierta: *¿entonces qué apuesto en el próximo giro?*. Tiene
- * dos estados y nada más — APOSTAR con su mercado, su fuerza y su monto, o NO
- * APOSTAR. Las estadísticas que sostienen la decisión están abajo, plegadas.
+ * tres estados y nada más (§2.10):
+ *
+ * - SEÑAL FUERTE: el score llega al umbral alto. APOSTAR, con su fuerza y monto.
+ * - SEÑAL MEDIA: pasa el umbral mínimo sin llegar al alto. Igual, marcada media.
+ * - SIN SEÑAL: nada pasa el mínimo. NO APOSTAR ESTE GIRO.
+ *
+ * Siempre una sola jugada: la mejor alternativa. Aunque otro mercado también
+ * pase el umbral, no se muestra como segunda apuesta. Las estadísticas que
+ * sostienen la decisión están abajo, plegadas, y solo cuando hay recomendación.
  *
  * Dos cosas que el copy no puede perder, y que están aquí por diseño y no por
  * decoración:
@@ -22,14 +29,30 @@
 import { useState } from "react";
 
 import { Card } from "@/components/ui";
+import type { BetResponse, CreateBetRequest } from "@/lib/types/bets";
+import type { GameVariantConfig } from "@/lib/types/games";
 import type { BankrollStrategy } from "@/lib/types/sessions";
 import type {
+  MarketResponse,
   MarketStakeResponse,
   RecommendationResponse,
   ScoredMarketResponse,
   SignalBand,
   WindowStatResponse,
 } from "@/lib/types/suggestions";
+
+/**
+ * Lo necesario para anotar desde la tarjeta la apuesta que el usuario hizo
+ * siguiendo una gestión. Sin esto (sesión cerrada) la tarjeta solo informa.
+ */
+export interface StakeRegistration {
+  config: GameVariantConfig;
+  /** Banca actual menos lo ya comprometido en apuestas sin resolver. */
+  available: number;
+  pendingBets: BetResponse[];
+  busy: boolean;
+  onRegister: (bets: CreateBetRequest[]) => void;
+}
 
 const CURRENCY = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -40,25 +63,45 @@ const CURRENCY = new Intl.NumberFormat("es-CO", {
 const PCT = (n: number) => `${(n * 100).toFixed(1)} %`;
 
 const BAND_LABEL: Record<SignalBand, string> = {
-  weak: "DÉBIL",
+  weak: "SIN SEÑAL",
   medium: "MEDIA",
   strong: "FUERTE",
-  very_strong: "MUY FUERTE",
+};
+
+/** El estado de salida, tal como encabeza la tarjeta. */
+const STATE_LABEL: Record<SignalBand, string> = {
+  weak: "SIN SEÑAL",
+  medium: "SEÑAL MEDIA",
+  strong: "SEÑAL FUERTE",
 };
 
 const BAND_TEXT: Record<SignalBand, string> = {
   weak: "text-muted",
   medium: "text-signal-medium",
   strong: "text-signal-strong",
-  very_strong: "text-signal-strong",
 };
 
 const BAND_BAR: Record<SignalBand, string> = {
   weak: "bg-muted",
   medium: "bg-signal-medium",
   strong: "bg-signal-strong",
-  very_strong: "bg-signal-strong",
 };
+
+const BAND_PILL: Record<SignalBand, string> = {
+  weak: "border-edge text-muted",
+  medium: "border-signal-medium/50 bg-signal-medium/10 text-signal-medium",
+  strong: "border-signal-strong/50 bg-signal-strong/10 text-signal-strong",
+};
+
+function StatePill({ band }: { band: SignalBand }) {
+  return (
+    <span
+      className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${BAND_PILL[band]}`}
+    >
+      {STATE_LABEL[band]}
+    </span>
+  );
+}
 
 export const STRATEGY_LABEL: Record<BankrollStrategy, string> = {
   flat: "Plana",
@@ -68,8 +111,10 @@ export const STRATEGY_LABEL: Record<BankrollStrategy, string> = {
 
 export function RecommendationCard({
   recommendation,
+  registration,
 }: {
   recommendation: RecommendationResponse | null;
+  registration?: StakeRegistration;
 }) {
   if (recommendation === null) return null;
 
@@ -78,12 +123,13 @@ export function RecommendationCard({
   return (
     <Card className="border-gold/30">
       {recomienda && recommendation.market ? (
-        <BetState recommendation={recommendation} />
+        <BetState recommendation={recommendation} registration={registration} />
       ) : (
         <NoBetState recommendation={recommendation} />
       )}
 
-      <Why recommendation={recommendation} />
+      {/* El respaldo solo acompaña a una jugada: sin señal no hay nada que explicar. */}
+      {recomienda && recommendation.market ? <Why recommendation={recommendation} /> : null}
 
       {/* Línea fija: va siempre, haya o no señal. */}
       <p className="mt-4 border-t border-edge pt-3 text-xs leading-relaxed text-muted">
@@ -93,23 +139,30 @@ export function RecommendationCard({
   );
 }
 
-function BetState({ recommendation }: { recommendation: RecommendationResponse }) {
+function BetState({
+  recommendation,
+  registration,
+}: {
+  recommendation: RecommendationResponse;
+  registration?: StakeRegistration;
+}) {
   const market = recommendation.market!;
   const banda = recommendation.signal_band;
 
   return (
     <>
-      <p className="text-xs font-bold uppercase tracking-wider text-muted">
-        Recomendación para el siguiente giro
-      </p>
-      <h2 className="mt-1 text-3xl font-bold leading-tight text-white sm:text-4xl">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <StatePill band={banda} />
+        <p className="text-xs text-muted">Recomendación para el siguiente giro</p>
+      </div>
+      <h2 className="mt-2 text-3xl font-bold leading-tight text-white sm:text-4xl">
         APOSTAR: <span className="text-gold">{market.label.toUpperCase()}</span>
       </h2>
 
-      {/* Fuerza de señal */}
+      {/* Fuerza interna */}
       <div className="mt-4">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="text-sm text-muted">Fuerza de señal</span>
+          <span className="text-sm text-muted">Fuerza interna</span>
           <span className={`text-sm font-bold ${BAND_TEXT[banda]}`}>
             <span className="tabular-nums">
               {Math.round(recommendation.signal_score)}/100
@@ -129,62 +182,131 @@ function BetState({ recommendation }: { recommendation: RecommendationResponse }
         </p>
       </div>
 
-      <StakeList stakes={recommendation.stakes} sectors={market.sectors} />
+      <StakeList
+        stakes={recommendation.stakes}
+        market={market}
+        registration={registration}
+      />
     </>
   );
 }
 
 function NoBetState({ recommendation }: { recommendation: RecommendationResponse }) {
+  const faltanDatos = recommendation.no_bet_reason === "insufficient_data";
+
   return (
     <>
-      <p className="text-xs font-bold uppercase tracking-wider text-muted">
-        Recomendación para el siguiente giro
-      </p>
-      <h2 className="mt-1 text-3xl font-bold leading-tight text-white sm:text-4xl">
-        NO APOSTAR ESTE GIRO
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <StatePill band="weak" />
+        <p className="text-xs text-muted">Recomendación para el siguiente giro</p>
+      </div>
+      <h2 className="mt-2 text-3xl font-bold leading-tight text-white sm:text-4xl">
+        {faltanDatos ? "FALTA INFORMACIÓN" : "NO APOSTAR ESTE GIRO"}
       </h2>
-      <p className="mt-2 text-sm text-muted">
-        Esperar el siguiente resultado y volver a analizar.
-      </p>
-      {recommendation.best ? (
-        <p className="mt-3 text-xs leading-relaxed text-muted">
-          La alternativa más marcada,{" "}
+
+      {faltanDatos ? (
+        <p className="mt-2 text-sm text-muted">
+          Llevas{" "}
           <span className="font-bold text-white">
-            {recommendation.best.market.label}
-          </span>
-          , llega a {Math.round(recommendation.best.signal_score)}/100 y no alcanza
-          el umbral de {Math.round(recommendation.threshold)}.
+            {recommendation.total_spins} de {recommendation.min_spins_for_signal}
+          </span>{" "}
+          números. Hasta tenerlos no hay con qué medir una señal: registra los que
+          vayan saliendo.
         </p>
-      ) : null}
+      ) : (
+        // Sin señal no se nombra ninguna alternativa: mostrar la "mejor de las
+        // que no llegan" se lee como una segunda jugada.
+        <p className="mt-2 text-sm text-muted">
+          Esperar el siguiente resultado y volver a analizar.
+        </p>
+      )}
+
+      {/*
+        Hay mesas (sobre todo virtuales) que exigen apostar en cada giro. Sin
+        señal, la salida honesta es el mínimo: ninguna opción se distingue de
+        otra, y cualquier monto mayor solo agranda la exposición a la ventaja de
+        la casa.
+      */}
+      <div className="mt-4 rounded-lg border border-edge bg-ink px-3.5 py-3 text-xs leading-relaxed text-muted">
+        <p>
+          <span className="font-bold text-white">No apuestes este giro.</span> Si la
+          mesa te obliga a apostar en cada giro, apuesta el{" "}
+          <span className="font-bold text-white">mínimo que acepte la mesa</span>,
+          fuera de tus progresiones: sin señal, ninguna opción se distingue de otra.
+        </p>
+        <p className="mt-1.5">
+          Las progresiones no avanzan con un giro sin recomendación.
+        </p>
+      </div>
     </>
   );
 }
 
 /**
+ * "en cada docena", "en cada columna": el nombre de la zona sale de la etiqueta
+ * de la categoría en `categories_json`, no de un texto fijo de ruleta.
+ */
+function perSectorLabel(config: GameVariantConfig | undefined, market: MarketResponse): string {
+  const categoria = config?.categories.find((c) => c.id === market.category_id);
+  return categoria ? `en cada ${categoria.label.toLowerCase()}` : "en cada una";
+}
+
+/** Una apuesta por zona del mercado, con el monto por sector de la gestión. */
+function betsFor(
+  config: GameVariantConfig,
+  market: MarketResponse,
+  stake: MarketStakeResponse,
+): CreateBetRequest[] {
+  const categoria = config.categories.find((c) => c.id === market.category_id);
+  return market.group_ids.map((gid) => ({
+    category: market.category_id,
+    option_label: categoria?.groups[gid]?.label ?? gid,
+    amount: stake.bet_per_sector,
+    followed_suggestion: true,
+    strategy: stake.strategy,
+  }));
+}
+
+/**
  * Las tres progresiones, juntas. La mesa no pide elegir una: muestra lo que
- * pediría cada una para el mercado recomendado y el usuario sigue la suya.
+ * pediría cada una para el mercado recomendado, y el usuario anota con un toque
+ * la que siguió.
  */
 function StakeList({
   stakes,
-  sectors,
+  market,
+  registration,
 }: {
   stakes: MarketStakeResponse[];
-  sectors: number;
+  market: MarketResponse;
+  registration?: StakeRegistration;
 }) {
   if (stakes.length === 0) return null;
+  const sectors = market.sectors;
+  const enCada = perSectorLabel(registration?.config, market);
+  const anotada = registration?.pendingBets.some((b) => b.followed_suggestion) ?? false;
 
   return (
     <div className="mt-5 border-t border-edge pt-4">
-      <h3 className="text-sm font-bold text-white">Apuesta indicada</h3>
+      <h3 className="text-sm font-bold text-white">Apuesta indicada, por gestión</h3>
       <p className="mt-0.5 text-xs text-muted">
-        Según cada gestión. Sigue la que estés usando.
+        {registration && !anotada
+          ? "Sigue la gestión que estés usando. Si apostaste, toca la que usaste: queda anotada y solo esa avanza de escalón."
+          : "Sigue la gestión que estés usando."}
       </p>
+
+      {anotada ? (
+        <p className="mt-3 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-white">
+          Ya anotaste tu apuesta de este giro. Se resuelve con el próximo número; si
+          te equivocaste, quítala en la mesa.
+        </p>
+      ) : null}
 
       <ul className="mt-3 space-y-1.5">
         {stakes.map((s) => (
           <li
             key={s.strategy}
-            className={`flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 ${
+            className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 ${
               s.applicable
                 ? "border-edge bg-ink-sunken"
                 : "border-edge/50 bg-ink-sunken/40"
@@ -202,21 +324,42 @@ function StakeList({
             </span>
 
             {s.applicable ? (
-              <span className="text-right">
-                <span className="text-sm font-bold tabular-nums text-white">
-                  {CURRENCY.format(s.total_bet)}
+              <span className="flex items-center gap-3">
+                <span className="text-right">
+                  <span className="text-sm font-bold tabular-nums text-white">
+                    {CURRENCY.format(s.bet_per_sector)}
+                  </span>
+                  {sectors > 1 ? (
+                    <>
+                      <span className="ml-1.5 text-xs text-white">{enCada}</span>
+                      <span className="block text-xs text-muted">
+                        {CURRENCY.format(s.total_bet)} en total
+                      </span>
+                    </>
+                  ) : null}
+                  {s.exceeds_bankroll || s.exceeds_table_limit ? (
+                    <span className="mt-0.5 block text-xs text-table-red">
+                      {s.exceeds_bankroll
+                        ? "La banca no lo cubre"
+                        : "Supera el límite de la mesa"}
+                    </span>
+                  ) : null}
                 </span>
-                {sectors > 1 ? (
-                  <span className="ml-2 text-xs text-muted">
-                    ({CURRENCY.format(s.bet_per_sector)} en cada una)
-                  </span>
-                ) : null}
-                {s.exceeds_bankroll || s.exceeds_table_limit ? (
-                  <span className="mt-0.5 block text-xs text-table-red">
-                    {s.exceeds_bankroll
-                      ? "La banca no lo cubre"
-                      : "Supera el límite de la mesa"}
-                  </span>
+                {registration && !anotada ? (
+                  <button
+                    type="button"
+                    disabled={
+                      registration.busy ||
+                      s.exceeds_table_limit ||
+                      s.total_bet > registration.available
+                    }
+                    onClick={() =>
+                      registration.onRegister(betsFor(registration.config, market, s))
+                    }
+                    className="rounded-md border border-gold/50 px-2.5 py-1.5 text-xs font-bold text-gold transition-colors enabled:hover:bg-gold enabled:hover:text-gold-ink disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Aposté esto
+                  </button>
                 ) : null}
               </span>
             ) : (
@@ -260,8 +403,11 @@ function Why({ recommendation }: { recommendation: RecommendationResponse }) {
       {abierto ? (
         <div className="mt-3 space-y-4">
           <WindowTable scored={mejor} />
-          <Components scored={mejor} threshold={recommendation.threshold} />
-          <OtherMarkets recommendation={recommendation} />
+          <Components
+            scored={mejor}
+            threshold={recommendation.threshold}
+            strongThreshold={recommendation.strong_threshold}
+          />
         </div>
       ) : null}
     </div>
@@ -326,9 +472,11 @@ function WindowRow({ w }: { w: WindowStatResponse }) {
 function Components({
   scored,
   threshold,
+  strongThreshold,
 }: {
   scored: ScoredMarketResponse;
   threshold: number;
+  strongThreshold: number;
 }) {
   const c = scored.components;
   const filas: { label: string; valor: number | null; peso: number; nota: string }[] = [
@@ -397,38 +545,9 @@ function Components({
             múltiples.
           </>
         )}{" "}
-        Se recomienda apostar a partir de {Math.round(threshold)} puntos.
+        Se recomienda apostar desde {Math.round(threshold)} puntos (SEÑAL MEDIA);
+        desde {Math.round(strongThreshold)}, la señal es FUERTE.
       </p>
-    </div>
-  );
-}
-
-function OtherMarkets({
-  recommendation,
-}: {
-  recommendation: RecommendationResponse;
-}) {
-  const otros = recommendation.candidates.slice(0, 6);
-  if (otros.length === 0) return null;
-
-  return (
-    <div>
-      <h4 className="text-xs font-bold uppercase tracking-wider text-muted">
-        Los demás mercados
-      </h4>
-      <ul className="mt-2 space-y-1">
-        {otros.map((c) => (
-          <li
-            key={c.market.key}
-            className="flex items-baseline justify-between gap-3 text-xs"
-          >
-            <span className="text-white">{c.market.label}</span>
-            <span className={`tabular-nums ${BAND_TEXT[c.signal_band]}`}>
-              {Math.round(c.signal_score)}/100 · {BAND_LABEL[c.signal_band]}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

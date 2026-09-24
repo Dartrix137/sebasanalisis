@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Sequence
 
 from scipy import stats
@@ -21,6 +22,13 @@ RECENCY_LAMBDA = 0.969
 
 #: Nivel de confianza del intervalo que acompana a cada frecuencia observada.
 CONFIDENCE_LEVEL = 0.95
+
+
+@lru_cache(maxsize=8)
+def _two_sided_z(confidence: float) -> float:
+    # `norm.ppf` cuesta ~0.1 ms por llamada y el valor solo depende de la
+    # confianza; sin cache era el 75% del tiempo de la auto-evaluacion.
+    return float(stats.norm.ppf(1 - (1 - confidence) / 2))
 
 
 def wilson_interval(
@@ -53,7 +61,7 @@ def wilson_interval(
     if total == 0:
         return (0.0, 1.0)
 
-    z = float(stats.norm.ppf(1 - (1 - confidence) / 2))
+    z = _two_sided_z(confidence)
     p = favorable / total
     denominador = 1 + z**2 / total
     centro = (p + z**2 / (2 * total)) / denominador

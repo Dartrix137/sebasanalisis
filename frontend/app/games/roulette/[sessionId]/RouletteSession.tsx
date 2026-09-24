@@ -6,10 +6,10 @@
  *
  * Lo que cambió respecto del analizador:
  *
- * - El ranking top-3 con porcentajes y el porcentaje de mesa salieron de la
- *   vista principal. Las frecuencias y las probabilidades teóricas siguen
- *   viajando y se muestran, pero dentro de "¿Por qué recomienda esto?" y en el
- *   bloque plegado de todas las categorías: son el respaldo, no el protagonista.
+ * - El ranking top-3, las señales por categoría, la racha activa y la tasa de
+ *   coincidencia del motor salieron de la vista. Las frecuencias y las
+ *   probabilidades teóricas de la recomendación se muestran dentro de "¿Por qué
+ *   recomienda esto?": son el respaldo, no el protagonista.
  * - La recomendación se recalcula sola al ingresar cada número.
  * - La gestión de banca no se elige: la mesa muestra las tres progresiones con
  *   lo que pediría cada una para el mercado recomendado.
@@ -23,27 +23,22 @@
  * independiente. Ver §0 y la skill `terminologia-no-predictiva`.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
-import {
-  AllCategoriesPanel,
-  PerformancePanel,
-} from "@/components/roulette/AnalysisPanels";
 import { BankrollPanel } from "@/components/roulette/BankrollPanel";
-import { BankrollPlanCard } from "@/components/roulette/BankrollPlanCard";
-import type { LastRound } from "@/components/roulette/BankrollPlanCard";
 import { BetHistory, BetRow } from "@/components/roulette/BetRow";
+import { AYUDA } from "@/components/roulette/NewSessionForm";
 import { RecommendationCard } from "@/components/roulette/RecommendationCard";
-import { SignalBoard } from "@/components/roulette/SignalBoard";
+import { RoundStatus } from "@/components/roulette/RoundStatus";
+import { StopCard } from "@/components/roulette/StopCard";
 import { SummaryPanel } from "@/components/roulette/SummaryPanel";
-import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
 import {
   ApiError,
-  analysisApi,
-  bankrollApi,
   betsApi,
   gamesApi,
   recommendationApi,
@@ -54,21 +49,13 @@ import { TONE_CLASSES, describeOutcome, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
 import type { GameVariantResponse } from "@/lib/types/games";
 import type {
-  SessionPerformanceResponse,
   SessionResponse,
   SessionSummaryResponse,
   UpdateSessionRequest,
 } from "@/lib/types/sessions";
 import type { SpinResponse } from "@/lib/types/spins";
 import type { BetResponse } from "@/lib/types/bets";
-import type {
-  BankrollSuggestionResponse,
-  EligibleBetResponse,
-  ProgressionTableResponse,
-  RecommendationResponse,
-  StatisticalSuggestionsPanel,
-  StreakAlert,
-} from "@/lib/types/suggestions";
+import type { RecommendationRecord, RecommendationResponse } from "@/lib/types/suggestions";
 
 const CURRENCY = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -83,70 +70,41 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [variant, setVariant] = useState<GameVariantResponse | null>(null);
   const [spins, setSpins] = useState<SpinResponse[]>([]);
-  const [panel, setPanel] = useState<StatisticalSuggestionsPanel | null>(null);
-  const [streak, setStreak] = useState<StreakAlert | null>(null);
-  const [performance, setPerformance] = useState<SessionPerformanceResponse | null>(null);
-  const [bankroll, setBankroll] = useState<BankrollSuggestionResponse | null>(null);
-  const [progression, setProgression] = useState<ProgressionTableResponse | null>(null);
-  const [eligibleBets, setEligibleBets] = useState<EligibleBetResponse[]>([]);
   const [bets, setBets] = useState<BetResponse[]>([]);
   const [summary, setSummary] = useState<SessionSummaryResponse | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(
     null,
   );
-  // Sobre qué apuesta se estima el riesgo de agotar la banca. Null a propósito
-  // al abrir: el motor no decide a qué se apuesta, así que hasta que el usuario
-  // elija no se muestra ninguna estimación.
-  const [selectedBetId, setSelectedBetId] = useState<string | null>(null);
+  const [history, setHistory] = useState<RecommendationRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [manual, setManual] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [editingAjustes, setEditingAjustes] = useState(false);
   const [ajTableLimit, setAjTableLimit] = useState("");
   const [ajLossLimit, setAjLossLimit] = useState("");
 
   const load = useCallback(async () => {
-    const [s, eb] = await Promise.all([
-      withToken((t) => sessionsApi.get(t, sessionId)),
-      withToken((t) => bankrollApi.eligibleBets(t, sessionId)),
-    ]);
-    // Si la apuesta elegida para estimar el riesgo ya no está en la lista,
-    // pedirla daría un 422 que tumbaría toda la pantalla. Se descarta y se sigue
-    // sin estimación.
-    const betId =
-      selectedBetId !== null && eb.some((b) => b.id === selectedBetId)
-        ? selectedBetId
-        : undefined;
-    if (selectedBetId !== null && betId === undefined) setSelectedBetId(null);
-    const [v, sp, pn, st, pf, bk, pg, bt, sm, rc] = await Promise.all([
+    const s = await withToken((t) => sessionsApi.get(t, sessionId));
+    const [v, sp, bt, sm, rc, hs] = await Promise.all([
       // La variante se pide por id, no listando los juegos: listar con
       // `include_inactive` exige rol admin y daba 403 a un usuario normal.
       withToken((t) => gamesApi.variant(t, s.game_variant_id)),
       withToken((t) => spinsApi.list(t, sessionId)),
-      withToken((t) => analysisApi.suggestions(t, sessionId)),
-      withToken((t) => analysisApi.streak(t, sessionId)),
-      withToken((t) => analysisApi.performance(t, sessionId)),
-      withToken((t) => bankrollApi.suggestion(t, sessionId, { betId })),
-      withToken((t) => bankrollApi.progression(t, sessionId, { stages: 10, betId })),
       withToken((t) => betsApi.list(t, sessionId)),
       withToken((t) => sessionsApi.summary(t, sessionId)),
       // La recomendación se recalcula sola: `load()` corre tras cada giro.
       withToken((t) => recommendationApi.latest(t, sessionId)),
+      // Para explicar cómo movió las progresiones la recomendación anterior.
+      withToken((t) => recommendationApi.history(t, sessionId)),
     ]);
     setSession(s);
     setVariant(v);
     setSpins(sp);
-    setPanel(pn);
-    setStreak(st);
-    setPerformance(pf);
-    setBankroll(bk);
-    setProgression(pg);
-    setEligibleBets(eb);
     setBets(bt);
     setSummary(sm);
     setRecommendation(rc);
-  }, [withToken, sessionId, selectedBetId]);
+    setHistory(hs);
+  }, [withToken, sessionId]);
 
   useEffect(() => {
     if (loading) return;
@@ -163,6 +121,24 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
     try {
       await action();
       await load();
+    } catch (e) {
+      setError(describe(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  /**
+   * Anotar o quitar una apuesta pendiente solo cambia la lista de apuestas: la
+   * banca, los escalones y la recomendación se mueven cuando entra el número.
+   * Por eso aquí no se recarga toda la mesa.
+   */
+  async function runBets(action: () => Promise<unknown>) {
+    setPending(true);
+    setError(null);
+    try {
+      await action();
+      setBets(await withToken((t) => betsApi.list(t, sessionId)));
     } catch (e) {
       setError(describe(e));
     } finally {
@@ -187,26 +163,24 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   if (!session || !variant) return null;
 
   const abierta = session.status === "active";
-  const categoryLabels = Object.fromEntries(
-    variant.config.categories.map((c) => [c.id, c.label]),
-  );
+  // Banca sin la apuesta base o límite de pérdida alcanzado: abierta, sin apuestas.
+  const parada = abierta && session.stop_reason !== null;
   const ultimo = spins.at(-1) ?? null;
+  const penultimo = spins.at(-2) ?? null;
   const masRecientePrimero = [...spins].reverse();
 
-  // El resultado de la última ronda sale de los datos, no de lo que se vio en
-  // pantalla: sobrevive a recargar la página y aparece aunque el escalón no se
-  // haya movido (ganar en la apuesta base también es un resultado).
-  const apuestasDelUltimo = ultimo
-    ? bets.filter((b) => b.spin_id === ultimo.id && b.status === "resolved")
-    : [];
-  const ultimaRonda: LastRound | null =
-    ultimo && apuestasDelUltimo.length > 0
-      ? {
-          resultValue: ultimo.result_value,
-          net: apuestasDelUltimo.reduce((acc, b) => acc + (b.net_change ?? 0), 0),
-          stageBefore: ultimo.stage_martingale_before,
-        }
-      : null;
+  const pendientes = bets.filter((b) => b.status === "pending");
+  const disponible =
+    session.bankroll_current - pendientes.reduce((acc, b) => acc + b.amount, 0);
+  // Cambia cuando cambia algo que mueve los montos de las gestiones.
+  const bankrollVersion = [
+    spins.length,
+    session.bankroll_current,
+    session.stage_martingale,
+    session.stage_two_sector,
+    session.table_limit,
+    session.loss_limit,
+  ].join("|");
 
   const limiteActual = session.loss_limit;
   const limiteNuevo = ajLossLimit === "" ? null : Number(ajLossLimit);
@@ -249,6 +223,15 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
       </AppHeader>
 
       <main className="mx-auto grid max-w-6xl items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
+        <div className="lg:col-span-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-ink-sunken px-3 py-2 text-sm font-bold text-muted transition-colors hover:border-gold/50 hover:text-white"
+          >
+            <span aria-hidden>←</span> Volver al menú
+          </Link>
+        </div>
+
         {error ? (
           <div className="lg:col-span-2">
             <ErrorBox message={error} />
@@ -262,7 +245,30 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
         */}
         <div className="space-y-5">
           {!abierta ? <SummaryPanel summary={summary} /> : null}
-          {abierta ? <RecommendationCard recommendation={recommendation} /> : null}
+          {parada ? (
+            <StopCard
+              session={session}
+              busy={pending}
+              onClose={() => run(() => withToken((t) => sessionsApi.close(t, sessionId)))}
+            />
+          ) : abierta ? (
+            <RecommendationCard
+              recommendation={recommendation}
+              registration={{
+                config: variant.config,
+                available: disponible,
+                pendingBets: pendientes,
+                busy: pending,
+                // Dos zonas (dos docenas) son dos apuestas: una por casilla.
+                onRegister: (bodies) =>
+                  runBets(async () => {
+                    for (const body of bodies) {
+                      await withToken((t) => betsApi.create(t, sessionId, body));
+                    }
+                  }),
+              }}
+            />
+          ) : null}
         </div>
 
         {/*
@@ -322,30 +328,36 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
 
           {abierta ? (
             <div className="mt-4 border-t border-edge pt-4">
-              <BankrollPlanCard
-                suggestion={bankroll}
-                progression={progression}
-                lastRound={ultimaRonda}
-                lossLimit={session.loss_limit}
-                lostSoFar={session.bankroll_start - session.bankroll_current}
+              <RoundStatus
+                session={session}
+                lastSpin={ultimo}
+                previousSpin={penultimo}
+                bets={bets}
+                history={history}
               />
             </div>
           ) : null}
 
-          {abierta ? (
+          {parada ? (
+            <p className="mt-4 border-t border-edge pt-4 text-xs text-muted">
+              Esta mesa ya no acepta apuestas. Puedes seguir anotando números o
+              deshacer el último si quedó mal ingresado.
+            </p>
+          ) : abierta ? (
             <div className="mt-4 border-t border-edge pt-4">
               <BetRow
                 config={variant.config}
                 bets={bets}
                 bankrollCurrent={session.bankroll_current}
-                suggestedBet={bankroll?.suggested_bet ?? null}
+                baseBet={session.base_bet}
+                recommends={recommendation?.decision === "RECOMMEND"}
                 abierta={abierta}
                 pending={pending}
                 onPlace={(body) =>
-                  run(() => withToken((t) => betsApi.create(t, sessionId, body)))
+                  runBets(() => withToken((t) => betsApi.create(t, sessionId, body)))
                 }
                 onCancel={(betId) =>
-                  run(() => withToken((t) => betsApi.cancel(t, sessionId, betId)))
+                  runBets(() => withToken((t) => betsApi.cancel(t, sessionId, betId)))
                 }
               />
             </div>
@@ -434,33 +446,11 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
           cuando, no a cada giro: va plegado y a ancho completo.
         */}
         <div className="space-y-3 lg:col-span-2">
-          <Detalle titulo="Tasa de coincidencia del motor">
-            <PerformancePanel performance={performance} />
-          </Detalle>
-
           {abierta ? (
             <Detalle titulo="Gestión de banca y tabla de progresión">
-              <BankrollPanel
-                suggestion={bankroll}
-                progression={progression}
-                eligibleBets={eligibleBets}
-                selectedBetId={selectedBetId}
-                onSelectBet={setSelectedBetId}
-              />
+              <BankrollPanel sessionId={sessionId} version={bankrollVersion} />
             </Detalle>
           ) : null}
-
-          {/*
-            Las señales del motor núcleo siguen aquí, plegadas: desde la Fase 3
-            son el respaldo de la recomendación, no el protagonista (§2.10).
-          */}
-          <Detalle titulo="Señales por categoría y racha activa">
-            <SignalBoard panel={panel} streak={streak} categoryLabels={categoryLabels} />
-          </Detalle>
-
-          <Detalle titulo="Todas las categorías, incluidas las señales débiles">
-            <AllCategoriesPanel panel={panel} categoryLabels={categoryLabels} />
-          </Detalle>
 
           <Detalle titulo="Apuestas de esta sesión">
             <BetHistory bets={bets} />
@@ -492,6 +482,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                     min={1}
                     value={ajTableLimit}
                     onChange={(e) => setAjTableLimit(e.target.value)}
+                    info={AYUDA.limiteMesa}
                   />
 
                   <Field
@@ -502,6 +493,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
                     placeholder="Sin límite"
                     value={ajLossLimit}
                     onChange={(e) => setAjLossLimit(e.target.value)}
+                    info={AYUDA.limitePerdida}
                     hint={
                       limiteActual === null
                         ? "Cuánto estás dispuesto a perder en esta sesión. Una vez fijado se puede bajar, no subir."

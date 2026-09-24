@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
 
 BET_STATUSES = ("pending", "resolved", "cancelled")
+BET_STRATEGIES = ("flat", "martingale", "two_sector_recovery")
 
 
 class Bet(Base):
@@ -27,6 +28,13 @@ class Bet(Base):
     # Si el usuario siguio o no la sugerencia estadistica mostrada. Alimenta la
     # auto-evaluacion (§2.7); no implica que la sugerencia anticipara el resultado.
     followed_suggestion: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Gestion de banca con la que se hizo la apuesta, si siguio una. Es lo que
+    # hace avanzar el escalon de esa progresion al resolverse el giro: sin
+    # apuesta anotada con una gestion, su serie no se mueve. Null en una
+    # apuesta manual por fuera de las progresiones.
+    strategy: Mapped[str | None] = mapped_column(
+        enum_col(*BET_STRATEGIES, name="bet_strategy")
+    )
     status: Mapped[str] = mapped_column(
         enum_col(*BET_STATUSES, name="bet_status"), default="pending", nullable=False
     )

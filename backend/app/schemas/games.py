@@ -69,7 +69,7 @@ class GameVariantConfig(BaseModel):
     allowed_combinations: list[AllowedCombination] = []
     # `signal_score` a partir del cual el motor recomienda apostar. Configurable
     # por variante desde el admin; por debajo la decisión es NO APOSTAR.
-    recommendation_threshold: float = Field(default=60, ge=0, le=100)
+    recommendation_threshold: float = Field(default=50, ge=0, le=100)
 
     @field_validator("categories")
     @classmethod

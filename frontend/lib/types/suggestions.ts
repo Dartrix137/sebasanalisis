@@ -153,11 +153,20 @@ export interface SuggestionSnapshot {
 export type RecommendationDecision = "RECOMMEND" | "NO_BET";
 
 /**
- * Banda del `signal_score`: 0-39 débil, 40-59 media, 60-79 fuerte,
- * 80-100 muy fuerte. Describe la fuerza del criterio interno sobre la muestra
- * ya ocurrida, no la probabilidad de acertar el próximo giro.
+ * Por qué el motor no recomienda apostar: todavía no hay giros suficientes para
+ * medir, o los hay y ningún mercado llega al umbral.
  */
-export type SignalBand = "weak" | "medium" | "strong" | "very_strong";
+export type NoBetReason = "insufficient_data" | "below_threshold";
+
+/**
+ * Estado de salida del motor según los dos umbrales (§2.10):
+ * - `weak`: SIN SEÑAL — por debajo de `threshold`. No apostar.
+ * - `medium`: SEÑAL MEDIA — de `threshold` a `strong_threshold`.
+ * - `strong`: SEÑAL FUERTE — desde `strong_threshold`.
+ * Describe la fuerza del criterio interno sobre la muestra ya ocurrida, no la
+ * probabilidad de acertar el próximo giro.
+ */
+export type SignalBand = "weak" | "medium" | "strong";
 
 /** Un NO APOSTAR se queda en `PENDING`: no hubo nada que acertar ni que fallar. */
 export type RecommendationOutcome = "PENDING" | "HIT" | "MISS";
@@ -245,7 +254,14 @@ export interface MarketStakeResponse {
 export interface RecommendationResponse {
   session_id: UUID;
   decision: RecommendationDecision;
+  /** null con RECOMMEND. */
+  no_bet_reason: NoBetReason | null;
+  /** Giros por debajo de los cuales un NO_BET es por falta de información. */
+  min_spins_for_signal: number;
+  /** Umbral mínimo: desde aquí hay recomendación (SEÑAL MEDIA). */
   threshold: number;
+  /** Umbral alto: desde aquí la señal es FUERTE. */
+  strong_threshold: number;
   signal_score: number;
   signal_band: SignalBand;
   /** El mercado a apostar. null con NO_BET. */

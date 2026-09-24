@@ -59,9 +59,10 @@ class GameSession(Base):
     # La plana no tiene contador porque no tiene progresion: siempre esta en el
     # escalon 0. Guardarlo seria una columna que solo puede valer 0.
     #
-    # Los tres avanzan con el mismo cierre de la recomendacion anterior
-    # (`engine.bankroll.advance_stages_on_outcome`), asi que cada escalon dice
-    # donde estaria quien hubiera seguido siempre al motor con esa progresion.
+    # Cada escalon solo avanza cuando el usuario aposto con esa gestion
+    # (`bets.strategy`), segun el cierre de la recomendacion
+    # (`engine.bankroll.advance_stages_on_outcome`): es el de la serie que lleva
+    # de verdad.
     stage_martingale: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     stage_two_sector: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

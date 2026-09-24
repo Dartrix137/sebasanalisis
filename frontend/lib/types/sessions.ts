@@ -34,6 +34,9 @@ export interface UpdateSessionRequest {
   loss_limit?: number | null;
 }
 
+/** Por qué la mesa dejó de ofrecer apuestas. */
+export type StopReason = "bankroll_exhausted" | "loss_limit_reached";
+
 export interface SessionResponse {
   id: UUID;
   user_id: UUID;
@@ -54,6 +57,13 @@ export interface SessionResponse {
   stage_two_sector: number;
   started_at: string; // ISO 8601
   closed_at: string | null;
+  /**
+   * null mientras se pueda apostar. Con valor, la mesa sigue abierta pero no
+   * acepta apuestas: la banca no cubre la apuesta base o se alcanzó el límite
+   * de pérdida. Lo calcula el servidor; deshacer el giro que lo provocó lo
+   * levanta solo.
+   */
+  stop_reason: StopReason | null;
 }
 
 /** Resumen de la sesión (§4). Solo describe lo que ya pasó. */

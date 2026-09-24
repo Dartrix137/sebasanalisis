@@ -6,7 +6,10 @@ Que hace y que no
 -----------------
 Recorre el catalogo de mercados de la variante, le pone a cada uno un
 `signal_score` de 0 a 100 y devuelve UNA sola recomendacion, o `NO_BET` si
-ninguna alternativa alcanza el umbral. El score mide **cuanto se separo la
+ninguna alternativa alcanza el umbral. Hay tres salidas y nada mas: SEÑAL
+FUERTE (desde el umbral alto), SEÑAL MEDIA (del minimo al alto) y SIN SEÑAL
+(por debajo del minimo, no apostar). Solo se evalua la mejor alternativa: una
+segunda que tambien pase el umbral no se ofrece como otra apuesta. El score mide **cuanto se separo la
 muestra ya ocurrida de lo que la mesa da de por si**, no la probabilidad de
 acertar el proximo giro: esa sigue siendo la teorica, y no la cambia nada de lo
 que se calcule aqui.
@@ -56,27 +59,47 @@ WINDOWS: tuple[int, ...] = (10, 20, 50, 100)
 #: clasico "dos sigmas", pero aqui se evalua sobre ~18 mercados solapados a la
 #: vez y sin corregir por comparaciones multiples, asi que llegar a 2 no dice
 #: que la desviacion se distinga del azar. Es la escala con la que el producto
-#: decide cada cuanto habla. Medido por simulacion sobre ruedas europeas justas
-#: (150 sesiones x 150 giros): con Z_MAX = 2.0 y umbral 60 el motor recomienda
-#: en ~31% de los giros; con 2.5 baja a ~12% y con 3.0 a ~4%. La tasa de
-#: coincidencia y el ROI no mejoran en ningun caso — se quedan en la ventaja de
-#: la casa, que es lo esperado y lo que el backtest de `scripts/` confirma.
-Z_MAX = 2.0
+#: decide cada cuanto habla, y junto con los pesos, cuantas de esas veces la
+#: señal llega a FUERTE.
+#:
+#: Recalibrado el 2026-09-24 (antes: Z_MAX 2.0 y pesos 0.45/0.25/0.30). Con la
+#: calibracion anterior el motor recomendaba en ~35% de los giros, pero solo ~5%
+#: de esas recomendaciones llegaba a 80: la consistencia, que es un cociente y no
+#: una magnitud, regalaba sus 30 puntos a cualquier inclinacion pareja por chica
+#: que fuera, y apelotonaba los scores entre 60 y 79. Bajarle el peso y acortar
+#: Z_MAX mantiene la frecuencia con la que el motor habla y abre el rango de
+#: arriba. Medido sobre ruedas europeas justas con semillas distintas a la del
+#: backtest (200 sesiones x 150 giros para calibrar; otras 200 y 40 de 400
+#: giros, estas con chi-cuadrado activo, para validar): con umbral 60 el motor
+#: recomienda en ~32-36% de los giros y ~18% de las recomendaciones son FUERTE
+#: (~1 de cada 16 giros); con el umbral por defecto de 50, en ~58-60% y ~11%.
+#: Las FUERTE son las mismas: el umbral alto no depende del minimo. La tasa de coincidencia y el ROI no mejoran con ninguna
+#: calibracion — se quedan en la ventaja de la casa, que es lo esperado y lo que
+#: el backtest de `scripts/` confirma. FUERTE dice que la muestra se separo mas,
+#: no que se acierte mas.
+Z_MAX = 1.6
 
 #: Pesos de los tres componentes. Suman 1.0.
-WEIGHT_DEVIATION = 0.45
-WEIGHT_RECENCY = 0.25
-WEIGHT_CONSISTENCY = 0.30
+WEIGHT_DEVIATION = 0.58
+WEIGHT_RECENCY = 0.32
+WEIGHT_CONSISTENCY = 0.10
 
 #: Puntos que suma el respaldo del chi-cuadrado, solo si la prueba esta activa
 #: para la categoria del mercado: >=200 giros y p corregido por
 #: Benjamini-Hochberg < 0.05 (§2.4). Es un bono, no un requisito.
 CHI_SQUARE_BONUS = 10.0
 
-#: Limites de banda (§2.10). El valor es el piso inclusivo de cada banda.
-BAND_MEDIUM = 40.0
-BAND_STRONG = 60.0
-BAND_VERY_STRONG = 80.0
+#: Umbral alto (§2.10): piso inclusivo de SEÑAL FUERTE. El umbral minimo, el
+#: de SEÑAL MEDIA, es el `recommendation_threshold` de la variante.
+STRONG_THRESHOLD = 80.0
+
+
+#: Por debajo de estos giros no hay recomendacion, llegue o no el score al
+#: umbral, y el NO_BET se explica como falta de informacion: es la ventana mas
+#: corta, y sin ella completa ni siquiera hay dos tramos para medir la
+#: consistencia. Hasta el 2026-09-24 solo cambiaba la explicacion; con el umbral
+#: en 50, cinco rojos seguidos ya daban 51 puntos y una recomendacion.
+MIN_SPINS_FOR_SIGNAL = WINDOWS[0]
 
 
 class Decision(str, Enum):
@@ -86,27 +109,52 @@ class Decision(str, Enum):
     no_bet = "NO_BET"
 
 
+class NoBetReason(str, Enum):
+    """Por que el motor no recomienda apostar."""
+
+    insufficient_data = "insufficient_data"
+    below_threshold = "below_threshold"
+
+
+def no_bet_reason(decision: Decision, total_spins: int) -> NoBetReason | None:
+    """El motivo de un NO_BET, o None si hay recomendacion."""
+    if decision is Decision.recommend:
+        return None
+    if total_spins < MIN_SPINS_FOR_SIGNAL:
+        return NoBetReason.insufficient_data
+    return NoBetReason.below_threshold
+
+
 class SignalBand(str, Enum):
-    """Banda de fuerza del `signal_score`.
+    """Los tres estados de salida del motor (§2.10).
 
     Describe la fuerza del criterio interno sobre la muestra ya ocurrida. No es
     una probabilidad de acertar.
     """
 
-    weak = "weak"                # 0-39    DEBIL
-    medium = "medium"            # 40-59   MEDIA
-    strong = "strong"            # 60-79   FUERTE
-    very_strong = "very_strong"  # 80-100  MUY FUERTE
+    weak = "weak"      # por debajo del umbral minimo: SIN SEÑAL, no apostar
+    medium = "medium"  # del umbral minimo al alto: SEÑAL MEDIA
+    strong = "strong"  # desde el umbral alto: SEÑAL FUERTE
 
 
-def band_for(score: float) -> SignalBand:
-    if score >= BAND_VERY_STRONG:
-        return SignalBand.very_strong
-    if score >= BAND_STRONG:
+def strong_threshold_for(threshold: float) -> float:
+    """El piso efectivo de SEÑAL FUERTE: nunca por debajo del umbral minimo."""
+    return max(STRONG_THRESHOLD, threshold)
+
+
+def band_for(score: float, threshold: float) -> SignalBand:
+    """La banda de un score contra el umbral minimo de la variante.
+
+    La banda y la decision salen del mismo umbral, asi que una banda MEDIA o
+    FUERTE siempre lleva recomendacion y SIN SEÑAL nunca. Si el admin sube el
+    umbral minimo por encima del alto, desaparece la MEDIA: todo lo que se
+    recomienda es FUERTE.
+    """
+    if score < threshold:
+        return SignalBand.weak
+    if score >= strong_threshold_for(threshold):
         return SignalBand.strong
-    if score >= BAND_MEDIUM:
-        return SignalBand.medium
-    return SignalBand.weak
+    return SignalBand.medium
 
 
 # --------------------------------------------------------------------------
@@ -396,10 +444,11 @@ def score_market(
     results: Sequence[str],
     chi: ChiSquareResult | None = None,
     lambda_: float = RECENCY_LAMBDA,
+    threshold: float | None = None,
 ) -> ScoredMarket:
     """`signal_score` de un mercado sobre el historial dado (§2.10).
 
-        score = 100 x (0.45 D + 0.25 R + 0.30 C) + 10 [chi-cuadrado activo]
+        score = 100 x (0.58 D + 0.32 R + 0.10 C) + 10 [chi-cuadrado activo]
 
     - **D** (desviacion): `z` de la ventana mas larga disponible, la que mas
       muestra tiene, dividido por `Z_MAX` y acotado a [0, 1].
@@ -413,7 +462,11 @@ def score_market(
     Solo cuenta la desviacion POR ENCIMA de la teorica: un mercado que salio
     menos de lo esperado da componentes en 0, no negativos. Recomendar lo que no
     ha salido seria la falacia del jugador, y el producto no juega a eso.
+
+    `threshold` es el umbral minimo con el que se asigna la banda; por defecto,
+    el de la variante.
     """
+    umbral = threshold if threshold is not None else config.recommendation_threshold
     ventanas = available_windows(len(results))
     if not ventanas:
         vacio = ScoreComponents(
@@ -428,7 +481,7 @@ def score_market(
         return ScoredMarket(
             market=market,
             signal_score=0.0,
-            signal_band=band_for(0.0),
+            signal_band=band_for(0.0, umbral),
             components=vacio,
             windows=(),
             chi_square_pvalue_adjusted=None,
@@ -453,7 +506,7 @@ def score_market(
         peso_c = WEIGHT_CONSISTENCY
     else:
         # Un solo tramo no dice nada sobre consistencia. Dejarla en 0 castigaria
-        # a todos por igual, y darla por 1 regalaria 30 puntos a cualquier
+        # a todos por igual, y darla por 1 regalaria sus puntos a cualquier
         # mercado que asome por encima de la teorica en los primeros giros.
         C = None
         peso_c = 0.0
@@ -473,7 +526,7 @@ def score_market(
     return ScoredMarket(
         market=market,
         signal_score=score,
-        signal_band=band_for(score),
+        signal_band=band_for(score, umbral),
         components=componentes,
         windows=stats,
         chi_square_pvalue_adjusted=(
@@ -513,7 +566,7 @@ class Recommendation:
 
     @property
     def signal_band(self) -> SignalBand:
-        return self.best.signal_band if self.best else band_for(0.0)
+        return self.best.signal_band if self.best else band_for(0.0, self.threshold)
 
 
 def _tie_break_key(config: GameConfig, scored: ScoredMarket) -> tuple:
@@ -552,12 +605,16 @@ def recommend(
     valor sin tocar la configuracion guardada.
     """
     umbral = threshold if threshold is not None else config.recommendation_threshold
-    chis = all_chi_square_signals(
-        config, results if full_history is None else full_history
-    )
+    historial = results if full_history is None else full_history
+    chis = all_chi_square_signals(config, historial)
+
+    # Sin los giros minimos no se recomienda nada, y la banda tiene que decir
+    # lo mismo: con un umbral infinito todo queda SIN SEÑAL.
+    hay_datos = len(historial) >= MIN_SPINS_FOR_SIGNAL
+    umbral_banda = umbral if hay_datos else math.inf
 
     puntuados = [
-        score_market(config, m, results, chis.get(m.category_id), lambda_)
+        score_market(config, m, results, chis.get(m.category_id), lambda_, umbral_banda)
         for m in market_catalog(config)
     ]
     puntuados.sort(key=lambda s: _tie_break_key(config, s))
@@ -569,7 +626,9 @@ def recommend(
 
     mejor = puntuados[0]
     decision = (
-        Decision.recommend if mejor.signal_score >= umbral else Decision.no_bet
+        Decision.recommend
+        if hay_datos and mejor.signal_score >= umbral
+        else Decision.no_bet
     )
     return Recommendation(
         decision=decision,

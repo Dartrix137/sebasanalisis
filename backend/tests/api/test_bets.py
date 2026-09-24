@@ -586,3 +586,67 @@ def test_se_puede_deshacer_hasta_dejar_la_mesa_vacia(
         f"/sessions/{sesion}/suggestions/latest", headers=auth(user_token)
     ).json()
     assert len(panel["top"]) > 0
+
+
+# ---------- Estado de parar ----------
+
+
+def _vaciar_la_banca(client, token, sid):
+    """Apuesta casi toda la banca a rojo y sale negro: quedan 500, menos que la
+    apuesta base de 1.000."""
+    assert _apostar(client, token, sid, amount=99_500).status_code == 201
+    assert _girar(client, token, sid, "2").status_code == 201
+
+
+def test_una_mesa_con_banca_no_esta_en_estado_de_parar(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    assert _sesion(client, user_token, sesion)["stop_reason"] is None
+
+
+def test_sin_banca_para_la_base_la_mesa_para_y_no_acepta_apuestas(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    _vaciar_la_banca(client, user_token, sesion)
+    datos = _sesion(client, user_token, sesion)
+    assert datos["bankroll_current"] == 500
+    assert datos["stop_reason"] == "bankroll_exhausted"
+    # Sigue abierta: no se cierra sola.
+    assert datos["status"] == "active"
+
+    # Ni siquiera lo que queda: el estado lo decide el servidor.
+    r = _apostar(client, user_token, sesion, amount=500)
+    assert r.status_code == 422
+    assert "apuesta base" in r.json()["detail"]
+
+
+def test_deshacer_el_giro_que_vacio_la_banca_levanta_el_estado(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """Un numero mal ingresado no deja la mesa trabada."""
+    _vaciar_la_banca(client, user_token, sesion)
+    giros = client.get(f"/sessions/{sesion}/spins", headers=auth(user_token)).json()
+    r = client.delete(f"/sessions/{sesion}/spins/{giros[-1]['id']}", headers=auth(user_token))
+    assert r.status_code == 204
+
+    datos = _sesion(client, user_token, sesion)
+    assert datos["bankroll_current"] == 100_000
+    assert datos["stop_reason"] is None
+
+
+def test_alcanzar_el_limite_de_perdida_para_la_mesa(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    r = client.patch(
+        f"/sessions/{sesion}", json={"loss_limit": 5_000}, headers=auth(user_token)
+    )
+    assert r.status_code == 200, r.text
+    assert _apostar(client, user_token, sesion, amount=5_000).status_code == 201
+    assert _girar(client, user_token, sesion, "2").status_code == 201
+
+    datos = _sesion(client, user_token, sesion)
+    assert datos["bankroll_current"] == 95_000
+    assert datos["stop_reason"] == "loss_limit_reached"
+    r = _apostar(client, user_token, sesion, amount=1_000)
+    assert r.status_code == 422
+    assert "límite de pérdida" in r.json()["detail"]

@@ -5,6 +5,7 @@
  */
 
 import type { UUID } from "./auth";
+import type { BankrollStrategy } from "./sessions";
 
 export type BetStatus = "pending" | "resolved" | "cancelled";
 
@@ -17,6 +18,11 @@ export interface CreateBetRequest {
    * ver una señal. No implica que la señal anticipara el resultado.
    */
   followed_suggestion: boolean;
+  /**
+   * Gestión con la que se apostó. Solo esa progresión avanza de escalón al
+   * resolverse el giro; se omite en una apuesta manual por fuera de ellas.
+   */
+  strategy?: BankrollStrategy | null;
 }
 
 export interface BetResponse {
@@ -27,6 +33,7 @@ export interface BetResponse {
   option_label: string;
   amount: number;
   followed_suggestion: boolean;
+  strategy: BankrollStrategy | null;
   status: BetStatus;
   won: boolean | null;
   /** Total devuelto por la mesa: lo apostado más la ganancia. Cero si se perdió. */
