@@ -6,9 +6,10 @@ Que hace y que no
 -----------------
 Recorre el catalogo de mercados de la variante, le pone a cada uno un
 `signal_score` de 0 a 100 y devuelve UNA sola recomendacion, o `NO_BET` si
-ninguna alternativa alcanza el umbral. Hay tres salidas y nada mas: SEÑAL
-FUERTE (desde el umbral alto), SEÑAL MEDIA (del minimo al alto) y SIN SEÑAL
-(por debajo del minimo, no apostar). Solo se evalua la mejor alternativa: una
+ninguna alternativa alcanza el umbral. Hay cuatro salidas y nada mas: SEÑAL
+FUERTE (desde el umbral alto), SEÑAL MEDIA (del umbral medio al alto), SEÑAL
+DEBIL (del umbral debil al medio: solo apuesta base) y SIN SEÑAL (por debajo
+del debil, no apostar). Solo se evalua la mejor alternativa: una
 segunda que tambien pase el umbral no se ofrece como otra apuesta. El score mide **cuanto se separo la
 muestra ya ocurrida de lo que la mesa da de por si**, no la probabilidad de
 acertar el proximo giro: esa sigue siendo la teorica, y no la cambia nada de lo
@@ -89,8 +90,9 @@ WEIGHT_CONSISTENCY = 0.10
 #: Benjamini-Hochberg < 0.05 (§2.4). Es un bono, no un requisito.
 CHI_SQUARE_BONUS = 10.0
 
-#: Umbral alto (§2.10): piso inclusivo de SEÑAL FUERTE. El umbral minimo, el
-#: de SEÑAL MEDIA, es el `recommendation_threshold` de la variante.
+#: Umbral alto (§2.10): piso inclusivo de SEÑAL FUERTE. Los otros dos salen de
+#: la variante: `recommendation_threshold` es el piso de SEÑAL MEDIA y
+#: `weak_threshold` el de SEÑAL DEBIL, que es el minimo para recomendar algo.
 STRONG_THRESHOLD = 80.0
 
 
@@ -126,30 +128,39 @@ def no_bet_reason(decision: Decision, total_spins: int) -> NoBetReason | None:
 
 
 class SignalBand(str, Enum):
-    """Los tres estados de salida del motor (§2.10).
+    """Los cuatro estados de salida del motor (§2.10).
 
     Describe la fuerza del criterio interno sobre la muestra ya ocurrida. No es
     una probabilidad de acertar.
     """
 
-    weak = "weak"      # por debajo del umbral minimo: SIN SEÑAL, no apostar
-    medium = "medium"  # del umbral minimo al alto: SEÑAL MEDIA
+    none = "none"      # por debajo del umbral debil: SIN SEÑAL, no apostar
+    weak = "weak"      # del umbral debil al medio: SEÑAL DEBIL, solo apuesta base
+    medium = "medium"  # del umbral medio al alto: SEÑAL MEDIA
     strong = "strong"  # desde el umbral alto: SEÑAL FUERTE
 
 
 def strong_threshold_for(threshold: float) -> float:
-    """El piso efectivo de SEÑAL FUERTE: nunca por debajo del umbral minimo."""
+    """El piso efectivo de SEÑAL FUERTE: nunca por debajo del umbral medio."""
     return max(STRONG_THRESHOLD, threshold)
 
 
-def band_for(score: float, threshold: float) -> SignalBand:
-    """La banda de un score contra el umbral minimo de la variante.
+def weak_threshold_for(weak_threshold: float, threshold: float) -> float:
+    """El piso efectivo de SEÑAL DEBIL: nunca por encima del umbral medio.
+    Igualarlo al medio apaga la banda DEBIL."""
+    return min(weak_threshold, threshold)
 
-    La banda y la decision salen del mismo umbral, asi que una banda MEDIA o
-    FUERTE siempre lleva recomendacion y SIN SEÑAL nunca. Si el admin sube el
-    umbral minimo por encima del alto, desaparece la MEDIA: todo lo que se
-    recomienda es FUERTE.
+
+def band_for(score: float, threshold: float, weak_threshold: float) -> SignalBand:
+    """La banda de un score contra los umbrales de la variante.
+
+    La banda y la decision salen de los mismos umbrales, asi que DEBIL, MEDIA y
+    FUERTE siempre llevan recomendacion y SIN SEÑAL nunca. Si el admin sube el
+    umbral medio por encima del alto, desaparece la MEDIA; si iguala el debil
+    al medio, desaparece la DEBIL.
     """
+    if score < weak_threshold_for(weak_threshold, threshold):
+        return SignalBand.none
     if score < threshold:
         return SignalBand.weak
     if score >= strong_threshold_for(threshold):
@@ -445,6 +456,7 @@ def score_market(
     chi: ChiSquareResult | None = None,
     lambda_: float = RECENCY_LAMBDA,
     threshold: float | None = None,
+    weak_threshold: float | None = None,
 ) -> ScoredMarket:
     """`signal_score` de un mercado sobre el historial dado (§2.10).
 
@@ -463,10 +475,11 @@ def score_market(
     menos de lo esperado da componentes en 0, no negativos. Recomendar lo que no
     ha salido seria la falacia del jugador, y el producto no juega a eso.
 
-    `threshold` es el umbral minimo con el que se asigna la banda; por defecto,
-    el de la variante.
+    `threshold` (umbral medio) y `weak_threshold` (umbral debil) son con los que
+    se asigna la banda; por defecto, los de la variante.
     """
     umbral = threshold if threshold is not None else config.recommendation_threshold
+    umbral_debil = weak_threshold if weak_threshold is not None else config.weak_threshold
     ventanas = available_windows(len(results))
     if not ventanas:
         vacio = ScoreComponents(
@@ -481,7 +494,7 @@ def score_market(
         return ScoredMarket(
             market=market,
             signal_score=0.0,
-            signal_band=band_for(0.0, umbral),
+            signal_band=band_for(0.0, umbral, umbral_debil),
             components=vacio,
             windows=(),
             chi_square_pvalue_adjusted=None,
@@ -526,7 +539,7 @@ def score_market(
     return ScoredMarket(
         market=market,
         signal_score=score,
-        signal_band=band_for(score, umbral),
+        signal_band=band_for(score, umbral, umbral_debil),
         components=componentes,
         windows=stats,
         chi_square_pvalue_adjusted=(
@@ -550,7 +563,10 @@ class Recommendation:
     """
 
     decision: Decision
+    #: Umbral medio: piso de SEÑAL MEDIA.
     threshold: float
+    #: Umbral debil efectivo: piso de SEÑAL DEBIL y minimo para recomendar.
+    weak_threshold: float
     best: ScoredMarket | None
     #: Todos los mercados, ya ordenados por el desempate. Incluye a `best`.
     candidates: tuple[ScoredMarket, ...]
@@ -566,7 +582,11 @@ class Recommendation:
 
     @property
     def signal_band(self) -> SignalBand:
-        return self.best.signal_band if self.best else band_for(0.0, self.threshold)
+        return (
+            self.best.signal_band
+            if self.best
+            else band_for(0.0, self.threshold, self.weak_threshold)
+        )
 
 
 def _tie_break_key(config: GameConfig, scored: ScoredMarket) -> tuple:
@@ -593,6 +613,7 @@ def recommend(
     lambda_: float = RECENCY_LAMBDA,
     full_history: Sequence[str] | None = None,
     threshold: float | None = None,
+    weak_threshold: float | None = None,
 ) -> Recommendation:
     """La recomendacion para el giro siguiente.
 
@@ -601,10 +622,14 @@ def recommend(
     pierde entero cada giro que se le recorte (§2.4), mientras que a las señales
     ponderadas recortar no les cuesta casi nada.
 
-    `threshold` gana sobre el de la variante; sirve para que el admin pruebe un
-    valor sin tocar la configuracion guardada.
+    `threshold` gana sobre el umbral medio de la variante; sirve para que el
+    admin pruebe un valor sin tocar la configuracion guardada; `weak_threshold`,
+    igual sobre el debil. El debil nunca queda por encima del medio.
     """
     umbral = threshold if threshold is not None else config.recommendation_threshold
+    umbral_debil = weak_threshold_for(
+        weak_threshold if weak_threshold is not None else config.weak_threshold, umbral
+    )
     historial = results if full_history is None else full_history
     chis = all_chi_square_signals(config, historial)
 
@@ -612,27 +637,41 @@ def recommend(
     # lo mismo: con un umbral infinito todo queda SIN SEÑAL.
     hay_datos = len(historial) >= MIN_SPINS_FOR_SIGNAL
     umbral_banda = umbral if hay_datos else math.inf
+    umbral_debil_banda = umbral_debil if hay_datos else math.inf
 
     puntuados = [
-        score_market(config, m, results, chis.get(m.category_id), lambda_, umbral_banda)
+        score_market(
+            config,
+            m,
+            results,
+            chis.get(m.category_id),
+            lambda_,
+            umbral_banda,
+            umbral_debil_banda,
+        )
         for m in market_catalog(config)
     ]
     puntuados.sort(key=lambda s: _tie_break_key(config, s))
 
     if not puntuados:
         return Recommendation(
-            decision=Decision.no_bet, threshold=umbral, best=None, candidates=()
+            decision=Decision.no_bet,
+            threshold=umbral,
+            weak_threshold=umbral_debil,
+            best=None,
+            candidates=(),
         )
 
     mejor = puntuados[0]
     decision = (
         Decision.recommend
-        if hay_datos and mejor.signal_score >= umbral
+        if hay_datos and mejor.signal_score >= umbral_debil
         else Decision.no_bet
     )
     return Recommendation(
         decision=decision,
         threshold=umbral,
+        weak_threshold=umbral_debil,
         best=mejor,
         candidates=tuple(puntuados),
     )

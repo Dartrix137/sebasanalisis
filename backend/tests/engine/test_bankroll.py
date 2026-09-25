@@ -1088,3 +1088,48 @@ def test_sin_banca_para_la_base_gana_sobre_el_limite() -> None:
     """Si pasan las dos cosas, lo primero que hay que decir es que no queda con
     que apostar."""
     assert stop_reason(500, 100_000, 1_000, 30_000) is StopReason.bankroll_exhausted
+
+# --------------------------------------------------------------------------
+# SEÑAL DEBIL: solo la apuesta base (decidido el 2026-09-24)
+# --------------------------------------------------------------------------
+
+
+def test_con_senal_debil_solo_aplica_la_plana() -> None:
+    assert applies_to_market(Strategy.flat, 2, weak_signal=True) is None
+    assert applies_to_market(Strategy.martingale, 2, weak_signal=True) is not None
+    assert applies_to_market(Strategy.two_sector_recovery, 2, weak_signal=True) is not None
+
+
+def test_las_gestiones_de_una_senal_debil_piden_solo_la_base() -> None:
+    stakes = stakes_for_market(
+        1_000,
+        {Strategy.martingale: 3, Strategy.two_sector_recovery: 2},
+        sectors=2,
+        payout=2.0,
+        bankroll_current=100_000,
+        weak_signal=True,
+    )
+    por_gestion = {s.strategy: s for s in stakes}
+    plana = por_gestion[Strategy.flat]
+    assert plana.applicable
+    assert plana.bet_per_sector == 1_000
+    assert plana.total_bet == 2_000
+    for gestion in (Strategy.martingale, Strategy.two_sector_recovery):
+        assert not por_gestion[gestion].applicable
+        assert "señal débil" in por_gestion[gestion].reason
+        assert por_gestion[gestion].total_bet == 0
+
+
+def test_una_senal_debil_no_avanza_ninguna_progresion() -> None:
+    """Aunque el usuario anote martingala en un giro DEBIL, el escalon no se
+    mueve: esa gestion no se ofrecia."""
+    escalones = {Strategy.martingale: 2, Strategy.two_sector_recovery: 1}
+    tras_fallo = advance_stages_on_outcome(
+        escalones,
+        hit=False,
+        sectors=2,
+        followed=frozenset({Strategy.martingale, Strategy.two_sector_recovery}),
+        weak_signal=True,
+    )
+    assert tras_fallo[Strategy.martingale] == 2
+    assert tras_fallo[Strategy.two_sector_recovery] == 1

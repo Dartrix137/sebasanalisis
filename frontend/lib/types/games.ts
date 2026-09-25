@@ -43,8 +43,13 @@ export interface GameVariantConfig {
   categories: GameCategory[];
   /** Orden significativo: es el orden de catálogo del desempate (§2.10). */
   allowed_combinations: AllowedCombination[];
-  /** `signal_score` a partir del cual se recomienda apostar. 60 por defecto. */
+  /** Umbral medio: `signal_score` desde el que la señal es MEDIA. 50 por defecto. */
   recommendation_threshold: number;
+  /**
+   * Umbral débil: desde aquí hay recomendación (SEÑAL DÉBIL, solo apuesta base).
+   * 35 por defecto; nunca mayor que el medio. Igualarlo al medio apaga la débil.
+   */
+  weak_threshold: number;
 }
 
 export interface CreateGameRequest {

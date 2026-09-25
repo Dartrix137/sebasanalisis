@@ -350,6 +350,7 @@ export const adminApi = {
       limit?: number;
       spins?: number;
       threshold?: number;
+      weakThreshold?: number;
     } = {},
   ) => {
     const qs = new URLSearchParams();
@@ -358,6 +359,9 @@ export const adminApi = {
     if (options.limit !== undefined) qs.set("limit", String(options.limit));
     if (options.spins !== undefined) qs.set("spins", String(options.spins));
     if (options.threshold !== undefined) qs.set("threshold", String(options.threshold));
+    if (options.weakThreshold !== undefined) {
+      qs.set("weak_threshold", String(options.weakThreshold));
+    }
     const sufijo = qs.toString() ? `?${qs}` : "";
     return apiFetch<BacktestReport>(`/admin/recommendations/backtest${sufijo}`, { token });
   },

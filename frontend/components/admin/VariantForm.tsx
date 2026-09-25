@@ -97,6 +97,9 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
   const [threshold, setThreshold] = useState(
     String(initial?.config.recommendation_threshold ?? 50),
   );
+  const [weakThreshold, setWeakThreshold] = useState(
+    String(initial?.config.weak_threshold ?? 35),
+  );
   /*
     Las combinaciones permitidas (dos docenas, dos columnas) se conservan tal
     como están: editarlas pediría el builder visual que CLAUDE.md deja fuera del
@@ -146,6 +149,7 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
       })),
       allowed_combinations: combinations,
       recommendation_threshold: Number(threshold),
+      weak_threshold: Number(weakThreshold),
     };
     onSubmit({ name: name.trim(), house_edge: Number(houseEdge), config, active });
   }
@@ -173,17 +177,30 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
         />
       </div>
 
-      <Field
-        label="Umbral de recomendación"
-        required
-        type="number"
-        step="1"
-        min={0}
-        max={100}
-        hint="Puntuación de señal a partir de la cual se recomienda apostar (§2.10). Por debajo, la decisión es NO APOSTAR. Por defecto 60: subirlo hace que el motor hable menos, bajarlo que hable más."
-        value={threshold}
-        onChange={(e) => setThreshold(e.target.value)}
-      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Umbral de señal débil"
+          required
+          type="number"
+          step="1"
+          min={0}
+          max={Number(threshold) || 100}
+          hint="Desde aquí el motor recomienda, con la apuesta base y sin progresiones (§2.10). Por debajo, NO APOSTAR. Por defecto 35; igualarlo al de señal media apaga la señal débil."
+          value={weakThreshold}
+          onChange={(e) => setWeakThreshold(e.target.value)}
+        />
+        <Field
+          label="Umbral de señal media"
+          required
+          type="number"
+          step="1"
+          min={0}
+          max={100}
+          hint="Desde aquí la señal es MEDIA y se ofrecen las progresiones. FUERTE empieza en 80. Por defecto 50."
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+      </div>
 
       <label className="block">
         <span className="mb-1.5 block text-sm font-bold text-white">Resultados posibles</span>

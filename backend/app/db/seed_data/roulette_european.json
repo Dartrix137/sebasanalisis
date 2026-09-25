@@ -391,5 +391,6 @@
       ]
     }
   ],
-  "recommendation_threshold": 50
+  "recommendation_threshold": 50,
+  "weak_threshold": 35
 }

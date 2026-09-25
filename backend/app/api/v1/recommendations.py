@@ -26,6 +26,7 @@ from app.engine.recommendation import (
     Market,
     Recommendation,
     ScoredMarket,
+    SignalBand,
     no_bet_reason,
     recommend,
     resolve,
@@ -173,6 +174,7 @@ def resolve_pending_recommendation(
             hit=outcome.value == "HIT",
             sectors=market.sectors,
             followed=followed,
+            weak_signal=pendiente.signal_band == SignalBand.weak.value,
         ),
     )
     return pendiente
@@ -313,6 +315,7 @@ def stakes_for(
         payout=market.payout,
         bankroll_current=float(session.bankroll_current),
         table_limit=float(session.table_limit),
+        weak_signal=resultado.signal_band is SignalBand.weak,
     )
 
 
@@ -329,6 +332,7 @@ def to_response(
         no_bet_reason=motivo.value if motivo is not None else None,
         min_spins_for_signal=MIN_SPINS_FOR_SIGNAL,
         threshold=resultado.threshold,
+        weak_threshold=resultado.weak_threshold,
         strong_threshold=strong_threshold_for(resultado.threshold),
         signal_score=resultado.signal_score,
         signal_band=resultado.signal_band.value,

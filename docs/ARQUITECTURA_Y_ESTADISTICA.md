@@ -318,16 +318,19 @@ Es decir: con la calibración vigente y el umbral por defecto, **el motor recomi
 
 #### Bandas, umbral y desempate
 
-Tres estados de salida y nada más (decidido el 2026-09-24):
+Cuatro estados de salida y nada más (decididos el 2026-09-24; SEÑAL DÉBIL se agregó ese mismo día para que el motor hable más seguido):
 
 | Estado | Condición | Salida |
 | --- | --- | --- |
 | **SEÑAL FUERTE** (`strong`) | score ≥ umbral alto (80) | APOSTAR: mercado, fuerza interna y monto por gestión |
-| **SEÑAL MEDIA** (`medium`) | umbral mínimo ≤ score < umbral alto | Igual, indicando que la fuerza es media |
-| **SIN SEÑAL** (`weak`) | score < umbral mínimo | NO APOSTAR ESTE GIRO. Esperar el siguiente resultado y volver a analizar |
+| **SEÑAL MEDIA** (`medium`) | umbral medio ≤ score < umbral alto | Igual, indicando que la fuerza es media |
+| **SEÑAL DÉBIL** (`weak`) | umbral débil ≤ score < umbral medio | APOSTAR solo con la apuesta base (gestión plana), con un aviso de que la señal es débil. Martingala y dos sectores no aplican |
+| **SIN SEÑAL** (`none`) | score < umbral débil | NO APOSTAR ESTE GIRO. Esperar el siguiente resultado y volver a analizar |
 
-- El umbral mínimo es el de recomendación, configurable por variante (`recommendation_threshold`, por defecto 50; era 60 hasta el 2026-09-24, migración `9e3f61a0c7d2`) y editable desde el admin. El alto es fijo (`STRONG_THRESHOLD = 80`). Los dos son inclusivos. Si el admin sube el mínimo por encima de 80, desaparece la MEDIA: todo lo que se recomienda es FUERTE.
-- **La banda sale de los mismos umbrales que la decisión**, así que nunca la contradice: una recomendación es MEDIA o FUERTE, y un NO APOSTAR es SIN SEÑAL, también en el mejor candidato que se guarda. Antes la banda era una escala absoluta de cuatro tramos (0-39 DÉBIL, 40-59 MEDIA, 60-79 FUERTE, 80+ MUY FUERTE) que no coincidía con el umbral: un NO APOSTAR podía salir "MEDIA" y toda recomendación salía "FUERTE". Las filas ya guardadas se reetiquetaron (migración `221b8df05052`).
+- Umbral medio: `recommendation_threshold`, por defecto 50 (era 60 hasta el 2026-09-24, migración `9e3f61a0c7d2`). Umbral débil: `weak_threshold`, por defecto 35 (migración `dab3a9ae40f8`), nunca mayor que el medio; igualarlo al medio apaga la DÉBIL. Los dos son por variante y editables desde el admin. El alto es fijo (`STRONG_THRESHOLD = 80`). Todos son inclusivos. Si el admin sube el medio por encima de 80, desaparece la MEDIA.
+- **SEÑAL DÉBIL, solo la apuesta base.** Una progresión sube la apuesta tras cada fallo; hacerlo sobre la señal más floja que emite el motor agrandaría la exposición justo donde menos respaldo hay. Con DÉBIL la tarjeta ofrece solo la plana, y en la resolución ningún escalón avanza aunque el usuario haya anotado martingala o dos sectores (`advance_stages_on_outcome(weak_signal=True)`).
+- Backtest fuera de muestra con los umbrales por defecto (semilla 90217, 150 × 150): el motor recomienda en el **90.6 %** de los giros de la europea (87.8 % americana). Por banda, en la europea: DÉBIL 6280 recomendaciones (48.6 % de coincidencia), MEDIA 11101 (47.2 %), FUERTE 1367 (45.3 %). Las diferencias son ruido: ninguna banda acierta más que otra, y el ROI de todas se queda en la ventaja de la casa.
+- **La banda sale de los mismos umbrales que la decisión**, así que nunca la contradice: una recomendación es DÉBIL, MEDIA o FUERTE, y un NO APOSTAR es SIN SEÑAL (`none`), también en el mejor candidato que se guarda. Hasta que existió la DÉBIL, SIN SEÑAL se guardaba como `weak`; esas filas pasaron a `none` (migración `ccba7ad9d695`). Antes la banda era una escala absoluta de cuatro tramos (0-39 DÉBIL, 40-59 MEDIA, 60-79 FUERTE, 80+ MUY FUERTE) que no coincidía con el umbral: un NO APOSTAR podía salir "MEDIA" y toda recomendación salía "FUERTE". Las filas ya guardadas se reetiquetaron (migración `221b8df05052`).
 - El motor no está obligado a recomendar en cada giro: la mejor alternativa disponible **no se asciende** a señal si no pasa el mínimo.
 - **Con menos de 10 giros en la sesión no hay recomendación**, aunque el score pase el umbral (`MIN_SPINS_FOR_SIGNAL`, la ventana más corta). Con el umbral en 50, cinco rojos seguidos ya daban 51 puntos. La pantalla lo muestra como FALTA INFORMACIÓN.
 - Se devuelve **una sola** recomendación, y la pantalla muestra solo esa: aunque otro mercado también pase el umbral, no aparece como segunda jugada. Con SIN SEÑAL no se nombra ninguna alternativa. Desempate determinista: mayor score → menor cobertura → índice de la categoría en el array `categories` → `group_ids` alfabético → clave del mercado. Ninguna parte de la clave depende del orden de un objeto JSON.

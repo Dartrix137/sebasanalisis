@@ -5,11 +5,13 @@
  *
  * Es lo primero y lo más grande de la pantalla, y responde la pregunta que el
  * analizador dejaba abierta: *¿entonces qué apuesto en el próximo giro?*. Tiene
- * tres estados y nada más (§2.10):
+ * cuatro estados y nada más (§2.10):
  *
  * - SEÑAL FUERTE: el score llega al umbral alto. APOSTAR, con su fuerza y monto.
- * - SEÑAL MEDIA: pasa el umbral mínimo sin llegar al alto. Igual, marcada media.
- * - SIN SEÑAL: nada pasa el mínimo. NO APOSTAR ESTE GIRO.
+ * - SEÑAL MEDIA: pasa el umbral medio sin llegar al alto. Igual, marcada media.
+ * - SEÑAL DÉBIL: pasa el umbral débil sin llegar al medio. APOSTAR solo con la
+ *   apuesta base, con un aviso de que la señal es débil.
+ * - SIN SEÑAL: nada pasa el débil. NO APOSTAR ESTE GIRO.
  *
  * Siempre una sola jugada: la mejor alternativa. Aunque otro mercado también
  * pase el umbral, no se muestra como segunda apuesta. Las estadísticas que
@@ -63,32 +65,37 @@ const CURRENCY = new Intl.NumberFormat("es-CO", {
 const PCT = (n: number) => `${(n * 100).toFixed(1)} %`;
 
 const BAND_LABEL: Record<SignalBand, string> = {
-  weak: "SIN SEÑAL",
+  none: "SIN SEÑAL",
+  weak: "DÉBIL",
   medium: "MEDIA",
   strong: "FUERTE",
 };
 
 /** El estado de salida, tal como encabeza la tarjeta. */
 const STATE_LABEL: Record<SignalBand, string> = {
-  weak: "SIN SEÑAL",
+  none: "SIN SEÑAL",
+  weak: "SEÑAL DÉBIL",
   medium: "SEÑAL MEDIA",
   strong: "SEÑAL FUERTE",
 };
 
 const BAND_TEXT: Record<SignalBand, string> = {
-  weak: "text-muted",
+  none: "text-muted",
+  weak: "text-signal-weak",
   medium: "text-signal-medium",
   strong: "text-signal-strong",
 };
 
 const BAND_BAR: Record<SignalBand, string> = {
-  weak: "bg-muted",
+  none: "bg-muted",
+  weak: "bg-signal-weak",
   medium: "bg-signal-medium",
   strong: "bg-signal-strong",
 };
 
 const BAND_PILL: Record<SignalBand, string> = {
-  weak: "border-edge text-muted",
+  none: "border-edge text-muted",
+  weak: "border-signal-weak/50 bg-signal-weak/10 text-signal-weak",
   medium: "border-signal-medium/50 bg-signal-medium/10 text-signal-medium",
   strong: "border-signal-strong/50 bg-signal-strong/10 text-signal-strong",
 };
@@ -182,6 +189,8 @@ function BetState({
         </p>
       </div>
 
+      {banda === "weak" ? <WeakNotice /> : null}
+
       <StakeList
         stakes={recommendation.stakes}
         market={market}
@@ -197,7 +206,7 @@ function NoBetState({ recommendation }: { recommendation: RecommendationResponse
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <StatePill band="weak" />
+        <StatePill band="none" />
         <p className="text-xs text-muted">Recomendación para el siguiente giro</p>
       </div>
       <h2 className="mt-2 text-3xl font-bold leading-tight text-white sm:text-4xl">
@@ -249,6 +258,28 @@ function NoBetState({ recommendation }: { recommendation: RecommendationResponse
 function perSectorLabel(config: GameVariantConfig | undefined, market: MarketResponse): string {
   const categoria = config?.categories.find((c) => c.id === market.category_id);
   return categoria ? `en cada ${categoria.label.toLowerCase()}` : "en cada una";
+}
+
+/**
+ * El anuncio de la SEÑAL DÉBIL. Explica por qué igual se muestra una jugada
+ * —es la opción que más se ha destacado en los números de esta mesa— sin
+ * disfrazarla de algo más firme, y fija el monto en la apuesta base.
+ */
+function WeakNotice() {
+  return (
+    <div className="mt-4 rounded-lg border border-signal-weak/40 bg-signal-weak/10 px-3.5 py-3 text-xs leading-relaxed text-white">
+      <p className="font-bold uppercase tracking-wider text-signal-weak">Señal débil</p>
+      <p className="mt-1">
+        La desviación observada es pequeña. Aun así, es la opción que más se ha
+        destacado según cómo han ido saliendo los números en esta mesa, y por eso
+        se muestra como recomendación.
+      </p>
+      <p className="mt-1.5 text-muted">
+        Si decides jugar, hazlo solo con la apuesta base: con una señal débil las
+        progresiones no se ofrecen y ninguna avanza de escalón.
+      </p>
+    </div>
+  );
 }
 
 /** Una apuesta por zona del mercado, con el monto por sector de la gestión. */
@@ -405,6 +436,7 @@ function Why({ recommendation }: { recommendation: RecommendationResponse }) {
           <WindowTable scored={mejor} />
           <Components
             scored={mejor}
+            weakThreshold={recommendation.weak_threshold}
             threshold={recommendation.threshold}
             strongThreshold={recommendation.strong_threshold}
           />
@@ -471,10 +503,12 @@ function WindowRow({ w }: { w: WindowStatResponse }) {
 
 function Components({
   scored,
+  weakThreshold,
   threshold,
   strongThreshold,
 }: {
   scored: ScoredMarketResponse;
+  weakThreshold: number;
   threshold: number;
   strongThreshold: number;
 }) {
@@ -545,8 +579,9 @@ function Components({
             múltiples.
           </>
         )}{" "}
-        Se recomienda apostar desde {Math.round(threshold)} puntos (SEÑAL MEDIA);
-        desde {Math.round(strongThreshold)}, la señal es FUERTE.
+        Se recomienda apostar desde {Math.round(weakThreshold)} puntos (SEÑAL
+        DÉBIL, solo con la apuesta base); desde {Math.round(threshold)}, la señal es
+        MEDIA, y desde {Math.round(strongThreshold)}, FUERTE.
       </p>
     </div>
   );

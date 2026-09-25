@@ -920,14 +920,25 @@ OFFERED_STRATEGIES: tuple[Strategy, ...] = (
 )
 
 
-def applies_to_market(strategy: Strategy, sectors: int) -> str | None:
+def applies_to_market(
+    strategy: Strategy, sectors: int, weak_signal: bool = False
+) -> str | None:
     """Motivo por el que la progresion no encaja con el mercado, o None si encaja.
+
+    Con una SEÑAL DEBIL solo se ofrece la plana: una progresion sube la apuesta
+    tras cada fallo, y hacerlo sobre la señal mas floja que el motor emite es
+    agrandar la exposicion justo donde menos respaldo hay.
 
     La recuperacion de dos sectores no es una martingala con otro nombre: cada
     escalon apuesta la perdida acumulada del anterior *contando que el otro
     sector se pierde* y que el acertado paga 2:1. Sobre un mercado de un solo
     sector esa aritmetica no describe nada, asi que no se ofrece.
     """
+    if weak_signal and strategy is not Strategy.flat:
+        return (
+            "Con señal débil solo se indica la apuesta base: una progresión no "
+            "sube la apuesta sobre una señal débil."
+        )
     if strategy is Strategy.two_sector_recovery and sectors != SECTORS_IN_TWO_SECTOR_MODE:
         return (
             "La recuperación de dos sectores solo aplica cuando la recomendación "
@@ -977,6 +988,7 @@ def stake_for_market(
     payout: float,
     bankroll_current: float,
     table_limit: float | None = None,
+    weak_signal: bool = False,
 ) -> MarketStake:
     """Cuanto pide esta progresion para el mercado recomendado, en este escalon."""
     if base_bet <= 0:
@@ -986,7 +998,7 @@ def stake_for_market(
     if sectors < 1:
         raise ValueError("Un mercado cubre al menos un sector")
 
-    motivo = applies_to_market(strategy, sectors)
+    motivo = applies_to_market(strategy, sectors, weak_signal)
     if motivo is not None:
         return MarketStake(
             strategy=strategy,
@@ -1031,6 +1043,7 @@ def stakes_for_market(
     payout: float,
     bankroll_current: float,
     table_limit: float | None = None,
+    weak_signal: bool = False,
 ) -> list[MarketStake]:
     """Las tres progresiones sobre el mercado recomendado, en orden de menu.
 
@@ -1046,6 +1059,7 @@ def stakes_for_market(
             payout=payout,
             bankroll_current=bankroll_current,
             table_limit=table_limit,
+            weak_signal=weak_signal,
         )
         for s in OFFERED_STRATEGIES
     ]
@@ -1057,6 +1071,7 @@ def advance_stages_on_outcome(
     hit: bool | None,
     sectors: int,
     followed: frozenset[Strategy],
+    weak_signal: bool = False,
 ) -> dict[Strategy, int]:
     """Mueve los contadores de las progresiones con el cierre de la
     recomendacion anterior, sobre un mercado de `sectors` sectores.
@@ -1067,14 +1082,16 @@ def advance_stages_on_outcome(
 
     `hit=None` es el NO APOSTAR: tampoco avanza nada. Y una progresion que no
     aplica al mercado (`applies_to_market`) no se mueve aunque llegue en
-    `followed`: no se pudo jugar en ese giro.
+    `followed`: no se pudo jugar en ese giro. Con una SEÑAL DEBIL
+    (`weak_signal`) solo aplica la plana, que no tiene escalon: ninguna
+    progresion avanza.
     """
     if hit is None:
         return dict(stages)
     return {
         s: (
             advance_stage(s, stages.get(s, 0), won=hit)
-            if s in followed and applies_to_market(s, sectors) is None
+            if s in followed and applies_to_market(s, sectors, weak_signal) is None
             else stages.get(s, 0)
         )
         for s in OFFERED_STRATEGIES

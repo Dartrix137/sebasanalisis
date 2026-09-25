@@ -187,15 +187,18 @@ class NoBetReason(str, Enum):
 
 
 class SignalBand(str, Enum):
-    """Estado de salida del motor según los dos umbrales de §2.10:
+    """Estado de salida del motor según los tres umbrales de §2.10:
 
-    - `weak`: SIN SEÑAL — por debajo del umbral mínimo (`threshold`). No apostar.
-    - `medium`: SEÑAL MEDIA — del umbral mínimo al alto (`strong_threshold`).
-    - `strong`: SEÑAL FUERTE — desde el umbral alto.
+    - `none`: SIN SEÑAL — por debajo de `weak_threshold`. No apostar.
+    - `weak`: SEÑAL DÉBIL — de `weak_threshold` a `threshold`. Solo la apuesta
+      base: las progresiones no aplican.
+    - `medium`: SEÑAL MEDIA — de `threshold` a `strong_threshold`.
+    - `strong`: SEÑAL FUERTE — desde `strong_threshold`.
 
     Describe la fuerza del criterio interno sobre la muestra ya ocurrida. No es
     la probabilidad de acertar el próximo giro — esa sigue siendo la teórica.
     """
+    none = "none"
     weak = "weak"
     medium = "medium"
     strong = "strong"
@@ -304,8 +307,10 @@ class RecommendationResponse(BaseModel):
     no_bet_reason: Optional[NoBetReason] = None
     # Giros por debajo de los cuales un NO_BET es por falta de información.
     min_spins_for_signal: int
-    # Umbral mínimo: desde aquí hay recomendación (SEÑAL MEDIA).
+    # Umbral medio: desde aquí la señal es MEDIA.
     threshold: float
+    # Umbral débil: desde aquí hay recomendación (SEÑAL DÉBIL, solo apuesta base).
+    weak_threshold: float
     # Umbral alto: desde aquí la señal es FUERTE.
     strong_threshold: float
     signal_score: float
@@ -391,7 +396,9 @@ class BacktestReport(BaseModel):
     recommendations: int
     no_bets: int
     no_bet_rate: float
+    # Umbral medio (SEÑAL MEDIA) y débil (mínimo para recomendar) aplicados.
     threshold: float
+    weak_threshold: float
     overall: BacktestTally
     by_band: list[BacktestBandRow]
     # EV de cualquier apuesta en esta variante: la referencia contra la que se

@@ -48,7 +48,7 @@ from app.engine.backtest import (  # noqa: E402
     fair_wheel_histories,
 )
 from app.engine.probability import GameConfig  # noqa: E402
-from app.engine.recommendation import SignalBand  # noqa: E402
+from app.engine.recommendation import SignalBand, weak_threshold_for  # noqa: E402
 
 SEED_DATA = Path(__file__).resolve().parents[1] / "app" / "db" / "seed_data"
 
@@ -134,7 +134,9 @@ def _fmt_tally(nombre: str, t: Tally) -> str:
     )
 
 
-def print_report(informe: Report, config: GameConfig, threshold: float) -> None:
+def print_report(
+    informe: Report, config: GameConfig, threshold: float, weak_threshold: float
+) -> None:
     ventaja = -1 / len(config.possible_outcomes)
     print()
     print("=" * 96)
@@ -144,7 +146,8 @@ def print_report(informe: Report, config: GameConfig, threshold: float) -> None:
     print(f"  Decisiones             {informe.decisions:>8}")
     print(f"  Recomendaciones        {informe.overall.recommendations:>8}")
     print(f"  NO APOSTAR             {informe.no_bets:>8}  ({informe.no_bet_rate:.1%})")
-    print(f"  Umbral aplicado        {threshold:>8.0f}")
+    print(f"  Umbral debil           {weak_threshold:>8.0f}")
+    print(f"  Umbral medio           {threshold:>8.0f}")
     print()
     print("  TOTAL")
     print(_fmt_tally("todas", informe.overall))
@@ -185,7 +188,8 @@ def main() -> None:
         default=90_217,
         help="Semilla del generador. Distinta a la de calibracion a proposito.",
     )
-    p.add_argument("--threshold", type=float, default=None)
+    p.add_argument("--threshold", type=float, default=None, help="Umbral medio")
+    p.add_argument("--weak-threshold", type=float, default=None, help="Umbral debil")
     p.add_argument("--window-size", type=int, default=50)
     p.add_argument("--file", type=Path, help="Historiales reales, uno por linea")
     p.add_argument("--from-db", action="store_true", help="Sesiones reales de la base")
@@ -215,14 +219,19 @@ def main() -> None:
     umbral = (
         args.threshold if args.threshold is not None else config.recommendation_threshold
     )
+    umbral_debil = weak_threshold_for(
+        args.weak_threshold if args.weak_threshold is not None else config.weak_threshold,
+        umbral,
+    )
     print(f"\nFuente: {origen}")
     informe = backtest(
         config,
         historiales,
         threshold=umbral,
+        weak_threshold=umbral_debil,
         window_size=args.window_size,
     )
-    print_report(informe, config, umbral)
+    print_report(informe, config, umbral, umbral_debil)
 
 
 if __name__ == "__main__":

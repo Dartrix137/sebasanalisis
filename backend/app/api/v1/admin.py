@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app.api.deps import AdminUser, DbSession
 from app.engine.probability import GameConfig
 from app.engine.recommendation import SignalBand as EngineSignalBand
+from app.engine.recommendation import weak_threshold_for
 from app.core.game_config_validation import (
     check_payouts_against_house_edge,
     validate_game_config,
@@ -213,6 +214,7 @@ def recommendation_backtest(
     limit: int = Query(default=50, ge=1, le=500),
     spins: int = Query(default=150, ge=20, le=500),
     threshold: float | None = Query(default=None, ge=0, le=100),
+    weak_threshold: float | None = Query(default=None, ge=0, le=100),
 ) -> BacktestReport:
     """Backtest del motor: cuanto recomienda, cuanto acierta y con que ROI.
 
@@ -237,6 +239,9 @@ def recommendation_backtest(
 
     config = GameConfig.from_dict(variant.categories_json)
     umbral = threshold if threshold is not None else config.recommendation_threshold
+    umbral_debil = weak_threshold_for(
+        weak_threshold if weak_threshold is not None else config.weak_threshold, umbral
+    )
 
     if source is BacktestSource.simulated:
         historiales = fair_wheel_histories(config, limit, spins, seed=90_217)
@@ -260,7 +265,9 @@ def recommendation_backtest(
                 historiales.append(giros)
         origen = f"{len(historiales)} sesiones reales de {variant.name}"
 
-    informe = backtest(config, historiales, threshold=umbral)
+    informe = backtest(
+        config, historiales, threshold=umbral, weak_threshold=umbral_debil
+    )
 
     def _tally(t) -> dict:
         return {
@@ -282,6 +289,7 @@ def recommendation_backtest(
         no_bets=informe.no_bets,
         no_bet_rate=informe.no_bet_rate,
         threshold=umbral,
+        weak_threshold=umbral_debil,
         overall=BacktestTally(**_tally(informe.overall)),
         by_band=[
             BacktestBandRow(

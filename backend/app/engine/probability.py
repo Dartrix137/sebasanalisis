@@ -76,6 +76,11 @@ class AllowedCombination:
 #: cuando la variante no declara el suyo (§2.10).
 DEFAULT_RECOMMENDATION_THRESHOLD = 50.0
 
+#: Piso de SEÑAL DEBIL cuando la variante no declara el suyo (§2.10). Es el
+#: minimo para recomendar algo; entre este y el anterior solo se ofrece la
+#: apuesta base.
+DEFAULT_WEAK_THRESHOLD = 35.0
+
 
 @dataclass(frozen=True)
 class GameConfig:
@@ -86,6 +91,7 @@ class GameConfig:
     #: objeto, y el desempate del motor necesita un orden de catalogo estable.
     allowed_combinations: tuple[AllowedCombination, ...] = ()
     recommendation_threshold: float = DEFAULT_RECOMMENDATION_THRESHOLD
+    weak_threshold: float = DEFAULT_WEAK_THRESHOLD
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> GameConfig:
@@ -126,6 +132,7 @@ class GameConfig:
             recommendation_threshold=float(
                 raw.get("recommendation_threshold", DEFAULT_RECOMMENDATION_THRESHOLD)
             ),
+            weak_threshold=float(raw.get("weak_threshold", DEFAULT_WEAK_THRESHOLD)),
         )
 
     def category_index(self, category_id: str) -> int:

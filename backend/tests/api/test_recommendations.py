@@ -119,29 +119,36 @@ def test_una_mesa_vacia_no_recomienda(client: TestClient, user_token: str, sesio
     assert cuerpo["stakes"] == []
     assert cuerpo["total_spins"] == 0
     assert cuerpo["threshold"] == 60
+    assert cuerpo["weak_threshold"] == 35
     assert cuerpo["strong_threshold"] == 80
-    assert cuerpo["signal_band"] == "weak"
+    assert cuerpo["signal_band"] == "none"
 
 
 def test_la_banda_de_la_respuesta_sigue_a_la_decision(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
-    """Tres estados de salida (§2.10): con recomendacion la banda es MEDIA o
-    FUERTE, sin ella SIN SEÑAL — tambien en lo que queda guardado."""
+    """Cuatro estados de salida (§2.10): con recomendacion la banda es DEBIL,
+    MEDIA o FUERTE, sin ella SIN SEÑAL — tambien en lo que queda guardado."""
     for valor in ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19", "21", "23"]:
         _girar(client, user_token, sesion, valor)
         cuerpo = _recomendacion(client, user_token, sesion)
+        puntaje = cuerpo["signal_score"]
         if cuerpo["decision"] == "RECOMMEND":
-            esperada = "strong" if cuerpo["signal_score"] >= cuerpo["strong_threshold"] else "medium"
+            if puntaje >= cuerpo["strong_threshold"]:
+                esperada = "strong"
+            elif puntaje >= cuerpo["threshold"]:
+                esperada = "medium"
+            else:
+                esperada = "weak"
         else:
-            esperada = "weak"
+            esperada = "none"
         assert cuerpo["signal_band"] == esperada
 
     for registro in _historial(client, user_token, sesion):
         if registro["decision"] == "RECOMMEND":
-            assert registro["signal_band"] in ("medium", "strong")
+            assert registro["signal_band"] in ("weak", "medium", "strong")
         else:
-            assert registro["signal_band"] == "weak"
+            assert registro["signal_band"] == "none"
 
 
 def test_una_mesa_vacia_no_recomienda_por_falta_de_informacion(
@@ -294,8 +301,9 @@ def test_no_apostar_no_avanza_ninguna_progresion(
     """Regla de §2.10: con NO APOSTAR la progresion no avanza y el saldo no
     cambia. Cobrar un escalon por un giro que el motor pidio no jugar seria
     cobrar por una apuesta que no se hizo."""
-    # Historial alterno: ningun mercado se despega, asi que todo es NO APOSTAR.
-    for valor in ["1", "2", "3", "4", "5", "6"] * 3:
+    # Cada numero, 0 incluido, una vez por vuelta y en un orden que no agrupa
+    # ningun mercado: nada llega ni a SEÑAL DEBIL, asi que todo es NO APOSTAR.
+    for valor in ["0", "3", "6", "2", "5", "1", "4"] * 3:
         _girar(client, user_token, sesion, valor)
 
     assert all(h["decision"] == "NO_BET" for h in _historial(client, user_token, sesion))
@@ -481,3 +489,42 @@ def test_no_se_ve_la_recomendacion_de_una_sesion_ajena(
 
 def test_requiere_autenticacion(client: TestClient, sesion: str) -> None:
     assert client.get(f"/sessions/{sesion}/recommendation").status_code == 401
+
+
+# ---------- SEÑAL DEBIL ----------
+
+#: Deja la mesa en SEÑAL DEBIL sobre Rojo (52.5 con el umbral medio de 60 de
+#: RULETA_MINI y el debil por defecto de 35).
+HISTORIAL_DEBIL = ["1", "6", "3", "3", "4", "1", "2", "1", "5", "1", "6", "3"]
+
+
+def test_una_senal_debil_recomienda_solo_la_apuesta_base(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    for valor in HISTORIAL_DEBIL:
+        _girar(client, user_token, sesion, valor)
+    cuerpo = _recomendacion(client, user_token, sesion)
+
+    assert cuerpo["decision"] == "RECOMMEND"
+    assert cuerpo["signal_band"] == "weak"
+    assert cuerpo["weak_threshold"] <= cuerpo["signal_score"] < cuerpo["threshold"]
+    gestiones = {s["strategy"]: s for s in cuerpo["stakes"]}
+    assert gestiones["flat"]["applicable"]
+    assert gestiones["flat"]["total_bet"] == 1_000
+    assert not gestiones["martingale"]["applicable"]
+    assert "señal débil" in gestiones["martingale"]["reason"]
+
+
+def test_anotar_martingala_sobre_una_senal_debil_no_mueve_el_escalon(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    for valor in HISTORIAL_DEBIL:
+        _girar(client, user_token, sesion, valor)
+    rec = _recomendacion(client, user_token, sesion)
+    assert rec["signal_band"] == "weak"
+
+    _apostar_al_mercado(client, user_token, sesion, rec, "martingale")
+    _girar(client, user_token, sesion, "2")  # negro: la recomendacion falla
+
+    assert _sesion(client, user_token, sesion)["stage_martingale"] == 0
+

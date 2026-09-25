@@ -31,7 +31,8 @@ const PCT = (n: number) => `${(n * 100).toFixed(1)} %`;
 const SIGNED = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(3)}`;
 
 const BAND_LABEL: Record<SignalBand, string> = {
-  weak: "Sin señal",
+  none: "Sin señal",
+  weak: "Débil",
   medium: "Media",
   strong: "Fuerte",
 };
@@ -183,7 +184,8 @@ function ReportView({ report }: { report: BacktestReport }) {
         </span>{" "}
         Un ROI cercano a esa cifra es el resultado esperado — significa que el motor
         no encontró estructura donde no la hay. Ninguna progresión ni ningún umbral
-        cambia esa ventaja. Umbral aplicado: {Math.round(report.threshold)}.
+        cambia esa ventaja. Umbrales aplicados: débil {Math.round(report.weak_threshold)},
+        medio {Math.round(report.threshold)}.
       </p>
     </div>
   );

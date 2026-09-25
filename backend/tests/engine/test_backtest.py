@@ -118,7 +118,7 @@ def test_los_aciertos_por_banda_suman_el_total(europea) -> None:
 
 def test_un_umbral_imposible_deja_todo_en_no_apostar(europea) -> None:
     historiales = fair_wheel_histories(europea, n_sessions=2, spins=40, seed=3)
-    informe = backtest(europea, historiales, threshold=101)
+    informe = backtest(europea, historiales, threshold=101, weak_threshold=101)
 
     assert informe.overall.recommendations == 0
     assert informe.no_bets == informe.decisions

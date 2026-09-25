@@ -27,7 +27,8 @@ from app.engine.probability import GameConfig
 from app.engine.recommendation import Decision, Market, SignalBand, recommend
 
 BAND_LABEL: dict[SignalBand, str] = {
-    SignalBand.weak: "SIN SEÑAL",
+    SignalBand.none: "SIN SEÑAL",
+    SignalBand.weak: "DEBIL",
     SignalBand.medium: "MEDIA",
     SignalBand.strong: "FUERTE",
 }
@@ -130,6 +131,7 @@ def backtest(
     historiales: Iterable[Sequence[str]],
     *,
     threshold: float | None = None,
+    weak_threshold: float | None = None,
     window_size: int = 50,
     warmup: int = WARMUP,
 ) -> Report:
@@ -151,9 +153,10 @@ def backtest(
                 previos[-window_size:],
                 full_history=previos,
                 threshold=threshold,
+                weak_threshold=weak_threshold,
             )
 
-            banda = resultado.best.signal_band if resultado.best else SignalBand.weak
+            banda = resultado.best.signal_band if resultado.best else SignalBand.none
             if resultado.decision is Decision.no_bet:
                 informe.no_bets += 1
                 informe.no_bet_by_band[banda] += 1

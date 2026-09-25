@@ -7,6 +7,8 @@ Las configuraciones de ruleta se leen del mismo `seed_data/` que carga el seed
 falla.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from app.engine.probability import GameConfig
@@ -175,8 +177,8 @@ def test_historial_uniforme_no_recomienda(europea) -> None:
 
     resultado = recommend(europea, uniforme)
     assert resultado.decision is Decision.no_bet
-    assert resultado.signal_band is SignalBand.weak
-    assert resultado.signal_score < resultado.threshold
+    assert resultado.signal_band is SignalBand.none
+    assert resultado.signal_score < resultado.weak_threshold
     # El mejor candidato viaja igual, para que el backtest pueda analizarlo.
     assert resultado.best is not None
     assert resultado.market is None
@@ -202,59 +204,86 @@ def test_una_racha_reciente_da_señal_aunque_el_total_este_parejo(europea) -> No
     assert resultado.best.components.consistency < 0.5
 
 
-def test_las_bandas_cortan_en_los_dos_umbrales() -> None:
-    """Tres estados: SIN SEÑAL bajo el minimo, MEDIA del minimo al alto,
-    FUERTE desde el alto. Los dos pisos son inclusivos."""
+def test_las_bandas_cortan_en_los_tres_umbrales() -> None:
+    """Cuatro estados: SIN SEÑAL bajo el debil, DEBIL del debil al medio,
+    MEDIA del medio al alto, FUERTE desde el alto. Los pisos son inclusivos."""
     assert STRONG_THRESHOLD == 80
-    assert band_for(0, 60) is SignalBand.weak
-    assert band_for(59.99, 60) is SignalBand.weak
-    assert band_for(60, 60) is SignalBand.medium
-    assert band_for(68, 60) is SignalBand.medium
-    assert band_for(79.99, 60) is SignalBand.medium
-    assert band_for(80, 60) is SignalBand.strong
-    assert band_for(100, 60) is SignalBand.strong
+    assert band_for(0, 50, 35) is SignalBand.none
+    assert band_for(34.99, 50, 35) is SignalBand.none
+    assert band_for(35, 50, 35) is SignalBand.weak
+    assert band_for(49.99, 50, 35) is SignalBand.weak
+    assert band_for(50, 50, 35) is SignalBand.medium
+    assert band_for(79.99, 50, 35) is SignalBand.medium
+    assert band_for(80, 50, 35) is SignalBand.strong
+    assert band_for(100, 50, 35) is SignalBand.strong
 
 
-def test_el_umbral_minimo_mueve_el_piso_de_la_media() -> None:
-    assert band_for(55, 50) is SignalBand.medium
-    assert band_for(65, 70) is SignalBand.weak
+def test_el_debil_igual_al_medio_apaga_la_debil() -> None:
+    assert band_for(49.99, 50, 50) is SignalBand.none
+    assert band_for(50, 50, 50) is SignalBand.medium
 
 
-def test_con_el_minimo_por_encima_del_alto_no_hay_media() -> None:
-    """Si el admin sube el umbral minimo por encima de 80, todo lo que se
-    recomienda es FUERTE, y lo que queda debajo del minimo es SIN SEÑAL aunque
-    pase de 80: la banda nunca contradice a la decision."""
-    assert band_for(84.99, 85) is SignalBand.weak
-    assert band_for(85, 85) is SignalBand.strong
+def test_el_debil_nunca_queda_por_encima_del_medio() -> None:
+    """Si el medio baja de 35 (admin o prueba de backtest), el debil lo sigue:
+    no puede haber una franja DEBIL por encima de la MEDIA."""
+    assert band_for(29.99, 30, 35) is SignalBand.none
+    assert band_for(30, 30, 35) is SignalBand.medium
+
+
+def test_con_el_medio_por_encima_del_alto_no_hay_media() -> None:
+    """Si el admin sube el umbral medio por encima de 80, lo que pasa el medio
+    es FUERTE, y lo que queda entre el debil y el medio es DEBIL aunque pase de
+    80: la banda nunca contradice a la decision."""
+    assert band_for(84.99, 85, 35) is SignalBand.weak
+    assert band_for(85, 85, 35) is SignalBand.strong
 
 
 def test_la_banda_nunca_contradice_a_la_decision(europea) -> None:
-    """Una recomendacion es MEDIA o FUERTE; un NO_BET es siempre SIN SEÑAL,
-    tambien en el mejor candidato y en los demas mercados."""
+    """Una recomendacion es DEBIL, MEDIA o FUERTE; un NO_BET es siempre SIN
+    SEÑAL, tambien en el mejor candidato y en los demas mercados."""
     giros = ["1"] * 30 + list(europea.possible_outcomes)
     puntaje = recommend(europea, giros).signal_score
     for umbral in (puntaje - 1, puntaje, puntaje + 1):
-        resultado = recommend(europea, giros, threshold=umbral)
+        config = replace(europea, weak_threshold=umbral, recommendation_threshold=umbral + 5)
+        resultado = recommend(config, giros)
         if resultado.decision is Decision.recommend:
-            assert resultado.signal_band in (SignalBand.medium, SignalBand.strong)
+            assert resultado.signal_band is not SignalBand.none
         else:
-            assert resultado.signal_band is SignalBand.weak
+            assert resultado.signal_band is SignalBand.none
         for c in resultado.candidates:
-            assert (c.signal_band is SignalBand.weak) == (c.signal_score < umbral)
+            assert (c.signal_band is SignalBand.none) == (c.signal_score < umbral)
 
 
-def test_justo_en_el_umbral_recomienda_y_un_punto_por_debajo_no(europea) -> None:
-    """El umbral es inclusivo: alcanzarlo exacto basta para recomendar."""
+def test_entre_el_debil_y_el_medio_recomienda_como_debil(europea) -> None:
+    giros = ["1"] * 30 + list(europea.possible_outcomes)
+    puntaje = recommend(europea, giros).signal_score
+    config = replace(europea, weak_threshold=puntaje - 1, recommendation_threshold=puntaje + 1)
+    resultado = recommend(config, giros)
+    assert resultado.decision is Decision.recommend
+    assert resultado.signal_band is SignalBand.weak
+    assert resultado.market is not None
+
+
+def test_justo_en_el_umbral_debil_recomienda_y_un_punto_por_debajo_no(europea) -> None:
+    """El umbral debil es el minimo para recomendar, y es inclusivo."""
     giros = ["1"] * 30 + list(europea.possible_outcomes)
     puntaje = recommend(europea, giros).signal_score
 
-    justo = recommend(europea, giros, threshold=puntaje)
+    justo = recommend(replace(europea, weak_threshold=puntaje, recommendation_threshold=100), giros)
     assert justo.decision is Decision.recommend
+    assert justo.signal_band is SignalBand.weak
 
-    por_encima = recommend(europea, giros, threshold=puntaje + 1)
+    por_encima = recommend(
+        replace(europea, weak_threshold=puntaje + 1, recommendation_threshold=100), giros
+    )
     assert por_encima.decision is Decision.no_bet
     # Cambiar el umbral no cambia el puntaje: solo la decision.
     assert por_encima.signal_score == pytest.approx(puntaje)
+
+
+def test_los_umbrales_por_defecto_son_35_y_50(europea) -> None:
+    assert europea.weak_threshold == 35
+    assert europea.recommendation_threshold == 50
 
 
 def test_el_score_esta_acotado_entre_0_y_100(europea) -> None:
@@ -311,7 +340,7 @@ def test_sin_los_giros_minimos_no_recomienda_aunque_llegue_al_umbral(europea) ->
     assert resultado.decision is Decision.no_bet
     assert resultado.market is None
     assert no_bet_reason(resultado.decision, len(cinco_rojos)) is NoBetReason.insufficient_data
-    assert all(c.signal_band is SignalBand.weak for c in resultado.candidates)
+    assert all(c.signal_band is SignalBand.none for c in resultado.candidates)
 
 
 def test_con_los_giros_minimos_ya_puede_recomendar(europea) -> None:

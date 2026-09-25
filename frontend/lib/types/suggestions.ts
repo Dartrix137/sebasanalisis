@@ -159,14 +159,15 @@ export type RecommendationDecision = "RECOMMEND" | "NO_BET";
 export type NoBetReason = "insufficient_data" | "below_threshold";
 
 /**
- * Estado de salida del motor según los dos umbrales (§2.10):
- * - `weak`: SIN SEÑAL — por debajo de `threshold`. No apostar.
+ * Estado de salida del motor según los tres umbrales (§2.10):
+ * - `none`: SIN SEÑAL — por debajo de `weak_threshold`. No apostar.
+ * - `weak`: SEÑAL DÉBIL — de `weak_threshold` a `threshold`. Solo apuesta base.
  * - `medium`: SEÑAL MEDIA — de `threshold` a `strong_threshold`.
  * - `strong`: SEÑAL FUERTE — desde `strong_threshold`.
  * Describe la fuerza del criterio interno sobre la muestra ya ocurrida, no la
  * probabilidad de acertar el próximo giro.
  */
-export type SignalBand = "weak" | "medium" | "strong";
+export type SignalBand = "none" | "weak" | "medium" | "strong";
 
 /** Un NO APOSTAR se queda en `PENDING`: no hubo nada que acertar ni que fallar. */
 export type RecommendationOutcome = "PENDING" | "HIT" | "MISS";
@@ -258,8 +259,10 @@ export interface RecommendationResponse {
   no_bet_reason: NoBetReason | null;
   /** Giros por debajo de los cuales un NO_BET es por falta de información. */
   min_spins_for_signal: number;
-  /** Umbral mínimo: desde aquí hay recomendación (SEÑAL MEDIA). */
+  /** Umbral medio: desde aquí la señal es MEDIA. */
   threshold: number;
+  /** Umbral débil: desde aquí hay recomendación (SEÑAL DÉBIL, solo apuesta base). */
+  weak_threshold: number;
   /** Umbral alto: desde aquí la señal es FUERTE. */
   strong_threshold: number;
   signal_score: number;
@@ -339,7 +342,10 @@ export interface BacktestReport {
   recommendations: number;
   no_bets: number;
   no_bet_rate: number;
+  /** Umbral medio (SEÑAL MEDIA) aplicado. */
   threshold: number;
+  /** Umbral débil (mínimo para recomendar) aplicado. */
+  weak_threshold: number;
   overall: BacktestTally;
   by_band: BacktestBandRow[];
   /** EV de cualquier apuesta en esta variante: la referencia del ROI. */

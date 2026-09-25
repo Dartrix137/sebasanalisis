@@ -5,7 +5,7 @@ Modelo genérico: cualquier juego de resultados discretos con probabilidad fija
 """
 from uuid import UUID
 from typing import Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---------- Config genérica (categories_json) ----------
@@ -67,9 +67,21 @@ class GameVariantConfig(BaseModel):
     # claves de un objeto, y el desempate del motor necesita un orden de
     # catálogo estable (§2.10).
     allowed_combinations: list[AllowedCombination] = []
-    # `signal_score` a partir del cual el motor recomienda apostar. Configurable
-    # por variante desde el admin; por debajo la decisión es NO APOSTAR.
+    # Umbral medio: `signal_score` desde el que la señal es MEDIA y se ofrecen
+    # las progresiones. Configurable por variante desde el admin.
     recommendation_threshold: float = Field(default=50, ge=0, le=100)
+    # Umbral débil: desde aquí hay recomendación (SEÑAL DÉBIL, solo apuesta
+    # base); por debajo la decisión es NO APOSTAR. Igualarlo al medio apaga la
+    # señal débil.
+    weak_threshold: float = Field(default=35, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def weak_not_above_medium(self):
+        if self.weak_threshold > self.recommendation_threshold:
+            raise ValueError(
+                "El umbral de señal débil no puede ser mayor que el de señal media"
+            )
+        return self
 
     @field_validator("categories")
     @classmethod

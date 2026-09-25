@@ -24,10 +24,11 @@ from app.models.base import Base, created_at_col, enum_col, uuid_pk
 #: Que decidio el motor para el giro siguiente (§2.10).
 DECISIONS = ("RECOMMEND", "NO_BET")
 
-#: Estado de salida del motor (§2.10): 'weak' es SIN SEÑAL (bajo el umbral
-#: minimo), 'medium' SEÑAL MEDIA y 'strong' SEÑAL FUERTE. Describe el criterio
-#: interno sobre la muestra ya ocurrida, no una probabilidad de acertar.
-SIGNAL_BANDS = ("weak", "medium", "strong")
+#: Estado de salida del motor (§2.10): 'none' es SIN SEÑAL (bajo el umbral
+#: debil), 'weak' SEÑAL DEBIL, 'medium' SEÑAL MEDIA y 'strong' SEÑAL FUERTE.
+#: Describe el criterio interno sobre la muestra ya ocurrida, no una
+#: probabilidad de acertar.
+SIGNAL_BANDS = ("none", "weak", "medium", "strong")
 
 #: Como cerro la recomendacion contra el giro siguiente. Un `NO_BET` se queda en
 #: PENDING para siempre: no hubo nada que acertar ni que fallar.
