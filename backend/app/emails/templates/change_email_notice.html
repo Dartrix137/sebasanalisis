@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Se pidió cambiar el correo de tu cuenta de Sebasanálisis a <strong>{{ new_email }}</strong>.
+  El cambio solo se aplica si alguien lo confirma desde ese correo.
+</p>
+<p style="margin:0;">
+  Si no fuiste tú, alguien conoce tu contraseña: cámbiala ya desde
+  <a href="{{ forgot_url }}" style="color:#e0b341;">{{ forgot_url }}</a>.
+</p>
+{% endblock %}

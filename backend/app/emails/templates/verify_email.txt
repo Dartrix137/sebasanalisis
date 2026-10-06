@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Creaste una cuenta en Sebasanálisis con este correo. Confírmalo para terminar de activarla:
+
+{{ url }}
+
+El enlace vence en {{ hours }} horas y solo se puede usar una vez.
+
+Si no creaste esta cuenta, ignora este mensaje.
+{% endblock %}
