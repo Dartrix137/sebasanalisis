@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { defineConfig, devices } from "@playwright/test";
 
 // Tests de punta a punta (docs/PLATAFORMA_COMPLETA.md §13.3): navegador real
@@ -8,7 +10,12 @@ const WEB_PORT = 3010;
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 
+// La API corre con EMAIL_BACKEND=file y deja aquí cada correo como un JSON; los
+// tests leen de ahí el enlace (e2e/helpers.ts). start-api.mjs la vacía al arrancar.
+const EMAIL_DIR = path.resolve(__dirname, ".e2e-emails");
+
 process.env.E2E_API_URL = API_URL;
+process.env.E2E_EMAIL_DIR = EMAIL_DIR;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -25,7 +32,11 @@ export default defineConfig({
     {
       command: "node e2e/start-api.mjs",
       url: `${API_URL}/health`,
-      env: { E2E_API_PORT: String(API_PORT), E2E_WEB_ORIGIN: WEB_URL },
+      env: {
+        E2E_API_PORT: String(API_PORT),
+        E2E_WEB_ORIGIN: WEB_URL,
+        E2E_EMAIL_DIR: EMAIL_DIR,
+      },
       reuseExistingServer: false,
       timeout: 120_000,
     },

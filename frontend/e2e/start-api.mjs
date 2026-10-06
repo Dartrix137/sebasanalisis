@@ -1,7 +1,7 @@
 // Levanta la API para los tests de punta a punta: recrea la base de e2e y
 // arranca uvicorn contra ella. Lo llama Playwright (playwright.config.ts).
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,7 +24,17 @@ const env = {
     "postgresql+psycopg://sebas:sebas@localhost:5434/sebasanalisis_e2e",
   CORS_ORIGINS: JSON.stringify([process.env.E2E_WEB_ORIGIN]),
   JWT_SECRET_KEY: "clave-solo-para-tests-de-punta-a-punta-0123456789",
+  // Los correos no se envian: quedan como archivos y los tests leen el enlace.
+  EMAIL_BACKEND: "file",
+  EMAIL_FILE_DIR: process.env.E2E_EMAIL_DIR,
+  FRONTEND_BASE_URL: process.env.E2E_WEB_ORIGIN,
+  // Todas las peticiones salen de la misma IP: el limite por IP las cortaria.
+  RATE_LIMIT_ENABLED: "false",
 };
+
+// Sin correos de una corrida anterior.
+rmSync(process.env.E2E_EMAIL_DIR, { recursive: true, force: true });
+mkdirSync(process.env.E2E_EMAIL_DIR, { recursive: true });
 
 const prepared = spawnSync(python, [path.join("scripts", "prepare_e2e_db.py")], {
   cwd: backendDir,
