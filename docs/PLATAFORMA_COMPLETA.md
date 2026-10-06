@@ -435,6 +435,22 @@ Se extiende a `register`, `forgot-password`, `resend-verification`, `reset-passw
 
 `/verificar-correo`, `/olvide-contrasena`, `/restablecer-contrasena`, `/cuenta`. El registro suma los consentimientos de §6.3.
 
+### 5.7.1 Cómo quedó construido (2026-10-06)
+
+Decisiones de implementación que este documento no fijaba. Las marcadas con (*) las tomó el desarrollo por la opción más simple y están pendientes de que el usuario las confirme.
+
+- **Confirmar un cambio de correo usa el mismo endpoint y la misma página** que verificar la cuenta: `POST /auth/verify-email` acepta tokens `verify_email` y `change_email`, y el enlace apunta a `/verificar-correo` en los dos casos. No hay un endpoint aparte. (*)
+- **Sin dominio, el correo no se envía**: `EMAIL_BACKEND` vale `console` por defecto y la API imprime el correo en su log. Las cuentas entran sin confirmar; el aviso "Confirma tu correo" no bloquea nada.
+- **Política de contraseñas**: 10 caracteres mínimo, máximo 200, se rechazan las de una lista local propia (`backend/app/core/common_passwords.txt`, unas 115 entradas), las de un solo carácter repetido, las escaleras (`abcdefghij`) y la que es igual al correo. Aplica a contraseñas nuevas; el login no la revisa, para no dejar fuera a las cuentas anteriores. La lista es corta: se puede reemplazar por una pública más larga sin tocar código. (*)
+- **`forgot-password` responde igual y con el mismo código**, exista o no el correo, y el envío va en segundo plano. Queda una diferencia de tiempo de una escritura en la base (emitir el token) entre los dos casos; no se igualó. (*)
+- **Sesiones al desplegar**: un JWT sin el claim `ver` se lee como versión 0, que es con la que arrancan todas las cuentas. Desplegar el paso 1 no cierra la sesión de nadie.
+- **`change-password` devuelve tokens nuevos** para que la sesión que hizo el cambio siga abierta; todas las demás se cierran. Una contraseña actual incorrecta responde `400`, no `401`: el cliente trata un `401` como sesión vencida.
+- **Límites** (por ventana, en memoria): `register` 10 por hora por IP; `verify-email` 20 cada 15 min por IP; `resend-verification` 3 cada 15 min por usuario; `forgot-password` 10 cada 15 min por IP y 3 por correo; `reset-password` 10 cada 15 min por IP; `change-password` 10 cada 15 min por usuario; `change-email` 5 por hora por usuario. (*)
+- **Variable `RATE_LIMIT_ENABLED`** (no estaba en §12): apaga esos límites. Existe solo para los tests de punta a punta, donde todas las peticiones salen de la misma IP. El límite de login no la mira.
+- **De §5.4 queda para después**: `DELETE /auth/me` y `GET /auth/me/export` (dependen de suscripciones y de §6.4; entran con los pasos 2 y 5), y las secciones de `/cuenta` de suscripción, método de pago, historial de pagos y documentos aceptados. `/cuenta` trae hoy perfil, correo y contraseña. (*)
+- **De §5.8 queda para el paso 5**: "cuenta sin verificar → no puede crear suscripción", porque `POST /billing/subscriptions` todavía no existe.
+- **`FileEmailSender`** no rechaza todavía el arranque con llaves de producción de Wompi: esas variables llegan en el paso 5. Queda anotado en `core/email.py`.
+
 ### 5.8 Tests de aceptación
 
 - Token de verificación usado dos veces → el segundo uso se rechaza.

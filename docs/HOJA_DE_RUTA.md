@@ -102,7 +102,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
 | 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido y en `main` (2026-10-06); falta solo GlitchTip** (ver abajo) |
-| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | En curso (rama `fase-4-paso-1-correo`) |
+| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Construido el 2026-10-06** (rama `fase-4-paso-1-correo`); cierre pendiente del dominio y de Resend (ver `PLATAFORMA_COMPLETA.md` §5.7.1) |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, Juego Responsable, onboarding | §6 | Pendiente |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §4.4, §4.5 | Pendiente |

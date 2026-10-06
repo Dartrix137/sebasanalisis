@@ -45,7 +45,18 @@ SEED_ADMIN_EMAIL=<correo real del administrador>
 SEED_ADMIN_PASSWORD=<clave fuerte>
 FORWARDED_ALLOW_IPS=<red del proxy de Dokploy, ver abajo>
 SENTRY_DSN=<DSN del proyecto de la API en GlitchTip; vacio hasta instalarlo>
+FRONTEND_BASE_URL=https://sebasanalisis.com
+EMAIL_BACKEND=console
 ```
+
+`FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
+(verificar el correo, restablecer la contrasena). Es la direccion **publica del
+frontend**, sin barra final. Si queda el `localhost` por defecto, los correos
+salen con enlaces que no abren.
+
+`EMAIL_BACKEND=console` significa que la API **no envia correo**: lo imprime en
+su log. Es el valor mientras no haya dominio ni proveedor; ver "Correo" abajo
+para encenderlo.
 
 Tres cosas que se rompen en silencio si se copian de desarrollo o se dejan vacias:
 
@@ -158,6 +169,55 @@ la aplicacion queda viva pero rota:
    arrancar.
 
 Repetir la comprobacion de la seccion anterior despues de migrar.
+
+## Correo
+
+La API envia correos de verificacion, de restablecimiento de contrasena y de
+aviso. El codigo solo conoce SMTP generico; el proveedor elegido es Resend.
+
+### Mientras no hay dominio
+
+Con `EMAIL_BACKEND=console` (o sin la variable) no se envia nada: cada correo
+sale en el log de la API, con su enlace. Sirve para probar el flujo a mano
+(registrarse, copiar el enlace del log, abrirlo), pero **un usuario real no
+recibe nada**: no puede confirmar su correo ni recuperar su contrasena. Las
+cuentas siguen entrando sin confirmar, asi que la mesa no se ve afectada.
+
+### Encenderlo (pendiente: necesita el dominio)
+
+1. **Confirmar con Resend, por escrito, que su politica de uso admite el
+   producto**: analisis estadistico por suscripcion, adyacente a juegos de azar,
+   que no recibe apuestas. Si la respuesta es no, se usa otro relay SMTP (Brevo,
+   Amazon SES) cambiando solo las variables.
+2. En Resend, dar de alta el **subdominio remitente** (por ejemplo
+   `correo.sebasanalisis.com`), no el dominio principal: separa la reputacion
+   del correo automatico.
+3. En el DNS de Hostinger, crear los registros **SPF, DKIM y DMARC** que Resend
+   muestra para ese subdominio. Sin ellos los correos caen en spam.
+4. En la API (`Environment`), con los valores de host, puerto y usuario copiados
+   de la **documentacion vigente de Resend** (la contrasena es la API key):
+
+   ```
+   EMAIL_BACKEND=smtp
+   SMTP_HOST=...
+   SMTP_PORT=587
+   SMTP_USER=...
+   SMTP_PASSWORD=<API key de Resend>
+   SMTP_FROM=Sebasanálisis <no-responder@correo.sebasanalisis.com>
+   SMTP_USE_TLS=true
+   ```
+
+   Con el puerto 465 la conexion es TLS desde el inicio; con 587 se cifra con
+   STARTTLS. Los dos funcionan con `SMTP_USE_TLS=true`.
+5. Redesplegar la API y comprobar: registrar una cuenta con un correo propio,
+   recibir el correo en la bandeja de entrada (no en spam) y abrir el enlace.
+   Repetir con "¿Olvidaste tu contraseña?".
+6. Revisar los topes diario y mensual del plan de Resend contra el volumen
+   esperado: un tope diario alcanzado deja sin correo de verificacion a quien se
+   registre ese dia.
+
+`EMAIL_BACKEND=file` y `RATE_LIMIT_ENABLED=false` son solo para los tests de
+punta a punta. **Nunca van en produccion.**
 
 ## Monitoreo de errores con GlitchTip
 
