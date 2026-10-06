@@ -17,8 +17,8 @@ multiples antes de decidir si la senal se activa. Ver `all_chi_square_signals`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Sequence
 
 from scipy import stats
 
@@ -180,7 +180,7 @@ def _apply_correction(
     activa = p_adjusted < P_VALUE_THRESHOLD
     if activa:
         motivo = None
-    elif result.p_value < P_VALUE_THRESHOLD:
+    elif result.p_value is not None and result.p_value < P_VALUE_THRESHOLD:
         # Pasaba sola pero no sobrevive a la familia. Hay que decirlo con todas
         # las letras: desde fuera, ver p=0.041 junto a una senal apagada parece
         # un error de calculo y no lo es.
@@ -214,7 +214,9 @@ def all_chi_square_signals(
     if not evaluadas:
         return crudos
 
-    ajustados = benjamini_hochberg([crudos[cid].p_value for cid in evaluadas])
+    ajustados = benjamini_hochberg(
+        [p for cid in evaluadas if (p := crudos[cid].p_value) is not None]
+    )
     corregidos = dict(crudos)
     for cid, q in zip(evaluadas, ajustados):
         corregidos[cid] = _apply_correction(crudos[cid], q, len(evaluadas))

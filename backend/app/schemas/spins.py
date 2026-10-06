@@ -4,8 +4,9 @@ Schemas: Spins (resultados genéricos de cualquier juego de resultados discretos
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
+
 from pydantic import ConfigDict
+
 from app.schemas.base import ApiModel
 
 
@@ -51,8 +52,8 @@ class SpinResponse(ApiModel):
     # ellos el aviso "la progresión sube del escalón 2 al 3", y deshacer el giro
     # los restaura. Son dos porque las tres progresiones corren a la vez (§2.10);
     # la plana no tiene escalón, siempre está en 0.
-    stage_martingale_before: Optional[int] = None
-    stage_two_sector_before: Optional[int] = None
+    stage_martingale_before: int | None = None
+    stage_two_sector_before: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

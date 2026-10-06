@@ -4,7 +4,6 @@ import pytest
 
 from app.engine.streak import active_streak, longest_active_streak, streak_probability
 
-
 # ---------- Tabla de regresion de la skill (europea, p = 18/37) ----------
 
 

@@ -178,6 +178,7 @@ Las decisiones pendientes de §10 de ese documento no se resuelven en silencio: 
 ## Convenciones de código
 
 - Python: type hints en todo, Pydantic para validación de I/O, nombres de funciones y variables en español o inglés de forma consistente dentro de cada módulo (no mezclar en el mismo archivo).
+- `ruff check .` y `mypy` corren en el CI y se corren en local antes de commitear (configuración en `backend/pyproject.toml`). `mypy` revisa en modo estricto los módulos puros: `app/engine/` hoy; al crear `app/billing/` se agrega a `files`.
 - Nombres de tablas/campos en `snake_case`, en español donde ya están definidos en el doc de arquitectura (ej. `bankroll_current`), no los traduzcas.
 - Tests: cada módulo de `engine/` y de `billing/` necesita tests unitarios con pytest antes de conectarse a un endpoint. Usa casos conocidos del documento de estrategia verificado (ej. la tabla de martingala $100→$102.300 en 10 pérdidas) como test de regresión.
 - Frontend: componentes tipados, sin `any`.

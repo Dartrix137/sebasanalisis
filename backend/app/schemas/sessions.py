@@ -4,11 +4,11 @@ Schemas: Game Sessions
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
+
 from pydantic import ConfigDict, Field, computed_field
-from app.schemas.base import ApiModel
 
 from app.engine.bankroll import stop_reason as _stop_reason
+from app.schemas.base import ApiModel
 
 
 class StopReason(str, Enum):
@@ -49,13 +49,13 @@ class BankrollStrategy(str, Enum):
 
 class CreateSessionRequest(ApiModel):
     game_variant_id: UUID
-    name: Optional[str] = Field(default=None, max_length=100)
+    name: str | None = Field(default=None, max_length=100)
     window_size: int = Field(default=50, ge=5, le=500)
     bankroll_start: float = Field(gt=0)
     base_bet: float = Field(gt=0)
     table_limit: float = Field(gt=0)
     # Pérdida neta en la que el usuario decide detenerse (§2.8). Opcional.
-    loss_limit: Optional[float] = Field(default=None, gt=0)
+    loss_limit: float | None = Field(default=None, gt=0)
 
     def validate_bet_within_bankroll(self):
         if self.base_bet > self.bankroll_start:
@@ -68,13 +68,13 @@ class CreateSessionRequest(ApiModel):
 
 
 class UpdateSessionRequest(ApiModel):
-    name: Optional[str] = Field(default=None, max_length=100)
-    window_size: Optional[int] = Field(default=None, ge=5, le=500)
-    table_limit: Optional[float] = Field(default=None, gt=0)
+    name: str | None = Field(default=None, max_length=100)
+    window_size: int | None = Field(default=None, ge=5, le=500)
+    table_limit: float | None = Field(default=None, gt=0)
     # Solo se puede fijar si no había uno, o bajar. Subirlo o quitarlo con la
     # sesión abierta es "aumentar el límite para recuperar" (§9 del documento
     # verificado); el endpoint lo rechaza con 422.
-    loss_limit: Optional[float] = Field(default=None, gt=0)
+    loss_limit: float | None = Field(default=None, gt=0)
 
 
 # ---------- Responses ----------
@@ -83,26 +83,26 @@ class SessionResponse(ApiModel):
     id: UUID
     user_id: UUID
     game_variant_id: UUID
-    name: Optional[str] = None
+    name: str | None = None
     status: SessionStatus
     window_size: int
     bankroll_start: float
     bankroll_current: float
     base_bet: float
     table_limit: float
-    loss_limit: Optional[float] = None
+    loss_limit: float | None = None
     # Un escalón por progresión: las tres corren a la vez y el usuario sigue la
     # que quiera (§2.10). La plana no tiene escalón porque no tiene progresión.
     stage_martingale: int
     stage_two_sector: int
     started_at: datetime
-    closed_at: Optional[datetime] = None
+    closed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def stop_reason(self) -> Optional[StopReason]:
+    def stop_reason(self) -> StopReason | None:
         """null mientras se pueda apostar. Con valor, la mesa sigue abierta pero
         no acepta apuestas: la banca no cubre la apuesta base o se alcanzó el
         límite de pérdida. Se deriva de la banca, así que deshacer el giro que lo

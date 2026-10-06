@@ -664,7 +664,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 9 | Proveedor SMTP concreto | **Resuelta (2026-10-05): Resend**, enviando desde un subdominio propio. Queda una condición: confirmar con Resend que su política de uso admite el producto antes de configurar el dominio. Ver §13.6. |
 | 10 | Correo y responsable que figuran en la política de datos | Pendiente del usuario. El correo de contacto puede ser un buzón de Hostinger en el dominio (`soporte@…`), separado del remitente transaccional. |
 | 11 | Servicio de monitoreo de errores | **Resuelta (2026-10-05): GlitchTip autohospedado** en el mismo VPS. Ver §13.6. |
-| 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | No se hacen hasta que el usuario diga cuáles. Los tests de frontend ya están decididos (§13.3). |
+| 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. Los tests de frontend ya están decididos (§13.3). |
 
 ---
 
@@ -806,7 +806,7 @@ Hoy el frontend no tiene ningún test. Se agregan tests de punta a punta (navega
 
 | Mejora | Qué aporta | Cuándo convendría |
 |---|---|---|
-| `ruff` y `mypy` en el backend, dentro del CI | Errores de tipos y de estilo antes de la revisión. | Fase 0. |
+| `ruff` y `mypy` en el backend, dentro del CI | Errores de tipos y de estilo antes de la revisión. | **Hecho en la Fase 0 (decidido el 2026-10-06).** `ruff` revisa todo el backend (solo lint, sin formateador); `mypy` en modo estricto revisa `app/engine/`, y `app/billing/` se le suma al crearse. Configuración en `backend/pyproject.toml`. |
 | Cabeceras `Content-Security-Policy` en `next.config.ts` | Los tokens viven en `localStorage` y el checkout carga un script de terceros (el widget de Wompi). Una CSP limita qué puede ejecutar la página. | Paso 5. |
 | Refresh token en cookie `httpOnly` en vez de `localStorage` | Lo saca del alcance de un script inyectado. Cambia el flujo de auth y la configuración de CORS. | Después del lanzamiento. |
 

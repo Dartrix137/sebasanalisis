@@ -15,6 +15,9 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
+from app.engine import bankroll as bk
+from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
+from app.engine.probability import GameConfig
 from app.models import Bet, GameSession, GameVariant, Spin, StatisticalSuggestion
 from app.schemas.games import GameVariantConfig
 from app.schemas.sessions import (
@@ -24,9 +27,6 @@ from app.schemas.sessions import (
     SessionSummaryResponse,
     UpdateSessionRequest,
 )
-from app.engine import bankroll as bk
-from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
-from app.engine.probability import GameConfig
 from app.schemas.spins import BulkSpinsRequest, BulkSpinsResponse, CreateSpinRequest, SpinResponse
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])

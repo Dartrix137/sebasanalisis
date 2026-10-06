@@ -3,10 +3,10 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
+from sqlalchemy import DateTime, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):

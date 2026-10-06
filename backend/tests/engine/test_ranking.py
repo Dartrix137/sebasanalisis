@@ -3,10 +3,6 @@
 import pytest
 
 from app.engine.chi_square import all_chi_square_signals, chi_square_signal
-from tests.engine.test_chi_square import (
-    GIROS_CON_SESGO_BURDO,
-    GIROS_SIN_SESGO_CON_UN_P_BAJO,
-)
 from app.engine.frequency import category_frequencies
 from app.engine.ranking import (
     EV_MEDIUM,
@@ -17,7 +13,10 @@ from app.engine.ranking import (
     significance_score,
     top3,
 )
-
+from tests.engine.test_chi_square import (
+    GIROS_CON_SESGO_BURDO,
+    GIROS_SIN_SESGO_CON_UN_P_BAJO,
+)
 
 # ---------- significance_score ----------
 

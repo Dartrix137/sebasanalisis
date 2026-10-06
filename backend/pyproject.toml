@@ -1,0 +1,37 @@
+# Configuracion de las herramientas de calidad del backend. Las dependencias
+# siguen en requirements.txt y requirements-dev.txt.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["app/db/migrations/versions"]
+
+[tool.ruff.lint]
+# E/F: errores de sintaxis y de nombres. I: orden de imports. B: errores
+# comunes. UP: sintaxis vigente de Python 3.11. Solo lint: no se usa el
+# formateador, para no reescribir el repositorio entero.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    # `Depends(...)` y `Query(...)` como valor por defecto son el idioma de FastAPI.
+    "B008",
+    # El largo de linea no se impone: hay tablas y mensajes que se leen mejor enteros.
+    "E501",
+    # Pasar (str, Enum) a StrEnum cambia lo que devuelve str() sobre el valor.
+    "UP042",
+    # zip() sin strict: exigirlo cambiaria comportamiento donde hoy se trunca.
+    "B905",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+# Se revisan los modulos puros, donde un tipo mal puesto es un calculo mal
+# hecho: el motor y, cuando exista, billing/. El resto de la app entra despues.
+files = ["app/engine"]
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

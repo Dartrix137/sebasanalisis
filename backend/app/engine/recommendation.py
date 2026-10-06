@@ -32,10 +32,10 @@ con el signo de `z`, en vez de quedar implicita en el EV.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from statistics import fmean
-from typing import Sequence
 
 from app.engine.chi_square import ChiSquareResult, all_chi_square_signals
 from app.engine.frequency import (
@@ -233,21 +233,21 @@ def market_catalog(config: GameConfig) -> list[Market]:
 
     combinados: list[Market] = []
     for combo in config.allowed_combinations:
-        category = config.category(combo.category_id)
-        if category is None:
+        combo_category = config.category(combo.category_id)
+        if combo_category is None:
             raise KeyError(
                 f"La combinacion '{combo.id}' referencia la categoria "
                 f"'{combo.category_id}', que no existe"
             )
         grupos = []
         for gid in combo.group_ids:
-            group = category.group(gid)
-            if group is None:
+            combo_group = combo_category.group(gid)
+            if combo_group is None:
                 raise KeyError(
                     f"La combinacion '{combo.id}' referencia el grupo '{gid}', "
                     f"que no existe en la categoria '{combo.category_id}'"
                 )
-            grupos.append(group)
+            grupos.append(combo_group)
 
         cubiertos: set[str] = set()
         for group in grupos:
@@ -274,7 +274,7 @@ def market_catalog(config: GameConfig) -> list[Market]:
                 outcomes=frozenset(cubiertos),
                 payout=pagos.pop(),
                 sectors=len(grupos),
-                shrinkage_alpha=category.shrinkage_alpha,
+                shrinkage_alpha=combo_category.shrinkage_alpha,
                 order=0,
             )
         )
@@ -589,7 +589,9 @@ class Recommendation:
         )
 
 
-def _tie_break_key(config: GameConfig, scored: ScoredMarket) -> tuple:
+def _tie_break_key(
+    config: GameConfig, scored: ScoredMarket
+) -> tuple[float, int, int, tuple[str, ...], str]:
     """Desempate determinista (§2.10): mayor score, menor cobertura, orden de
     catalogo.
 

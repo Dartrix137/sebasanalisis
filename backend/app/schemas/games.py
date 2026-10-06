@@ -4,16 +4,16 @@ Modelo genérico: cualquier juego de resultados discretos con probabilidad fija
 (ruleta, dados, y futuros) se describe con el mismo esquema de configuración.
 """
 from uuid import UUID
-from typing import Optional
-from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
-from app.schemas.base import ApiModel
 
+from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
+
+from app.schemas.base import ApiModel
 
 # ---------- Config genérica (categories_json) ----------
 
 class CategoryGroup(ApiModel):
     """Un grupo dentro de una categoría, ej: 'red' dentro de 'color'."""
-    label: Optional[str] = None  # nombre legible del grupo, ej 'Rojo'; lo trae el seed
+    label: str | None = None  # nombre legible del grupo, ej 'Rojo'; lo trae el seed
     outcomes: list[str] = Field(min_length=1)
     payout: float = Field(gt=0, description="Multiplicador de pago, ej 1 para rojo/negro, 35 para pleno")
     market: bool = Field(
@@ -110,8 +110,8 @@ class CreateGameRequest(ApiModel):
 
 
 class UpdateGameRequest(ApiModel):
-    name: Optional[str] = None
-    active: Optional[bool] = None
+    name: str | None = None
+    active: bool | None = None
 
 
 class CreateGameVariantRequest(ApiModel):
@@ -122,10 +122,10 @@ class CreateGameVariantRequest(ApiModel):
 
 
 class UpdateGameVariantRequest(ApiModel):
-    name: Optional[str] = None
-    house_edge: Optional[float] = Field(default=None, ge=0, le=1)
-    config: Optional[GameVariantConfig] = None
-    active: Optional[bool] = None
+    name: str | None = None
+    house_edge: float | None = Field(default=None, ge=0, le=1)
+    config: GameVariantConfig | None = None
+    active: bool | None = None
 
 
 # ---------- Responses ----------

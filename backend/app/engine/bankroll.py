@@ -753,7 +753,7 @@ def bankroll_alerts(
         )
     else:
         distancia = _stages_until_table_limit(strategy, base_bet, stage, table_limit)
-        if distancia is not None:
+        if distancia is not None and table_limit is not None:
             siguiente = base_bet * stage_multiplier(strategy, stage + distancia)
             alertas.append(
                 BankrollAlert(

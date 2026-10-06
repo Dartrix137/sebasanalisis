@@ -47,6 +47,14 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt pip-audit
 
+      - name: Lint (ruff)
+        run: ruff check .
+
+      # Por ahora solo los modulos puros (pyproject.toml): engine/ y, cuando
+      # exista, billing/.
+      - name: Tipos (mypy)
+        run: mypy
+
       # Una migracion que no baja no esta terminada: se sube sobre base limpia,
       # se baja la ultima y se vuelve a subir.
       - name: Migraciones (upgrade, downgrade -1, upgrade)

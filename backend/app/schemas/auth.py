@@ -4,8 +4,9 @@ Schemas: Auth & Users
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
+
 from pydantic import ConfigDict, EmailStr, Field
+
 from app.schemas.base import ApiModel
 
 
@@ -25,7 +26,7 @@ class UserRole(str, Enum):
 class RegisterRequest(ApiModel):
     email: EmailStr
     password: str = Field(min_length=8)
-    display_name: Optional[str] = Field(default=None, max_length=100)
+    display_name: str | None = Field(default=None, max_length=100)
 
 
 class LoginRequest(ApiModel):
@@ -42,7 +43,7 @@ class RefreshRequest(ApiModel):
 class UserResponse(ApiModel):
     id: UUID
     email: EmailStr
-    display_name: Optional[str] = None
+    display_name: str | None = None
     access_type: AccessType
     role: UserRole
     created_at: datetime

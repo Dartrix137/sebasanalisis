@@ -13,7 +13,7 @@ backtest necesita poder hacer.
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession

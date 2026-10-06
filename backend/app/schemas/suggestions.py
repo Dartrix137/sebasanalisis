@@ -4,10 +4,10 @@ Schemas: Statistical suggestions & Bankroll suggestions
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
-from pydantic import ConfigDict
-from app.schemas.base import ApiModel
 
+from pydantic import ConfigDict
+
+from app.schemas.base import ApiModel
 from app.schemas.sessions import BankrollStrategy
 
 
@@ -42,7 +42,7 @@ class StatisticalSuggestionItem(ApiModel):
     # §2.4). Es el que sostiene la decisión de activar la señal; el crudo no viaja
     # a la UI porque leerlo como significancia sobreestima lo que la familia de
     # pruebas respalda. null si el χ² no está activo para esa categoría.
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
 
 
 class StatisticalSuggestionsPanel(ApiModel):
@@ -103,8 +103,8 @@ class BankrollSuggestionResponse(ApiModel):
     recovers_only_to_break_even: bool
     exceeds_table_limit: bool
     exceeds_bankroll: bool
-    risk_warning: Optional[str] = None
-    ruin_probability_estimate: Optional[float] = None
+    risk_warning: str | None = None
+    ruin_probability_estimate: float | None = None
     # Recordatorio fijo: ninguna progresión altera la ventaja de la casa (§2.8).
     disclaimer: str
     next_if_lost: NextStepResponse
@@ -150,7 +150,7 @@ class ProgressionTableResponse(ApiModel):
     sectors: int
     rows: list[ProgressionRowResponse]
     max_affordable_stages: int
-    ruin_probability_estimate: Optional[float] = None
+    ruin_probability_estimate: float | None = None
     disclaimer: str
 
 
@@ -160,7 +160,7 @@ class SuggestionSnapshot(ApiModel):
     spin_index: int
     created_at: datetime
     panel: StatisticalSuggestionsPanel
-    bankroll: Optional[BankrollSuggestionResponse] = None
+    bankroll: BankrollSuggestionResponse | None = None
 
 
 # ============================================================================
@@ -243,7 +243,7 @@ class ScoreComponentsResponse(ApiModel):
     # C: coherencia entre tramos disjuntos del historial. null cuando hay un solo
     # tramo — un tramo no tiene con qué ser consistente, y entonces su peso se
     # reparte entre D y R.
-    consistency: Optional[float] = None
+    consistency: float | None = None
     weight_deviation: float
     weight_recency: float
     weight_consistency: float
@@ -272,7 +272,7 @@ class ScoredMarketResponse(ApiModel):
     signal_band: SignalBand
     components: ScoreComponentsResponse
     windows: list[WindowStatResponse]
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
 
 
 class MarketStakeResponse(ApiModel):
@@ -284,7 +284,7 @@ class MarketStakeResponse(ApiModel):
     """
     strategy: BankrollStrategy
     applicable: bool
-    reason: Optional[str] = None
+    reason: str | None = None
     stage: int
     bet_per_sector: float
     total_bet: float
@@ -305,7 +305,7 @@ class RecommendationResponse(ApiModel):
     session_id: UUID
     decision: RecommendationDecision
     # null con RECOMMEND.
-    no_bet_reason: Optional[NoBetReason] = None
+    no_bet_reason: NoBetReason | None = None
     # Giros por debajo de los cuales un NO_BET es por falta de información.
     min_spins_for_signal: int
     # Umbral medio: desde aquí la señal es MEDIA.
@@ -317,9 +317,9 @@ class RecommendationResponse(ApiModel):
     signal_score: float
     signal_band: SignalBand
     # El mercado a apostar. null con NO_BET.
-    market: Optional[MarketResponse] = None
+    market: MarketResponse | None = None
     # El mejor candidato, haya o no recomendación.
-    best: Optional[ScoredMarketResponse] = None
+    best: ScoredMarketResponse | None = None
     # Las tres progresiones sobre el mercado recomendado, en orden de menú.
     # Vacío con NO_BET: no hay monto que calcular.
     stakes: list[MarketStakeResponse] = []
@@ -336,7 +336,7 @@ class RecommendationRecord(ApiModel):
     """Una recomendación ya emitida y su cierre — historial y auto-evaluación."""
     id: UUID
     session_id: UUID
-    spin_id: Optional[UUID] = None
+    spin_id: UUID | None = None
     decision: RecommendationDecision
     market_key: str
     category: str
@@ -349,12 +349,12 @@ class RecommendationRecord(ApiModel):
     observed_ci_low: float
     observed_ci_high: float
     ev: float
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
     # Monto en centavos, nunca float. null con NO_BET.
-    stake_cents: Optional[int] = None
+    stake_cents: int | None = None
     currency: str
     outcome: RecommendationOutcome
-    resolved_spin_id: Optional[UUID] = None
+    resolved_spin_id: UUID | None = None
     window_size_used: int
     created_at: datetime
 

@@ -2,11 +2,15 @@
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, enum_col, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.spin import Spin
 
 SESSION_STATUSES = ("active", "closed", "abandoned")
 

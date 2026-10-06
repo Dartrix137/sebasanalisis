@@ -10,7 +10,6 @@ from app.engine.frequency import (
     wilson_interval,
 )
 
-
 # ---------- Caso de regresion de la skill ----------
 
 

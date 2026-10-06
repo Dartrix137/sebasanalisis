@@ -14,11 +14,11 @@ import pytest
 from app.engine.probability import GameConfig
 from app.engine.recommendation import (
     CHI_SQUARE_BONUS,
+    MIN_SPINS_FOR_SIGNAL,
     STRONG_THRESHOLD,
     WEIGHT_CONSISTENCY,
     WEIGHT_DEVIATION,
     WEIGHT_RECENCY,
-    MIN_SPINS_FOR_SIGNAL,
     Decision,
     NoBetReason,
     Outcome,

@@ -120,7 +120,7 @@ Construido en la rama `fase-4-paso-0-stack` (2026-10-06):
 - FastAPI 0.142.2, PyJWT 2.15.1 y python-multipart 0.0.32; `pip-audit` sin vulnerabilidades conocidas. No estaba en la lista original: lo exigió el `pip-audit` del CI.
 - IP real del cliente tras el proxy (`--proxy-headers`, `FORWARDED_ALLOW_IPS`), con tests del rate limit de login.
 - Tipos del cliente API generados (`npm run gen:types`); `lib/types/` reexporta. Los schemas heredan de `ApiModel`.
-- CI en GitHub Actions: backend, frontend y punta a punta.
+- CI en GitHub Actions: backend, frontend y punta a punta. Incluye `ruff` sobre todo el backend y `mypy` estricto sobre `app/engine/`.
 - Playwright con el test de humo.
 - `sentry-sdk` y `@sentry/nextjs` con el filtro de datos sensibles, apagados sin DSN.
 
