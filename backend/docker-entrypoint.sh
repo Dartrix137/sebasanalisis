@@ -20,5 +20,11 @@ if [ "$RUN_SEED" = "1" ]; then
   python -m app.db.seed
 fi
 
+# Detras del proxy de Dokploy, la IP que ve uvicorn es la del proxy. Con
+# --proxy-headers toma la del cliente de X-Forwarded-For, pero SOLO cuando la
+# conexion viene de una direccion listada en FORWARDED_ALLOW_IPS: de cualquier
+# otro origen la cabecera se ignora, porque la puede escribir quien quiera. Sin
+# la variable se confia unicamente en el propio contenedor (ver DESPLIEGUE.md).
 echo "Levantando API en el puerto 8000..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+  --proxy-headers --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-127.0.0.1}"

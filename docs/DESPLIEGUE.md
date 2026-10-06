@@ -42,9 +42,26 @@ REFRESH_TOKEN_EXPIRE_DAYS=30
 CORS_ORIGINS=["https://sebasanalisis.com"]
 SEED_ADMIN_EMAIL=<correo real del administrador>
 SEED_ADMIN_PASSWORD=<clave fuerte>
+FORWARDED_ALLOW_IPS=<red del proxy de Dokploy, ver abajo>
 ```
 
-Dos cosas que se rompen en silencio si se copian de desarrollo:
+Tres cosas que se rompen en silencio si se copian de desarrollo o se dejan vacias:
+
+- **`FORWARDED_ALLOW_IPS` es la red de Docker desde la que el proxy de Dokploy
+  (Traefik) le habla a la API.** Sin ella, la API ve a todos los usuarios con la
+  IP del proxy: el limite de intentos de login queda compartido entre todos, y
+  las IP que se guarden como evidencia no sirven. Se saca en el VPS con:
+
+  ```
+  docker network inspect dokploy-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+  ```
+
+  y se pone tal cual, en formato CIDR (por ejemplo `10.0.1.0/24`). **No se pone
+  `*`**: con `*` cualquiera que alcance el puerto de la API puede escribir la
+  cabecera `X-Forwarded-For` y hacerse pasar por otra IP. Comprobacion despues
+  de desplegar: fallar el login 5 veces desde un equipo deja bloqueado ese
+  correo solo desde ese equipo; desde otra red (el celular con datos) el mismo
+  correo todavia responde "credenciales invalidas" y no "demasiados intentos".
 
 - **`DATABASE_URL` lleva el prefijo `postgresql+psycopg://`**, no `postgres://`.
   Dokploy muestra la cadena en el formato corto; hay que adaptarla.
