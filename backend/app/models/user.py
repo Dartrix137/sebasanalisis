@@ -11,7 +11,7 @@ de verdad por si solo, idempotencia por `provider_event_id`).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,10 +29,16 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     # Opcional: el formulario de registro lo pide, pero no es obligatorio (§3.3).
     display_name: Mapped[str | None] = mapped_column(String(100))
-    # Campo preparado, sin logica todavia: el registro deja la cuenta activa de
-    # inmediato con access_type='trial'. Existe para no necesitar otra migracion
-    # si mas adelante se agrega verificacion por correo.
+    # Se pone en True al confirmar el enlace del correo (§5.2 de la Fase 4). No
+    # da ni quita acceso a la mesa por si solo: es requisito para pagar.
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Viaja en el JWT. Cambiar o restablecer la contrasena la incrementa, y con
+    # eso todo token emitido antes deja de valer: cierra las demas sesiones sin
+    # necesitar una tabla de refresh tokens (§5.3).
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     access_type: Mapped[str] = mapped_column(
         enum_col(*ACCESS_TYPES, name="access_type"), default="trial", nullable=False
     )

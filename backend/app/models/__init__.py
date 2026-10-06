@@ -8,6 +8,7 @@ from app.models.performance import SessionPerformance
 from app.models.spin import Spin
 from app.models.suggestion import BankrollSuggestion, StatisticalSuggestion
 from app.models.user import PaymentEvent, Subscription, User
+from app.models.user_token import UserToken
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "BankrollSuggestion",
     "Subscription",
     "User",
+    "UserToken",
 ]
