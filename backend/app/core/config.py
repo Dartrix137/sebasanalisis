@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # DSN del proyecto de la API en GlitchTip. Vacio = monitoreo desactivado.
     sentry_dsn: str = ""
 
+    # Solo se apaga en los tests de punta a punta, donde todas las peticiones
+    # salen de la misma IP y el limite por IP las cortaria. Nunca en produccion.
+    rate_limit_enabled: bool = True
+
     # Base de los enlaces que viajan en los correos (verificar, restablecer).
     frontend_base_url: str = "http://localhost:3000"
 

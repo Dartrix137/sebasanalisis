@@ -28,11 +28,13 @@ def get_current_user(
     if credentials is None:
         raise _CREDENTIALS_ERROR
     try:
-        user_id = decode_token(credentials.credentials, "access")
+        claims = decode_token(credentials.credentials, "access")
     except TokenError:
         raise _CREDENTIALS_ERROR from None
-    user = db.get(User, user_id)
-    if user is None:
+    user = db.get(User, claims.user_id)
+    # Una version distinta significa que la contrasena cambio despues de emitir
+    # el token: esa sesion quedo revocada (§5.3 de la Fase 4).
+    if user is None or claims.token_version != user.token_version:
         raise _CREDENTIALS_ERROR
     return user
 
