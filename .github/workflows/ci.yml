@@ -1,0 +1,107 @@
+# CI de Sebasanalisis (docs/PLATAFORMA_COMPLETA.md §13.1).
+#
+# Corre en cada push. Dos trabajos independientes: si uno falla, el otro
+# termina igual y se ve todo lo que hay que arreglar de una vez.
+name: CI
+
+on:
+  push:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sebas
+          POSTGRES_PASSWORD: sebas
+          POSTGRES_DB: sebasanalisis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sebas -d sebasanalisis"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Credenciales de la base desechable de este trabajo, no secretos.
+      DATABASE_URL: postgresql+psycopg://sebas:sebas@localhost:5432/sebasanalisis
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt pip-audit
+
+      # Una migracion que no baja no esta terminada: se sube sobre base limpia,
+      # se baja la ultima y se vuelve a subir.
+      - name: Migraciones (upgrade, downgrade -1, upgrade)
+        run: |
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head
+
+      # Los tests de API crean su propia base (sebasanalisis_test) en el mismo
+      # servidor, a partir de DATABASE_URL.
+      - name: Tests
+        run: pytest -q
+
+      - name: Auditoria de dependencias
+        run: pip-audit -r requirements.txt
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Python solo para exportar el OpenAPI: gen:types importa la app.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias del backend
+        run: pip install -r ../backend/requirements.txt
+
+      - name: Instalar dependencias del frontend
+        run: npm ci
+
+      # Si alguien cambio un schema o un endpoint y no regenero, esto falla.
+      - name: Tipos generados al dia
+        run: |
+          npm run gen:types
+          git diff --exit-code -- lib/api/openapi.json lib/api/schema.d.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Auditoria de dependencias de produccion
+        run: npm audit --omit=dev --audit-level=high
