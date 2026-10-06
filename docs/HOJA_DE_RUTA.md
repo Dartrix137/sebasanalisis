@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-05.
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-06.
 
 ---
 
@@ -101,7 +101,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
-| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | Pendiente |
+| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido el 2026-10-06; cierre pendiente** (ver abajo) |
 | 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | Pendiente |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, Juego Responsable, onboarding | §6 | Pendiente |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
@@ -112,6 +112,28 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
 | 9 | Lanzamiento comercial | §9, párrafo final | Pendiente |
 
+### Paso 0: qué quedó hecho y qué falta para cerrarlo
+
+Construido en la rama `fase-4-paso-0-stack` (2026-10-06):
+
+- Next.js 16.3.8 y React 19.3.0; `npm audit --omit=dev` sin vulnerabilidades. Next 16 retiró `next lint`: el script `lint` llama a ESLint.
+- FastAPI 0.142.2, PyJWT 2.15.1 y python-multipart 0.0.32; `pip-audit` sin vulnerabilidades conocidas. No estaba en la lista original: lo exigió el `pip-audit` del CI.
+- IP real del cliente tras el proxy (`--proxy-headers`, `FORWARDED_ALLOW_IPS`), con tests del rate limit de login.
+- Tipos del cliente API generados (`npm run gen:types`); `lib/types/` reexporta. Los schemas heredan de `ApiModel`.
+- CI en GitHub Actions: backend, frontend y punta a punta.
+- Playwright con el test de humo.
+- `sentry-sdk` y `@sentry/nextjs` con el filtro de datos sensibles, apagados sin DSN.
+
+De la lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 **faltan tres cosas, ninguna de código**:
+
+| Falta | Depende de |
+|---|---|
+| CI en verde en `main` | Mezclar la rama (hoy está en verde en la rama). |
+| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS: pasos en `DESPLIEGUE.md`. |
+| Rate limit de login probado con dos IP detrás del proxy real | Desplegar y poner `FORWARDED_ALLOW_IPS`: comprobación en `DESPLIEGUE.md`. Con el middleware de uvicorn ya está probado en los tests. |
+
+Quedó sin hacer, a propósito: las dos reglas nuevas de `react-hooks` que marcan `lib/session.tsx` y los formularios están como advertencia en `eslint.config.mjs`; y `npm audit` completo (con dependencias de desarrollo) sigue reportando avisos altos por la cadena de Tailwind 3, que solo se cierran migrando a Tailwind 4.
+
 ### Decisiones tomadas para la Fase 4
 
 - Cobro con renovación automática y tarjeta tokenizada en Wompi.
@@ -120,6 +142,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 - Tests de frontend de punta a punta con Playwright.
 - Tipos del cliente API generados con `openapi-typescript`.
 - Dominio `sebasanalisis.com`, en Hostinger junto con el VPS.
+- El VPS tiene 8 GB de RAM (confirmado el 2026-10-06): alcanza para GlitchTip junto a la aplicación.
 
 ### Pendiente del usuario
 
@@ -132,7 +155,6 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Qué pasa con los usuarios `trial` actuales | Paso 3 |
 | Planes y precios iniciales | Paso 4 |
 | Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |
-| Memoria disponible en el VPS para GlitchTip | Paso 0 |
 
 ---
 
