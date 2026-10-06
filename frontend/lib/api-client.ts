@@ -10,6 +10,7 @@
 import type {
   ChangeEmailRequest,
   ChangePasswordRequest,
+  DeleteAccountRequest,
   ForgotPasswordRequest,
   LoginRequest,
   MessageResponse,
@@ -179,6 +180,14 @@ export const authApi = {
   changePassword: (token: string, body: ChangePasswordRequest) =>
     apiFetch<TokenResponse>("/auth/change-password", {
       method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Elimina la cuenta y todos sus datos. No se puede deshacer. */
+  deleteAccount: (token: string, body: DeleteAccountRequest) =>
+    apiFetch<void>("/auth/me", {
+      method: "DELETE",
       body: JSON.stringify(body),
       token,
     }),

@@ -15,9 +15,11 @@ Los tests de API usan `FakeEmailSender`, que guarda los correos en una lista.
 import json
 import logging
 import smtplib
+import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from email.message import EmailMessage as MimeMessage
 from functools import lru_cache
 from pathlib import Path
@@ -126,9 +128,52 @@ class SmtpEmailSender:
             smtp.send_message(mime)
 
 
+class EmailDailyLimitReached(RuntimeError):
+    """Se alcanzo el tope diario de correos; este no se envio."""
+
+
+class CappedEmailSender:
+    """Corta el envio al llegar a un tope diario de correos.
+
+    Es la ultima barrera si algo (un abuso del registro, un error en un bucle)
+    empieza a mandar correo sin control: protege la cuota del proveedor y la
+    reputacion del dominio remitente. El tope debe quedar por debajo del limite
+    diario del plan contratado.
+
+    La cuenta vive en memoria y por proceso, igual que el rate limit: reiniciar
+    la API la pone en cero. El dia se cuenta en UTC.
+    """
+
+    def __init__(
+        self,
+        inner: EmailSender,
+        daily_limit: int,
+        today: Callable[[], date] = lambda: datetime.now(UTC).date(),
+    ) -> None:
+        self.inner = inner
+        self.daily_limit = daily_limit
+        self._today = today
+        self._day: date | None = None
+        self._count = 0
+        self._lock = threading.Lock()
+
+    def send(self, message: EmailMessage) -> None:
+        with self._lock:
+            day = self._today()
+            if day != self._day:
+                self._day, self._count = day, 0
+            if self._count >= self.daily_limit:
+                raise EmailDailyLimitReached(
+                    f"Tope diario de correos alcanzado ({self.daily_limit}): no se envio"
+                )
+            self._count += 1
+        self.inner.send(message)
+
+
 def build_email_sender(settings: Settings) -> EmailSender:
+    sender: EmailSender
     if settings.email_backend == "smtp":
-        return SmtpEmailSender(
+        sender = SmtpEmailSender(
             host=settings.smtp_host,
             port=settings.smtp_port,
             user=settings.smtp_user,
@@ -136,11 +181,16 @@ def build_email_sender(settings: Settings) -> EmailSender:
             sender=settings.smtp_from,
             use_tls=settings.smtp_use_tls,
         )
-    if settings.email_backend == "file":
+    elif settings.email_backend == "file":
         # Pendiente del paso 5 (§5.5): rechazar este backend en el arranque si
         # hay llaves de produccion de Wompi configuradas.
-        return FileEmailSender(settings.email_file_dir)
-    return ConsoleEmailSender()
+        sender = FileEmailSender(settings.email_file_dir)
+    else:
+        sender = ConsoleEmailSender()
+
+    if settings.email_daily_limit > 0:
+        return CappedEmailSender(sender, settings.email_daily_limit)
+    return sender
 
 
 @lru_cache
@@ -159,5 +209,9 @@ def send_safely(sender: EmailSender, message: EmailMessage) -> None:
     """
     try:
         sender.send(message)
+    except EmailDailyLimitReached as exc:
+        # En ERROR para que llegue al monitoreo: alguien tiene que mirar por que
+        # se esta enviando tanto correo.
+        logger.error("%s (correo '%s')", exc, message.subject)
     except Exception:
         logger.exception("No se pudo enviar el correo '%s'", message.subject)

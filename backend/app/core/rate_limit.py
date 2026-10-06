@@ -32,10 +32,15 @@ def is_rate_limited(key: str) -> bool:
     return len(_prune(key, time.time())) >= MAX_ATTEMPTS
 
 
-def register_failure(key: str) -> None:
+def register_failure(key: str, window: float = WINDOW_SECONDS) -> None:
     now = time.time()
-    _prune(key, now)
+    _prune(key, now, window)
     _attempts[key].append(now)
+
+
+def failures(key: str, window: float) -> int:
+    """Cuantos fallos lleva la clave dentro de la ventana."""
+    return len(_prune(key, time.time(), window))
 
 
 def reset(key: str) -> None:

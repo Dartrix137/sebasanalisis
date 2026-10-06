@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "Sebasanálisis <no-responder@localhost>"
     smtp_use_tls: bool = True
+    # Tope de correos por dia (UTC) que la API acepta enviar; al llegar, corta y
+    # lo registra como error. Debe quedar por debajo del limite diario del plan
+    # del proveedor. 0 lo desactiva.
+    email_daily_limit: int = 300
     # Solo con EMAIL_BACKEND=file (tests de punta a punta).
     email_file_dir: str = ""
 

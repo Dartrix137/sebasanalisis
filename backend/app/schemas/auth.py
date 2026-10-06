@@ -86,6 +86,11 @@ class ChangeEmailRequest(ApiModel):
     password: str
 
 
+class DeleteAccountRequest(ApiModel):
+    # Eliminar la cuenta no se puede deshacer: se confirma con la contrasena.
+    password: str
+
+
 # ---------- Responses ----------
 
 class UserResponse(ApiModel):

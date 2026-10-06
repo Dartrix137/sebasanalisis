@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-import { linkFromEmail, loginViaUi, PASSWORD, registerViaApi, uniqueEmail } from "./helpers";
+import {
+  expectEmail,
+  linkFromEmail,
+  loginViaUi,
+  PASSWORD,
+  registerViaApi,
+  uniqueEmail,
+} from "./helpers";
 
 /**
  * Flujos de cuenta del paso 1 de la Fase 4 (§13.3): un error aquí es un cliente
@@ -86,4 +93,31 @@ test("restablecer la contraseña cierra la sesión que estaba abierta", async ({
   await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
   await loginViaUi(page, email, nueva);
   await expect(page).toHaveURL(/\/dashboard/);
+});
+
+test("eliminar la cuenta cierra la sesión y la cuenta deja de existir", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email);
+  await loginViaUi(page, email);
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await page.goto("/cuenta");
+  await page.getByRole("button", { name: "Eliminar mi cuenta" }).click();
+
+  // Una contraseña equivocada no borra nada.
+  await page.locator("#delete-account-password").fill("no-es-esta-clave");
+  await page.getByRole("button", { name: "Eliminar definitivamente" }).click();
+  await expect(page.getByText("La contraseña actual no es correcta")).toBeVisible();
+
+  await page.locator("#delete-account-password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Eliminar definitivamente" }).click();
+  await expect(page).toHaveURL(/\/login/);
+
+  // La cuenta ya no existe, y al usuario le llegó el aviso.
+  await loginViaUi(page, email);
+  await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
+  await expectEmail(email, "fue eliminada");
 });

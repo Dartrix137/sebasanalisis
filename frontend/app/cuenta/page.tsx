@@ -3,8 +3,8 @@
 /**
  * Mi cuenta: perfil, correo y seguridad (§5.4 de la Fase 4).
  *
- * La suscripción, el método de pago, el historial de pagos, los documentos
- * aceptados y la eliminación de la cuenta se suman en sus pasos (2 y 5).
+ * La suscripción, el método de pago, el historial de pagos y los documentos
+ * aceptados se suman en sus pasos (2 y 5).
  */
 
 import { useRouter } from "next/navigation";
@@ -51,6 +51,7 @@ export default function AccountPage() {
         <ProfileCard />
         <EmailCard />
         <PasswordCard />
+        <DeleteAccountCard />
       </main>
     </div>
   );
@@ -261,6 +262,71 @@ function PasswordCard() {
           {pending ? "Un momento…" : "Cambiar contraseña"}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+function DeleteAccountCard() {
+  const { withToken, signOut } = useSession();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setPending(true);
+    try {
+      await withToken((t) => authApi.deleteAccount(t, { password }));
+      signOut();
+      router.replace("/login");
+    } catch (err) {
+      setError(messageOf(err));
+      setPending(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Eliminar cuenta"
+        subtitle="Borra tu perfil, tus mesas, los números que registraste y tus apuestas anotadas. No se puede deshacer."
+      />
+      {open ? (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <PasswordField
+            id="delete-account-password"
+            label="Escribe tu contraseña para confirmar"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {error ? <ErrorBox message={error} /> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="danger" disabled={pending}>
+              {pending ? "Eliminando…" : "Eliminar definitivamente"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setPassword("");
+                setError(null);
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          Eliminar mi cuenta
+        </Button>
+      )}
     </Card>
   );
 }

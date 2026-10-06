@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core import rate_limit
@@ -39,6 +39,7 @@ from app.models import User
 from app.schemas.auth import (
     ChangeEmailRequest,
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
@@ -68,6 +69,11 @@ _FORGOT_SENT = (
 
 _MINUTE = 60
 _HOUR = 3600
+_DAY = 24 * _HOUR
+
+# Fallos de login desde una misma IP, sin importar contra que correo.
+_LOGIN_IP_MAX_FAILURES = 30
+_LOGIN_IP_WINDOW = 15 * _MINUTE
 
 
 def _now() -> datetime:
@@ -146,7 +152,10 @@ def register(
     background: BackgroundTasks,
     sender: EmailSenderDep,
 ) -> TokenResponse:
+    # Cada registro envia un correo a la direccion que se escriba, sea de quien
+    # sea: sin tope, la plataforma serviria para mandar correo a terceros.
     _limit(f"register:{_client_ip(request)}", limit=10, window=_HOUR)
+    _limit(f"register-day:{_client_ip(request)}", limit=20, window=_DAY)
 
     email = payload.email.lower()
     _check_new_password(payload.password, email)
@@ -172,9 +181,17 @@ def register(
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenResponse:
     email = payload.email.lower()
-    key = f"{_client_ip(request)}:{email}"
+    ip = _client_ip(request)
+    key = f"{ip}:{email}"
+    # Dos limites de fallos. Por IP y correo: frena insistir contra una cuenta.
+    # Por IP sola: frena probar pocas contrasenas contra muchos correos, que el
+    # primero no ve porque cada correo estrena su propia cuenta.
+    ip_key = f"login-ip:{ip}"
 
-    if rate_limit.is_rate_limited(key):
+    if (
+        rate_limit.is_rate_limited(key)
+        or rate_limit.failures(ip_key, _LOGIN_IP_WINDOW) >= _LOGIN_IP_MAX_FAILURES
+    ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY)
 
     user = db.scalar(select(User).where(User.email == email))
@@ -183,6 +200,7 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
     valid = verify_password(payload.password, user.password_hash) if user else False
     if not user or not valid:
         rate_limit.register_failure(key)
+        rate_limit.register_failure(ip_key, _LOGIN_IP_WINDOW)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_CREDENTIALS
         )
@@ -224,6 +242,48 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, db: DbSessi
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    payload: DeleteAccountRequest,
+    user: CurrentUser,
+    db: DbSession,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+) -> None:
+    """Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).
+
+    Borra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,
+    recomendaciones y tokens. No queda nada que lo identifique.
+
+    Pendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y
+    los registros de pago se conservan anonimizados por obligacion contable.
+    """
+    _limit(f"delete-account:{user.id}", limit=10, window=15 * _MINUTE)
+
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_WRONG_PASSWORD)
+
+    # Sin administrador nadie puede gestionar juegos ni usuarios, y no hay forma
+    # de crear otro desde la aplicacion.
+    if user.role == "admin":
+        otros = db.scalar(
+            select(func.count()).select_from(User).where(User.role == "admin", User.id != user.id)
+        )
+        if not otros:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Eres el único administrador: nombra otro antes de eliminar tu cuenta",
+            )
+
+    # El correo se arma antes de borrar: despues ya no hay a quien escribirle.
+    message = build_email("account_deleted", to=user.email, display_name=user.display_name)
+    # DELETE directo y no db.delete(user): el borrado en cascada lo hace la base
+    # (ON DELETE CASCADE), no el ORM cargando y anulando fila por fila.
+    db.execute(delete(User).where(User.id == user.id))
+    db.commit()
+    background.add_task(send_safely, sender, message)
 
 
 # ---------- Verificacion del correo ----------

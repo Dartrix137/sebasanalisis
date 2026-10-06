@@ -60,3 +60,22 @@ export async function linkFromEmail(to: string, subjectPart: string): Promise<st
     .toBe(true);
   return link;
 }
+
+/** Espera a que exista un correo para `to` cuyo asunto contenga `subjectPart`. */
+export async function expectEmail(to: string, subjectPart: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const files = (await readdir(EMAIL_DIR)).filter((f) => f.endsWith(".json"));
+        for (const file of files) {
+          const email = JSON.parse(
+            await readFile(path.join(EMAIL_DIR, file), "utf8"),
+          ) as StoredEmail;
+          if (email.to === to && email.subject.includes(subjectPart)) return true;
+        }
+        return false;
+      },
+      { message: `correo "${subjectPart}" para ${to}`, timeout: 15_000 },
+    )
+    .toBe(true);
+}

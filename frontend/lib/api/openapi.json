@@ -839,6 +839,19 @@
         "title": "CreateSpinRequest",
         "type": "object"
       },
+      "DeleteAccountRequest": {
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "DeleteAccountRequest",
+        "type": "object"
+      },
       "EligibleBetResponse": {
         "description": "Una apuesta compatible con el modo de la estrategia de la sesión.\n\nExiste para que la interfaz pueda preguntar \"¿sobre qué apuesta calculo el\nriesgo?\" sin recalcular ninguna probabilidad por su cuenta: la teórica la\nentrega el motor.",
         "properties": {
@@ -3379,6 +3392,44 @@
       }
     },
     "/auth/me": {
+      "delete": {
+        "description": "Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).\n\nBorra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,\nrecomendaciones y tokens. No queda nada que lo identifique.\n\nPendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y\nlos registros de pago se conservan anonimizados por obligacion contable.",
+        "operationId": "delete_account_auth_me_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Account",
+        "tags": [
+          "auth"
+        ]
+      },
       "get": {
         "operationId": "me_auth_me_get",
         "responses": {

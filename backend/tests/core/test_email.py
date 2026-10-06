@@ -1,6 +1,7 @@
 """Envio de correo y plantillas (§5.5). Sin red ni base."""
 
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,9 @@ import pytest
 from app.core import email as email_module
 from app.core.config import Settings
 from app.core.email import (
+    CappedEmailSender,
     ConsoleEmailSender,
+    EmailDailyLimitReached,
     EmailMessage,
     FakeEmailSender,
     FileEmailSender,
@@ -218,8 +221,14 @@ def test_smtp_sin_host_se_rechaza() -> None:
 # ---------- Seleccion por configuracion ----------
 
 
+def _inner(sender: object) -> object:
+    """El sender real, por debajo del tope diario que lo envuelve."""
+    assert isinstance(sender, CappedEmailSender)
+    return sender.inner
+
+
 def test_el_backend_por_defecto_es_la_consola() -> None:
-    assert isinstance(build_email_sender(Settings(_env_file=None)), ConsoleEmailSender)
+    assert isinstance(_inner(build_email_sender(Settings(_env_file=None))), ConsoleEmailSender)
 
 
 def test_el_backend_sale_de_la_configuracion(tmp_path: Path) -> None:
@@ -229,8 +238,44 @@ def test_el_backend_sale_de_la_configuracion(tmp_path: Path) -> None:
     archivo = build_email_sender(
         Settings(_env_file=None, email_backend="file", email_file_dir=str(tmp_path))
     )
-    assert isinstance(smtp, SmtpEmailSender)
-    assert isinstance(archivo, FileEmailSender)
+    assert isinstance(_inner(smtp), SmtpEmailSender)
+    assert isinstance(_inner(archivo), FileEmailSender)
+
+
+def test_el_tope_diario_se_puede_desactivar() -> None:
+    sender = build_email_sender(Settings(_env_file=None, email_daily_limit=0))
+    assert isinstance(sender, ConsoleEmailSender)
+
+
+# ---------- Tope diario ----------
+
+
+def test_el_tope_diario_corta_y_se_reinicia_al_dia_siguiente() -> None:
+    hoy = [date(2026, 10, 6)]
+    fake = FakeEmailSender()
+    sender = CappedEmailSender(fake, daily_limit=2, today=lambda: hoy[0])
+
+    sender.send(MESSAGE)
+    sender.send(MESSAGE)
+    with pytest.raises(EmailDailyLimitReached):
+        sender.send(MESSAGE)
+    assert len(fake.sent) == 2
+
+    hoy[0] = date(2026, 10, 7)
+    sender.send(MESSAGE)
+    assert len(fake.sent) == 3
+
+
+def test_al_llegar_al_tope_no_se_propaga_y_queda_como_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sender = CappedEmailSender(FakeEmailSender(), daily_limit=0)
+    with caplog.at_level("ERROR", logger="app.core.email"):
+        send_safely(sender, MESSAGE)
+
+    (registro,) = caplog.records
+    assert registro.levelname == "ERROR"
+    assert "Tope diario de correos alcanzado" in registro.getMessage()
 
 
 # ---------- Envio que no rompe la peticion ----------

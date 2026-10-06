@@ -215,6 +215,11 @@ cuentas siguen entrando sin confirmar, asi que la mesa no se ve afectada.
 6. Revisar los topes diario y mensual del plan de Resend contra el volumen
    esperado: un tope diario alcanzado deja sin correo de verificacion a quien se
    registre ese dia.
+7. Poner `EMAIL_DAILY_LIMIT` **por debajo del tope diario del plan** (por
+   defecto 300). Al llegar a ese numero la API deja de enviar hasta el dia
+   siguiente (UTC) y lo registra como error, que llega al monitoreo: es la
+   senal de que alguien esta abusando del registro o de que el plan ya queda
+   corto.
 
 `EMAIL_BACKEND=file` y `RATE_LIMIT_ENABLED=false` son solo para los tests de
 punta a punta. **Nunca van en produccion.**

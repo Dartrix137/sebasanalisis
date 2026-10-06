@@ -229,7 +229,17 @@ export interface paths {
         get: operations["me_auth_me_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Account
+         * @description Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).
+         *
+         *     Borra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,
+         *     recomendaciones y tokens. No queda nada que lo identifique.
+         *
+         *     Pendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y
+         *     los registros de pago se conservan anonimizados por obligacion contable.
+         */
+        delete: operations["delete_account_auth_me_delete"];
         options?: never;
         head?: never;
         /** Update Profile */
@@ -1199,6 +1209,11 @@ export interface components {
             result_value: string;
             /** @default manual */
             source: components["schemas"]["SpinSource"];
+        };
+        /** DeleteAccountRequest */
+        DeleteAccountRequest: {
+            /** Password */
+            password: string;
         };
         /**
          * EligibleBetResponse
@@ -2432,6 +2447,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    delete_account_auth_me_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

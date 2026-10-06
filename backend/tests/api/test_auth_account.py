@@ -16,6 +16,9 @@ from app.core.email import EmailMessage
 from app.core.user_tokens import hash_token
 from app.models import User, UserToken
 
+# Fixture y ayudante de los tests de mesa, para darle datos de juego a una cuenta.
+from tests.api.test_spins import _crear_sesion, variant_id  # noqa: F401, I001
+
 PASSWORD = "clave-segura-123"
 NEW_PASSWORD = "otra-clave-distinta-456"
 
@@ -499,3 +502,150 @@ def test_un_smtp_caido_no_rompe_el_registro(client: TestClient) -> None:
     app.dependency_overrides[get_email_sender] = lambda: Roto()
     r = client.post("/auth/register", json={"email": _email(), "password": PASSWORD})
     assert r.status_code == 201
+
+# ---------- Limites (§5.6) ----------
+
+
+def test_login_se_limita_por_ip_aunque_cambie_el_correo(client: TestClient) -> None:
+    """Probar pocas contrasenas contra muchos correos tambien se corta."""
+    from app.api.v1.auth import _LOGIN_IP_MAX_FAILURES
+
+    email = _register(client)["user"]["email"]
+    for _ in range(_LOGIN_IP_MAX_FAILURES):
+        r = client.post("/auth/login", json={"email": _email(), "password": "no-es-la-clave"})
+        assert r.status_code == 401
+
+    # Un correo nunca probado, y hasta la contrasena correcta de una cuenta real:
+    # la IP entera queda fuera hasta que pase la ventana.
+    assert client.post(
+        "/auth/login", json={"email": _email(), "password": "no-es-la-clave"}
+    ).status_code == 429
+    assert client.post(
+        "/auth/login", json={"email": email, "password": PASSWORD}
+    ).status_code == 429
+
+
+def test_un_login_correcto_no_borra_los_fallos_de_la_ip(client: TestClient) -> None:
+    """Si no, alternar con una cuenta propia dejaria probar sin limite."""
+    from app.api.v1.auth import _LOGIN_IP_MAX_FAILURES
+
+    email = _register(client)["user"]["email"]
+    for _ in range(_LOGIN_IP_MAX_FAILURES - 1):
+        client.post("/auth/login", json={"email": _email(), "password": "no-es-la-clave"})
+    assert client.post(
+        "/auth/login", json={"email": email, "password": PASSWORD}
+    ).status_code == 200
+    client.post("/auth/login", json={"email": _email(), "password": "no-es-la-clave"})
+
+    assert client.post(
+        "/auth/login", json={"email": email, "password": PASSWORD}
+    ).status_code == 429
+
+
+def test_el_registro_tiene_limite_por_hora(client: TestClient) -> None:
+    codigos = [
+        client.post(
+            "/auth/register", json={"email": _email(), "password": PASSWORD}
+        ).status_code
+        for _ in range(11)
+    ]
+    assert codigos == [201] * 10 + [429]
+
+
+# ---------- Eliminar la cuenta (§5.4, derecho de supresion) ----------
+
+
+def _delete_account(client: TestClient, tokens: dict, password: str = PASSWORD):
+    return client.request(
+        "DELETE", "/auth/me", json={"password": password}, headers=_auth(tokens)
+    )
+
+
+def test_eliminar_la_cuenta_borra_al_usuario_y_todos_sus_datos(
+    client: TestClient,
+    outbox: list[EmailMessage],
+    db: Session,
+    variant_id: str,  # noqa: F811
+) -> None:
+    tokens = _register(client, display_name="Ana")
+    user_id = tokens["user"]["id"]
+    email = tokens["user"]["email"]
+    sesion = _crear_sesion(client, tokens["access_token"], variant_id).json()["id"]
+    assert client.post(
+        f"/sessions/{sesion}/spins",
+        json={"result_value": "3"},
+        headers=_auth(tokens),
+    ).status_code == 201
+    outbox.clear()
+
+    assert _delete_account(client, tokens).status_code == 204
+
+    # No queda ninguna fila suya en ninguna tabla.
+    conteos = {
+        "users": "SELECT count(*) FROM users WHERE id = :u",
+        "user_tokens": "SELECT count(*) FROM user_tokens WHERE user_id = :u",
+        "game_sessions": "SELECT count(*) FROM game_sessions WHERE user_id = :u",
+        "spins": "SELECT count(*) FROM spins WHERE session_id = :s",
+        "bets": "SELECT count(*) FROM bets WHERE session_id = :s",
+        "statistical_suggestions": (
+            "SELECT count(*) FROM statistical_suggestions WHERE session_id = :s"
+        ),
+    }
+    for tabla, sql in conteos.items():
+        assert db.execute(text(sql), {"u": user_id, "s": sesion}).scalar() == 0, tabla
+
+    # La sesion deja de valer y la cuenta ya no entra.
+    assert client.get("/auth/me", headers=_auth(tokens)).status_code == 401
+    assert client.post(
+        "/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    ).status_code == 401
+    assert client.post(
+        "/auth/login", json={"email": email, "password": PASSWORD}
+    ).status_code == 401
+
+    # Aviso al correo, y el correo queda libre para registrarse de nuevo.
+    (aviso,) = outbox
+    assert aviso.to == email
+    assert "eliminada" in aviso.subject
+    assert client.post(
+        "/auth/register", json={"email": email, "password": PASSWORD}
+    ).status_code == 201
+
+
+def test_eliminar_la_cuenta_exige_la_contrasena(client: TestClient) -> None:
+    tokens = _register(client)
+    assert _delete_account(client, tokens, "no-es-esta-clave").status_code == 400
+    assert client.get("/auth/me", headers=_auth(tokens)).status_code == 200
+
+
+def test_eliminar_la_cuenta_exige_sesion(client: TestClient) -> None:
+    assert client.request("DELETE", "/auth/me", json={"password": PASSWORD}).status_code == 401
+
+
+def test_eliminar_una_cuenta_no_toca_las_demas(client: TestClient, db: Session) -> None:
+    otra = _register(client)
+    tokens = _register(client)
+
+    assert _delete_account(client, tokens).status_code == 204
+    assert client.get("/auth/me", headers=_auth(otra)).status_code == 200
+
+
+def test_el_unico_administrador_no_puede_eliminar_su_cuenta(
+    client: TestClient, db: Session
+) -> None:
+    tokens = _register(client)
+    db.execute(text("UPDATE users SET role = 'user' WHERE role = 'admin'"))
+    db.execute(
+        text("UPDATE users SET role = 'admin' WHERE id = :u"), {"u": tokens["user"]["id"]}
+    )
+    db.commit()
+
+    r = _delete_account(client, tokens)
+    assert r.status_code == 409
+    assert "administrador" in r.json()["detail"]
+
+    # Con otro administrador ya puede.
+    otro = _register(client)
+    db.execute(text("UPDATE users SET role = 'admin' WHERE id = :u"), {"u": otro["user"]["id"]})
+    db.commit()
+    assert _delete_account(client, tokens).status_code == 204

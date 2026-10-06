@@ -24,6 +24,7 @@ SUBJECTS: dict[str, str] = {
     "password_changed": "Tu contraseña de Sebasanálisis cambió",
     "change_email_confirm": "Confirma tu nuevo correo en Sebasanálisis",
     "change_email_notice": "Se pidió cambiar el correo de tu cuenta de Sebasanálisis",
+    "account_deleted": "Tu cuenta de Sebasanálisis fue eliminada",
 }
 
 _env = Environment(
