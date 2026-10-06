@@ -1,6 +1,10 @@
 # Sebasanálisis — Arquitectura, Motor Estadístico y Alcance del MVP
 
 > Documento de referencia técnica y de producto. Es la fuente de verdad para Claude Code al construir el proyecto. Cualquier ambigüedad se resuelve consultando este documento antes de asumir.
+>
+> **Qué cubre y qué no** (2026-10-05). Este documento define el **núcleo**: la filosofía y la terminología (§0), el motor estadístico (§2.1-§2.9), el motor de recomendación (§2.10) y la arquitectura, el modelo de datos y los endpoints de la mesa (§3). El núcleo está construido. Lo que se construye ahora (acceso, pagos, correo, legal, admin completo, multijuego) está especificado en `docs/PLATAFORMA_COMPLETA.md`, que amplía §3 sin reemplazarlo. El estado del proyecto y la historia de las decisiones están en `docs/HOJA_DE_RUTA.md`.
+>
+> El documento se escribió por etapas y conserva la redacción de cada una. Donde una decisión posterior cambió algo, está anotado en el lugar; la tabla completa de lo que cambió está en `docs/HOJA_DE_RUTA.md` §4.
 
 ---
 
@@ -240,6 +244,33 @@ Los umbrales (`DRAWDOWN_*`, `FEW_STAGES_LEFT`, `TABLE_LIMIT_LOOKAHEAD`, `LOSS_LI
 - **Apuestas pendientes**: si se cambia de estrategia con una apuesta registrada y aún sin resolver, esa apuesta se resuelve normalmente con el giro siguiente y el escalón avanza según la estrategia nueva, desde 0.
 - **Cambio de modo (1:1 ↔ dos sectores)**: las apuestas elegibles para estimar el riesgo de ruina cambian. Si la que el usuario tenía elegida deja de existir, la UI la descarta y sigue sin estimación, en lugar de pedir una apuesta incompatible (que daría 422).
 
+### 2.9 Alcance del motor: qué entra al MVP y qué queda para después
+
+El boceto de referencia (`explicacion_analisis_estadistico_ruleta.md`) tiene 9 señales (transición, patrón k-grama, racha, alternancia, ciclo, sesgo χ², y 3 de pleno vía Markov/ciclo/caliente). Implementar las 9 en el primer sprint es demasiado alcance. División:
+
+**MVP (Fase 1) — Núcleo estadístico:**
+
+- Frecuencia con shrinkage (2.2) + recencia (2.3) por categoría (color, paridad, alto/bajo, docena, columna)
+- χ² de sesgo global (2.4)
+- Racha activa con cola binomial (2.5)
+- EV + ranking top-3 (2.1, 2.6)
+- Auto-evaluación vs. línea base (2.7)
+- Bankroll: martingala, d'Alembert, Fibonacci, flat + modo dos-sectores (2.8). *D'Alembert y Fibonacci se retiraron del producto en la Fase 3 (§2.10).*
+
+**Señales avanzadas (fuera de alcance; entran una por una, solo cuando el usuario las pida):**
+
+> En versiones anteriores de este documento esta lista se llamaba "Fase 2". Se le quitó el nombre para no confundirla con la Fase 2 de pagos (§4). No tiene fecha ni forma parte de la Fase 4.
+
+- Transición condicional P(siguiente | actual) (sección 6.1 del boceto)
+- k-gramas / patrones de secuencia (6.6)
+- Ciclo de docenas/columnas (señal CICLO)
+- Señales de pleno (Markov, ciclo, caliente) — alto riesgo de sobre-prometer, requieren las barreras y techos duros que describe el boceto (máx. 20%/15% de probabilidad estimada) si se implementan
+- Fusión multi-señal con detección de contradicciones y bonus por acuerdo (sección 12.1-12.3 del boceto)
+
+**Confirmado (paso 1)**: `categories_json` NO incluye una categoría `straight`/pleno con 37-38 grupos — sería redundante. `engine/probability.py` deriva la probabilidad teórica del pleno directamente desde `1 / len(possible_outcomes)` cuando haga falta mostrarla (ej. en la tabla de referencia de §2.1), sin que el admin tenga que configurarla.
+
+Esta división se declara explícitamente en la UI: un aviso "Motor en versión núcleo — más señales estadísticas próximamente" evita expectativas de que la v1 tiene todo el sofisticamiento del boceto.
+
 ### 2.10 Motor de recomendación (Fase 3, decidido el 2026-09-22)
 
 El producto deja de ser un analizador descriptivo y pasa a ser un **motor de recomendación**: después de cada giro dice qué apostar en el siguiente, o `NO_APOSTAR`. Vive en `engine/recommendation.py`, es Python puro y genérico — los mercados salen de `categories_json`, nunca hardcodeados.
@@ -380,32 +411,6 @@ Permitido: "Recomendación", "Apostar: …", "No apostar este giro", "Fuerza de 
 
 **La regla que hace que esto sirva de algo**: los pesos se fijaron mirando simulaciones de ruedas justas, no historiales concretos. El backtest corre sobre sesiones reales —fuera de muestra por construcción— y las ruedas simuladas quedan como línea base, donde el ROI tiene que quedarse en la ventaja de la casa. Si ahí apareciera una ventaja, sería un error de medición y no un hallazgo.
 
-### 2.9 Alcance del motor: qué entra al MVP y qué queda para después
-
-El boceto de referencia (`explicacion_analisis_estadistico_ruleta.md`) tiene 9 señales (transición, patrón k-grama, racha, alternancia, ciclo, sesgo χ², y 3 de pleno vía Markov/ciclo/caliente). Implementar las 9 en el primer sprint es demasiado alcance. División:
-
-**MVP (Fase 1) — Núcleo estadístico:**
-
-- Frecuencia con shrinkage (2.2) + recencia (2.3) por categoría (color, paridad, alto/bajo, docena, columna)
-- χ² de sesgo global (2.4)
-- Racha activa con cola binomial (2.5)
-- EV + ranking top-3 (2.1, 2.6)
-- Auto-evaluación vs. línea base (2.7)
-- Bankroll: martingala, d'Alembert, Fibonacci, flat + modo dos-sectores (2.8)
-
-**Fase 2 — Señales avanzadas (post-MVP):**
-
-- Transición condicional P(siguiente | actual) (sección 6.1 del boceto)
-- k-gramas / patrones de secuencia (6.6)
-- Ciclo de docenas/columnas (señal CICLO)
-- Señales de pleno (Markov, ciclo, caliente) — alto riesgo de sobre-prometer, requieren las barreras y techos duros que describe el boceto (máx. 20%/15% de probabilidad estimada) si se implementan
-
-**Confirmado (paso 1)**: `categories_json` NO incluye una categoría `straight`/pleno con 37-38 grupos — sería redundante. `engine/probability.py` deriva la probabilidad teórica del pleno directamente desde `1 / len(possible_outcomes)` cuando haga falta mostrarla (ej. en la tabla de referencia de §2.1), sin que el admin tenga que configurarla.
-
-- Fusión multi-señal con detección de contradicciones y bonus por acuerdo (sección 12.1-12.3 del boceto)
-
-Esta división se declara explícitamente en la UI: un aviso "Motor en versión núcleo — más señales estadísticas próximamente" evita expectativas de que la v1 tiene todo el sofisticamiento del boceto.
-
 ---
 
 ## 3. Arquitectura técnica
@@ -414,45 +419,85 @@ Esta división se declara explícitamente en la UI: un aviso "Motor en versión 
 Backend:   FastAPI (Python) — motor estadístico puro en engine/, sin efectos secundarios
 Frontend:  Next.js (React + TypeScript)
 DB:        PostgreSQL
-Auth:      JWT (access + refresh), hash de contraseñas con bcrypt/argon2
-Pagos:     Wompi (Colombia) — fase 2 (en alcance); campos de DB preparados desde el MVP
+Auth:      JWT (access + refresh), hash de contraseñas con argon2
+Pagos:     Wompi (Colombia) — se construye en la Fase 4 (docs/PLATAFORMA_COMPLETA.md §3);
+           tablas preparadas desde el MVP, sin lógica
 ```
+
+Lo que la Fase 4 suma al stack (generador de tipos, CI, Playwright, correo SMTP, monitoreo) está en `docs/PLATAFORMA_COMPLETA.md` §13.
 
 **Por qué separado (Backend Python + Frontend Next.js) y no monolítico como el boceto de referencia:** el ecosistema Python (numpy/scipy para χ², shrinkage, distribución binomial) es más natural para el motor estadístico que TypeScript, y mantiene el motor testeable de forma aislada, igual que en el boceto (`roulette-v3.ts` como módulo puro) pero en Python.
 
 ### 3.1 Estructura de carpetas
 
+Estructura vigente, revisada contra el repositorio el 2026-10-05:
+
 ```
 backend/
   app/
-    api/v1/
-      auth.py  games.py  sessions.py  spins.py  bets.py  bankroll.py  admin.py
+    api/
+      deps.py                    # get_current_user, require_admin
+      v1/
+        auth.py  games.py  sessions.py  spins.py  bets.py  bankroll.py
+        suggestions.py  recommendations.py  admin.py
     core/
-      security.py  config.py
+      security.py  config.py  rate_limit.py  game_config_validation.py
     engine/                      # PURO — sin DB, sin HTTP, testeable con pytest solo
       probability.py             # probabilidad teórica desde categories_json
-      frequency.py                # shrinkage + decaimiento por recencia
-      chi_square.py                 # señal de sesgo global
-      streak.py                      # racha + cola binomial
-      ranking.py                      # significance_score + top-3 + fuerza (FUERTE/MEDIA/DÉBIL)
-      bankroll.py                      # martingala, d'alembert, fibonacci, flat, dos-sectores
-      baseline.py                       # línea base ingenua para auto-evaluación
-      recommendation.py                  # catálogo de mercados, signal_score, decisión (§2.10)
-      backtest.py                         # métricas del motor sobre historiales (§2.10)
-    models/                              # SQLAlchemy
-    schemas/                             # Pydantic (ya definidos, ver /schemas del proyecto)
+      frequency.py               # shrinkage + decaimiento por recencia
+      chi_square.py              # señal de sesgo global
+      streak.py                  # racha + cola binomial
+      ranking.py                 # significance_score + top-3 + fuerza (FUERTE/MEDIA/DÉBIL)
+      bankroll.py                # plana, martingala, dos sectores; estado de parar
+      baseline.py                # línea base ingenua para auto-evaluación
+      settlement.py              # resolución de una apuesta real contra el resultado que salió
+      bulk_entry.py              # parseo y normalización de la carga inicial (§3.5)
+      recommendation.py          # catálogo de mercados, signal_score, decisión (§2.10)
+      backtest.py                # métricas del motor sobre historiales (§2.10)
+    models/                      # SQLAlchemy
+    schemas/                     # Pydantic
     db/
-      session.py
-      migrations/                        # Alembic
+      session.py  seed.py  seed_data/
+      migrations/                # Alembic
+  scripts/                       # CLIs (backtest_recommendations.py)
+  tests/
+    engine/                      # sin infraestructura
+    api/                         # contra PostgreSQL real
 
 frontend/
-  app/ (o pages/)
+  app/
     (auth)/login  (auth)/register
-    dashboard/                            # menú principal, selector de juegos
-    games/roulette/[sessionId]/           # vista de juego
-    admin/                                 # panel admin
+    dashboard/                   # menú principal, selector de juegos
+    games/roulette/[sessionId]/  # vista de juego
+    admin/                       # panel admin
   components/
-  lib/api-client.ts                        # wrapper tipado de la API REST
+    roulette/  admin/
+  lib/
+    api-client.ts                # wrapper tipado de la API REST
+    types/                       # tipos del cliente API
+    session.tsx  outcomes.ts
+```
+
+**Lo que agrega la Fase 4**, con el mismo criterio de no aplanar ni reinventar (detalle en `docs/PLATAFORMA_COMPLETA.md`):
+
+```
+backend/app/
+  core/access.py                 # has_access, única fuente de verdad del acceso (§2)
+  core/email.py                  # interfaz EmailSender y sus implementaciones (§5.5)
+  billing/                       # PURO, como engine/: pricing.py, schedule.py (§3.3, §3.5)
+  emails/                        # plantillas HTML + texto (§5.5)
+  api/v1/                        # legal.py, billing.py, webhooks.py, y admin por secciones
+  engine/sports/                 # reservado, sin implementación (§8)
+backend/scripts/
+  run_renewals.py                # job de renovación (§3.5)
+  export_openapi.py              # entrada del generador de tipos (§13.2)
+
+frontend/
+  app/juegos/[slug]/mesa/[sessionId]/   # reemplaza a games/roulette/[sessionId] (§7.3)
+  app/legal/  app/planes/  app/cuenta/  app/admin/<sección>/
+  components/mesa/               # reemplaza a components/roulette/ (§7.3)
+  lib/api/                       # openapi.json y schema.d.ts generados (§13.2)
+  e2e/                           # tests de Playwright (§13.3)
 ```
 
 ### 3.2 Modelo de juego genérico (ya definido, se mantiene)
@@ -473,6 +518,8 @@ Cualquier juego de resultados discretos y probabilidad fija (ruleta, dados, futu
 El motor estadístico (`engine/`) opera solo sobre esta estructura — nunca sabe que "docena" es específico de ruleta. Esto es lo que permite agregar dados u otros juegos desde el admin sin escribir código nuevo (ver conversación previa para el detalle completo).
 
 ### 3.3 Modelo de datos (consolidado)
+
+> Este es el modelo del núcleo. La Fase 4 amplía `users`, `subscriptions`, `payment_events`, `games` y `game_variants`, y agrega las tablas de planes, cupones, pagos, tokens, documentos legales, consentimientos y auditoría: ver `docs/PLATAFORMA_COMPLETA.md` §2.3, §3.2, §4.6, §5.1, §6.2 y §7.2.
 
 ```sql
 users (id, email, password_hash, display_name, access_type, role, created_at)  -- display_name: nullable, opcional en registro (decisión de paso 2)
@@ -531,6 +578,8 @@ La recomendación vigente (`GET /sessions/:id/recommendation`) **sí se recalcul
 
 ### 3.4 Endpoints (consolidado de la conversación)
 
+> Endpoints del núcleo. Los que agrega la Fase 4 están en `docs/PLATAFORMA_COMPLETA.md` §11.
+
 ```
 Auth:       POST /auth/register  POST /auth/login  POST /auth/refresh  GET /auth/me
 Games:      GET /games  GET /games/:id/variants
@@ -575,9 +624,11 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
 
 ---
 
-## 4. Alcance del MVP — definición cerrada
+## 4. Alcance por etapas
 
-### En scope (MVP v1)
+> Cada bloque conserva lo que se decidió en su momento. Para saber qué está construido y qué sigue, ver `docs/HOJA_DE_RUTA.md`.
+
+### En scope (MVP v1) — construido
 
 1. **Auth**: registro, login, refresh, perfil. Acceso inicial: `access_type` en `'trial' | 'invited' | 'full'` — sin pagos en el MVP; Wompi entra en la Fase 2.
 2. **Admin dashboard**: gestión de usuarios (cambiar access_type), CRUD de juegos/variantes vía formulario estructurado (NO builder visual drag-and-drop — se pospone).
@@ -597,12 +648,14 @@ Al abrir una sesión el usuario puede cargar de una vez los números que ya obse
 
    > **Actualización 2026-09-23:** la vista de ruleta ya no muestra el panel de sugerencias top-3, las señales por categoría, la alerta de racha ni la tasa de coincidencia. Los endpoints (`/suggestions/latest`, `/streak`, `/performance`) y sus cálculos se mantienen; lo que cambió es que el cliente no los pinta. Las frecuencias y probabilidades teóricas de la recomendación siguen visibles en "¿Por qué recomienda esto?".
 
-### Fase 2 (en alcance, decidido el 2026-09-17)
+### Fase 2 (decidida el 2026-09-17; sus pagos se construyen dentro de la Fase 4)
+
+> No se construyó como fase aparte: la Fase 3 entró antes y la Fase 4 absorbió los pagos con un alcance mayor. Las reglas de abajo siguen vigentes sin cambios.
 
 - **Pagos/suscripciones con Wompi.** El MVP dejó `subscriptions` y `payment_events` con el modelo de datos preparado y sin lógica; la Fase 2 los implementa. Reglas: firma (integridad de la transacción y checksum del webhook) verificada contra la documentación oficial vigente de Wompi y nunca de memoria; el webhook no es fuente de verdad por sí solo, se reconsulta la transacción contra la API antes de mover `subscriptions.status` o `users.access_type`; idempotencia por `provider_event_id`, que es único, porque los webhooks se reintentan; montos en centavos con moneda explícita; secretos solo por variable de entorno; acceso decidido siempre en el servidor a partir de `access_type` y `current_period_end`.
 - **Señales avanzadas del motor** (§2.9): entran una por una, solo cuando el usuario las pida explícitamente.
 
-### Fase 3 (en alcance, decidido el 2026-09-22)
+### Fase 3 (decidida el 2026-09-22) — construida
 
 **El producto pasa de analizador descriptivo a motor de recomendación** (§2.10). Después de cada giro, la pantalla de ruleta dice qué apostar o que no se apueste, con un Signal Score 0-100 y su banda. Las estadísticas pasan a ser el respaldo.
 
@@ -618,10 +671,25 @@ Fuera de esta fase, igual que antes: las señales avanzadas de §2.9, el builder
 
 Documento que define la fase: `docs/reference/Comparativo_Software_Actual_vs_Software_Deseado.md`.
 
+### Fase 4 (decidida el 2026-10-02) — en curso
+
+**El MVP aprobado pasa a plataforma comercial.** No cambia el motor; se construye todo lo que hace falta alrededor para venderlo:
+
+- **Modelo de acceso** decidido en el servidor por una sola función, aplicada a todos los endpoints de juego. Cuenta nueva sin acceso hasta pagar; `trial` desaparece.
+- **Pagos y suscripciones con Wompi** con renovación automática, planes, cupones de descuento y precio congelado por suscripción. Implementa lo que la Fase 2 dejó definido arriba, con las mismas reglas.
+- **Admin dashboard** por secciones: usuarios, suscripciones, pagos, planes, descuentos, juegos, documentos legales, métricas del motor y auditoría.
+- **Auth**: verificación de correo, recuperación y cambio de contraseña con revocación de sesiones, eliminación y exportación de la cuenta.
+- **Términos y políticas** versionados con registro de aceptación, incluida la página de Juego Responsable y el onboarding scroll-to-accept de §0, que el MVP no llegó a construir.
+- **Base multijuego**: metadatos y módulos de juego para que un juego de resultados discretos nuevo se cree desde el admin sin código, y estructura reservada para apuestas deportivas (que no se construyen en esta fase).
+
+Siguen fuera: las señales avanzadas de §2.9, el builder visual, el juego de dados como producto (entra solo como fixture de test) y el CSV.
+
+Documento que define la fase: `docs/PLATAFORMA_COMPLETA.md`.
+
 ### Fuera de scope (post-MVP, ya identificado)
 
 - Builder visual de categorías en el admin (se usa formulario simple primero).
-- Señales avanzadas: transición condicional, k-gramas, ciclo, señales de pleno (sección 2.9) — fuera del MVP; pasan a la Fase 2 solo cuando el usuario pida cada una.
+- Señales avanzadas: transición condicional, k-gramas, ciclo, señales de pleno (sección 2.9) — entran solo cuando el usuario pida cada una.
 - Juego de dados u otros — el modelo ya lo soporta, pero no se construye la UI/seed en el MVP.
 - Exportar CSV, migración de datos locales, notificaciones.
 
@@ -629,4 +697,4 @@ Documento que define la fase: `docs/reference/Comparativo_Software_Actual_vs_Sof
 
 ## 5. Diseños de pantalla
 
-Se agregará una carpeta `docs/design/` con mockups de: login/registro y vista de juego de ruleta. Claude Code debe tratarlos como especificación visual de referencia — implementar fielmente layout, jerarquía de información y componentes (panel top-3, banner de disclaimer, input de número, tarjeta de sugerencia de bankroll) salvo que el stack (Next.js + Tailwind, ver `frontend-design` en CLAUDE.md) requiera adaptaciones menores de implementación.
+La carpeta `docs/design/` contiene mockups de login, registro y vista de juego de ruleta. Los mockups son anteriores a la Fase 3: muestran el panel top-3 y el banner de disclaimer, que ya no están en la vista (§2.10); donde el mockup y una regla vigente choquen, gana la regla. Claude Code debe tratarlos como especificación visual de referencia — implementar fielmente layout, jerarquía de información y componentes (input de número, tarjeta de recomendación, gestión de banca) salvo que el stack (Next.js + Tailwind, ver `frontend-design` en CLAUDE.md) requiera adaptaciones menores de implementación.
