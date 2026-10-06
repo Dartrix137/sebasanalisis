@@ -6,6 +6,7 @@ Decisiones de `docs/ARQUITECTURA_Y_ESTADISTICA.md` §3.6:
 - Mensajes de error genericos que no revelan si un correo existe.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
@@ -41,7 +42,7 @@ def needs_rehash(password_hash: str) -> bool:
         return False
 
 
-def create_token(user_id: UUID, token_type: TokenType) -> str:
+def create_token(user_id: UUID, token_type: TokenType, *, token_version: int) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     if token_type == "access":
@@ -51,6 +52,8 @@ def create_token(user_id: UUID, token_type: TokenType) -> str:
     payload = {
         "sub": str(user_id),
         "type": token_type,
+        # Version de sesion del usuario al emitir (users.token_version).
+        "ver": token_version,
         "iat": int(now.timestamp()),
         "exp": int(expires.timestamp()),
     }
@@ -61,11 +64,23 @@ class TokenError(Exception):
     """Token ausente, malformado, expirado, o de un tipo distinto al esperado."""
 
 
-def decode_token(token: str, expected_type: TokenType) -> UUID:
-    """Devuelve el user_id del token, o lanza TokenError.
+@dataclass(frozen=True)
+class TokenClaims:
+    user_id: UUID
+    # Quien llama la compara con `users.token_version`: si no coinciden, la
+    # sesion fue revocada (la contrasena cambio despues de emitir el token).
+    token_version: int
+
+
+def decode_token(token: str, expected_type: TokenType) -> TokenClaims:
+    """Devuelve el usuario y la version de sesion del token, o lanza TokenError.
 
     Verifica explicitamente el claim `type`: un refresh token no debe servir para
     autenticar una peticion normal, ni un access token para renovar sesion.
+
+    Un token sin `ver` es anterior a la revocacion de sesiones y se lee como
+    version 0, que es con la que arrancan todas las cuentas: desplegar esto no
+    cierra la sesion de nadie.
     """
     settings = get_settings()
     try:
@@ -76,6 +91,6 @@ def decode_token(token: str, expected_type: TokenType) -> UUID:
     if payload.get("type") != expected_type:
         raise TokenError("Token invalido o expirado")
     try:
-        return UUID(payload["sub"])
-    except (KeyError, ValueError) as exc:
+        return TokenClaims(user_id=UUID(payload["sub"]), token_version=int(payload.get("ver", 0)))
+    except (KeyError, ValueError, TypeError) as exc:
         raise TokenError("Token invalido o expirado") from exc

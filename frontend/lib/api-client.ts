@@ -8,10 +8,18 @@
  */
 
 import type {
+  ChangeEmailRequest,
+  ChangePasswordRequest,
+  DeleteAccountRequest,
+  ForgotPasswordRequest,
   LoginRequest,
+  MessageResponse,
   RefreshRequest,
   RegisterRequest,
+  ResetPasswordRequest,
+  TokenRequest,
   TokenResponse,
+  UpdateProfileRequest,
   UserResponse,
   UUID,
 } from "./types/auth";
@@ -134,6 +142,63 @@ export const authApi = {
     }),
 
   me: (token: string) => apiFetch<UserResponse>("/auth/me", { token }),
+
+  updateProfile: (token: string, body: UpdateProfileRequest) =>
+    apiFetch<UserResponse>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Confirma un correo con el token del enlace: el de la cuenta o uno nuevo. */
+  verifyEmail: (body: TokenRequest) =>
+    apiFetch<MessageResponse>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  resendVerification: (token: string) =>
+    apiFetch<MessageResponse>("/auth/resend-verification", { method: "POST", token }),
+
+  /** Responde siempre igual, exista o no una cuenta con ese correo. */
+  forgotPassword: (body: ForgotPasswordRequest) =>
+    apiFetch<MessageResponse>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  resetPassword: (body: ResetPasswordRequest) =>
+    apiFetch<MessageResponse>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * Devuelve tokens nuevos: los anteriores dejan de valer, junto con las demás
+   * sesiones abiertas de la cuenta.
+   */
+  changePassword: (token: string, body: ChangePasswordRequest) =>
+    apiFetch<TokenResponse>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Elimina la cuenta y todos sus datos. No se puede deshacer. */
+  deleteAccount: (token: string, body: DeleteAccountRequest) =>
+    apiFetch<void>("/auth/me", {
+      method: "DELETE",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** El cambio se aplica cuando se confirma el enlace que llega al correo nuevo. */
+  changeEmail: (token: string, body: ChangeEmailRequest) =>
+    apiFetch<MessageResponse>("/auth/change-email", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
 };
 
 export const gamesApi = {

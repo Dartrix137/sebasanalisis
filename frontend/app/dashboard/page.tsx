@@ -20,6 +20,7 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
 import { NewSessionForm } from "@/components/roulette/NewSessionForm";
 import { Button, ErrorBox } from "@/components/ui";
+import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
 import { ApiError, gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
 import { TONE_CLASSES, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
@@ -158,6 +159,8 @@ export default function DashboardPage() {
             ? "Tu mesa te espera donde la dejaste."
             : "Abre una mesa y registra los números a medida que salen."}
         </p>
+
+        <VerifyEmailNotice />
 
         {error ? (
           <div className="mt-6">

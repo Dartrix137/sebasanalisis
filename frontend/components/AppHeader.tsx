@@ -33,7 +33,15 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
 
         <div className="flex flex-wrap items-center gap-2">
           {children}
-          {user ? <Badge>{user.display_name ?? user.email}</Badge> : null}
+          {user ? (
+            <Link
+              href="/cuenta"
+              title="Mi cuenta"
+              className="rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+            >
+              <Badge>{user.display_name ?? user.email}</Badge>
+            </Link>
+          ) : null}
           {user?.role === "admin" ? (
             <Button variant="ghost" onClick={() => router.push("/admin")}>
               Admin

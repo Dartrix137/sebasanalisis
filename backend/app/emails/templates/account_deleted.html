@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Tu cuenta de Sebasanálisis fue eliminada, como lo pediste. Borramos tus datos: tu perfil,
+  tus mesas, los números que registraste y tus apuestas anotadas.
+</p>
+<p style="margin:0;">
+  Este es el último correo que recibes de nosotros. Si quieres volver, puedes crear una cuenta
+  nueva cuando quieras.
+</p>
+{% endblock %}

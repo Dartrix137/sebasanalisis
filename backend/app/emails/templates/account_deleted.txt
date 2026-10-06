@@ -1,0 +1,8 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Tu cuenta de Sebasanálisis fue eliminada, como lo pediste. Borramos tus datos: tu perfil, tus mesas, los números que registraste y tus apuestas anotadas.
+
+Este es el último correo que recibes de nosotros. Si quieres volver, puedes crear una cuenta nueva cuando quieras.
+{% endblock %}

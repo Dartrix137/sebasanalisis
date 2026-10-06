@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Pediste usar este correo en tu cuenta de Sebasanálisis. Confírmalo para aplicar el cambio.
+</p>
+{{ button(url, "Confirmar este correo") }}
+<p style="margin:0 0 12px 0;">
+  El enlace vence en {{ hours }} horas y solo se puede usar una vez. Hasta que lo confirmes,
+  tu cuenta sigue con el correo anterior.
+</p>
+<p style="margin:0;">Si no lo pediste, ignora este mensaje.</p>
+{% endblock %}

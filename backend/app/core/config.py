@@ -1,6 +1,7 @@
 """Configuracion de la aplicacion, leida de variables de entorno."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,6 +25,29 @@ class Settings(BaseSettings):
 
     # DSN del proyecto de la API en GlitchTip. Vacio = monitoreo desactivado.
     sentry_dsn: str = ""
+
+    # Solo se apaga en los tests de punta a punta, donde todas las peticiones
+    # salen de la misma IP y el limite por IP las cortaria. Nunca en produccion.
+    rate_limit_enabled: bool = True
+
+    # Base de los enlaces que viajan en los correos (verificar, restablecer).
+    frontend_base_url: str = "http://localhost:3000"
+
+    # Correo (docs/PLATAFORMA_COMPLETA.md §5.5). `console` imprime el correo en
+    # el log y es el valor por defecto: sin configurar nada, no se envia nada.
+    email_backend: Literal["smtp", "console", "file"] = "console"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "Sebasanálisis <no-responder@localhost>"
+    smtp_use_tls: bool = True
+    # Tope de correos por dia (UTC) que la API acepta enviar; al llegar, corta y
+    # lo registra como error. Debe quedar por debajo del limite diario del plan
+    # del proveedor. 0 lo desactiva.
+    email_daily_limit: int = 300
+    # Solo con EMAIL_BACKEND=file (tests de punta a punta).
+    email_file_dir: str = ""
 
 
 @lru_cache

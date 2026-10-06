@@ -53,7 +53,31 @@ def test_database() -> Iterator[str]:
 
 
 @pytest.fixture
-def client(test_database: str) -> Iterator[TestClient]:
+def outbox() -> Iterator[list]:
+    """Los correos que la API "envio" durante el test, en orden.
+
+    Sustituye el sender real por un `FakeEmailSender`: ningun test envia correo.
+    """
+    from app.core.email import FakeEmailSender, get_email_sender
+    from app.main import app
+
+    fake = FakeEmailSender()
+    app.dependency_overrides[get_email_sender] = lambda: fake
+    yield fake.sent
+    app.dependency_overrides.pop(get_email_sender, None)
+
+
+@pytest.fixture
+def db(test_database: str) -> Iterator[object]:
+    """Sesion directa a la base de test, para preparar o inspeccionar filas."""
+    engine = create_engine(test_database, poolclass=None)
+    with sessionmaker(bind=engine, future=True)() as session:
+        yield session
+    engine.dispose()
+
+
+@pytest.fixture
+def client(test_database: str, outbox: list) -> Iterator[TestClient]:
     """Cliente HTTP con la sesion de DB apuntando a la base de test."""
     from app.db.session import get_db
     from app.main import app
@@ -71,7 +95,7 @@ def client(test_database: str) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
         yield c
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
     engine.dispose()
 
 

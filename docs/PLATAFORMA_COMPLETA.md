@@ -435,6 +435,26 @@ Se extiende a `register`, `forgot-password`, `resend-verification`, `reset-passw
 
 `/verificar-correo`, `/olvide-contrasena`, `/restablecer-contrasena`, `/cuenta`. El registro suma los consentimientos de §6.3.
 
+### 5.7.1 Cómo quedó construido (2026-10-06)
+
+Decisiones de implementación que este documento no fijaba, confirmadas por el usuario el 2026-10-06.
+
+- **Confirmar un cambio de correo usa el mismo endpoint y la misma página** que verificar la cuenta: `POST /auth/verify-email` acepta tokens `verify_email` y `change_email`, y el enlace apunta a `/verificar-correo` en los dos casos. No hay un endpoint aparte.
+- **Sin dominio, el correo no se envía**: `EMAIL_BACKEND` vale `console` por defecto y la API imprime el correo en su log. Las cuentas entran sin confirmar; el aviso "Confirma tu correo" no bloquea nada.
+- **Política de contraseñas**: 10 caracteres mínimo, máximo 200, se rechazan las de una lista local (`backend/app/core/common_passwords.txt`), las de un solo carácter repetido, las escaleras (`abcdefghij`) y la que es igual al correo. Aplica a contraseñas nuevas; el login no la revisa, para no dejar fuera a las cuentas anteriores. La lista tiene unas 9.170 entradas: las de 10 caracteres o más de la lista pública de las 100.000 contraseñas más usadas (SecLists, licencia MIT; la fuente y la fecha están en el encabezado del archivo) más una lista propia en español. Se actualiza reemplazando el archivo, sin tocar código.
+- **`forgot-password` responde igual y con el mismo código**, exista o no el correo, y el envío va en segundo plano. Queda una diferencia de tiempo de una escritura en la base (emitir el token) entre los dos casos y **se decidió no igualarla**: el registro ya revela si un correo tiene cuenta ("Ya existe una cuenta con ese correo"), así que igualar el tiempo aquí no protegería nada. Ocultar de verdad quién tiene cuenta pediría cambiar el registro, y eso es una decisión de producto que no se ha tomado.
+- **Eliminar la cuenta** (`DELETE /auth/me {password}`, adelantado del paso 5 por decisión del usuario: la política de datos promete la supresión). Borra el usuario y, por `ON DELETE CASCADE`, sus mesas, números, apuestas, recomendaciones y tokens; envía un correo de aviso. El único administrador no puede eliminarse (`409`). **Falta para el paso 5**: cancelar la renovación antes de borrar y conservar los pagos anonimizados. `payment_events` y `subscriptions` hoy se borran en cascada con el usuario; ese `ON DELETE` hay que cambiarlo cuando esas tablas tengan datos.
+- **Sesiones al desplegar**: un JWT sin el claim `ver` se lee como versión 0, que es con la que arrancan todas las cuentas. Desplegar el paso 1 no cierra la sesión de nadie.
+- **`change-password` devuelve tokens nuevos** para que la sesión que hizo el cambio siga abierta; todas las demás se cierran. Una contraseña actual incorrecta responde `400`, no `401`: el cliente trata un `401` como sesión vencida.
+- **Límites** (por ventana, en memoria): `register` 10 por hora y 20 por día por IP; `verify-email` 20 cada 15 min por IP; `resend-verification` 3 cada 15 min por usuario; `forgot-password` 10 cada 15 min por IP y 3 por correo; `reset-password` 10 cada 15 min por IP; `change-password` 10 cada 15 min por usuario; `change-email` 5 por hora por usuario; `DELETE /auth/me` 10 cada 15 min por usuario.
+- **Login**: además del límite por IP y correo (5 fallos en 5 min), 30 fallos en 15 min por IP sin importar el correo. El primero no frenaba probar pocas contraseñas contra muchos correos. Un login correcto no borra la cuenta de fallos de la IP.
+- **Tope diario de correos** (`EMAIL_DAILY_LIMIT`, 300 por defecto, no estaba en §12): al llegar, la API deja de enviar hasta el día siguiente (UTC) y lo registra como error, que llega al monitoreo. Existe porque el registro envía un correo a cualquier dirección que se escriba: sin tope, la plataforma serviría para mandar correo a terceros y gastar la cuota del proveedor. Debe quedar por debajo del límite diario del plan de Resend. En memoria: un reinicio lo pone en cero.
+- **Pendiente para el paso 4**: límite de intentos en la cotización con cupón, para que no se puedan adivinar códigos.
+- **Variable `RATE_LIMIT_ENABLED`** (no estaba en §12): apaga los límites por endpoint. Existe solo para los tests de punta a punta, donde todas las peticiones salen de la misma IP. Los límites de login no la miran.
+- **De §5.4 queda para después**: `GET /auth/me/export` (paso 2, con el resto de derechos del titular de §6.4) y las secciones de `/cuenta` de suscripción, método de pago, historial de pagos y documentos aceptados. `/cuenta` trae hoy perfil, correo, contraseña y eliminar cuenta.
+- **De §5.8 queda para el paso 5**: "cuenta sin verificar → no puede crear suscripción", porque `POST /billing/subscriptions` todavía no existe.
+- **`FileEmailSender`** no rechaza todavía el arranque con llaves de producción de Wompi: esas variables llegan en el paso 5. Queda anotado en `core/email.py`.
+
 ### 5.8 Tests de aceptación
 
 - Token de verificación usado dos veces → el segundo uso se rechaza.

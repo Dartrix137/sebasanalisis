@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Pediste usar este correo en tu cuenta de Sebasanálisis. Confírmalo para aplicar el cambio:
+
+{{ url }}
+
+El enlace vence en {{ hours }} horas y solo se puede usar una vez. Hasta que lo confirmes, tu cuenta sigue con el correo anterior.
+
+Si no lo pediste, ignora este mensaje.
+{% endblock %}

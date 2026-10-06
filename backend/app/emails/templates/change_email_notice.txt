@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Se pidió cambiar el correo de tu cuenta de Sebasanálisis a {{ new_email }}. El cambio solo se aplica si alguien lo confirma desde ese correo.
+
+Si no fuiste tú, alguien conoce tu contraseña: cámbiala ya desde:
+
+{{ forgot_url }}
+{% endblock %}

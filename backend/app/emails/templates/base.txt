@@ -1,0 +1,6 @@
+{% block content %}{% endblock %}
+
+--
+Sebasanálisis es una herramienta de análisis estadístico por suscripción. No recibe apuestas, y sus recomendaciones salen del análisis de los resultados que tú registras: no son una predicción.
+
+Este es un correo automático; no respondas a esta dirección.

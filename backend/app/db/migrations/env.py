@@ -12,7 +12,10 @@ config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Sin disable_existing_loggers=False, correr una migracion dentro de un
+    # proceso que ya importo la app (tests, prepare_e2e_db.py) apaga en silencio
+    # todos sus loggers: los errores de envio de correo dejarian de verse.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

@@ -1,14 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+import { loginViaUi, registerViaApi, uniqueEmail } from "./helpers";
+
 /**
  * Humo: iniciar sesión, abrir una mesa, registrar un giro y ver la tarjeta de
  * recomendación. Si esto falla, el producto no hace lo único que tiene que hacer.
  *
  * Cada test registra su propio usuario: no comparten estado.
  */
-
-const API_URL = process.env.E2E_API_URL;
-const PASSWORD = "clave-de-prueba-e2e-123";
 
 // Doce números: con menos de diez giros el motor todavía no recomienda.
 const NUMEROS_INICIALES = "17, 32, 0, 15, 4, 21, 2, 25, 17, 34, 6, 27";
@@ -17,17 +16,11 @@ test("iniciar sesión, abrir una mesa, registrar un giro y ver la recomendación
   page,
   request,
 }) => {
-  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ejemplo.com`;
-  const registro = await request.post(`${API_URL}/auth/register`, {
-    data: { email, password: PASSWORD },
-  });
-  expect(registro.ok()).toBeTruthy();
+  const email = uniqueEmail();
+  await registerViaApi(request, email);
 
   // Iniciar sesión por la pantalla.
-  await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill(email);
-  await page.locator("#password").fill(PASSWORD);
-  await page.locator("form").getByRole("button", { name: "Entrar" }).click();
+  await loginViaUi(page, email);
   await expect(page).toHaveURL(/\/dashboard/);
 
   // Abrir una mesa europea con carga inicial, declarando el orden.
