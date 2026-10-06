@@ -7,11 +7,15 @@ mas reciente primero (§3.5).
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.game_session import GameSession
 
 #: Como entro el numero. Ambos son ingreso manual del usuario: el proyecto no
 #: lee pantallazos ni llama a ninguna IA (§3.5).

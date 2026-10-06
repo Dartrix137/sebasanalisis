@@ -9,9 +9,9 @@ desvio la muestra ya ocurrida y con cuanto respaldo, nada mas.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 from app.engine.chi_square import ChiSquareResult, all_chi_square_signals
 from app.engine.frequency import RECENCY_LAMBDA, GroupFrequency, all_frequencies

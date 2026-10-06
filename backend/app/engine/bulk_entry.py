@@ -10,9 +10,9 @@ imagenes ni llama a ningun modelo: el proyecto no integra IA (§3.5).
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 from app.engine.probability import GameConfig
 
@@ -90,8 +90,7 @@ def prepare_bulk_entry(
     invalidos = [v for v in raw_values if v not in posibles]
     if invalidos:
         # Se reportan sin repetir, conservando el orden de aparicion.
-        vistos: set[str] = set()
-        unicos = [v for v in invalidos if not (v in vistos or vistos.add(v))]
+        unicos = list(dict.fromkeys(invalidos))
         return BulkEntryResult(values=[], invalid_values=unicos)
 
     return BulkEntryResult(

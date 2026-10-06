@@ -17,6 +17,11 @@ COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
+# DSN del proyecto del frontend en GlitchTip. Igual que el anterior, se incrusta
+# en el build. Sin el, el monitoreo de errores queda desactivado.
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+
 RUN npm run build
 
 FROM node:22-alpine AS runner

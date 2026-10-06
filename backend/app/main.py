@@ -14,8 +14,12 @@ from app.api.v1 import (
     suggestions,
 )
 from app.core.config import get_settings
+from app.core.monitoring import init_monitoring
 
 settings = get_settings()
+
+# Antes de crear la app: asi el monitoreo engancha sus rutas y sus errores.
+init_monitoring(settings.sentry_dsn)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 

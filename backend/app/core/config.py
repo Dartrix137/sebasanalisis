@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     seed_admin_email: str = "admin@sebasanalisis.com"
     seed_admin_password: str = "cambia-esta-clave"
 
+    # DSN del proyecto de la API en GlitchTip. Vacio = monitoreo desactivado.
+    sentry_dsn: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

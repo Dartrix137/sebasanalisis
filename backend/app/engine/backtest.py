@@ -20,8 +20,8 @@ ventaja de la casa.
 from __future__ import annotations
 
 import random
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
 
 from app.engine.probability import GameConfig
 from app.engine.recommendation import Decision, Market, SignalBand, recommend

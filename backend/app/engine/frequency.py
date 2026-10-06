@@ -9,9 +9,9 @@ probabilidad teorica. Nunca se devuelve una frecuencia observada suelta.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Sequence
 
 from scipy import stats
 

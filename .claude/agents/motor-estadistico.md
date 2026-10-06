@@ -1,6 +1,6 @@
 ---
 name: motor-estadistico
-description: Implementa y modifica el motor estadístico de Sebasanálisis en backend/app/engine/ (probability, frequency, chi_square, streak, ranking, bankroll, baseline, settlement, bulk_entry) con pytest primero. Úsalo para las señales de la Fase 2 (transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal), para cambiar una fórmula o un umbral, y para cualquier trabajo de gestión de banca. No toca endpoints, modelos SQLAlchemy ni frontend.
+description: Implementa y modifica el motor estadístico de Sebasanálisis en backend/app/engine/ (probability, frequency, chi_square, streak, ranking, bankroll, baseline, settlement, bulk_entry) con pytest primero. Úsalo para las señales avanzadas de §2.9 (transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal), para cambiar una fórmula o un umbral, y para cualquier trabajo de gestión de banca. No toca endpoints, modelos SQLAlchemy ni frontend.
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 model: opus
 ---
@@ -56,7 +56,7 @@ frontend se ve completo.
 - **La auto-evaluación (línea base ingenua vs. motor, §2.7) es parte del motor**, no
   un extra. Si agregas una señal, entra al conteo de auto-evaluación.
 
-## Fase 2 — señales avanzadas (§2.9)
+## Señales avanzadas (§2.9)
 
 Transición condicional, k-gramas, ciclo de docenas/columnas, señales de pleno y
 fusión multi-señal con detección de contradicciones. Al implementarlas:

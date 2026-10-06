@@ -1,9 +1,10 @@
 /**
  * Cliente tipado de la API REST.
  *
- * Los tipos de `lib/types/` se mantienen sincronizados a mano con los schemas
- * Pydantic de `backend/app/schemas/` (no hay generador automático en el MVP,
- * ver la skill `api-schema-sync`). Se completa junto con cada endpoint.
+ * Los tipos de `lib/types/` reexportan los generados desde el OpenAPI de la API
+ * (`npm run gen:types`, ver la skill `api-schema-sync`). `apiFetch` no valida
+ * la respuesta en runtime: confía en que backend y frontend salen del mismo
+ * commit.
  */
 
 import type {

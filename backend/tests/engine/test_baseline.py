@@ -10,7 +10,7 @@ from app.engine.baseline import (
     matches,
     naive_baseline_choice,
 )
-from app.engine.ranking import Suggestion, SignalStrength
+from app.engine.ranking import SignalStrength, Suggestion
 
 
 def _sugerencia(category_id: str, group_id: str) -> Suggestion:

@@ -9,8 +9,8 @@ Que el rojo haya salido seis veces seguidas no altera en nada el septimo giro.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from app.engine.probability import GameConfig, theoretical_probability
 

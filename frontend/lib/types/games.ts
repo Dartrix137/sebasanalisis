@@ -1,100 +1,38 @@
 /**
- * Espejo manual de `backend/app/schemas/games.py`.
- * Cambios en el schema Pydantic se replican aquí en el mismo commit
- * (skill `api-schema-sync` — no hay generador automático en el MVP).
+ * Tipos de `backend/app/schemas/games.py`, reexportados desde los generados.
+ *
+ * No se escriben a mano: salen de `lib/api/schema.d.ts`, que genera
+ * `npm run gen:types` desde el OpenAPI de la API. Si cambia un schema Pydantic,
+ * se regenera y se commitea en el mismo commit (skill `api-schema-sync`).
+ * Aquí solo se les da el nombre que usan los componentes.
  */
 
-import type { UUID } from "./auth";
+import type { components } from "../api/schema";
 
-export interface CategoryGroup {
-  label: string | null;
-  outcomes: string[];
-  payout: number;
-  /**
-   * Si el grupo entra al catálogo de mercados del motor de recomendación
-   * (§2.10). El verde de la ruleta lo pone en false: cubre el 0/00 y no es una
-   * zona que el producto recomiende, pero se conserva como grupo para que las
-   * frecuencias de color sumen 1 y el χ² tenga todas sus celdas.
-   */
-  market: boolean;
-}
+type S = components["schemas"];
+
+export type CategoryGroup = S["CategoryGroup-Output"];
+export type AllowedCombination = S["AllowedCombination"];
+export type GameCategory = S["GameCategory-Output"];
+export type CreateGameRequest = S["CreateGameRequest"];
+export type UpdateGameRequest = S["UpdateGameRequest"];
+export type CreateGameVariantRequest = S["CreateGameVariantRequest"];
+export type UpdateGameVariantRequest = S["UpdateGameVariantRequest"];
+export type GameVariantResponse = S["GameVariantResponse"];
+export type GameResponse = S["GameResponse"];
 
 /**
- * Una apuesta a varios grupos de la misma categoría a la vez (dos docenas, dos
- * columnas). Vive en los datos porque es una regla de la mesa, no del motor.
+ * FastAPI publica la configuración de una variante (y sus categorías y grupos)
+ * dos veces: como entrada, donde un campo con valor por defecto es opcional, y
+ * como salida, donde siempre viaja. Aquí se usa la de salida, que es la que
+ * llega en `GameVariantResponse` y que también sirve para enviar.
  */
-export interface AllowedCombination {
-  id: string;
-  label: string;
-  category_id: string;
-  group_ids: string[];
-}
+export type GameVariantConfig = S["GameVariantConfig-Output"];
 
-export interface GameCategory {
-  id: string;
-  label: string;
-  /** Fuerza del shrinkage bayesiano de esta categoría (§2.2). */
-  shrinkage_alpha: number;
-  groups: Record<string, CategoryGroup>;
-}
-
-export interface GameVariantConfig {
-  possible_outcomes: string[];
-  categories: GameCategory[];
-  /** Orden significativo: es el orden de catálogo del desempate (§2.10). */
-  allowed_combinations: AllowedCombination[];
-  /** Umbral medio: `signal_score` desde el que la señal es MEDIA. 50 por defecto. */
-  recommendation_threshold: number;
-  /**
-   * Umbral débil: desde aquí hay recomendación (SEÑAL DÉBIL, solo apuesta base).
-   * 35 por defecto; nunca mayor que el medio. Igualarlo al medio apaga la débil.
-   */
-  weak_threshold: number;
-}
-
-export interface CreateGameRequest {
-  name: string;
-  type: string;
-  active: boolean;
-}
-
-export interface UpdateGameRequest {
-  name?: string | null;
-  active?: boolean | null;
-}
-
-export interface CreateGameVariantRequest {
-  name: string;
-  house_edge: number;
-  config: GameVariantConfig;
-  active: boolean;
-}
-
-export interface UpdateGameVariantRequest {
-  name?: string | null;
-  house_edge?: number | null;
-  config?: GameVariantConfig | null;
-  active?: boolean | null;
-}
-
-export interface GameVariantResponse {
-  id: UUID;
-  game_id: UUID;
-  name: string;
-  house_edge: number;
-  config: GameVariantConfig;
-  active: boolean;
-}
-
-export interface GameResponse {
-  id: UUID;
-  name: string;
-  type: string;
-  active: boolean;
-  variants: GameVariantResponse[];
-}
-
-/** Detalle de un 422 del validador de configuración del admin. */
+/**
+ * Detalle de un 422 del validador de configuración del admin. No está en el
+ * OpenAPI (es el `detail` de un error), así que se mantiene aquí.
+ */
 export interface ConfigValidationError {
   message: string;
   errors: string[];

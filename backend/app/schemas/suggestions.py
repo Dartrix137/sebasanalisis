@@ -4,9 +4,10 @@ Schemas: Statistical suggestions & Bankroll suggestions
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
 
+from pydantic import ConfigDict
+
+from app.schemas.base import ApiModel
 from app.schemas.sessions import BankrollStrategy
 
 
@@ -18,7 +19,7 @@ class SignalStrength(str, Enum):
     weak = "weak"
 
 
-class StatisticalSuggestionItem(BaseModel):
+class StatisticalSuggestionItem(ApiModel):
     category: str
     option_label: str
     # Regla anti-falacia del jugador (§2): estos dos viajan y se muestran
@@ -41,16 +42,16 @@ class StatisticalSuggestionItem(BaseModel):
     # §2.4). Es el que sostiene la decisión de activar la señal; el crudo no viaja
     # a la UI porque leerlo como significancia sobreestima lo que la familia de
     # pruebas respalda. null si el χ² no está activo para esa categoría.
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
 
 
-class StatisticalSuggestionsPanel(BaseModel):
+class StatisticalSuggestionsPanel(ApiModel):
     window_size_used: int
     top: list[StatisticalSuggestionItem] = []          # top 3 por significance_score
     all_categories: dict[str, list[StatisticalSuggestionItem]] = {}  # vista completa
 
 
-class StreakAlert(BaseModel):
+class StreakAlert(ApiModel):
     category: str
     option_label: str
     consecutive_count: int
@@ -63,14 +64,14 @@ class BankrollAlertLevel(str, Enum):
     critical = "critical"
 
 
-class BankrollAlertResponse(BaseModel):
+class BankrollAlertResponse(ApiModel):
     """Alerta de gestión de banca: habla del dinero, nunca del próximo resultado."""
     code: str
     level: BankrollAlertLevel
     message: str
 
 
-class NextStepResponse(BaseModel):
+class NextStepResponse(ApiModel):
     """Dónde queda la progresión si el giro cierra en contra o a favor.
 
     Es condicional: describe los dos casos, nunca cuál va a ocurrir.
@@ -84,7 +85,7 @@ class NextStepResponse(BaseModel):
     reaches_loss_limit: bool      # False si la sesión no tiene límite de pérdida
 
 
-class BankrollSuggestionResponse(BaseModel):
+class BankrollSuggestionResponse(ApiModel):
     """Tamaño de apuesta que exige el escalón actual de la progresión.
 
     Sugiere *cuánto* arriesgar según la progresión que el usuario eligió; nunca
@@ -102,8 +103,8 @@ class BankrollSuggestionResponse(BaseModel):
     recovers_only_to_break_even: bool
     exceeds_table_limit: bool
     exceeds_bankroll: bool
-    risk_warning: Optional[str] = None
-    ruin_probability_estimate: Optional[float] = None
+    risk_warning: str | None = None
+    ruin_probability_estimate: float | None = None
     # Recordatorio fijo: ninguna progresión altera la ventaja de la casa (§2.8).
     disclaimer: str
     next_if_lost: NextStepResponse
@@ -114,7 +115,7 @@ class BankrollSuggestionResponse(BaseModel):
     alerts: list[BankrollAlertResponse] = []
 
 
-class EligibleBetResponse(BaseModel):
+class EligibleBetResponse(ApiModel):
     """Una apuesta compatible con el modo de la estrategia de la sesión.
 
     Existe para que la interfaz pueda preguntar "¿sobre qué apuesta calculo el
@@ -128,7 +129,7 @@ class EligibleBetResponse(BaseModel):
     theoretical_probability: float
 
 
-class ProgressionRowResponse(BaseModel):
+class ProgressionRowResponse(ApiModel):
     """Una fila de la tabla de riesgo, con montos reales del usuario."""
     stage: int
     bet_per_sector: float
@@ -138,7 +139,7 @@ class ProgressionRowResponse(BaseModel):
     exceeds_bankroll: bool
 
 
-class ProgressionTableResponse(BaseModel):
+class ProgressionTableResponse(ApiModel):
     """Tabla que se muestra ANTES de activar una estrategia (§2.8).
 
     El riesgo debe ser visible y no abstracto: el usuario ve en pesos lo que
@@ -149,17 +150,17 @@ class ProgressionTableResponse(BaseModel):
     sectors: int
     rows: list[ProgressionRowResponse]
     max_affordable_stages: int
-    ruin_probability_estimate: Optional[float] = None
+    ruin_probability_estimate: float | None = None
     disclaimer: str
 
 
-class SuggestionSnapshot(BaseModel):
+class SuggestionSnapshot(ApiModel):
     """Para GET /sessions/:id/suggestions/history"""
     spin_id: UUID
     spin_index: int
     created_at: datetime
     panel: StatisticalSuggestionsPanel
-    bankroll: Optional[BankrollSuggestionResponse] = None
+    bankroll: BankrollSuggestionResponse | None = None
 
 
 # ============================================================================
@@ -214,7 +215,7 @@ class RecommendationOutcome(str, Enum):
     miss = "MISS"
 
 
-class WindowStatResponse(BaseModel):
+class WindowStatResponse(ApiModel):
     """Lo que el mercado hizo dentro de una ventana (10, 20, 50, 100 giros)."""
     window: int
     spins_used: int
@@ -231,7 +232,7 @@ class WindowStatResponse(BaseModel):
     z: float
 
 
-class ScoreComponentsResponse(BaseModel):
+class ScoreComponentsResponse(ApiModel):
     """De dónde sale cada punto del `signal_score`.
 
     Se expone entero para que "¿Por qué recomienda esto?" pueda mostrar el
@@ -242,7 +243,7 @@ class ScoreComponentsResponse(BaseModel):
     # C: coherencia entre tramos disjuntos del historial. null cuando hay un solo
     # tramo — un tramo no tiene con qué ser consistente, y entonces su peso se
     # reparte entre D y R.
-    consistency: Optional[float] = None
+    consistency: float | None = None
     weight_deviation: float
     weight_recency: float
     weight_consistency: float
@@ -251,7 +252,7 @@ class ScoreComponentsResponse(BaseModel):
     chi_square_bonus: float
 
 
-class MarketResponse(BaseModel):
+class MarketResponse(ApiModel):
     """Una alternativa del catálogo de mercados de la variante."""
     key: str
     label: str
@@ -265,16 +266,16 @@ class MarketResponse(BaseModel):
     payout: float
 
 
-class ScoredMarketResponse(BaseModel):
+class ScoredMarketResponse(ApiModel):
     market: MarketResponse
     signal_score: float
     signal_band: SignalBand
     components: ScoreComponentsResponse
     windows: list[WindowStatResponse]
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
 
 
-class MarketStakeResponse(BaseModel):
+class MarketStakeResponse(ApiModel):
     """Lo que una progresión pide para el mercado recomendado.
 
     `applicable=false` no es un error: es la respuesta honesta cuando la
@@ -283,7 +284,7 @@ class MarketStakeResponse(BaseModel):
     """
     strategy: BankrollStrategy
     applicable: bool
-    reason: Optional[str] = None
+    reason: str | None = None
     stage: int
     bet_per_sector: float
     total_bet: float
@@ -295,7 +296,7 @@ class MarketStakeResponse(BaseModel):
     exceeds_table_limit: bool
 
 
-class RecommendationResponse(BaseModel):
+class RecommendationResponse(ApiModel):
     """La recomendación para el giro siguiente.
 
     `best` viaja también con `NO_BET`: siempre hay un mejor candidato, sólo que
@@ -304,7 +305,7 @@ class RecommendationResponse(BaseModel):
     session_id: UUID
     decision: RecommendationDecision
     # null con RECOMMEND.
-    no_bet_reason: Optional[NoBetReason] = None
+    no_bet_reason: NoBetReason | None = None
     # Giros por debajo de los cuales un NO_BET es por falta de información.
     min_spins_for_signal: int
     # Umbral medio: desde aquí la señal es MEDIA.
@@ -316,9 +317,9 @@ class RecommendationResponse(BaseModel):
     signal_score: float
     signal_band: SignalBand
     # El mercado a apostar. null con NO_BET.
-    market: Optional[MarketResponse] = None
+    market: MarketResponse | None = None
     # El mejor candidato, haya o no recomendación.
-    best: Optional[ScoredMarketResponse] = None
+    best: ScoredMarketResponse | None = None
     # Las tres progresiones sobre el mercado recomendado, en orden de menú.
     # Vacío con NO_BET: no hay monto que calcular.
     stakes: list[MarketStakeResponse] = []
@@ -331,11 +332,11 @@ class RecommendationResponse(BaseModel):
     disclaimer: str
 
 
-class RecommendationRecord(BaseModel):
+class RecommendationRecord(ApiModel):
     """Una recomendación ya emitida y su cierre — historial y auto-evaluación."""
     id: UUID
     session_id: UUID
-    spin_id: Optional[UUID] = None
+    spin_id: UUID | None = None
     decision: RecommendationDecision
     market_key: str
     category: str
@@ -348,12 +349,12 @@ class RecommendationRecord(BaseModel):
     observed_ci_low: float
     observed_ci_high: float
     ev: float
-    chi_square_pvalue_adjusted: Optional[float] = None
+    chi_square_pvalue_adjusted: float | None = None
     # Monto en centavos, nunca float. null con NO_BET.
-    stake_cents: Optional[int] = None
+    stake_cents: int | None = None
     currency: str
     outcome: RecommendationOutcome
-    resolved_spin_id: Optional[UUID] = None
+    resolved_spin_id: UUID | None = None
     window_size_used: int
     created_at: datetime
 
@@ -366,7 +367,7 @@ class RecommendationRecord(BaseModel):
 # el que dice si el motor aporta información útil o sólo describe el pasado.
 
 
-class BacktestTally(BaseModel):
+class BacktestTally(ApiModel):
     """Resultado acumulado de un grupo de recomendaciones."""
     recommendations: int
     hits: int
@@ -387,7 +388,7 @@ class BacktestBandRow(BacktestTally):
     no_bets: int
 
 
-class BacktestReport(BaseModel):
+class BacktestReport(ApiModel):
     """Informe del backtest sobre historiales fuera de calibración."""
     source: str
     sessions: int

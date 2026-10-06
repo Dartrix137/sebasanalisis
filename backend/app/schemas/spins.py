@@ -4,8 +4,10 @@ Schemas: Spins (resultados genéricos de cualquier juego de resultados discretos
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+
+from pydantic import ConfigDict
+
+from app.schemas.base import ApiModel
 
 
 class SpinSource(str, Enum):
@@ -16,7 +18,7 @@ class SpinSource(str, Enum):
 
 # ---------- Requests ----------
 
-class CreateSpinRequest(BaseModel):
+class CreateSpinRequest(ApiModel):
     result_value: str  # valor crudo, ej '17', '00', '7' (dados)
     source: SpinSource = SpinSource.manual
 
@@ -32,7 +34,7 @@ class EntryOrder(str, Enum):
     most_recent_last = "most_recent_last"
 
 
-class BulkSpinsRequest(BaseModel):
+class BulkSpinsRequest(ApiModel):
     """Carga inicial de los números ya observados en la mesa (§3.5)."""
     values: list[str]
     order: EntryOrder
@@ -40,7 +42,7 @@ class BulkSpinsRequest(BaseModel):
 
 # ---------- Responses ----------
 
-class SpinResponse(BaseModel):
+class SpinResponse(ApiModel):
     id: UUID
     session_id: UUID
     spin_index: int
@@ -50,20 +52,20 @@ class SpinResponse(BaseModel):
     # ellos el aviso "la progresión sube del escalón 2 al 3", y deshacer el giro
     # los restaura. Son dos porque las tres progresiones corren a la vez (§2.10);
     # la plana no tiene escalón, siempre está en 0.
-    stage_martingale_before: Optional[int] = None
-    stage_two_sector_before: Optional[int] = None
+    stage_martingale_before: int | None = None
+    stage_two_sector_before: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class BulkSpinsResponse(BaseModel):
+class BulkSpinsResponse(ApiModel):
     """Los giros efectivamente creados, ya en orden cronológico ascendente."""
     created: int
     spins: list[SpinResponse]
 
 
-class CategoryDerivedResult(BaseModel):
+class CategoryDerivedResult(ApiModel):
     """Categoría/grupo derivados en tiempo real para un result_value dado,
     calculados contra game_variant.categories_json (no se persisten como columnas)."""
     category: str

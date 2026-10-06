@@ -39,7 +39,7 @@ El χ² corre sobre 5 categorías a la vez y el p<0.05 se evalúa sobre el p-val
 corregido por Benjamini-Hochberg — nunca sobre el crudo. Sin corregir, una de cada
 cuatro sesiones muestra una señal FUERTE espuria.
 
-Cada señal nueva de la Fase 2 (transición condicional, k-gramas, ciclo, pleno)
+Cada señal avanzada nueva de §2.9 (transición condicional, k-gramas, ciclo, pleno)
 **agrega pruebas simultáneas**. Pregunta siempre: ¿cuántas hipótesis se están
 probando ahora en total, y la corrección las cubre a todas o solo a las 5
 categorías originales? Este es el punto ciego principal del proyecto.

@@ -17,7 +17,6 @@ from app.engine.backtest import (
 )
 from app.engine.recommendation import SignalBand, market_for_key
 
-
 # --------------------------------------------------------------------------
 # Pagos reales
 # --------------------------------------------------------------------------
