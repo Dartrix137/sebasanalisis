@@ -16,5 +16,5 @@ export default defineConfig([
       "react-hooks/refs": "warn",
     },
   },
-  globalIgnores([".next/**", "node_modules/**", "next-env.d.ts", "lib/api/schema.d.ts"]),
+  globalIgnores([".next/**", "node_modules/**", "next-env.d.ts", "lib/api/schema.d.ts", "playwright-report/**", "test-results/**"]),
 ]);
