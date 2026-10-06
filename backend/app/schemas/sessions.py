@@ -5,7 +5,8 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import ConfigDict, Field, computed_field
+from app.schemas.base import ApiModel
 
 from app.engine.bankroll import stop_reason as _stop_reason
 
@@ -46,7 +47,7 @@ class BankrollStrategy(str, Enum):
 
 # ---------- Requests ----------
 
-class CreateSessionRequest(BaseModel):
+class CreateSessionRequest(ApiModel):
     game_variant_id: UUID
     name: Optional[str] = Field(default=None, max_length=100)
     window_size: int = Field(default=50, ge=5, le=500)
@@ -66,7 +67,7 @@ class CreateSessionRequest(BaseModel):
             )
 
 
-class UpdateSessionRequest(BaseModel):
+class UpdateSessionRequest(ApiModel):
     name: Optional[str] = Field(default=None, max_length=100)
     window_size: Optional[int] = Field(default=None, ge=5, le=500)
     table_limit: Optional[float] = Field(default=None, gt=0)
@@ -78,7 +79,7 @@ class UpdateSessionRequest(BaseModel):
 
 # ---------- Responses ----------
 
-class SessionResponse(BaseModel):
+class SessionResponse(ApiModel):
     id: UUID
     user_id: UUID
     game_variant_id: UUID
@@ -112,7 +113,7 @@ class SessionResponse(BaseModel):
         return StopReason(motivo.value) if motivo is not None else None
 
 
-class SessionSummaryResponse(BaseModel):
+class SessionSummaryResponse(ApiModel):
     session_id: UUID
     duration_minutes: float
     total_spins: int
@@ -125,7 +126,7 @@ class SessionSummaryResponse(BaseModel):
     followed_suggestion_rate: float
 
 
-class SessionPerformanceResponse(BaseModel):
+class SessionPerformanceResponse(ApiModel):
     """Auto-evaluación de la sesión (§2.7) — GET /sessions/:id/performance.
 
     `matched_suggestions` cuenta coincidencias entre las señales emitidas y el

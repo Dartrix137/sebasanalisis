@@ -5,7 +5,8 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
+from app.schemas.base import ApiModel
 
 from app.schemas.sessions import BankrollStrategy
 
@@ -20,7 +21,7 @@ class BetStatus(str, Enum):
 
 # ---------- Requests ----------
 
-class CreateBetRequest(BaseModel):
+class CreateBetRequest(ApiModel):
     category: str          # debe existir en game_variant.categories_json
     option_label: str      # debe existir dentro de esa categoría
     amount: float = Field(gt=0)
@@ -32,7 +33,7 @@ class CreateBetRequest(BaseModel):
 
 # ---------- Responses ----------
 
-class BetResponse(BaseModel):
+class BetResponse(ApiModel):
     id: UUID
     session_id: UUID
     spin_id: Optional[UUID] = None
@@ -51,7 +52,7 @@ class BetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class BetResolution(BaseModel):
+class BetResolution(ApiModel):
     """Sub-objeto embebido en la respuesta de POST /spins cuando resuelve una apuesta pendiente."""
     bet_id: UUID
     category: str

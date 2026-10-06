@@ -4,3 +4,9 @@
 *.sh text eol=lf
 docker-entrypoint.sh text eol=lf
 Dockerfile text eol=lf
+
+# Archivos generados por `npm run gen:types`. El CI los regenera en Linux y los
+# compara con lo commiteado: con CRLF en el repositorio esa comparacion fallaria
+# siempre.
+frontend/lib/api/openapi.json text eol=lf
+frontend/lib/api/schema.d.ts text eol=lf

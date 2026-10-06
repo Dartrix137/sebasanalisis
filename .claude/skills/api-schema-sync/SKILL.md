@@ -1,52 +1,44 @@
 ---
 name: api-schema-sync
-description: Mantiene sincronizados los schemas Pydantic del backend (backend/app/schemas/) con los tipos TypeScript del cliente API del frontend (frontend/lib/api-client.ts y tipos asociados) en Sebasanálisis, ya que el MVP no usa un generador automático de tipos. Úsala SIEMPRE que se cree, modifique o elimine un campo, enum, o modelo Pydantic en backend/app/schemas/, y también al construir por primera vez el cliente API del frontend. Sin esta skill es fácil que el frontend quede con tipos desactualizados sin que ningún error de compilación lo detecte a tiempo.
+description: Regenera los tipos TypeScript del cliente API del frontend (frontend/lib/api/schema.d.ts) desde el OpenAPI de FastAPI con `npm run gen:types`, en Sebasanálisis. Úsala SIEMPRE que se cree, modifique o elimine un campo, enum, modelo Pydantic en backend/app/schemas/, o un endpoint (ruta, parámetros, response_model) en backend/app/api/. Los archivos generados se commitean en el mismo commit que el cambio y no se editan a mano; el CI falla si quedaron desactualizados.
 ---
 
-# Sincronización manual de schemas — backend (Pydantic) ↔ frontend (TypeScript)
+# Tipos del cliente API: se generan, no se escriben
 
-Sebasanálisis no tiene generador automático de tipos en el MVP (ver `CLAUDE.md` — decisión explícita). Esto significa que cualquier cambio en un schema Pydantic debe reflejarse a mano en el tipo TypeScript correspondiente, en el mismo cambio/commit — nunca en un paso posterior "para después".
+Los tipos TypeScript del cliente API salen del OpenAPI de FastAPI. No se mantienen a mano (decidido el 2026-10-05, `docs/PLATAFORMA_COMPLETA.md` §13.2).
 
-## Mapeo de archivos (backend → frontend)
+## Qué hacer al cambiar un schema o un endpoint
 
-| Schema Pydantic (backend) | Tipo TypeScript (frontend) |
-| ------------------------- | -------------------------- |
-| `schemas/auth.py`         | `lib/types/auth.ts`        |
-| `schemas/games.py`        | `lib/types/games.ts`       |
-| `schemas/sessions.py`     | `lib/types/sessions.ts`    |
-| `schemas/spins.py`        | `lib/types/spins.ts`       |
-| `schemas/bets.py`         | `lib/types/bets.ts`        |
-| `schemas/suggestions.py`  | `lib/types/suggestions.ts` |
-| `schemas/screenshots.py`  | `lib/types/screenshots.ts` |
+1. Haz el cambio en `backend/app/schemas/` o `backend/app/api/`.
+2. Desde `frontend/`: `npm run gen:types`.
+3. `npm run typecheck`. Los errores que aparezcan son los lugares del frontend que el cambio rompió: corrígelos.
+4. Commitea **en el mismo commit** el cambio del backend, `frontend/lib/api/openapi.json` y `frontend/lib/api/schema.d.ts`.
 
-Si esta estructura de carpetas cambia en el proyecto real, actualiza esta tabla — no dejes que quede desactualizada, porque entonces la skill misma se vuelve la fuente de bugs.
+`npm run gen:types` corre `backend/scripts/export_openapi.py` (importa la app, no levanta el servidor ni toca la base) y después `openapi-typescript`. Usa el Python de `backend/.venv` si existe; si no, el `python` del PATH.
 
-## Reglas de traducción Pydantic → TypeScript
+## Reglas
 
-| Pydantic                                                      | TypeScript                                                                                                     |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `str`                                                         | `string`                                                                                                       |
-| `int` / `float`                                               | `number`                                                                                                       |
-| `bool`                                                        | `boolean`                                                                                                      |
-| `UUID`                                                        | `string` (con alias `type UUID = string` si se quiere semántica)                                               |
-| `datetime`                                                    | `string` (ISO 8601 — el frontend parsea con `new Date()` donde haga falta)                                     |
-| `Optional[X]` / `X \| None`                                   | `X \| null` (o `X?` si el campo puede estar ausente, no solo null — verificar cuál aplica)                     |
-| `Enum(str, Enum)`                                             | `type X = 'valor1' \| 'valor2' \| ...` (union de string literals, no `enum` de TS — más simple de sincronizar) |
-| `list[X]`                                                     | `X[]`                                                                                                          |
-| `dict[str, X]`                                                | `Record<string, X>`                                                                                            |
-| Modelo anidado (ej. `CategoryGroup` dentro de `GameCategory`) | Interface anidada equivalente, mismo nombre                                                                    |
+- **`openapi.json` y `schema.d.ts` no se editan a mano.** Si un tipo sale mal, se corrige el schema Pydantic y se regenera.
+- **El CI regenera y compara** (`git diff --exit-code` sobre los dos archivos). Si cambiaste un schema y no regeneraste, falla.
+- **Todo schema hereda de `ApiModel`** (`backend/app/schemas/base.py`), no de `BaseModel`. Es lo que hace que un campo de respuesta `X | None = None` se genere como `campo: X | null` y no como `campo?: X | null`: la API siempre lo envía. En las peticiones, un campo con valor por defecto sigue saliendo opcional, que es lo correcto.
+- **Todo endpoint declara su `response_model`** (o su tipo de retorno). Sin él aparece en el OpenAPI sin forma y el frontend tendría que tiparlo a mano.
+- **Los enums se declaran como `Enum` o `Literal`** en Pydantic, para que lleguen como uniones de literales y no como `string`.
 
-## Checklist al modificar un schema Pydantic
+## `frontend/lib/types/`
 
-1. ¿Agregaste, quitaste o renombraste un campo? → replica el cambio en el archivo TS correspondiente en el mismo commit.
-2. ¿Cambiaste un `Enum`? → actualiza el union type de TS con los mismos valores exactos (son strings, deben coincidir carácter por carácter — el backend los serializa tal cual).
-3. ¿Agregaste un modelo nuevo (ej. una nueva respuesta compuesta)? → crea la interface TS correspondiente antes de que el frontend intente consumir ese endpoint.
-4. ¿El campo es opcional en Pydantic (`Optional[X] = None`)? → decide explícitamente si en TS es `X | null`, `X?`, o ambos, según si el backend puede omitir la clave del JSON o siempre la envía en `null`. Esto es una fuente común de bugs si se asume mal.
+Cada archivo reexporta los tipos generados con el nombre que usan los componentes:
 
-## Nota sobre schemas ya definidos en el proyecto
+```ts
+import type { components } from "../api/schema";
+type S = components["schemas"];
+export type SessionResponse = S["SessionResponse"];
+```
 
-Los schemas iniciales (`auth.py`, `games.py`, `sessions.py`, `spins.py`, `bets.py`, `suggestions.py`, `screenshots.py`) ya fueron diseñados junto con el resto del proyecto. Al construir el cliente API del frontend por primera vez, revisa cada uno completo y genera su tipo TS correspondiente siguiendo la tabla de traducción — no empieces el cliente API sin haber cubierto los 7 archivos.
+- **Schema nuevo que el frontend va a usar** → agrega su línea de reexport en el archivo que corresponde al módulo de `schemas/`.
+- **Schema eliminado o renombrado** → el typecheck marca el reexport roto; quítalo o renómbralo.
+- **Sufijos `-Input` / `-Output`**: cuando un mismo modelo se usa en una petición y en una respuesta y sus formas difieren (un campo con valor por defecto es opcional al entrar y obligatorio al salir), FastAPI lo publica dos veces. Hoy pasa con `GameVariantConfig`, `GameCategory` y `CategoryGroup`; `lib/types/games.ts` reexporta la versión `-Output`. Si un modelo nuevo empieza a salir con sufijo, el reexport debe elegir uno explícitamente.
+- Solo se escribe a mano lo que **no está en el OpenAPI**: `UUID` (alias de `string`) y `ConfigValidationError` (el `detail` de un 422).
 
-## Cuándo esta skill deja de ser necesaria
+## Lo que el generador no cubre
 
-Si en una fase futura se decide introducir un generador automático de tipos (ej. `openapi-typescript` a partir del schema OpenAPI que FastAPI expone automáticamente), esta skill queda obsoleta — pero mientras el MVP no lo tenga, es la única barrera contra el drift silencioso entre backend y frontend.
+`apiFetch` castea la respuesta (`as T`) y **no valida en runtime**. Los tipos generados evitan que el código del frontend se desincronice del backend del mismo commit, pero un backend desplegado con una versión distinta a la del frontend todavía puede romper una pantalla. Por eso los dos salen del mismo repositorio y del mismo commit (`docs/DESPLIEGUE.md`).

@@ -1,55 +1,16 @@
 /**
- * Espejo manual de `backend/app/schemas/bets.py`.
- * Cambios en el schema Pydantic se replican aquí en el mismo commit
- * (skill `api-schema-sync`).
+ * Tipos de `backend/app/schemas/bets.py`, reexportados desde los generados.
+ *
+ * No se escriben a mano: salen de `lib/api/schema.d.ts`, que genera
+ * `npm run gen:types` desde el OpenAPI de la API. Si cambia un schema Pydantic,
+ * se regenera y se commitea en el mismo commit (skill `api-schema-sync`).
+ * Aquí solo se les da el nombre que usan los componentes.
  */
 
-import type { UUID } from "./auth";
-import type { BankrollStrategy } from "./sessions";
+import type { components } from "../api/schema";
 
-export type BetStatus = "pending" | "resolved" | "cancelled";
+type S = components["schemas"];
 
-export interface CreateBetRequest {
-  category: string;
-  option_label: string;
-  amount: number;
-  /**
-   * Nota del usuario sobre su propia decisión: si eligió esta opción después de
-   * ver una señal. No implica que la señal anticipara el resultado.
-   */
-  followed_suggestion: boolean;
-  /**
-   * Gestión con la que se apostó. Solo esa progresión avanza de escalón al
-   * resolverse el giro; se omite en una apuesta manual por fuera de ellas.
-   */
-  strategy?: BankrollStrategy | null;
-}
-
-export interface BetResponse {
-  id: UUID;
-  session_id: UUID;
-  spin_id: UUID | null;
-  category: string;
-  option_label: string;
-  amount: number;
-  followed_suggestion: boolean;
-  strategy: BankrollStrategy | null;
-  status: BetStatus;
-  won: boolean | null;
-  /** Total devuelto por la mesa: lo apostado más la ganancia. Cero si se perdió. */
-  payout: number | null;
-  net_change: number | null;
-  created_at: string; // ISO 8601
-  resolved_at: string | null;
-}
-
-export interface BetResolution {
-  bet_id: UUID;
-  category: string;
-  option_label: string;
-  won: boolean;
-  amount: number;
-  payout: number;
-  net_change: number;
-  followed_suggestion: boolean;
-}
+export type BetStatus = S["BetStatus"];
+export type CreateBetRequest = S["CreateBetRequest"];
+export type BetResponse = S["BetResponse"];

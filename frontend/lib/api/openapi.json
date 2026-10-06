@@ -1,0 +1,4734 @@
+{
+  "components": {
+    "schemas": {
+      "AccessType": {
+        "enum": [
+          "trial",
+          "invited",
+          "full"
+        ],
+        "title": "AccessType",
+        "type": "string"
+      },
+      "AllowedCombination": {
+        "description": "Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).\n\nVive en los datos y no en el motor porque \"dos docenas\" es una regla de la\nmesa, no una verdad matemática: un juego nuevo declara las suyas y\n`engine/recommendation.py` no cambia (§2.10).",
+        "properties": {
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "category_id",
+          "group_ids"
+        ],
+        "title": "AllowedCombination",
+        "type": "object"
+      },
+      "BacktestBandRow": {
+        "properties": {
+          "band": {
+            "$ref": "#/components/schemas/SignalBand"
+          },
+          "hit_rate": {
+            "title": "Hit Rate",
+            "type": "number"
+          },
+          "hits": {
+            "title": "Hits",
+            "type": "integer"
+          },
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "misses": {
+            "title": "Misses",
+            "type": "integer"
+          },
+          "no_bets": {
+            "title": "No Bets",
+            "type": "integer"
+          },
+          "recommendations": {
+            "title": "Recommendations",
+            "type": "integer"
+          },
+          "roi": {
+            "title": "Roi",
+            "type": "number"
+          },
+          "units": {
+            "title": "Units",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recommendations",
+          "hits",
+          "misses",
+          "hit_rate",
+          "units",
+          "roi",
+          "max_drawdown",
+          "band",
+          "no_bets"
+        ],
+        "title": "BacktestBandRow",
+        "type": "object"
+      },
+      "BacktestReport": {
+        "description": "Informe del backtest sobre historiales fuera de calibración.",
+        "properties": {
+          "by_band": {
+            "items": {
+              "$ref": "#/components/schemas/BacktestBandRow"
+            },
+            "title": "By Band",
+            "type": "array"
+          },
+          "decisions": {
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "house_edge_reference": {
+            "title": "House Edge Reference",
+            "type": "number"
+          },
+          "no_bet_rate": {
+            "title": "No Bet Rate",
+            "type": "number"
+          },
+          "no_bets": {
+            "title": "No Bets",
+            "type": "integer"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/BacktestTally"
+          },
+          "recommendations": {
+            "title": "Recommendations",
+            "type": "integer"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "spins_evaluated": {
+            "title": "Spins Evaluated",
+            "type": "integer"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "weak_threshold": {
+            "title": "Weak Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "sessions",
+          "spins_evaluated",
+          "decisions",
+          "recommendations",
+          "no_bets",
+          "no_bet_rate",
+          "threshold",
+          "weak_threshold",
+          "overall",
+          "by_band",
+          "house_edge_reference"
+        ],
+        "title": "BacktestReport",
+        "type": "object"
+      },
+      "BacktestSource": {
+        "description": "Sobre que historiales corre el backtest.\n\n`sessions` son datos reales, fuera de calibracion por construccion.\n`simulated` es la linea base: ruedas justas donde el ROI tiene que quedarse\nen la ventaja de la casa.",
+        "enum": [
+          "sessions",
+          "simulated"
+        ],
+        "title": "BacktestSource",
+        "type": "string"
+      },
+      "BacktestTally": {
+        "description": "Resultado acumulado de un grupo de recomendaciones.",
+        "properties": {
+          "hit_rate": {
+            "title": "Hit Rate",
+            "type": "number"
+          },
+          "hits": {
+            "title": "Hits",
+            "type": "integer"
+          },
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "misses": {
+            "title": "Misses",
+            "type": "integer"
+          },
+          "recommendations": {
+            "title": "Recommendations",
+            "type": "integer"
+          },
+          "roi": {
+            "title": "Roi",
+            "type": "number"
+          },
+          "units": {
+            "title": "Units",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recommendations",
+          "hits",
+          "misses",
+          "hit_rate",
+          "units",
+          "roi",
+          "max_drawdown"
+        ],
+        "title": "BacktestTally",
+        "type": "object"
+      },
+      "BankrollAlertLevel": {
+        "enum": [
+          "info",
+          "caution",
+          "critical"
+        ],
+        "title": "BankrollAlertLevel",
+        "type": "string"
+      },
+      "BankrollAlertResponse": {
+        "description": "Alerta de gestión de banca: habla del dinero, nunca del próximo resultado.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "level": {
+            "$ref": "#/components/schemas/BankrollAlertLevel"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "level",
+          "message"
+        ],
+        "title": "BankrollAlertResponse",
+        "type": "object"
+      },
+      "BankrollStrategy": {
+        "description": "Las tres progresiones que ofrece la mesa (§2.10).\n\nDesde la Fase 3 la sesión no elige una al crearse: la vista de ruleta las\nmuestra a la vez con lo que pide cada una, y el usuario sigue la que quiera.\nPor eso no hay `strategy_selected` ni `strategy_mode` — cada progresión\nlleva su propio escalón, que solo avanza cuando el usuario apostó con esa\ngestión (`bets.strategy`).\n\nD'Alembert y Fibonacci salieron del producto en la Fase 3.",
+        "enum": [
+          "flat",
+          "martingale",
+          "two_sector_recovery"
+        ],
+        "title": "BankrollStrategy",
+        "type": "string"
+      },
+      "BankrollSuggestionResponse": {
+        "description": "Tamaño de apuesta que exige el escalón actual de la progresión.\n\nSugiere *cuánto* arriesgar según la progresión que el usuario eligió; nunca\na qué apostar ni qué resultado esperar.",
+        "properties": {
+          "alerts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BankrollAlertResponse"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "bet_per_sector": {
+            "title": "Bet Per Sector",
+            "type": "number"
+          },
+          "cumulative_risked": {
+            "title": "Cumulative Risked",
+            "type": "number"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "exceeds_bankroll": {
+            "title": "Exceeds Bankroll",
+            "type": "boolean"
+          },
+          "exceeds_table_limit": {
+            "title": "Exceeds Table Limit",
+            "type": "boolean"
+          },
+          "net_result_if_won": {
+            "title": "Net Result If Won",
+            "type": "number"
+          },
+          "next_if_lost": {
+            "$ref": "#/components/schemas/NextStepResponse"
+          },
+          "next_if_won": {
+            "$ref": "#/components/schemas/NextStepResponse"
+          },
+          "recovers_only_to_break_even": {
+            "title": "Recovers Only To Break Even",
+            "type": "boolean"
+          },
+          "risk_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Warning"
+          },
+          "ruin_probability_estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruin Probability Estimate"
+          },
+          "sectors": {
+            "title": "Sectors",
+            "type": "integer"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "stages_supported": {
+            "title": "Stages Supported",
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/BankrollStrategy"
+          },
+          "suggested_bet": {
+            "title": "Suggested Bet",
+            "type": "number"
+          }
+        },
+        "required": [
+          "strategy",
+          "suggested_bet",
+          "bet_per_sector",
+          "sectors",
+          "stage",
+          "cumulative_risked",
+          "net_result_if_won",
+          "recovers_only_to_break_even",
+          "exceeds_table_limit",
+          "exceeds_bankroll",
+          "risk_warning",
+          "ruin_probability_estimate",
+          "disclaimer",
+          "next_if_lost",
+          "next_if_won",
+          "stages_supported",
+          "alerts"
+        ],
+        "title": "BankrollSuggestionResponse",
+        "type": "object"
+      },
+      "BetResponse": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "followed_suggestion": {
+            "title": "Followed Suggestion",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "net_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Change"
+          },
+          "option_label": {
+            "title": "Option Label",
+            "type": "string"
+          },
+          "payout": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payout"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "spin_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BetStatus"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BankrollStrategy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "spin_id",
+          "category",
+          "option_label",
+          "amount",
+          "followed_suggestion",
+          "strategy",
+          "status",
+          "won",
+          "payout",
+          "net_change",
+          "created_at",
+          "resolved_at"
+        ],
+        "title": "BetResponse",
+        "type": "object"
+      },
+      "BetStatus": {
+        "enum": [
+          "pending",
+          "resolved",
+          "cancelled"
+        ],
+        "title": "BetStatus",
+        "type": "string"
+      },
+      "BulkSpinsRequest": {
+        "description": "Carga inicial de los números ya observados en la mesa (§3.5).",
+        "properties": {
+          "order": {
+            "$ref": "#/components/schemas/EntryOrder"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values",
+          "order"
+        ],
+        "title": "BulkSpinsRequest",
+        "type": "object"
+      },
+      "BulkSpinsResponse": {
+        "description": "Los giros efectivamente creados, ya en orden cronológico ascendente.",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "spins": {
+            "items": {
+              "$ref": "#/components/schemas/SpinResponse"
+            },
+            "title": "Spins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "spins"
+        ],
+        "title": "BulkSpinsResponse",
+        "type": "object"
+      },
+      "CategoryGroup-Input": {
+        "description": "Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "market": {
+            "default": true,
+            "description": "Si el grupo entra al catálogo de mercados del motor de recomendación (§2.10). El verde de la ruleta lo pone en false: cubre el 0/00 y no es una zona que el producto recomiende, pero se conserva como grupo para que las frecuencias de color sumen 1 y el χ² tenga todas sus celdas.",
+            "title": "Market",
+            "type": "boolean"
+          },
+          "outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "payout": {
+            "description": "Multiplicador de pago, ej 1 para rojo/negro, 35 para pleno",
+            "exclusiveMinimum": 0.0,
+            "title": "Payout",
+            "type": "number"
+          }
+        },
+        "required": [
+          "outcomes",
+          "payout"
+        ],
+        "title": "CategoryGroup",
+        "type": "object"
+      },
+      "CategoryGroup-Output": {
+        "description": "Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "market": {
+            "default": true,
+            "description": "Si el grupo entra al catálogo de mercados del motor de recomendación (§2.10). El verde de la ruleta lo pone en false: cubre el 0/00 y no es una zona que el producto recomiende, pero se conserva como grupo para que las frecuencias de color sumen 1 y el χ² tenga todas sus celdas.",
+            "title": "Market",
+            "type": "boolean"
+          },
+          "outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "payout": {
+            "description": "Multiplicador de pago, ej 1 para rojo/negro, 35 para pleno",
+            "exclusiveMinimum": 0.0,
+            "title": "Payout",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "outcomes",
+          "payout",
+          "market"
+        ],
+        "title": "CategoryGroup",
+        "type": "object"
+      },
+      "CreateBetRequest": {
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "followed_suggestion": {
+            "default": false,
+            "title": "Followed Suggestion",
+            "type": "boolean"
+          },
+          "option_label": {
+            "title": "Option Label",
+            "type": "string"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BankrollStrategy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "option_label",
+          "amount"
+        ],
+        "title": "CreateBetRequest",
+        "type": "object"
+      },
+      "CreateGameRequest": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "CreateGameRequest",
+        "type": "object"
+      },
+      "CreateGameVariantRequest": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GameVariantConfig-Input"
+          },
+          "house_edge": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "House Edge",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "house_edge",
+          "config"
+        ],
+        "title": "CreateGameVariantRequest",
+        "type": "object"
+      },
+      "CreateSessionRequest": {
+        "properties": {
+          "bankroll_start": {
+            "exclusiveMinimum": 0.0,
+            "title": "Bankroll Start",
+            "type": "number"
+          },
+          "base_bet": {
+            "exclusiveMinimum": 0.0,
+            "title": "Base Bet",
+            "type": "number"
+          },
+          "game_variant_id": {
+            "format": "uuid",
+            "title": "Game Variant Id",
+            "type": "string"
+          },
+          "loss_limit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Limit"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "table_limit": {
+            "exclusiveMinimum": 0.0,
+            "title": "Table Limit",
+            "type": "number"
+          },
+          "window_size": {
+            "default": 50,
+            "maximum": 500.0,
+            "minimum": 5.0,
+            "title": "Window Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "game_variant_id",
+          "bankroll_start",
+          "base_bet",
+          "table_limit"
+        ],
+        "title": "CreateSessionRequest",
+        "type": "object"
+      },
+      "CreateSpinRequest": {
+        "properties": {
+          "result_value": {
+            "title": "Result Value",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SpinSource",
+            "default": "manual"
+          }
+        },
+        "required": [
+          "result_value"
+        ],
+        "title": "CreateSpinRequest",
+        "type": "object"
+      },
+      "EligibleBetResponse": {
+        "description": "Una apuesta compatible con el modo de la estrategia de la sesión.\n\nExiste para que la interfaz pueda preguntar \"¿sobre qué apuesta calculo el\nriesgo?\" sin recalcular ninguna probabilidad por su cuenta: la teórica la\nentrega el motor.",
+        "properties": {
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "theoretical_probability": {
+            "title": "Theoretical Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "category_id",
+          "group_ids",
+          "theoretical_probability"
+        ],
+        "title": "EligibleBetResponse",
+        "type": "object"
+      },
+      "EntryOrder": {
+        "description": "Cómo escribió el usuario la lista de la carga inicial.\n\nEs obligatorio y explícito: el motor pondera por recencia (§2.3), así que\ninvertir el orden en silencio produce un análisis equivocado sin que nada\nfalle de forma visible.",
+        "enum": [
+          "most_recent_first",
+          "most_recent_last"
+        ],
+        "title": "EntryOrder",
+        "type": "string"
+      },
+      "GameCategory-Input": {
+        "description": "Una categoría de agrupación, ej: 'color', 'dozen', 'sum_range'.",
+        "properties": {
+          "groups": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CategoryGroup-Input"
+            },
+            "title": "Groups",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shrinkage_alpha": {
+            "default": 8,
+            "description": "Fuerza de shrinkage bayesiano para esta categoría (ver ARQUITECTURA_Y_ESTADISTICA.md §2.2). Configuración del juego, no constante del motor — depende de cuántos grupos tiene la categoría.",
+            "exclusiveMinimum": 0.0,
+            "title": "Shrinkage Alpha",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "groups"
+        ],
+        "title": "GameCategory",
+        "type": "object"
+      },
+      "GameCategory-Output": {
+        "description": "Una categoría de agrupación, ej: 'color', 'dozen', 'sum_range'.",
+        "properties": {
+          "groups": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CategoryGroup-Output"
+            },
+            "title": "Groups",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shrinkage_alpha": {
+            "default": 8,
+            "description": "Fuerza de shrinkage bayesiano para esta categoría (ver ARQUITECTURA_Y_ESTADISTICA.md §2.2). Configuración del juego, no constante del motor — depende de cuántos grupos tiene la categoría.",
+            "exclusiveMinimum": 0.0,
+            "title": "Shrinkage Alpha",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "shrinkage_alpha",
+          "groups"
+        ],
+        "title": "GameCategory",
+        "type": "object"
+      },
+      "GameResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "variants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GameVariantResponse"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "active",
+          "variants"
+        ],
+        "title": "GameResponse",
+        "type": "object"
+      },
+      "GameVariantConfig-Input": {
+        "description": "El contenido completo de game_variants.categories_json + metadata.",
+        "properties": {
+          "allowed_combinations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AllowedCombination"
+            },
+            "title": "Allowed Combinations",
+            "type": "array"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/GameCategory-Input"
+            },
+            "minItems": 1,
+            "title": "Categories",
+            "type": "array"
+          },
+          "possible_outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Possible Outcomes",
+            "type": "array"
+          },
+          "recommendation_threshold": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Recommendation Threshold",
+            "type": "number"
+          },
+          "weak_threshold": {
+            "default": 35,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Weak Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "possible_outcomes",
+          "categories"
+        ],
+        "title": "GameVariantConfig",
+        "type": "object"
+      },
+      "GameVariantConfig-Output": {
+        "description": "El contenido completo de game_variants.categories_json + metadata.",
+        "properties": {
+          "allowed_combinations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AllowedCombination"
+            },
+            "title": "Allowed Combinations",
+            "type": "array"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/GameCategory-Output"
+            },
+            "minItems": 1,
+            "title": "Categories",
+            "type": "array"
+          },
+          "possible_outcomes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Possible Outcomes",
+            "type": "array"
+          },
+          "recommendation_threshold": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Recommendation Threshold",
+            "type": "number"
+          },
+          "weak_threshold": {
+            "default": 35,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Weak Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "possible_outcomes",
+          "categories",
+          "allowed_combinations",
+          "recommendation_threshold",
+          "weak_threshold"
+        ],
+        "title": "GameVariantConfig",
+        "type": "object"
+      },
+      "GameVariantResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GameVariantConfig-Output"
+          },
+          "game_id": {
+            "format": "uuid",
+            "title": "Game Id",
+            "type": "string"
+          },
+          "house_edge": {
+            "title": "House Edge",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "game_id",
+          "name",
+          "house_edge",
+          "config",
+          "active"
+        ],
+        "title": "GameVariantResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "MarketResponse": {
+        "description": "Una alternativa del catálogo de mercados de la variante.",
+        "properties": {
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "integer"
+          },
+          "group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "payout": {
+            "title": "Payout",
+            "type": "number"
+          },
+          "sectors": {
+            "title": "Sectors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "category_id",
+          "group_ids",
+          "sectors",
+          "coverage",
+          "payout"
+        ],
+        "title": "MarketResponse",
+        "type": "object"
+      },
+      "MarketStakeResponse": {
+        "description": "Lo que una progresión pide para el mercado recomendado.\n\n`applicable=false` no es un error: es la respuesta honesta cuando la\nprogresión no encaja con la forma del mercado (la recuperación de dos\nsectores sobre un mercado de un solo sector).",
+        "properties": {
+          "applicable": {
+            "title": "Applicable",
+            "type": "boolean"
+          },
+          "bet_per_sector": {
+            "title": "Bet Per Sector",
+            "type": "number"
+          },
+          "cumulative_risked": {
+            "title": "Cumulative Risked",
+            "type": "number"
+          },
+          "exceeds_bankroll": {
+            "title": "Exceeds Bankroll",
+            "type": "boolean"
+          },
+          "exceeds_table_limit": {
+            "title": "Exceeds Table Limit",
+            "type": "boolean"
+          },
+          "net_result_if_won": {
+            "title": "Net Result If Won",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "recovers_only_to_break_even": {
+            "title": "Recovers Only To Break Even",
+            "type": "boolean"
+          },
+          "sectors": {
+            "title": "Sectors",
+            "type": "integer"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/BankrollStrategy"
+          },
+          "total_bet": {
+            "title": "Total Bet",
+            "type": "number"
+          }
+        },
+        "required": [
+          "strategy",
+          "applicable",
+          "reason",
+          "stage",
+          "bet_per_sector",
+          "total_bet",
+          "sectors",
+          "cumulative_risked",
+          "net_result_if_won",
+          "recovers_only_to_break_even",
+          "exceeds_bankroll",
+          "exceeds_table_limit"
+        ],
+        "title": "MarketStakeResponse",
+        "type": "object"
+      },
+      "NextStepResponse": {
+        "description": "Dónde queda la progresión si el giro cierra en contra o a favor.\n\nEs condicional: describe los dos casos, nunca cuál va a ocurrir.",
+        "properties": {
+          "bankroll_after": {
+            "title": "Bankroll After",
+            "type": "number"
+          },
+          "bet_per_sector": {
+            "title": "Bet Per Sector",
+            "type": "number"
+          },
+          "exceeds_bankroll": {
+            "title": "Exceeds Bankroll",
+            "type": "boolean"
+          },
+          "exceeds_table_limit": {
+            "title": "Exceeds Table Limit",
+            "type": "boolean"
+          },
+          "reaches_loss_limit": {
+            "title": "Reaches Loss Limit",
+            "type": "boolean"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "suggested_bet": {
+            "title": "Suggested Bet",
+            "type": "number"
+          }
+        },
+        "required": [
+          "stage",
+          "bet_per_sector",
+          "suggested_bet",
+          "bankroll_after",
+          "exceeds_table_limit",
+          "exceeds_bankroll",
+          "reaches_loss_limit"
+        ],
+        "title": "NextStepResponse",
+        "type": "object"
+      },
+      "NoBetReason": {
+        "description": "Por qué el motor no recomienda apostar. null cuando sí recomienda.",
+        "enum": [
+          "insufficient_data",
+          "below_threshold"
+        ],
+        "title": "NoBetReason",
+        "type": "string"
+      },
+      "ProgressionRowResponse": {
+        "description": "Una fila de la tabla de riesgo, con montos reales del usuario.",
+        "properties": {
+          "bet_per_sector": {
+            "title": "Bet Per Sector",
+            "type": "number"
+          },
+          "cumulative_loss": {
+            "title": "Cumulative Loss",
+            "type": "number"
+          },
+          "exceeds_bankroll": {
+            "title": "Exceeds Bankroll",
+            "type": "boolean"
+          },
+          "exceeds_table_limit": {
+            "title": "Exceeds Table Limit",
+            "type": "boolean"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "total_bet": {
+            "title": "Total Bet",
+            "type": "number"
+          }
+        },
+        "required": [
+          "stage",
+          "bet_per_sector",
+          "total_bet",
+          "cumulative_loss",
+          "exceeds_table_limit",
+          "exceeds_bankroll"
+        ],
+        "title": "ProgressionRowResponse",
+        "type": "object"
+      },
+      "ProgressionTableResponse": {
+        "description": "Tabla que se muestra ANTES de activar una estrategia (§2.8).\n\nEl riesgo debe ser visible y no abstracto: el usuario ve en pesos lo que\ncuesta cada escalón antes de comprometerse con la progresión.",
+        "properties": {
+          "base_bet": {
+            "title": "Base Bet",
+            "type": "number"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "max_affordable_stages": {
+            "title": "Max Affordable Stages",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressionRowResponse"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "ruin_probability_estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruin Probability Estimate"
+          },
+          "sectors": {
+            "title": "Sectors",
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/BankrollStrategy"
+          }
+        },
+        "required": [
+          "strategy",
+          "base_bet",
+          "sectors",
+          "rows",
+          "max_affordable_stages",
+          "ruin_probability_estimate",
+          "disclaimer"
+        ],
+        "title": "ProgressionTableResponse",
+        "type": "object"
+      },
+      "RecommendationDecision": {
+        "description": "Qué hacer en el giro siguiente.",
+        "enum": [
+          "RECOMMEND",
+          "NO_BET"
+        ],
+        "title": "RecommendationDecision",
+        "type": "string"
+      },
+      "RecommendationOutcome": {
+        "description": "Cómo cerró una recomendación contra el giro siguiente.\n\nUn NO APOSTAR se queda en `PENDING`: no hubo nada que acertar ni que fallar.",
+        "enum": [
+          "PENDING",
+          "HIT",
+          "MISS"
+        ],
+        "title": "RecommendationOutcome",
+        "type": "string"
+      },
+      "RecommendationRecord": {
+        "description": "Una recomendación ya emitida y su cierre — historial y auto-evaluación.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chi_square_pvalue_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chi Square Pvalue Adjusted"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/RecommendationDecision"
+          },
+          "deviation": {
+            "title": "Deviation",
+            "type": "number"
+          },
+          "ev": {
+            "title": "Ev",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "market_key": {
+            "title": "Market Key",
+            "type": "string"
+          },
+          "observed_ci_high": {
+            "title": "Observed Ci High",
+            "type": "number"
+          },
+          "observed_ci_low": {
+            "title": "Observed Ci Low",
+            "type": "number"
+          },
+          "observed_frequency_shrunk": {
+            "title": "Observed Frequency Shrunk",
+            "type": "number"
+          },
+          "option_label": {
+            "title": "Option Label",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RecommendationOutcome"
+          },
+          "resolved_spin_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Spin Id"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "signal_band": {
+            "$ref": "#/components/schemas/SignalBand"
+          },
+          "signal_score": {
+            "title": "Signal Score",
+            "type": "number"
+          },
+          "spin_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Id"
+          },
+          "stake_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stake Cents"
+          },
+          "theoretical_probability": {
+            "title": "Theoretical Probability",
+            "type": "number"
+          },
+          "window_size_used": {
+            "title": "Window Size Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "spin_id",
+          "decision",
+          "market_key",
+          "category",
+          "option_label",
+          "signal_score",
+          "signal_band",
+          "theoretical_probability",
+          "observed_frequency_shrunk",
+          "deviation",
+          "observed_ci_low",
+          "observed_ci_high",
+          "ev",
+          "chi_square_pvalue_adjusted",
+          "stake_cents",
+          "currency",
+          "outcome",
+          "resolved_spin_id",
+          "window_size_used",
+          "created_at"
+        ],
+        "title": "RecommendationRecord",
+        "type": "object"
+      },
+      "RecommendationResponse": {
+        "description": "La recomendación para el giro siguiente.\n\n`best` viaja también con `NO_BET`: siempre hay un mejor candidato, sólo que\npor debajo del umbral. Es lo que permite explicar por qué el motor calló.",
+        "properties": {
+          "best": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoredMarketResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScoredMarketResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/RecommendationDecision"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "min_spins_for_signal": {
+            "title": "Min Spins For Signal",
+            "type": "integer"
+          },
+          "no_bet_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoBetReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "signal_band": {
+            "$ref": "#/components/schemas/SignalBand"
+          },
+          "signal_score": {
+            "title": "Signal Score",
+            "type": "number"
+          },
+          "stakes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MarketStakeResponse"
+            },
+            "title": "Stakes",
+            "type": "array"
+          },
+          "strong_threshold": {
+            "title": "Strong Threshold",
+            "type": "number"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "total_spins": {
+            "title": "Total Spins",
+            "type": "integer"
+          },
+          "weak_threshold": {
+            "title": "Weak Threshold",
+            "type": "number"
+          },
+          "window_size_used": {
+            "title": "Window Size Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "decision",
+          "no_bet_reason",
+          "min_spins_for_signal",
+          "threshold",
+          "weak_threshold",
+          "strong_threshold",
+          "signal_score",
+          "signal_band",
+          "market",
+          "best",
+          "stakes",
+          "candidates",
+          "window_size_used",
+          "total_spins",
+          "disclaimer"
+        ],
+        "title": "RecommendationResponse",
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest",
+        "type": "object"
+      },
+      "ScoreComponentsResponse": {
+        "description": "De dónde sale cada punto del `signal_score`.\n\nSe expone entero para que \"¿Por qué recomienda esto?\" pueda mostrar el\ndesglose en vez de un número sin origen.",
+        "properties": {
+          "chi_square_bonus": {
+            "title": "Chi Square Bonus",
+            "type": "number"
+          },
+          "consistency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consistency"
+          },
+          "deviation": {
+            "title": "Deviation",
+            "type": "number"
+          },
+          "recency": {
+            "title": "Recency",
+            "type": "number"
+          },
+          "weight_consistency": {
+            "title": "Weight Consistency",
+            "type": "number"
+          },
+          "weight_deviation": {
+            "title": "Weight Deviation",
+            "type": "number"
+          },
+          "weight_recency": {
+            "title": "Weight Recency",
+            "type": "number"
+          }
+        },
+        "required": [
+          "deviation",
+          "recency",
+          "consistency",
+          "weight_deviation",
+          "weight_recency",
+          "weight_consistency",
+          "chi_square_bonus"
+        ],
+        "title": "ScoreComponentsResponse",
+        "type": "object"
+      },
+      "ScoredMarketResponse": {
+        "properties": {
+          "chi_square_pvalue_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chi Square Pvalue Adjusted"
+          },
+          "components": {
+            "$ref": "#/components/schemas/ScoreComponentsResponse"
+          },
+          "market": {
+            "$ref": "#/components/schemas/MarketResponse"
+          },
+          "signal_band": {
+            "$ref": "#/components/schemas/SignalBand"
+          },
+          "signal_score": {
+            "title": "Signal Score",
+            "type": "number"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/WindowStatResponse"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "market",
+          "signal_score",
+          "signal_band",
+          "components",
+          "windows",
+          "chi_square_pvalue_adjusted"
+        ],
+        "title": "ScoredMarketResponse",
+        "type": "object"
+      },
+      "SessionPerformanceResponse": {
+        "description": "Auto-evaluación de la sesión (§2.7) — GET /sessions/:id/performance.\n\n`matched_suggestions` cuenta coincidencias entre las señales emitidas y el\nresultado observado después. No es \"precisión\" ni implica que la señal\nanticipara el giro: la ruleta no tiene memoria.",
+        "properties": {
+          "baseline_match_rate": {
+            "title": "Baseline Match Rate",
+            "type": "number"
+          },
+          "baseline_matched": {
+            "title": "Baseline Matched",
+            "type": "integer"
+          },
+          "match_rate": {
+            "title": "Match Rate",
+            "type": "number"
+          },
+          "matched_suggestions": {
+            "title": "Matched Suggestions",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_suggestions": {
+            "title": "Total Suggestions",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "total_suggestions",
+          "matched_suggestions",
+          "match_rate",
+          "baseline_matched",
+          "baseline_match_rate",
+          "verdict",
+          "updated_at"
+        ],
+        "title": "SessionPerformanceResponse",
+        "type": "object"
+      },
+      "SessionResponse": {
+        "properties": {
+          "bankroll_current": {
+            "title": "Bankroll Current",
+            "type": "number"
+          },
+          "bankroll_start": {
+            "title": "Bankroll Start",
+            "type": "number"
+          },
+          "base_bet": {
+            "title": "Base Bet",
+            "type": "number"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "game_variant_id": {
+            "format": "uuid",
+            "title": "Game Variant Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "loss_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Limit"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "stage_martingale": {
+            "title": "Stage Martingale",
+            "type": "integer"
+          },
+          "stage_two_sector": {
+            "title": "Stage Two Sector",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StopReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null mientras se pueda apostar. Con valor, la mesa sigue abierta pero\nno acepta apuestas: la banca no cubre la apuesta base o se alcanzó el\nlímite de pérdida. Se deriva de la banca, así que deshacer el giro que lo\nprovocó lo levanta solo. Lo decide el servidor, no el cliente.",
+            "readOnly": true
+          },
+          "table_limit": {
+            "title": "Table Limit",
+            "type": "number"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "window_size": {
+            "title": "Window Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "game_variant_id",
+          "name",
+          "status",
+          "window_size",
+          "bankroll_start",
+          "bankroll_current",
+          "base_bet",
+          "table_limit",
+          "loss_limit",
+          "stage_martingale",
+          "stage_two_sector",
+          "started_at",
+          "closed_at",
+          "stop_reason"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
+      "SessionStatus": {
+        "enum": [
+          "active",
+          "closed",
+          "abandoned"
+        ],
+        "title": "SessionStatus",
+        "type": "string"
+      },
+      "SessionSummaryResponse": {
+        "properties": {
+          "bankroll_final": {
+            "title": "Bankroll Final",
+            "type": "number"
+          },
+          "bankroll_start": {
+            "title": "Bankroll Start",
+            "type": "number"
+          },
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "number"
+          },
+          "followed_suggestion_rate": {
+            "title": "Followed Suggestion Rate",
+            "type": "number"
+          },
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "net_change": {
+            "title": "Net Change",
+            "type": "number"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_bets": {
+            "title": "Total Bets",
+            "type": "integer"
+          },
+          "total_spins": {
+            "title": "Total Spins",
+            "type": "integer"
+          },
+          "win_rate": {
+            "title": "Win Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "session_id",
+          "duration_minutes",
+          "total_spins",
+          "total_bets",
+          "win_rate",
+          "bankroll_start",
+          "bankroll_final",
+          "net_change",
+          "max_drawdown",
+          "followed_suggestion_rate"
+        ],
+        "title": "SessionSummaryResponse",
+        "type": "object"
+      },
+      "SignalBand": {
+        "description": "Estado de salida del motor según los tres umbrales de §2.10:\n\n- `none`: SIN SEÑAL — por debajo de `weak_threshold`. No apostar.\n- `weak`: SEÑAL DÉBIL — de `weak_threshold` a `threshold`. Solo la apuesta\n  base: las progresiones no aplican.\n- `medium`: SEÑAL MEDIA — de `threshold` a `strong_threshold`.\n- `strong`: SEÑAL FUERTE — desde `strong_threshold`.\n\nDescribe la fuerza del criterio interno sobre la muestra ya ocurrida. No es\nla probabilidad de acertar el próximo giro — esa sigue siendo la teórica.",
+        "enum": [
+          "none",
+          "weak",
+          "medium",
+          "strong"
+        ],
+        "title": "SignalBand",
+        "type": "string"
+      },
+      "SignalStrength": {
+        "description": "Fuerza de la señal según §2.6 — nunca \"confianza\": describe la evidencia\npasada de la muestra, no una certeza sobre el próximo giro.",
+        "enum": [
+          "strong",
+          "medium",
+          "weak"
+        ],
+        "title": "SignalStrength",
+        "type": "string"
+      },
+      "SpinResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "result_value": {
+            "title": "Result Value",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SpinSource"
+          },
+          "spin_index": {
+            "title": "Spin Index",
+            "type": "integer"
+          },
+          "stage_martingale_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Martingale Before"
+          },
+          "stage_two_sector_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Two Sector Before"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "spin_index",
+          "result_value",
+          "source",
+          "stage_martingale_before",
+          "stage_two_sector_before",
+          "created_at"
+        ],
+        "title": "SpinResponse",
+        "type": "object"
+      },
+      "SpinSource": {
+        "description": "Ambos son ingreso manual: el proyecto no lee pantallazos (§3.5).",
+        "enum": [
+          "manual",
+          "initial_batch"
+        ],
+        "title": "SpinSource",
+        "type": "string"
+      },
+      "StatisticalSuggestionItem": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chi_square_pvalue_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chi Square Pvalue Adjusted"
+          },
+          "deviation": {
+            "title": "Deviation",
+            "type": "number"
+          },
+          "ev": {
+            "title": "Ev",
+            "type": "number"
+          },
+          "observed_ci_high": {
+            "title": "Observed Ci High",
+            "type": "number"
+          },
+          "observed_ci_low": {
+            "title": "Observed Ci Low",
+            "type": "number"
+          },
+          "observed_frequency_shrunk": {
+            "title": "Observed Frequency Shrunk",
+            "type": "number"
+          },
+          "option_label": {
+            "title": "Option Label",
+            "type": "string"
+          },
+          "significance_score": {
+            "title": "Significance Score",
+            "type": "number"
+          },
+          "strength": {
+            "$ref": "#/components/schemas/SignalStrength"
+          },
+          "theoretical_probability": {
+            "title": "Theoretical Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "category",
+          "option_label",
+          "theoretical_probability",
+          "observed_frequency_shrunk",
+          "observed_ci_low",
+          "observed_ci_high",
+          "deviation",
+          "significance_score",
+          "strength",
+          "ev",
+          "chi_square_pvalue_adjusted"
+        ],
+        "title": "StatisticalSuggestionItem",
+        "type": "object"
+      },
+      "StatisticalSuggestionsPanel": {
+        "properties": {
+          "all_categories": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/StatisticalSuggestionItem"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "All Categories",
+            "type": "object"
+          },
+          "top": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StatisticalSuggestionItem"
+            },
+            "title": "Top",
+            "type": "array"
+          },
+          "window_size_used": {
+            "title": "Window Size Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_size_used",
+          "top",
+          "all_categories"
+        ],
+        "title": "StatisticalSuggestionsPanel",
+        "type": "object"
+      },
+      "StopReason": {
+        "description": "Por qué la mesa dejó de ofrecer apuestas. Debe coincidir con\n`app.engine.bankroll.StopReason`.",
+        "enum": [
+          "bankroll_exhausted",
+          "loss_limit_reached"
+        ],
+        "title": "StopReason",
+        "type": "string"
+      },
+      "StreakAlert": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "consecutive_count": {
+            "title": "Consecutive Count",
+            "type": "integer"
+          },
+          "option_label": {
+            "title": "Option Label",
+            "type": "string"
+          },
+          "probability_of_streak": {
+            "title": "Probability Of Streak",
+            "type": "number"
+          }
+        },
+        "required": [
+          "category",
+          "option_label",
+          "consecutive_count",
+          "probability_of_streak"
+        ],
+        "title": "StreakAlert",
+        "type": "object"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "user"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "UpdateGameRequest": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "UpdateGameRequest",
+        "type": "object"
+      },
+      "UpdateGameVariantRequest": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GameVariantConfig-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "house_edge": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "House Edge"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "UpdateGameVariantRequest",
+        "type": "object"
+      },
+      "UpdateSessionRequest": {
+        "properties": {
+          "loss_limit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Limit"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "table_limit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Limit"
+          },
+          "window_size": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Size"
+          }
+        },
+        "title": "UpdateSessionRequest",
+        "type": "object"
+      },
+      "UpdateUserAccessRequest": {
+        "description": "PATCH /admin/users/:id/access — §3.4.\n\nAgregado en el paso 3: el endpoint estaba en el documento de arquitectura\npero no tenia schema definido.",
+        "properties": {
+          "access_type": {
+            "$ref": "#/components/schemas/AccessType"
+          }
+        },
+        "required": [
+          "access_type"
+        ],
+        "title": "UpdateUserAccessRequest",
+        "type": "object"
+      },
+      "UserResponse": {
+        "properties": {
+          "access_type": {
+            "$ref": "#/components/schemas/AccessType"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "access_type",
+          "role",
+          "created_at"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "UserRole": {
+        "enum": [
+          "user",
+          "admin"
+        ],
+        "title": "UserRole",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WindowStatResponse": {
+        "description": "Lo que el mercado hizo dentro de una ventana (10, 20, 50, 100 giros).",
+        "properties": {
+          "deviation": {
+            "title": "Deviation",
+            "type": "number"
+          },
+          "observed_ci_high": {
+            "title": "Observed Ci High",
+            "type": "number"
+          },
+          "observed_ci_low": {
+            "title": "Observed Ci Low",
+            "type": "number"
+          },
+          "observed_frequency_shrunk": {
+            "title": "Observed Frequency Shrunk",
+            "type": "number"
+          },
+          "raw_count": {
+            "title": "Raw Count",
+            "type": "integer"
+          },
+          "spins_used": {
+            "title": "Spins Used",
+            "type": "integer"
+          },
+          "theoretical_probability": {
+            "title": "Theoretical Probability",
+            "type": "number"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "window",
+          "spins_used",
+          "theoretical_probability",
+          "observed_frequency_shrunk",
+          "raw_count",
+          "observed_ci_low",
+          "observed_ci_high",
+          "deviation",
+          "z"
+        ],
+        "title": "WindowStatResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Sebasanalisis API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin/games": {
+      "post": {
+        "operationId": "create_game_admin_games_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Game",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/games/{game_id}": {
+      "patch": {
+        "operationId": "update_game_admin_games__game_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "game_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Game Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Game",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/games/{game_id}/variants": {
+      "post": {
+        "operationId": "create_variant_admin_games__game_id__variants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "game_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Game Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGameVariantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameVariantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Variant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/games/{game_id}/variants/{variant_id}": {
+      "patch": {
+        "operationId": "update_variant_admin_games__game_id__variants__variant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "game_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Game Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGameVariantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameVariantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Variant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/recommendations/backtest": {
+      "get": {
+        "description": "Backtest del motor: cuanto recomienda, cuanto acierta y con que ROI.\n\nEs la validacion de §9 del comparativo y **no se muestra al cliente**.\n\nLa honestidad de la medicion depende de una sola cosa: que los historiales no\nsean los que se usaron para calibrar los pesos. Las sesiones reales lo\ncumplen por construccion (los pesos se fijaron sobre simulaciones, antes de\nque existieran). Las ruedas simuladas usan una semilla propia y sirven de\nlinea base: ahi el ROI TIENE que quedarse en la ventaja de la casa, y si no\nlo hace es que algo esta mal medido.",
+        "operationId": "recommendation_backtest_admin_recommendations_backtest_get",
+        "parameters": [
+          {
+            "description": "Variante a evaluar. Por defecto, la primera activa.",
+            "in": "query",
+            "name": "variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Variante a evaluar. Por defecto, la primera activa.",
+              "title": "Variant Id"
+            }
+          },
+          {
+            "description": "`sessions` corre sobre las sesiones reales de los usuarios; `simulated` sobre ruedas justas generadas, como linea base.",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BacktestSource",
+              "default": "sessions",
+              "description": "`sessions` corre sobre las sesiones reales de los usuarios; `simulated` sobre ruedas justas generadas, como linea base."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "spins",
+            "required": false,
+            "schema": {
+              "default": 150,
+              "maximum": 500,
+              "minimum": 20,
+              "title": "Spins",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threshold"
+            }
+          },
+          {
+            "in": "query",
+            "name": "weak_threshold",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Weak Threshold"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Recommendation Backtest",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "list_users_admin_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "title": "Response List Users Admin Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Users",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/access": {
+      "patch": {
+        "operationId": "update_user_access_admin_users__user_id__access_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update User Access",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "me_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "refresh_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "register_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/bankroll/progression": {
+      "get": {
+        "description": "Tabla de progresion ANTES de activar una estrategia (§2.8).\n\nExiste sin sesion a proposito: el requisito es que el usuario vea en pesos\nlo que cuesta cada escalon antes de comprometerse con la progresion.",
+        "operationId": "progression_preview_bankroll_progression_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "strategy",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/BankrollStrategy"
+            }
+          },
+          {
+            "in": "query",
+            "name": "base_bet",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0.0,
+              "title": "Base Bet",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bankroll",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0.0,
+              "title": "Bankroll",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "table_limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Table Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stages",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Stages",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "win_probability",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Win Probability"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressionTableResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Progression Preview",
+        "tags": [
+          "bankroll"
+        ]
+      }
+    },
+    "/games": {
+      "get": {
+        "operationId": "list_games_games_get",
+        "parameters": [
+          {
+            "description": "Incluye juegos y variantes desactivados. Solo para administradores.",
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Incluye juegos y variantes desactivados. Solo para administradores.",
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GameResponse"
+                  },
+                  "title": "Response List Games Games Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Games",
+        "tags": [
+          "games"
+        ]
+      }
+    },
+    "/games/variants/{variant_id}": {
+      "get": {
+        "description": "Una variante por su id, para cualquier usuario autenticado.\n\nDevuelve la variante aunque este desactivada: desactivarla impide abrir\nsesiones nuevas (ver `create_session`), pero las que ya estaban abiertas\nnecesitan su `categories_json` para seguir mostrando el analisis. Sin esto,\ndesactivar una variante dejaria en blanco la vista de sus sesiones vivas.",
+        "operationId": "get_variant_games_variants__variant_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "variant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Variant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameVariantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Variant",
+        "tags": [
+          "games"
+        ]
+      }
+    },
+    "/games/{game_id}/variants": {
+      "get": {
+        "operationId": "list_variants_games__game_id__variants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "game_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Game Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GameVariantResponse"
+                  },
+                  "title": "Response List Variants Games  Game Id  Variants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Variants",
+        "tags": [
+          "games"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/sessions": {
+      "get": {
+        "operationId": "list_sessions_sessions_get",
+        "parameters": [
+          {
+            "description": "Filtra por estado. Sin el, devuelve todas las del usuario.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SessionStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtra por estado. Sin el, devuelve todas las del usuario.",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionResponse"
+                  },
+                  "title": "Response List Sessions Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Sessions",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "operationId": "create_session_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}": {
+      "get": {
+        "operationId": "get_session_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "patch": {
+        "operationId": "update_session_sessions__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/bankroll/eligible-bets": {
+      "get": {
+        "description": "Apuestas de la variante compatibles con el modo de esa progresion.\n\nCada una viene con su probabilidad teorica ya calculada por el motor, para\nque la interfaz no tenga que derivarla y no se abra una segunda fuente de\nverdad sobre las probabilidades.",
+        "operationId": "eligible_bets_sessions__session_id__bankroll_eligible_bets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver.",
+            "in": "query",
+            "name": "strategy_key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BankrollStrategy",
+              "default": "flat",
+              "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EligibleBetResponse"
+                  },
+                  "title": "Response Eligible Bets Sessions  Session Id  Bankroll Eligible Bets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Eligible Bets",
+        "tags": [
+          "bankroll"
+        ]
+      }
+    },
+    "/sessions/{session_id}/bankroll/progression": {
+      "get": {
+        "description": "Tabla de progresion con los montos reales de esta sesion.",
+        "operationId": "session_progression_table_sessions__session_id__bankroll_progression_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stages",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Stages",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bet",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bet"
+            }
+          },
+          {
+            "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver.",
+            "in": "query",
+            "name": "strategy_key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BankrollStrategy",
+              "default": "flat",
+              "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressionTableResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Session Progression Table",
+        "tags": [
+          "bankroll"
+        ]
+      }
+    },
+    "/sessions/{session_id}/bankroll/suggestion": {
+      "get": {
+        "description": "Tamano de apuesta que exige el escalon actual de la progresion.\n\nNo sugiere a que apostar ni afirma nada sobre el resultado del giro\nsiguiente: solo traduce la progresion elegida a un monto y su advertencia.",
+        "operationId": "bankroll_suggestion_sessions__session_id__bankroll_suggestion_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Id de la apuesta sobre la que estimar el riesgo, de las que lista /bankroll/eligible-bets. Es opcional porque el motor no decide a que se apuesta: sin ella no se estima el riesgo de agotar la banca.",
+            "in": "query",
+            "name": "bet",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Id de la apuesta sobre la que estimar el riesgo, de las que lista /bankroll/eligible-bets. Es opcional porque el motor no decide a que se apuesta: sin ella no se estima el riesgo de agotar la banca.",
+              "title": "Bet"
+            }
+          },
+          {
+            "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver.",
+            "in": "query",
+            "name": "strategy_key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BankrollStrategy",
+              "default": "flat",
+              "description": "Progresion sobre la que calcular. La mesa muestra las tres a la vez (§2.10), asi que el cliente pide la que quiere ver."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankrollSuggestionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Bankroll Suggestion",
+        "tags": [
+          "bankroll"
+        ]
+      }
+    },
+    "/sessions/{session_id}/bets": {
+      "get": {
+        "description": "Apuestas de la sesion, de la mas antigua a la mas reciente.",
+        "operationId": "list_bets_sessions__session_id__bets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BetResponse"
+                  },
+                  "title": "Response List Bets Sessions  Session Id  Bets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Bets",
+        "tags": [
+          "bets"
+        ]
+      },
+      "post": {
+        "description": "Registra lo que el usuario puso en la mesa, a la espera del giro siguiente.\n\nSe admiten varias pendientes a la vez, como en una mesa real: todas se\nresuelven contra el mismo numero. Lo que se valida es la **suma** de lo\ncomprometido, para no poder apostar mas dinero del que hay en la banca.",
+        "operationId": "create_bet_sessions__session_id__bets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Bet",
+        "tags": [
+          "bets"
+        ]
+      }
+    },
+    "/sessions/{session_id}/bets/{bet_id}": {
+      "delete": {
+        "description": "Cancela una apuesta que todavia no se resolvio (se registro por error).\n\nUna apuesta ya resuelta no se toca: cambiaria la banca y la auto-evaluacion\nsobre hechos que ya ocurrieron.",
+        "operationId": "cancel_bet_sessions__session_id__bets__bet_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bet_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Bet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Bet",
+        "tags": [
+          "bets"
+        ]
+      }
+    },
+    "/sessions/{session_id}/close": {
+      "post": {
+        "description": "Cierra la sesion. Las apuestas pendientes quedan canceladas, no resueltas.\n\nNunca llego el giro que las resolveria, asi que darlas por ganadas o perdidas\nseria inventar un resultado.",
+        "operationId": "close_session_sessions__session_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Close Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/performance": {
+      "get": {
+        "description": "Auto-evaluacion de §2.7.\n\nSe recalcula sobre el historial en cada llamada en vez de leerse de\n`session_performance`: el motor es determinista, asi que re-simular da el\nmismo resultado que haber ido acumulando fila a fila, y evita que un cambio\nen una formula deje conteos viejos e incomparables en la base.",
+        "operationId": "session_performance_sessions__session_id__performance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPerformanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Session Performance",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/recommendation": {
+      "get": {
+        "description": "La recomendacion vigente para el giro siguiente.\n\nSe recalcula en cada llamada a partir de los giros: el motor es\ndeterminista, asi que leerla o recalcularla da lo mismo, y recalcular evita\nservir una recomendacion vieja si entretanto se deshizo un giro.",
+        "operationId": "latest_recommendation_sessions__session_id__recommendation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Latest Recommendation",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/sessions/{session_id}/recommendation/history": {
+      "get": {
+        "description": "Las recomendaciones emitidas en la sesion y como cerro cada una.\n\nEs el historico real, no una re-simulacion: cada fila guarda lo que el motor\ndijo en su momento.",
+        "operationId": "recommendation_history_sessions__session_id__recommendation_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecommendationRecord"
+                  },
+                  "title": "Response Recommendation History Sessions  Session Id  Recommendation History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Recommendation History",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/sessions/{session_id}/reset-strategy": {
+      "post": {
+        "description": "Vuelve las progresiones al escalon inicial sin tocar la banca ni los giros.\n\nSe reinician las tres a la vez porque las tres estan corriendo a la vez: el\nusuario no tiene una elegida que reiniciar por separado (§2.10).",
+        "operationId": "reset_strategy_sessions__session_id__reset_strategy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset Strategy",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/spins": {
+      "get": {
+        "description": "Orden cronologico ascendente: `spin_index` creciente va del mas antiguo al\nmas reciente. La UI que quiera mostrar \"mas reciente primero\" invierte al\npintar, no en la base.",
+        "operationId": "list_spins_sessions__session_id__spins_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SpinResponse"
+                  },
+                  "title": "Response List Spins Sessions  Session Id  Spins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Spins",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "operationId": "create_spin_sessions__session_id__spins_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSpinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpinResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Spin",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/spins/bulk": {
+      "post": {
+        "description": "Carga inicial: registra de una vez los numeros ya observados en la mesa.\n\nEl usuario declara en que orden los escribio y el backend normaliza siempre a\norden cronologico ascendente antes de guardar (§3.5). Adivinar el orden no es\naceptable: el motor pondera por recencia, asi que invertirlo en silencio da\nun analisis equivocado sin ningun error visible.",
+        "operationId": "create_spins_bulk_sessions__session_id__spins_bulk_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSpinsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSpinsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Spins Bulk",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/spins/{spin_id}": {
+      "delete": {
+        "description": "Deshacer: solo se puede borrar el ultimo giro.\n\nBorrar uno del medio dejaria huecos en `spin_index`, y el decaimiento por\nrecencia (§2.3) pesa cada observacion por su antiguedad — un hueco\ndesplazaria en silencio el peso de todos los giros posteriores.\n\nSi el giro habia resuelto apuestas, deshacerlo tiene que deshacer tambien su\nefecto: las apuestas vuelven a estar pendientes, la banca recupera lo que\nmovieron y el escalon vuelve al que habia antes. Lo que se deshace es el\nnumero mal tecleado, no la apuesta — esa se hizo de verdad y sigue viva.",
+        "operationId": "delete_spin_sessions__session_id__spins__spin_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "spin_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Spin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Spin",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/streak": {
+      "get": {
+        "operationId": "active_streak_alert_sessions__session_id__streak_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StreakAlert"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Active Streak Alert Sessions  Session Id  Streak Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Active Streak Alert",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/suggestions/latest": {
+      "get": {
+        "operationId": "latest_suggestions_sessions__session_id__suggestions_latest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatisticalSuggestionsPanel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Latest Suggestions",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/summary": {
+      "get": {
+        "description": "Resumen de la sesion: cuanto se jugo y como termino la banca.\n\nSolo describe lo que ya paso. `win_rate` es la proporcion de apuestas\nresueltas que se ganaron en esta sesion — no es una tasa de acierto del\nmotor ni dice nada sobre las proximas.",
+        "operationId": "session_summary_sessions__session_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Session Summary",
+        "tags": [
+          "sessions"
+        ]
+      }
+    }
+  }
+}

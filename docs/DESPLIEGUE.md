@@ -4,10 +4,11 @@
 
 Sebasanalisis va en **un repositorio**, con `backend/` y `frontend/` dentro. No en dos.
 
-La razon no es comodidad, es una regla que ya existe en el proyecto: no hay
-generador automatico de tipos, asi que cada cambio en un schema de Pydantic
-tiene que reflejarse a mano en su tipo de TypeScript **en el mismo commit**
-(ver `.claude/skills/api-schema-sync`). Con dos repositorios ese "mismo commit"
+La razon no es comodidad, es una regla que ya existe en el proyecto: los tipos
+de TypeScript del frontend se generan desde la API (`npm run gen:types`) y se
+commitean **en el mismo commit** que el cambio de schema, pero el frontend no
+valida las respuestas al recibirlas (ver `.claude/skills/api-schema-sync`). Con
+dos repositorios ese "mismo commit"
 deja de ser posible: el backend puede mezclarse a produccion con un campo nuevo
 mientras el frontend sigue apuntando al viejo, y nadie lo nota hasta que un
 usuario ve la pantalla rota.

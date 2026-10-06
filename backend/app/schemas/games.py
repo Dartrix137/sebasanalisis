@@ -5,12 +5,13 @@ Modelo genérico: cualquier juego de resultados discretos con probabilidad fija
 """
 from uuid import UUID
 from typing import Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
+from app.schemas.base import ApiModel
 
 
 # ---------- Config genérica (categories_json) ----------
 
-class CategoryGroup(BaseModel):
+class CategoryGroup(ApiModel):
     """Un grupo dentro de una categoría, ej: 'red' dentro de 'color'."""
     label: Optional[str] = None  # nombre legible del grupo, ej 'Rojo'; lo trae el seed
     outcomes: list[str] = Field(min_length=1)
@@ -26,7 +27,7 @@ class CategoryGroup(BaseModel):
     )
 
 
-class GameCategory(BaseModel):
+class GameCategory(ApiModel):
     """Una categoría de agrupación, ej: 'color', 'dozen', 'sum_range'."""
     id: str
     label: str
@@ -46,7 +47,7 @@ class GameCategory(BaseModel):
         return v
 
 
-class AllowedCombination(BaseModel):
+class AllowedCombination(ApiModel):
     """Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).
 
     Vive en los datos y no en el motor porque "dos docenas" es una regla de la
@@ -59,7 +60,7 @@ class AllowedCombination(BaseModel):
     group_ids: list[str] = Field(min_length=2)
 
 
-class GameVariantConfig(BaseModel):
+class GameVariantConfig(ApiModel):
     """El contenido completo de game_variants.categories_json + metadata."""
     possible_outcomes: list[str] = Field(min_length=1)
     categories: list[GameCategory] = Field(min_length=1)
@@ -102,25 +103,25 @@ class GameVariantConfig(BaseModel):
 
 # ---------- Requests (admin) ----------
 
-class CreateGameRequest(BaseModel):
+class CreateGameRequest(ApiModel):
     name: str
     type: str  # 'roulette' | 'dice' | futuro
     active: bool = True
 
 
-class UpdateGameRequest(BaseModel):
+class UpdateGameRequest(ApiModel):
     name: Optional[str] = None
     active: Optional[bool] = None
 
 
-class CreateGameVariantRequest(BaseModel):
+class CreateGameVariantRequest(ApiModel):
     name: str  # 'american' | 'european' | 'two_d6'
     house_edge: float = Field(ge=0, le=1)
     config: GameVariantConfig
     active: bool = True
 
 
-class UpdateGameVariantRequest(BaseModel):
+class UpdateGameVariantRequest(ApiModel):
     name: Optional[str] = None
     house_edge: Optional[float] = Field(default=None, ge=0, le=1)
     config: Optional[GameVariantConfig] = None
@@ -129,7 +130,7 @@ class UpdateGameVariantRequest(BaseModel):
 
 # ---------- Responses ----------
 
-class GameVariantResponse(BaseModel):
+class GameVariantResponse(ApiModel):
     id: UUID
     game_id: UUID
     name: str
@@ -144,7 +145,7 @@ class GameVariantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class GameResponse(BaseModel):
+class GameResponse(ApiModel):
     id: UUID
     name: str
     type: str

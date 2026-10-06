@@ -1,41 +1,23 @@
 /**
- * Espejo manual de `backend/app/schemas/auth.py`.
- * Si cambia el schema Pydantic, este archivo cambia en el mismo commit
- * (ver skill `api-schema-sync` — no hay generador automático en el MVP).
+ * Tipos de `backend/app/schemas/auth.py`, reexportados desde los generados.
+ *
+ * No se escriben a mano: salen de `lib/api/schema.d.ts`, que genera
+ * `npm run gen:types` desde el OpenAPI de la API. Si cambia un schema Pydantic,
+ * se regenera y se commitea en el mismo commit (skill `api-schema-sync`).
+ * Aquí solo se les da el nombre que usan los componentes.
  */
 
+import type { components } from "../api/schema";
+
+type S = components["schemas"];
+
+/** Los ids viajan como texto; el OpenAPI no les da un tipo propio. */
 export type UUID = string;
 
-export type AccessType = "trial" | "invited" | "full";
-export type UserRole = "user" | "admin";
-
-export interface RegisterRequest {
-  email: string;
-  password: string;
-  display_name?: string | null;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface RefreshRequest {
-  refresh_token: string;
-}
-
-export interface UserResponse {
-  id: UUID;
-  email: string;
-  display_name: string | null;
-  access_type: AccessType;
-  role: UserRole;
-  created_at: string; // ISO 8601
-}
-
-export interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  user: UserResponse;
-}
+export type AccessType = S["AccessType"];
+export type UserRole = S["UserRole"];
+export type RegisterRequest = S["RegisterRequest"];
+export type LoginRequest = S["LoginRequest"];
+export type RefreshRequest = S["RefreshRequest"];
+export type UserResponse = S["UserResponse"];
+export type TokenResponse = S["TokenResponse"];

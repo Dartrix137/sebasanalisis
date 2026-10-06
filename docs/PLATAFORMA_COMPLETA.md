@@ -774,6 +774,7 @@ Reemplaza la sincronización manual de `frontend/lib/types/` con los schemas Pyd
 - Los archivos generados no se editan a mano.
 - Todo endpoint declara su `response_model` (o su tipo de retorno): un endpoint sin él aparece en el OpenAPI sin forma, y el frontend volvería a tiparlo a mano.
 - Los enums se declaran como `Literal` o `Enum` en Pydantic, para que lleguen al cliente como uniones y no como `string`.
+- Todo schema hereda de `ApiModel` (`backend/app/schemas/base.py`), no de `BaseModel` (decidido el 2026-10-06). Sin eso, un campo de respuesta `X | None = None` se publica como opcional y el tipo generado dice que puede faltar, cuando la API siempre lo envía con `null`. Fue la única diferencia que la migración encontró entre los tipos manuales y el backend: 49 campos. Efecto secundario: un modelo que se usa a la vez en una petición y en una respuesta se publica dos veces (`-Input` y `-Output`); `lib/types/` reexporta la versión de salida.
 - El generador evita que los tipos se desincronicen, pero **`apiFetch` sigue sin validar en runtime**. Un backend desplegado con una versión distinta a la del frontend todavía puede romper una pantalla; por eso backend y frontend siguen saliendo del mismo commit (`docs/DESPLIEGUE.md`).
 
 **Migración** (parte de la Fase 0, sin cambiar comportamiento):
