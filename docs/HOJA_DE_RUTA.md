@@ -101,8 +101,8 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
-| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido el 2026-10-06; cierre pendiente** (ver abajo) |
-| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | Pendiente |
+| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido y en `main` (2026-10-06); falta solo GlitchTip** (ver abajo) |
+| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | En curso (rama `fase-4-paso-1-correo`) |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, Juego Responsable, onboarding | §6 | Pendiente |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §4.4, §4.5 | Pendiente |
@@ -114,7 +114,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 
 ### Paso 0: qué quedó hecho y qué falta para cerrarlo
 
-Construido en la rama `fase-4-paso-0-stack` (2026-10-06):
+Construido en la rama `fase-4-paso-0-stack` y mezclado a `main` (2026-10-06):
 
 - Next.js 16.3.8 y React 19.3.0; `npm audit --omit=dev` sin vulnerabilidades. Next 16 retiró `next lint`: el script `lint` llama a ESLint.
 - FastAPI 0.142.2, PyJWT 2.15.1 y python-multipart 0.0.32; `pip-audit` sin vulnerabilidades conocidas. No estaba en la lista original: lo exigió el `pip-audit` del CI.
@@ -124,13 +124,13 @@ Construido en la rama `fase-4-paso-0-stack` (2026-10-06):
 - Playwright con el test de humo.
 - `sentry-sdk` y `@sentry/nextjs` con el filtro de datos sensibles, apagados sin DSN.
 
-De la lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 **faltan tres cosas, ninguna de código**:
+De la lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 **falta una sola cosa, y no es de código**:
 
 | Falta | Depende de |
 |---|---|
-| CI en verde en `main` | Mezclar la rama (hoy está en verde en la rama). |
-| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS: pasos en `DESPLIEGUE.md`. |
-| Rate limit de login probado con dos IP detrás del proxy real | Desplegar y poner `FORWARDED_ALLOW_IPS`: comprobación en `DESPLIEGUE.md`. Con el middleware de uvicorn ya está probado en los tests. |
+| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS, que espera a la compra del dominio: pasos en `DESPLIEGUE.md`. La especificación lo exige activo antes del paso 5. |
+
+Ya comprobado: CI en verde en `main` (commit `cf456bb`, 2026-10-06) y rate limit de login con dos IP detrás del proxy real de Dokploy, con `FORWARDED_ALLOW_IPS` puesto (prueba manual del usuario, 2026-10-06).
 
 Quedó sin hacer, a propósito: las dos reglas nuevas de `react-hooks` que marcan `lib/session.tsx` y los formularios están como advertencia en `eslint.config.mjs`; y `npm audit` completo (con dependencias de desarrollo) sigue reportando avisos altos por la cadena de Tailwind 3, que solo se cierran migrando a Tailwind 4.
 
