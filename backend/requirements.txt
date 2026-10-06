@@ -10,3 +10,4 @@ argon2-cffi==23.1.0
 python-multipart==0.0.32
 numpy==2.2.1
 scipy==1.15.0
+sentry-sdk[fastapi]==2.71.0

@@ -44,6 +44,7 @@ CORS_ORIGINS=["https://sebasanalisis.com"]
 SEED_ADMIN_EMAIL=<correo real del administrador>
 SEED_ADMIN_PASSWORD=<clave fuerte>
 FORWARDED_ALLOW_IPS=<red del proxy de Dokploy, ver abajo>
+SENTRY_DSN=<DSN del proyecto de la API en GlitchTip; vacio hasta instalarlo>
 ```
 
 Tres cosas que se rompen en silencio si se copian de desarrollo o se dejan vacias:
@@ -75,6 +76,7 @@ Tres cosas que se rompen en silencio si se copian de desarrollo o se dejan vacia
 
 ```
 NEXT_PUBLIC_API_BASE_URL=https://api.sebasanalisis.com
+NEXT_PUBLIC_SENTRY_DSN=<DSN del proyecto del frontend en GlitchTip; vacio hasta instalarlo>
 ```
 
 Next.js incrusta las variables `NEXT_PUBLIC_*` en el JavaScript del navegador
@@ -156,6 +158,77 @@ la aplicacion queda viva pero rota:
    arrancar.
 
 Repetir la comprobacion de la seccion anterior despues de migrar.
+
+## Monitoreo de errores con GlitchTip
+
+La API (`sentry-sdk`) y el frontend (`@sentry/nextjs`) ya traen el monitoreo,
+**apagado mientras no tengan DSN**. Encenderlo es instalar GlitchTip en el VPS
+y pegar dos DSN. GlitchTip habla el protocolo de Sentry y corre en el mismo
+VPS: los errores no salen a ningun tercero.
+
+Lo que el codigo nunca envia, haya el error que haya: cabeceras
+`Authorization` y cookies, cuerpos de `/auth/*`, `/billing/*` y `/webhooks/*`,
+variables locales de los tracebacks, y desde el navegador ningun cuerpo de
+peticion (`backend/app/core/monitoring.py`, `frontend/lib/monitoring.ts`).
+
+El VPS tiene 8 GB de RAM (confirmado el 2026-10-06), suficiente para GlitchTip
+junto a la aplicacion. Antes de instalar, mirar igual la memoria libre real con
+`free -h`.
+
+### Instalacion (pendiente, se hace con el usuario)
+
+1. **DNS.** En Hostinger, un registro `A` para `errores.sebasanalisis.com`
+   apuntando a la IP del VPS.
+2. **Servicio en Dokploy.** Dentro del mismo proyecto, un servicio nuevo de
+   tipo *Compose* (o la plantilla de GlitchTip si Dokploy la ofrece). El
+   `docker-compose.yml` se copia de la **documentacion oficial vigente de
+   GlitchTip** (glitchtip.com, seccion de instalacion): no se escribe de
+   memoria, porque los servicios que trae han cambiado entre versiones.
+3. **Base de datos propia.** GlitchTip usa el PostgreSQL de su propio compose.
+   **Nunca** se le da la `DATABASE_URL` de Sebasanalisis.
+4. **Variables de GlitchTip** (los nombres exactos, de su documentacion):
+   - una clave secreta larga y aleatoria, distinta a `JWT_SECRET_KEY`;
+   - el dominio publico: `https://errores.sebasanalisis.com`;
+   - el remitente y el servidor SMTP para las alertas (el mismo relay de
+     Resend que usara la aplicacion; hasta tenerlo, las alertas por correo no
+     funcionan y los errores se revisan entrando al panel);
+   - el registro de usuarios nuevos **desactivado**, despues del paso 6.
+5. **Dominio y HTTPS.** En la pestana de dominios del servicio:
+   `errores.sebasanalisis.com` hacia el puerto del contenedor web de GlitchTip,
+   con HTTPS activado.
+6. **Cuenta de administrador.** Entrar a `https://errores.sebasanalisis.com`,
+   registrar la primera cuenta y crear una organizacion. Despues, cerrar el
+   registro (paso 4) y redesplegar GlitchTip.
+7. **Dos proyectos**: `sebasanalisis-api` (plataforma Python/FastAPI) y
+   `sebasanalisis-web` (plataforma JavaScript/Next.js). Cada uno muestra su DSN.
+8. **Pegar los DSN**:
+   - `SENTRY_DSN` en *Environment* de la API -> redesplegar;
+   - `NEXT_PUBLIC_SENTRY_DSN` en *Build Arguments* del Web -> **reconstruir**
+     (se incrusta en el build, igual que `NEXT_PUBLIC_API_BASE_URL`).
+9. **Alertas.** En cada proyecto, una alerta por correo al administrador ante
+   un error nuevo.
+10. **Chequeo externo.** GlitchTip vive en el mismo VPS: si el VPS se cae, se
+    cae con el y no avisa. Configurar un servicio externo gratuito de
+    disponibilidad sobre `https://api.sebasanalisis.com/health` y sobre
+    `https://sebasanalisis.com`.
+
+### Comprobacion (cierra el paso 0 de la Fase 4)
+
+Un error provocado a proposito en cada lado tiene que aparecer en su proyecto:
+
+- **Frontend**: abrir `https://sebasanalisis.com/login`, y en la consola del
+  navegador ejecutar
+  `setTimeout(() => { throw new Error("prueba de monitoreo web") }, 0)`.
+  Debe aparecer en `sebasanalisis-web` en menos de un minuto.
+- **API**: en la terminal de la aplicacion API en Dokploy,
+  `python -c "from app.main import app; import sentry_sdk; sentry_sdk.capture_exception(RuntimeError('prueba de monitoreo api')); sentry_sdk.flush()"`.
+  Debe aparecer en `sebasanalisis-api`.
+- Abrir cada evento y confirmar que **no** trae cabecera `Authorization` ni
+  cuerpos de peticion.
+
+Si no llega nada: revisar que el DSN use `https://` y el dominio publico, que
+el Web se haya reconstruido (no solo reiniciado), y que el navegador no este
+bloqueando la peticion a `errores.sebasanalisis.com` (pestana Red).
 
 ## Antes del primer despliegue
 
