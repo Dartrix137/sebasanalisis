@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { ApiError, authApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "./AuthShell";
 import { BrandMark, Button, Card, ErrorBox, Field, PasswordField } from "./ui";
 
 const SUBTITLE = "Registra los números de tu mesa y revisa lo que ya salió. Tu progreso queda guardado en tu cuenta.";
@@ -107,12 +108,20 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             id="password"
             label="Contraseña"
             required
-            minLength={8}
+            minLength={isRegister ? PASSWORD_MIN_LENGTH : undefined}
             autoComplete={isRegister ? "new-password" : "current-password"}
-            hint={isRegister ? "Mínimo 8 caracteres." : undefined}
+            hint={isRegister ? PASSWORD_HINT : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          {isRegister ? null : (
+            <p className="-mt-1 text-right text-xs">
+              <Link href="/olvide-contrasena" className="font-bold text-gold hover:text-gold-soft">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </p>
+          )}
 
           {error ? <ErrorBox message={error} /> : null}
 

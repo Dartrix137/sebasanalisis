@@ -35,6 +35,10 @@ interface SessionValue {
   loading: boolean;
   signIn: (tokens: TokenResponse) => void;
   signOut: () => void;
+  /** Reemplaza el usuario en memoria con el que acaba de devolver la API. */
+  updateUser: (user: UserResponse) => void;
+  /** Vuelve a pedir el usuario: tras confirmar el correo desde otro enlace. */
+  refreshUser: () => Promise<void>;
   /** Ejecuta una llamada y reintenta una vez si el access token expiró. */
   withToken: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
 }
@@ -197,9 +201,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [renew],
   );
 
+  const updateUser = useCallback((next: UserResponse) => {
+    setUser((prev) => keepIfSame(prev, next));
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!storedRef.current) return;
+    updateUser(await withToken((t) => authApi.me(t)));
+  }, [withToken, updateUser]);
+
   const value = useMemo<SessionValue>(
-    () => ({ user, token: stored?.access_token ?? null, loading, signIn, signOut, withToken }),
-    [user, stored, loading, signIn, signOut, withToken],
+    () => ({
+      user,
+      token: stored?.access_token ?? null,
+      loading,
+      signIn,
+      signOut,
+      updateUser,
+      refreshUser,
+      withToken,
+    }),
+    [user, stored, loading, signIn, signOut, updateUser, refreshUser, withToken],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
