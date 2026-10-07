@@ -123,9 +123,12 @@ No hay que hacer nada.
 El seed **no** corre solo, a proposito: reactiva las variantes de ruleta
 (`active=True`), asi que en cada despliegue pisaria en silencio una variante que
 el administrador haya desactivado. Se corre una sola vez, en la terminal de la
-aplicacion API dentro de Dokploy:
+aplicacion API dentro de Dokploy. La terminal abre en `/` y el codigo esta en
+`/app`: sin el `cd`, Python no encuentra los modulos (`No module named
+'app.core'`).
 
 ```
+cd /app
 python -m app.db.seed
 ```
 
@@ -283,7 +286,7 @@ punta a punta. **Nunca van en produccion.**
 ## Monitoreo de errores con GlitchTip
 
 La API (`sentry-sdk`) y el frontend (`@sentry/nextjs`) ya traen el monitoreo,
-**apagado mientras no tengan DSN**. Encenderlo es instalar GlitchTip en el VPS
+**apagado mientras no tengan DSN**. Encenderlo fue instalar GlitchTip en el VPS
 y pegar dos DSN. GlitchTip habla el protocolo de Sentry y corre en el mismo
 VPS: los errores no salen a ningun tercero.
 
@@ -296,53 +299,113 @@ El VPS tiene 8 GB de RAM (confirmado el 2026-10-06), suficiente para GlitchTip
 junto a la aplicacion. Antes de instalar, mirar igual la memoria libre real con
 `free -h`.
 
-### Instalacion (pendiente, se hace con el usuario)
+### Como quedo instalado (2026-10-07)
 
-1. **DNS.** En Hostinger, un registro `A` para `errores.sebasanalisis.com`
-   apuntando a la IP del VPS.
-2. **Servicio en Dokploy.** Dentro del mismo proyecto, un servicio nuevo de
-   tipo *Compose* (o la plantilla de GlitchTip si Dokploy la ofrece). El
-   `docker-compose.yml` se copia de la **documentacion oficial vigente de
-   GlitchTip** (glitchtip.com, seccion de instalacion): no se escribe de
-   memoria, porque los servicios que trae han cambiado entre versiones.
-3. **Base de datos propia.** GlitchTip usa el PostgreSQL de su propio compose.
+GlitchTip corre en `https://errores.sebasanalisis.com`, como un servicio
+*Compose* aparte dentro del mismo proyecto de Dokploy.
+
+1. **DNS.** En Hostinger, un registro `A` con Name `errores` hacia la IP del VPS.
+2. **Compose.** Es el de ejemplo de la documentacion oficial de GlitchTip
+   (`glitchtip.com/assets/compose.sample.yml`, leido el 2026-10-07; al
+   actualizar de version mayor se vuelve a leer, porque los servicios que trae
+   han cambiado entre versiones), con tres cambios: los secretos salen de
+   variables, Postgres lleva contrasena, y el puerto 8000 **no se publica** en
+   el VPS (`expose` en lugar de `ports`): publicado, GlitchTip quedaria abierto
+   por HTTP sin pasar por el proxy.
+
+   ```yaml
+   x-environment: &default-environment
+     DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+     VALKEY_URL: redis://valkey:6379
+     SECRET_KEY: ${SECRET_KEY}
+     EMAIL_URL: ${EMAIL_URL}
+     GLITCHTIP_DOMAIN: https://errores.sebasanalisis.com
+     DEFAULT_FROM_EMAIL: alertas@correo.sebasanalisis.com
+     ENABLE_USER_REGISTRATION: "False"
+     ENABLE_ADMIN: "False"
+     ENABLE_OPENAPI: "False"
+     GLITCHTIP_ENABLE_MCP: "False"
+     GLITCHTIP_ENABLE_DUCKDB: "False"
+
+   services:
+     postgres:
+       image: postgres:18
+       environment:
+         POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+       restart: unless-stopped
+       volumes:
+         - pg-data:/var/lib/postgresql
+     valkey:
+       image: valkey/valkey:9
+       restart: unless-stopped
+     web:
+       image: glitchtip/glitchtip:6
+       depends_on:
+         - postgres
+         - valkey
+       expose:
+         - "8000"
+       environment:
+         <<: *default-environment
+         SERVER_ROLE: all_in_one
+       restart: unless-stopped
+       volumes:
+         - uploads:/code/uploads
+
+   volumes:
+     pg-data:
+     uploads:
+   ```
+
+3. **Base de datos propia.** GlitchTip usa el PostgreSQL de su compose.
    **Nunca** se le da la `DATABASE_URL` de Sebasanalisis.
-4. **Variables de GlitchTip** (los nombres exactos, de su documentacion):
-   - una clave secreta larga y aleatoria, distinta a `JWT_SECRET_KEY`;
-   - el dominio publico: `https://errores.sebasanalisis.com`;
-   - el remitente y el servidor SMTP para las alertas (el mismo relay de
-     Resend que usara la aplicacion; hasta tenerlo, las alertas por correo no
-     funcionan y los errores se revisan entrando al panel);
-   - el registro de usuarios nuevos **desactivado**, despues del paso 6.
-5. **Dominio y HTTPS.** En la pestana de dominios del servicio:
-   `errores.sebasanalisis.com` hacia el puerto del contenedor web de GlitchTip,
-   con HTTPS activado.
-6. **Cuenta de administrador.** Entrar a `https://errores.sebasanalisis.com`,
-   registrar la primera cuenta y crear una organizacion. Despues, cerrar el
-   registro (paso 4) y redesplegar GlitchTip.
-7. **Dos proyectos**: `sebasanalisis-api` (plataforma Python/FastAPI) y
-   `sebasanalisis-web` (plataforma JavaScript/Next.js). Cada uno muestra su DSN.
-8. **Pegar los DSN**:
+4. **Secretos**, en la pestana *Environment* del servicio:
+
+   ```
+   SECRET_KEY=<openssl rand -hex 32; distinta a JWT_SECRET_KEY>
+   POSTGRES_PASSWORD=<openssl rand -hex 24>
+   EMAIL_URL=smtp+tls://resend:<API key de Resend>@smtp.resend.com:587
+   ```
+
+   La contrasena de Postgres va en hexadecimal porque viaja dentro de una URL.
+   La API key de Resend es **una aparte** de la de la aplicacion, solo de envio:
+   se puede revocar sin tocar la API. Las alertas salen por el mismo dominio
+   remitente y gastan la misma cuota diaria de Resend.
+5. **Registro cerrado desde el inicio.** Con `ENABLE_USER_REGISTRATION: "False"`
+   GlitchTip deja registrar solo a la primera cuenta: no hace falta redesplegar
+   despues de crearla.
+6. **Dominio y HTTPS.** En *Domains* del servicio: `errores.sebasanalisis.com`,
+   servicio `web`, puerto 8000, HTTPS.
+7. **Dos proyectos**: `sebasanalisis-api` (Python/FastAPI) y `sebasanalisis-web`
+   (JavaScript/Next.js). Cada uno muestra su DSN.
+8. **Los DSN**:
    - `SENTRY_DSN` en *Environment* de la API -> redesplegar;
    - `NEXT_PUBLIC_SENTRY_DSN` en *Build Arguments* del Web -> **reconstruir**
      (se incrusta en el build, igual que `NEXT_PUBLIC_API_BASE_URL`).
-9. **Alertas.** En cada proyecto, una alerta por correo al administrador ante
-   un error nuevo.
-10. **Chequeo externo.** GlitchTip vive en el mismo VPS: si el VPS se cae, se
-    cae con el y no avisa. Configurar un servicio externo gratuito de
-    disponibilidad sobre `https://api.sebasanalisis.com/health` y sobre
-    `https://sebasanalisis.com`.
+9. **Alertas.** En cada proyecto, una alerta "1 evento en 1 minuto" con correo a
+   los miembros del equipo del proyecto. GlitchTip no distingue errores nuevos:
+   alerta por cantidad en una ventana. Si un error ruidoso gasta la cuota de
+   correo, se sube la ventana. La casilla de monitores de disponibilidad queda
+   marcada, para el monitor del job de renovaciones del paso 5.
+10. **Retencion**: 90 dias, el valor por defecto (`GLITCHTIP_RETENTION_DAYS`).
+11. **Chequeo externo (pendiente).** GlitchTip vive en el mismo VPS: si el VPS
+    se cae, se cae con el y no avisa. Falta configurar un servicio externo
+    gratuito de disponibilidad sobre `https://api.sebasanalisis.com/health` y
+    sobre `https://sebasanalisis.com`.
 
 ### Comprobacion (cierra el paso 0 de la Fase 4)
 
-Un error provocado a proposito en cada lado tiene que aparecer en su proyecto:
+Hecha el 2026-10-07: los dos eventos llegaron a su proyecto y el correo de
+alerta tambien. Se repite cada vez que se toquen los DSN o GlitchTip. Un error
+provocado a proposito en cada lado tiene que aparecer en su proyecto:
 
 - **Frontend**: abrir `https://sebasanalisis.com/login`, y en la consola del
   navegador ejecutar
   `setTimeout(() => { throw new Error("prueba de monitoreo web") }, 0)`.
   Debe aparecer en `sebasanalisis-web` en menos de un minuto.
-- **API**: en la terminal de la aplicacion API en Dokploy,
-  `python -c "from app.main import app; import sentry_sdk; sentry_sdk.capture_exception(RuntimeError('prueba de monitoreo api')); sentry_sdk.flush()"`.
+- **API**: en la terminal de la aplicacion API en Dokploy, **desde `/app`**
+  (la terminal abre en `/`, y desde ahi el comando falla sin enviar nada):
+  `cd /app && python -c "from app.main import app; import sentry_sdk; sentry_sdk.capture_exception(RuntimeError('prueba de monitoreo api')); sentry_sdk.flush()"`.
   Debe aparecer en `sebasanalisis-api`.
 - Abrir cada evento y confirmar que **no** trae cabecera `Authorization` ni
   cuerpos de peticion.

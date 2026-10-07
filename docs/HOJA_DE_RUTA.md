@@ -101,7 +101,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
-| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido y en `main` (2026-10-06); falta solo GlitchTip** (ver abajo) |
+| 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Cerrado el 2026-10-07.** Construido y en `main` el 2026-10-06; GlitchTip instalado y comprobado el 2026-10-07 (ver abajo) |
 | 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Cerrado el 2026-10-07.** Construido el 2026-10-06 (rama `fase-4-paso-1-correo`); correo real encendido con Resend sobre `correo.sebasanalisis.com` y comprobado por el usuario con una cuenta nueva: registro, restablecimiento y aviso de cuenta eliminada (ver `DESPLIEGUE.md`, "Correo"). Queda anotado: en Hotmail el correo llegó a no deseado |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, Juego Responsable, onboarding | §6 | Pendiente |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
@@ -112,7 +112,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
 | 9 | Lanzamiento comercial | §9, párrafo final | Pendiente |
 
-### Paso 0: qué quedó hecho y qué falta para cerrarlo
+### Paso 0: qué quedó hecho
 
 Construido en la rama `fase-4-paso-0-stack` y mezclado a `main` (2026-10-06):
 
@@ -124,11 +124,9 @@ Construido en la rama `fase-4-paso-0-stack` y mezclado a `main` (2026-10-06):
 - Playwright con el test de humo.
 - `sentry-sdk` y `@sentry/nextjs` con el filtro de datos sensibles, apagados sin DSN.
 
-De la lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 **falta una sola cosa, y no es de código**:
+La lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 quedó completa el 2026-10-07: GlitchTip está instalado en `errores.sebasanalisis.com`, y un error provocado en la API y otro en el frontend aparecieron cada uno en su proyecto, con su correo de alerta (prueba manual del usuario; el detalle de la instalación está en `DESPLIEGUE.md`).
 
-| Falta | Depende de |
-|---|---|
-| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS: pasos en `DESPLIEGUE.md`. El dominio ya apunta al VPS (2026-10-07), así que no espera a nada más. La especificación lo exige activo antes del paso 5. |
+Queda pendiente, sin bloquear el cierre: el chequeo externo de disponibilidad sobre `/health` de la API y sobre la página de inicio (GlitchTip vive en el mismo VPS y no avisa si el VPS se cae). Debe estar antes del lanzamiento comercial.
 
 Ya comprobado: CI en verde en `main` (commit `cf456bb`, 2026-10-06) y rate limit de login con dos IP detrás del proxy real de Dokploy, con `FORWARDED_ALLOW_IPS` puesto (prueba manual del usuario, 2026-10-06).
 
@@ -138,7 +136,7 @@ Quedó sin hacer, a propósito: las dos reglas nuevas de `react-hooks` que marca
 
 - Cobro con renovación automática y tarjeta tokenizada en Wompi.
 - Correo transaccional con Resend por SMTP; buzón de soporte en Hostinger.
-- Monitoreo de errores con GlitchTip autohospedado en el VPS.
+- Monitoreo de errores con GlitchTip autohospedado en el VPS, en `errores.sebasanalisis.com` desde el 2026-10-07.
 - Tests de frontend de punta a punta con Playwright.
 - Tipos del cliente API generados con `openapi-typescript`.
 - Dominio `sebasanalisis.com`, en Hostinger junto con el VPS. Desde el 2026-10-07 la aplicación corre en `sebasanalisis.com` y `api.sebasanalisis.com`, con HTTPS.
