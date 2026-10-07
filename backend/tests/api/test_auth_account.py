@@ -6,12 +6,14 @@ Los casos de aceptacion de §5.8 estan marcados con "§5.8" en su docstring.
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core import rate_limit
 from app.core.email import EmailMessage
 from app.core.user_tokens import hash_token
 from app.models import User, UserToken
@@ -165,13 +167,71 @@ def test_reenviar_con_el_correo_ya_verificado_no_envia_nada(
     assert len(outbox) == 1
 
 
-def test_reenviar_la_verificacion_tiene_limite(client: TestClient) -> None:
+@pytest.fixture
+def reloj(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Reloj del limitador: `reloj[0] += segundos` adelanta el tiempo."""
+    ahora = [1_800_000_000.0]
+    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(time=lambda: ahora[0]))
+    return ahora
+
+
+def _reenviar(client: TestClient, tokens: dict) -> int:
+    return client.post("/auth/resend-verification", headers=_auth(tokens)).status_code
+
+
+def test_reenviar_la_verificacion_pide_esperar_un_minuto(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Pulsar el boton varias veces seguidas envia un solo correo."""
     tokens = _register(client)
-    codigos = [
-        client.post("/auth/resend-verification", headers=_auth(tokens)).status_code
-        for _ in range(4)
-    ]
+    outbox.clear()
+
+    assert [_reenviar(client, tokens) for _ in range(5)] == [200, 429, 429, 429, 429]
+    assert len(outbox) == 1
+
+    reloj[0] += 61
+    assert _reenviar(client, tokens) == 200
+    assert len(outbox) == 2
+
+
+def test_reenviar_la_verificacion_tiene_limite(client: TestClient, reloj: list[float]) -> None:
+    tokens = _register(client)
+    codigos = []
+    for _ in range(4):
+        codigos.append(_reenviar(client, tokens))
+        reloj[0] += 61
     assert codigos == [200, 200, 200, 429]
+
+
+def test_insistir_durante_la_espera_no_gasta_los_reenvios(
+    client: TestClient, reloj: list[float]
+) -> None:
+    """Los intentos rechazados por el minuto de espera no cuentan para los 15 minutos."""
+    tokens = _register(client)
+    codigos = []
+    for _ in range(3):
+        codigos.append(_reenviar(client, tokens))
+        assert [_reenviar(client, tokens) for _ in range(5)] == [429] * 5
+        reloj[0] += 61
+    assert codigos == [200, 200, 200]
+
+
+def test_reenviar_la_verificacion_tiene_tope_diario(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Una sola cuenta no puede gastar la cuota diaria de correos."""
+    tokens = _register(client)
+    outbox.clear()
+
+    codigos = []
+    for _ in range(11):
+        codigos.append(_reenviar(client, tokens))
+        reloj[0] += 16 * 60  # fuera de la espera y de la ventana de 15 minutos
+    assert codigos == [200] * 10 + [429]
+    assert len(outbox) == 10
+
+    reloj[0] += 24 * 3600
+    assert _reenviar(client, tokens) == 200
 
 
 def test_reenviar_exige_sesion(client: TestClient) -> None:
@@ -214,6 +274,23 @@ def test_forgot_password_tiene_limite_por_correo_exista_o_no(client: TestClient)
             for _ in range(4)
         ]
         assert codigos == [202, 202, 202, 429]
+
+
+def test_forgot_password_tiene_tope_diario_por_correo(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Nadie puede llenar un buzon de correos de restablecimiento, exista o no la cuenta."""
+    for email, enviados in ((_register(client)["user"]["email"], 10), (_email(), 0)):
+        outbox.clear()
+        codigos = []
+        for _ in range(11):
+            codigos.append(client.post("/auth/forgot-password", json={"email": email}).status_code)
+            reloj[0] += 16 * 60  # fuera de la ventana de 15 minutos
+        assert codigos == [202] * 10 + [429]
+        assert len(outbox) == enviados
+
+        reloj[0] += 24 * 3600
+        assert client.post("/auth/forgot-password", json={"email": email}).status_code == 202
 
 
 def test_restablecer_la_contrasena(client: TestClient, outbox: list[EmailMessage]) -> None:
@@ -458,6 +535,34 @@ def test_cambio_de_correo_exige_la_contrasena(
     )
     assert r.status_code == 400
     assert outbox == []
+
+
+def test_cambio_de_correo_tiene_limite_por_hora_y_tope_diario(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Cada solicitud envia dos correos: una cuenta no puede gastar la cuota diaria."""
+    tokens = _register(client)
+    outbox.clear()
+
+    def pedir() -> int:
+        return client.post(
+            "/auth/change-email",
+            json={"new_email": _email(), "password": PASSWORD},
+            headers=_auth(tokens),
+        ).status_code
+
+    assert [pedir() for _ in range(6)] == [202] * 5 + [429]
+
+    reloj[0] += 3601
+    assert [pedir() for _ in range(6)] == [202] * 5 + [429]
+
+    # Pasada otra hora ya van 10 en el dia: no entra ninguna mas.
+    reloj[0] += 3601
+    assert pedir() == 429
+    assert len(outbox) == 20
+
+    reloj[0] += 24 * 3600
+    assert pedir() == 202
 
 
 def test_cambio_de_correo_a_uno_ya_registrado_se_rechaza(client: TestClient) -> None:

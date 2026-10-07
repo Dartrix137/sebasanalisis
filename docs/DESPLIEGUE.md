@@ -46,7 +46,14 @@ SEED_ADMIN_PASSWORD=<clave fuerte>
 FORWARDED_ALLOW_IPS=<red del proxy de Dokploy, ver abajo>
 SENTRY_DSN=<DSN del proyecto de la API en GlitchTip; vacio hasta instalarlo>
 FRONTEND_BASE_URL=https://sebasanalisis.com
-EMAIL_BACKEND=console
+EMAIL_BACKEND=smtp
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_USER=resend
+SMTP_PASSWORD=<API key de Resend>
+SMTP_FROM=Sebasanálisis <no-responder@correo.sebasanalisis.com>
+SMTP_USE_TLS=true
+EMAIL_DAILY_LIMIT=80
 ```
 
 `FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
@@ -54,9 +61,9 @@ EMAIL_BACKEND=console
 frontend**, sin barra final. Si queda el `localhost` por defecto, los correos
 salen con enlaces que no abren.
 
-`EMAIL_BACKEND=console` significa que la API **no envia correo**: lo imprime en
-su log. Es el valor mientras no haya dominio ni proveedor; ver "Correo" abajo
-para encenderlo.
+`EMAIL_BACKEND=smtp` con las `SMTP_*` es lo que esta puesto en produccion desde
+el 2026-10-07; el detalle esta en "Correo" abajo. Con `EMAIL_BACKEND=console` (o
+sin la variable) la API **no envia correo**: lo imprime en su log.
 
 Tres cosas que se rompen en silencio si se copian de desarrollo o se dejan vacias:
 
@@ -170,56 +177,105 @@ la aplicacion queda viva pero rota:
 
 Repetir la comprobacion de la seccion anterior despues de migrar.
 
+**Hecho el 2026-10-07.** En el primer intento las dos URL quedaron cruzadas
+(`CORS_ORIGINS` con el dominio de la API y `NEXT_PUBLIC_API_BASE_URL` con el del
+frontend) y `/health` respondia bien igual, porque no pasa por el CORS del
+navegador. Dos comprobaciones que si lo detectan:
+
+```
+# Debe responder 200. Un 400 "Disallowed CORS origin" es CORS_ORIGINS mal puesto.
+curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS https://api.sebasanalisis.com/auth/login \
+  -H "Origin: https://sebasanalisis.com" -H "Access-Control-Request-Method: POST"
+```
+
+Y en el navegador, al intentar entrar, la pestana Red debe mostrar la peticion
+saliendo hacia `https://api.sebasanalisis.com/auth/login`, no hacia
+`https://sebasanalisis.com/auth/login`.
+
+No se usa `www.sebasanalisis.com`: el registro se borro del DNS. Si algun dia se
+quiere, se agrega en Dokploy como dominio del Web con redireccion al principal;
+un registro DNS sin dominio en Dokploy responde con error de certificado.
+
 ## Correo
 
 La API envia correos de verificacion, de restablecimiento de contrasena y de
 aviso. El codigo solo conoce SMTP generico; el proveedor elegido es Resend.
 
-### Mientras no hay dominio
+### Como quedo encendido (2026-10-07)
+
+Resend confirmo que su politica de uso admite el producto (analisis estadistico
+por suscripcion, que no recibe apuestas). Si algun dia hay que cambiar de relay
+(Brevo, Amazon SES), solo cambian las variables `SMTP_*` y los registros DNS.
+
+- **Dominio remitente**: el subdominio `correo.sebasanalisis.com`, dado de alta
+  en Resend. No el dominio principal: separa la reputacion del correo automatico.
+- **Registros en el DNS de Hostinger.** Los valores se copian del panel de
+  Resend (cambian con la region y con el tiempo; los de su guia publica ya no
+  coincidian). En el campo *Name* de Hostinger va el nombre **sin** el dominio:
+
+  | Para que | Tipo | Name | Valor |
+  |---|---|---|---|
+  | SPF (ruta de retorno) | MX | `send.correo` | el del panel de Resend, prioridad 10 |
+  | SPF | TXT | `send.correo` | el `v=spf1 ...` del panel de Resend |
+  | DKIM | TXT | `resend._domainkey.correo` | la clave `p=...` completa del panel |
+  | DMARC | TXT | `_dmarc` | `v=DMARC1; p=none;` |
+
+  El DMARC va en el dominio raiz y cubre tambien el subdominio. Empieza en
+  `p=none`, como recomienda Resend. **Pendiente**: agregarle `rua=mailto:...`
+  cuando exista el buzon de soporte en Hostinger, y subirlo a `p=quarantine`
+  cuando los reportes muestren que todo pasa.
+- **Variables de la API**: las del bloque de "Variables de entorno". Host,
+  puertos y usuario salen de `resend.com/docs/send-with-smtp` (leida el
+  2026-10-07): host `smtp.resend.com`, usuario `resend`, contrasena la API key.
+  El 587 cifra con STARTTLS y el 465 es TLS desde el inicio; los dos funcionan
+  con `SMTP_USE_TLS=true`. **No usar el 2465 ni el 2587**: el codigo solo trata
+  como TLS directo el 465. Si el VPS no deja salir por el 587, se cambia a 465.
+- **API key**: con permiso solo de envio (*Sending access*) y restringida a ese
+  dominio. Vive unicamente en Dokploy.
+- **Seguimiento de aperturas y de clics: apagado.** El de clics reescribe los
+  enlaces de verificacion.
+- **Recepcion (*Enable Receiving*)**: no hace falta. El remitente es
+  `no-responder@` y los correos recibidos gastan la misma cuota. Si esta
+  encendida, hay un MX en `correo` que se borra al apagarla.
+
+### Cuota y `EMAIL_DAILY_LIMIT`
+
+El plan gratuito de Resend da **100 correos al dia y 3.000 al mes**; el dia se
+cuenta en UTC, igual que el tope de la API. `EMAIL_DAILY_LIMIT=80` deja margen
+porque la cuota de Resend cuenta todo lo que salga de la cuenta (tambien las
+alertas de GlitchTip cuando usen el mismo relay) y porque el contador de la API
+vive en memoria: un reinicio lo pone en cero.
+
+Al llegar al tope la API deja de enviar hasta el dia siguiente y lo registra
+como error, que llega al monitoreo: es la senal de que alguien esta abusando del
+registro o de que el plan ya queda corto. **Antes del lanzamiento comercial se
+pasa al plan Pro** (sin tope diario) y se sube `EMAIL_DAILY_LIMIT`: con 100
+diarios, un dia de muchos registros deja gente sin correo de verificacion.
+
+### Comprobacion
+
+Hecha el 2026-10-07 con una cuenta nueva: registro, "¿Olvidaste tu contraseña?"
+y aviso de cuenta eliminada llegaron y sus enlaces funcionaron. Se repite cada
+vez que se toque el dominio, el DNS o las `SMTP_*`:
+
+1. Registrar una cuenta con un correo propio: llega el correo y el enlace, que
+   empieza por `https://sebasanalisis.com/verificar-correo`, confirma la cuenta.
+2. "¿Olvidaste tu contraseña?" y eliminar la cuenta desde `/cuenta`.
+3. En Gmail, "Mostrar original": SPF, DKIM y DMARC en `PASS`.
+
+Si no llega nada: el log de la API en Dokploy y la tabla *Emails* de Resend.
+
+**Entrega conocida**: en Gmail llego a la bandeja principal; en Hotmail llego a
+**correo no deseado**. Es frecuente con un dominio recien estrenado y sin
+historial de envio, y no se arregla con una variable. Las pantallas le dicen al
+usuario que revise esa carpeta. Volver a probar con Hotmail/Outlook antes del
+lanzamiento comercial.
+
+### Sin proveedor
 
 Con `EMAIL_BACKEND=console` (o sin la variable) no se envia nada: cada correo
-sale en el log de la API, con su enlace. Sirve para probar el flujo a mano
-(registrarse, copiar el enlace del log, abrirlo), pero **un usuario real no
-recibe nada**: no puede confirmar su correo ni recuperar su contrasena. Las
-cuentas siguen entrando sin confirmar, asi que la mesa no se ve afectada.
-
-### Encenderlo (pendiente: necesita el dominio)
-
-1. **Confirmar con Resend, por escrito, que su politica de uso admite el
-   producto**: analisis estadistico por suscripcion, adyacente a juegos de azar,
-   que no recibe apuestas. Si la respuesta es no, se usa otro relay SMTP (Brevo,
-   Amazon SES) cambiando solo las variables.
-2. En Resend, dar de alta el **subdominio remitente** (por ejemplo
-   `correo.sebasanalisis.com`), no el dominio principal: separa la reputacion
-   del correo automatico.
-3. En el DNS de Hostinger, crear los registros **SPF, DKIM y DMARC** que Resend
-   muestra para ese subdominio. Sin ellos los correos caen en spam.
-4. En la API (`Environment`), con los valores de host, puerto y usuario copiados
-   de la **documentacion vigente de Resend** (la contrasena es la API key):
-
-   ```
-   EMAIL_BACKEND=smtp
-   SMTP_HOST=...
-   SMTP_PORT=587
-   SMTP_USER=...
-   SMTP_PASSWORD=<API key de Resend>
-   SMTP_FROM=Sebasanálisis <no-responder@correo.sebasanalisis.com>
-   SMTP_USE_TLS=true
-   ```
-
-   Con el puerto 465 la conexion es TLS desde el inicio; con 587 se cifra con
-   STARTTLS. Los dos funcionan con `SMTP_USE_TLS=true`.
-5. Redesplegar la API y comprobar: registrar una cuenta con un correo propio,
-   recibir el correo en la bandeja de entrada (no en spam) y abrir el enlace.
-   Repetir con "¿Olvidaste tu contraseña?".
-6. Revisar los topes diario y mensual del plan de Resend contra el volumen
-   esperado: un tope diario alcanzado deja sin correo de verificacion a quien se
-   registre ese dia.
-7. Poner `EMAIL_DAILY_LIMIT` **por debajo del tope diario del plan** (por
-   defecto 300). Al llegar a ese numero la API deja de enviar hasta el dia
-   siguiente (UTC) y lo registra como error, que llega al monitoreo: es la
-   senal de que alguien esta abusando del registro o de que el plan ya queda
-   corto.
+sale en el log de la API, con su enlace. Sirve para probar el flujo a mano en
+desarrollo, pero un usuario real no recibe nada.
 
 `EMAIL_BACKEND=file` y `RATE_LIMIT_ENABLED=false` son solo para los tests de
 punta a punta. **Nunca van en produccion.**

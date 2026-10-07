@@ -5,31 +5,16 @@
  * confirmación es requisito para pagar, no para entrar (§5.2 de la Fase 4).
  */
 
-import { useState } from "react";
-
-import { ApiError, authApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
+import { useResendVerification } from "@/lib/useResendVerification";
 
 import { Button } from "./ui";
 
 export function VerifyEmailNotice() {
-  const { user, withToken } = useSession();
-  const [status, setStatus] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const { user } = useSession();
+  const { resend, pending, secondsLeft, outcome } = useResendVerification();
 
   if (!user || user.email_verified) return null;
-
-  async function resend() {
-    setPending(true);
-    try {
-      const { message } = await withToken((t) => authApi.resendVerification(t));
-      setStatus(message);
-    } catch (err) {
-      setStatus(err instanceof ApiError ? err.message : "No se pudo reenviar el correo");
-    } finally {
-      setPending(false);
-    }
-  }
 
   return (
     <div
@@ -38,10 +23,12 @@ export function VerifyEmailNotice() {
     >
       <p className="min-w-0 flex-1 break-words text-sm leading-relaxed text-white">
         <span className="font-bold">Confirma tu correo.</span>{" "}
-        {status ?? `Te enviamos un enlace a ${user.email}.`}
+        {outcome && !outcome.ok
+          ? outcome.message
+          : `${outcome?.message ?? `Te enviamos un enlace a ${user.email}`}. Si no lo ves en tu bandeja de entrada, revisa la carpeta de correo no deseado.`}
       </p>
-      <Button variant="ghost" onClick={resend} disabled={pending}>
-        {pending ? "Enviando…" : "Reenviar correo"}
+      <Button variant="ghost" onClick={resend} disabled={pending || secondsLeft > 0}>
+        {pending ? "Enviando…" : secondsLeft > 0 ? `Reenviar en ${secondsLeft} s` : "Reenviar correo"}
       </Button>
     </div>
   );

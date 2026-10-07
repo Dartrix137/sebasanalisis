@@ -15,6 +15,7 @@ import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, SuccessBox } from "@/components/Aut
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, PasswordField } from "@/components/ui";
 import { ApiError, authApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
+import { useResendVerification } from "@/lib/useResendVerification";
 
 type Outcome = { ok: boolean; message: string } | null;
 
@@ -104,8 +105,12 @@ function ProfileCard() {
 
 function EmailCard() {
   const { user, withToken } = useSession();
-  const [resent, setResent] = useState<Outcome>(null);
-  const [resending, setResending] = useState(false);
+  const {
+    resend,
+    pending: resending,
+    secondsLeft: resendSecondsLeft,
+    outcome: resent,
+  } = useResendVerification();
 
   const [newEmail, setNewEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -113,19 +118,6 @@ function EmailCard() {
   const [pending, setPending] = useState(false);
 
   if (!user) return null;
-
-  async function resend() {
-    setResent(null);
-    setResending(true);
-    try {
-      const { message } = await withToken((t) => authApi.resendVerification(t));
-      setResent({ ok: true, message });
-    } catch (err) {
-      setResent({ ok: false, message: messageOf(err) });
-    } finally {
-      setResending(false);
-    }
-  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -160,12 +152,21 @@ function EmailCard() {
       {user.email_verified ? null : (
         <div className="mt-3 space-y-3">
           <p className="text-sm leading-relaxed text-muted">
-            Te enviamos un enlace de confirmación al registrarte. Si no lo encuentras, pide uno
-            nuevo; el anterior deja de servir.
+            Te enviamos un enlace de confirmación al registrarte. Si no lo ves en tu bandeja de
+            entrada, revisa la carpeta de correo no deseado. Si tampoco está ahí, pide uno nuevo; el
+            anterior deja de servir.
           </p>
           <OutcomeBox outcome={resent} />
-          <Button variant="ghost" onClick={resend} disabled={resending}>
-            {resending ? "Enviando…" : "Reenviar correo de confirmación"}
+          <Button
+            variant="ghost"
+            onClick={resend}
+            disabled={resending || resendSecondsLeft > 0}
+          >
+            {resending
+              ? "Enviando…"
+              : resendSecondsLeft > 0
+                ? `Reenviar en ${resendSecondsLeft} s`
+                : "Reenviar correo de confirmación"}
           </Button>
         </div>
       )}
@@ -174,7 +175,8 @@ function EmailCard() {
         <h3 className="text-sm font-bold text-white">Cambiar de correo</h3>
         <p className="text-sm leading-relaxed text-muted">
           Te enviamos un enlace al correo nuevo. El cambio se aplica cuando lo confirmes; hasta
-          entonces sigues entrando con el actual.
+          entonces sigues entrando con el actual. Si el enlace no llega, revisa la carpeta de correo
+          no deseado.
         </p>
         <Field
           label="Correo nuevo"
