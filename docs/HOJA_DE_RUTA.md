@@ -102,7 +102,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
 | 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Construido y en `main` (2026-10-06); falta solo GlitchTip** (ver abajo) |
-| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Construido el 2026-10-06** (rama `fase-4-paso-1-correo`); cierre pendiente del dominio y de Resend (ver `PLATAFORMA_COMPLETA.md` §5.7.1) |
+| 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Cerrado el 2026-10-07.** Construido el 2026-10-06 (rama `fase-4-paso-1-correo`); correo real encendido con Resend sobre `correo.sebasanalisis.com` y comprobado por el usuario con una cuenta nueva: registro, restablecimiento y aviso de cuenta eliminada (ver `DESPLIEGUE.md`, "Correo"). Queda anotado: en Hotmail el correo llegó a no deseado |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, Juego Responsable, onboarding | §6 | Pendiente |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §4.4, §4.5 | Pendiente |
@@ -128,7 +128,7 @@ De la lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 **falta una
 
 | Falta | Depende de |
 |---|---|
-| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS, que espera a la compra del dominio: pasos en `DESPLIEGUE.md`. La especificación lo exige activo antes del paso 5. |
+| Un error provocado en la API y otro en el frontend aparecen en GlitchTip | Instalar GlitchTip en el VPS: pasos en `DESPLIEGUE.md`. El dominio ya apunta al VPS (2026-10-07), así que no espera a nada más. La especificación lo exige activo antes del paso 5. |
 
 Ya comprobado: CI en verde en `main` (commit `cf456bb`, 2026-10-06) y rate limit de login con dos IP detrás del proxy real de Dokploy, con `FORWARDED_ALLOW_IPS` puesto (prueba manual del usuario, 2026-10-06).
 
@@ -141,7 +141,8 @@ Quedó sin hacer, a propósito: las dos reglas nuevas de `react-hooks` que marca
 - Monitoreo de errores con GlitchTip autohospedado en el VPS.
 - Tests de frontend de punta a punta con Playwright.
 - Tipos del cliente API generados con `openapi-typescript`.
-- Dominio `sebasanalisis.com`, en Hostinger junto con el VPS.
+- Dominio `sebasanalisis.com`, en Hostinger junto con el VPS. Desde el 2026-10-07 la aplicación corre en `sebasanalisis.com` y `api.sebasanalisis.com`, con HTTPS.
+- Resend en el plan gratuito (100 correos al día) mientras se construye, con `EMAIL_DAILY_LIMIT=80`; se pasa al plan Pro antes del lanzamiento comercial.
 - El VPS tiene 8 GB de RAM (confirmado el 2026-10-06): alcanza para GlitchTip junto a la aplicación.
 
 ### Pendiente del usuario
@@ -150,8 +151,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 
 | Decisión | Bloquea |
 |---|---|
-| Confirmación de Resend de que su política de uso admite el producto | Cierre del paso 1 |
-| Textos legales revisados por abogado; responsable y correo de la política de datos | Lanzamiento (el paso 2 se construye con borradores) |
+| Textos legales revisados por abogado; responsable y correo de la política de datos. El buzón de soporte en Hostinger todavía no existe (2026-10-07); de él depende también el `rua` del DMARC | Lanzamiento (el paso 2 se construye con borradores) |
 | Qué pasa con los usuarios `trial` actuales | Paso 3 |
 | Planes y precios iniciales | Paso 4 |
 | Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |
