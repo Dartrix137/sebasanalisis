@@ -92,6 +92,8 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Cualquier cuenta registrada usa la mesa. | El acceso lo decide una sola función en el servidor, en todos los endpoints de juego. | Fase 4, paso 3 |
 | Tipos TypeScript del cliente API mantenidos a mano. | Generados desde el OpenAPI de FastAPI. | Fase 4, paso 0 |
 | Pagos como "Fase 2" independiente. | Parte de la Fase 4, con renovación automática, planes y cupones. | Fase 4 |
+| Buzón de soporte en Hostinger sobre el dominio (`soporte@sebasanalisis.com`). | El correo de soporte y de contacto es una cuenta de Gmail: `sebas.analisis.ia.com@gmail.com`. | 2026-10-07 |
+| Chequeo externo de disponibilidad sobre la API y la página de inicio. | No se hace. Si el VPS se cae, no hay aviso. | 2026-10-07 |
 
 ---
 
@@ -126,7 +128,7 @@ Construido en la rama `fase-4-paso-0-stack` y mezclado a `main` (2026-10-06):
 
 La lista "Fase 0 hecha cuando" de `PLATAFORMA_COMPLETA.md` §13.5 quedó completa el 2026-10-07: GlitchTip está instalado en `errores.sebasanalisis.com`, y un error provocado en la API y otro en el frontend aparecieron cada uno en su proyecto, con su correo de alerta (prueba manual del usuario; el detalle de la instalación está en `DESPLIEGUE.md`).
 
-Queda pendiente, sin bloquear el cierre: el chequeo externo de disponibilidad sobre `/health` de la API y sobre la página de inicio (GlitchTip vive en el mismo VPS y no avisa si el VPS se cae). Debe estar antes del lanzamiento comercial.
+El chequeo externo de disponibilidad que pedía §13.6 **no se hace** (decidido por el usuario el 2026-10-07). Se acepta que, si el VPS entero se cae, GlitchTip se cae con él y nadie recibe aviso.
 
 Ya comprobado: CI en verde en `main` (commit `cf456bb`, 2026-10-06) y rate limit de login con dos IP detrás del proxy real de Dokploy, con `FORWARDED_ALLOW_IPS` puesto (prueba manual del usuario, 2026-10-06).
 
@@ -135,7 +137,7 @@ Quedó sin hacer, a propósito: las dos reglas nuevas de `react-hooks` que marca
 ### Decisiones tomadas para la Fase 4
 
 - Cobro con renovación automática y tarjeta tokenizada en Wompi.
-- Correo transaccional con Resend por SMTP; buzón de soporte en Hostinger.
+- Correo transaccional con Resend por SMTP. El correo de soporte y de contacto es `sebas.analisis.ia.com@gmail.com` (2026-10-07); no hay buzón en Hostinger.
 - Monitoreo de errores con GlitchTip autohospedado en el VPS, en `errores.sebasanalisis.com` desde el 2026-10-07.
 - Tests de frontend de punta a punta con Playwright.
 - Tipos del cliente API generados con `openapi-typescript`.
@@ -149,7 +151,8 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 
 | Decisión | Bloquea |
 |---|---|
-| Textos legales revisados por abogado; responsable y correo de la política de datos. El buzón de soporte en Hostinger todavía no existe (2026-10-07); de él depende también el `rua` del DMARC | Lanzamiento (el paso 2 se construye con borradores) |
+| Textos legales revisados por abogado; responsable que figura en la política de datos (el correo de contacto ya está decidido: `sebas.analisis.ia.com@gmail.com`) | Lanzamiento (el paso 2 se construye con borradores) |
+| Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Qué pasa con los usuarios `trial` actuales | Paso 3 |
 | Planes y precios iniciales | Paso 4 |
 | Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |

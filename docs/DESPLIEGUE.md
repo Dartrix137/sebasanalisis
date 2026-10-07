@@ -224,9 +224,11 @@ por suscripcion, que no recibe apuestas). Si algun dia hay que cambiar de relay
   | DMARC | TXT | `_dmarc` | `v=DMARC1; p=none;` |
 
   El DMARC va en el dominio raiz y cubre tambien el subdominio. Empieza en
-  `p=none`, como recomienda Resend. **Pendiente**: agregarle `rua=mailto:...`
-  cuando exista el buzon de soporte en Hostinger, y subirlo a `p=quarantine`
-  cuando los reportes muestren que todo pasa.
+  `p=none`, como recomienda Resend. Queda **sin `rua`**: el correo de soporte es
+  una cuenta de Gmail (decidido el 2026-10-07), y los reportes DMARC hacia un
+  dominio ajeno solo se entregan si ese dominio los autoriza en su DNS, cosa que
+  con Gmail no se puede. Si algun dia hay un buzon en el dominio propio, se
+  agrega `rua=mailto:...` y con los reportes se decide subirlo a `p=quarantine`.
 - **Variables de la API**: las del bloque de "Variables de entorno". Host,
   puertos y usuario salen de `resend.com/docs/send-with-smtp` (leida el
   2026-10-07): host `smtp.resend.com`, usuario `resend`, contrasena la API key.
@@ -388,10 +390,12 @@ GlitchTip corre en `https://errores.sebasanalisis.com`, como un servicio
    correo, se sube la ventana. La casilla de monitores de disponibilidad queda
    marcada, para el monitor del job de renovaciones del paso 5.
 10. **Retencion**: 90 dias, el valor por defecto (`GLITCHTIP_RETENTION_DAYS`).
-11. **Chequeo externo (pendiente).** GlitchTip vive en el mismo VPS: si el VPS
-    se cae, se cae con el y no avisa. Falta configurar un servicio externo
-    gratuito de disponibilidad sobre `https://api.sebasanalisis.com/health` y
-    sobre `https://sebasanalisis.com`.
+11. **Sin chequeo externo de disponibilidad** (decidido por el usuario el
+    2026-10-07). Consecuencia que se acepta: GlitchTip vive en el mismo VPS, asi
+    que si el VPS entero se cae, se cae con el y nadie recibe aviso. Si se cambia
+    de opinion, basta un servicio externo gratuito sobre
+    `https://api.sebasanalisis.com/health` y `https://sebasanalisis.com`; no toca
+    codigo.
 
 ### Comprobacion (cierra el paso 0 de la Fase 4)
 
