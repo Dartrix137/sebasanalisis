@@ -276,6 +276,23 @@ def test_forgot_password_tiene_limite_por_correo_exista_o_no(client: TestClient)
         assert codigos == [202, 202, 202, 429]
 
 
+def test_forgot_password_tiene_tope_diario_por_correo(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Nadie puede llenar un buzon de correos de restablecimiento, exista o no la cuenta."""
+    for email, enviados in ((_register(client)["user"]["email"], 10), (_email(), 0)):
+        outbox.clear()
+        codigos = []
+        for _ in range(11):
+            codigos.append(client.post("/auth/forgot-password", json={"email": email}).status_code)
+            reloj[0] += 16 * 60  # fuera de la ventana de 15 minutos
+        assert codigos == [202] * 10 + [429]
+        assert len(outbox) == enviados
+
+        reloj[0] += 24 * 3600
+        assert client.post("/auth/forgot-password", json={"email": email}).status_code == 202
+
+
 def test_restablecer_la_contrasena(client: TestClient, outbox: list[EmailMessage]) -> None:
     email = _register(client)["user"]["email"]
     client.post("/auth/forgot-password", json={"email": email})
@@ -518,6 +535,34 @@ def test_cambio_de_correo_exige_la_contrasena(
     )
     assert r.status_code == 400
     assert outbox == []
+
+
+def test_cambio_de_correo_tiene_limite_por_hora_y_tope_diario(
+    client: TestClient, outbox: list[EmailMessage], reloj: list[float]
+) -> None:
+    """Cada solicitud envia dos correos: una cuenta no puede gastar la cuota diaria."""
+    tokens = _register(client)
+    outbox.clear()
+
+    def pedir() -> int:
+        return client.post(
+            "/auth/change-email",
+            json={"new_email": _email(), "password": PASSWORD},
+            headers=_auth(tokens),
+        ).status_code
+
+    assert [pedir() for _ in range(6)] == [202] * 5 + [429]
+
+    reloj[0] += 3601
+    assert [pedir() for _ in range(6)] == [202] * 5 + [429]
+
+    # Pasada otra hora ya van 10 en el dia: no entra ninguna mas.
+    reloj[0] += 3601
+    assert pedir() == 429
+    assert len(outbox) == 20
+
+    reloj[0] += 24 * 3600
+    assert pedir() == 202
 
 
 def test_cambio_de_correo_a_uno_ya_registrado_se_rechaza(client: TestClient) -> None:

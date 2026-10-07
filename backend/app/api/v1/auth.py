@@ -363,6 +363,8 @@ def forgot_password(
     email = payload.email.lower()
     _limit(f"forgot-password:ip:{_client_ip(request)}", limit=10, window=15 * _MINUTE)
     _limit(f"forgot-password:email:{email}", limit=3, window=15 * _MINUTE)
+    # Sin tope por dia, 3 cada 15 minutos son 288 correos diarios a un mismo buzon.
+    _limit(f"forgot-password:email-day:{email}", limit=10, window=_DAY)
 
     user = db.scalar(select(User).where(User.email == email))
     if user is not None:
@@ -457,6 +459,9 @@ def change_email(
 ) -> MessageResponse:
     """Pide cambiar el correo. Se aplica al confirmar el enlace que llega al nuevo."""
     _limit(f"change-email:{user.id}", limit=5, window=_HOUR)
+    # Cada solicitud envia dos correos (confirmacion y aviso): sin tope por dia,
+    # 5 por hora son 240 correos diarios desde una sola cuenta.
+    _limit(f"change-email:day:{user.id}", limit=10, window=_DAY)
 
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_WRONG_PASSWORD)
