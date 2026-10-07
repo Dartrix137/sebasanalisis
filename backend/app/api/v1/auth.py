@@ -329,7 +329,13 @@ def resend_verification(
 ) -> MessageResponse:
     if user.email_verified:
         return MessageResponse(message="Tu correo ya está confirmado")
+    # De la ventana mas corta a la mas larga: un intento rechazado por la espera
+    # de un minuto no gasta los cupos de 15 minutos ni del dia. El tope diario
+    # existe porque 3 cada 15 minutos son 288 correos al dia desde una sola
+    # cuenta, mas que la cuota diaria del proveedor.
+    _limit(f"resend-verification:min:{user.id}", limit=1, window=_MINUTE)
     _limit(f"resend-verification:{user.id}", limit=3, window=15 * _MINUTE)
+    _limit(f"resend-verification:day:{user.id}", limit=10, window=_DAY)
 
     _queue_verification_email(db, user, background, sender)
     db.commit()

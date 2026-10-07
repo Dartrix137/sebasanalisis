@@ -121,3 +121,21 @@ test("eliminar la cuenta cierra la sesión y la cuenta deja de existir", async (
   await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
   await expectEmail(email, "fue eliminada");
 });
+
+test("reenviar el correo de confirmación deja el botón en espera", async ({ page, request }) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email);
+  await loginViaUi(page, email);
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  // El aviso dice dónde buscar antes de pedir otro correo.
+  await expect(page.getByText(/revisa la carpeta de correo no deseado/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Reenviar correo" }).click();
+  await expect(page.getByText(/Te enviamos un nuevo correo de confirmación/)).toBeVisible();
+
+  // No se puede pulsar de nuevo hasta que pase la espera.
+  const enEspera = page.getByRole("button", { name: /Reenviar en \d+ s/ });
+  await expect(enEspera).toBeVisible();
+  await expect(enEspera).toBeDisabled();
+});
