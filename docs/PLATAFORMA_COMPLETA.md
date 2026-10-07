@@ -682,7 +682,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | Manuales en Wompi y registrados en el admin. |
 | 8 | Textos legales definitivos | Los redacta o revisa un abogado; el equipo entrega la estructura de §6.5. |
 | 9 | Proveedor SMTP concreto | **Resuelta (2026-10-05): Resend**, enviando desde un subdominio propio. Resend confirmó que su política de uso admite el producto y el correo quedó encendido el 2026-10-07. Ver §13.6 y `DESPLIEGUE.md`. |
-| 10 | Correo y responsable que figuran en la política de datos | Pendiente del usuario. El correo de contacto puede ser un buzón de Hostinger en el dominio (`soporte@…`), separado del remitente transaccional. |
+| 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente del usuario. |
 | 11 | Servicio de monitoreo de errores | **Resuelta (2026-10-05): GlitchTip autohospedado** en el mismo VPS. Ver §13.6. |
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. Los tests de frontend ya están decididos (§13.3). |
 
@@ -848,11 +848,11 @@ El dominio `sebasanalisis.com` y el VPS están en Hostinger. Tres piezas distint
 | Pieza | Qué se usa |
 |---|---|
 | **Correo transaccional** (verificación, recibos, cobros fallidos) | Resend, por su relay SMTP. El código solo conoce las variables `SMTP_*` (§12): los valores de host, puerto y usuario se copian de la documentación vigente de Resend al configurarlo, y la contraseña es la API key. Cambiar de proveedor no toca código. |
-| **Buzón de personas** (`soporte@sebasanalisis.com`, el contacto de la política de datos) | El correo de Hostinger sobre el mismo dominio. |
+| **Buzón de personas** (soporte y contacto de la política de datos) | `sebas.analisis.ia.com@gmail.com`, una cuenta de Gmail (decidido el 2026-10-07; antes se preveía un buzón de Hostinger sobre el dominio). |
 | **DNS** | En el panel de Hostinger: registros SPF, DKIM y DMARC que entrega Resend al dar de alta el dominio. |
 
 - **No se envía desde el VPS** (Postfix o similar): una IP de VPS sin reputación cae en spam, y un correo de verificación que no llega es un cliente que no puede pagar.
-- **No se usa el buzón de Hostinger como remitente transaccional**: es correo de buzón, con límites de envío pensados para personas.
+- **No se usa un buzón de personas como remitente transaccional** (ni el de Gmail ni uno de Hostinger): tienen límites de envío pensados para personas.
 - **Subdominio remitente** (por ejemplo `correo.sebasanalisis.com`): separa la reputación del correo automático de la del dominio principal.
 - **Política de uso aceptable**: el producto es adyacente a juegos de azar y varios proveedores restringen ese contenido. Se confirma por escrito con Resend antes de configurar el dominio, describiendo el servicio como lo que es: análisis estadístico por suscripción, que no recibe apuestas. Si la respuesta es negativa, se cambia a otro relay SMTP (Brevo, Amazon SES) cambiando solo las variables.
 - **Límites del plan**: se revisan los topes diario y mensual del plan contratado contra el volumen esperado antes del lanzamiento; un tope diario alcanzado deja sin correo de verificación a quien se registre ese día.
@@ -865,5 +865,5 @@ El dominio `sebasanalisis.com` y el VPS están en Hostinger. Tres piezas distint
 - **Datos que no salen de la aplicación**: `send_default_pii` desactivado, y un filtro `before_send` que quita cabeceras `Authorization`, cuerpos de `/auth/*` y de `/billing/*`, y el cuerpo crudo de los webhooks. Ni contraseñas, ni tokens, ni referencias de pago llegan al monitoreo.
 - **Alertas**: correo al administrador ante un error nuevo en producción. GlitchTip envía sus alertas por el mismo SMTP.
 - **Job de renovaciones**: cada corrida termina llamando a un monitor de tipo *heartbeat* en GlitchTip; si pasan dos horas sin recibirlo, alerta.
-- **Límite de tenerlo en el mismo VPS**: si el VPS se cae, el monitoreo se cae con él y no avisa. Se cubre con un chequeo externo gratuito de disponibilidad sobre `GET /health` de la API y sobre la página de inicio. Antes de instalarlo se confirma que el VPS tiene memoria libre suficiente para GlitchTip además de la aplicación.
+- **Límite de tenerlo en el mismo VPS**: si el VPS se cae, el monitoreo se cae con él y no avisa. Se preveía cubrirlo con un chequeo externo gratuito de disponibilidad sobre `GET /health` de la API y sobre la página de inicio; **el usuario decidió no hacerlo (2026-10-07)** y acepta ese límite. Antes de instalarlo se confirma que el VPS tiene memoria libre suficiente para GlitchTip además de la aplicación.
 - Retención de eventos limitada (90 días) para que no llene el disco.
