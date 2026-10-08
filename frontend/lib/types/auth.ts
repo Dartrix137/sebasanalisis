@@ -15,6 +15,8 @@ type S = components["schemas"];
 export type UUID = string;
 
 export type AccessType = S["AccessType"];
+export type AccessReason = S["AccessReason"];
+export type AccessInfo = S["AccessInfo"];
 export type UserRole = S["UserRole"];
 export type RegisterRequest = S["RegisterRequest"];
 export type LoginRequest = S["LoginRequest"];

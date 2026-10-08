@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Panel de administración (paso 3): CRUD de juegos/variantes y gestión de
- * acceso de usuarios. Sin mockup de referencia — el sistema visual se hereda de
+ * Panel de administración: CRUD de juegos/variantes y backtest del motor. Los
+ * usuarios, la bitácora y los documentos legales tienen su propia página. Sin mockup de referencia — el sistema visual se hereda de
  * `docs/design/` (fondo azul-noche, tarjetas, acento dorado).
  */
 
@@ -11,24 +11,21 @@ import { useCallback, useEffect, useState } from "react";
 
 import { BacktestPanel } from "@/components/admin/BacktestPanel";
 import { VariantForm } from "@/components/admin/VariantForm";
-import { LegalGate } from "@/components/legal/LegalGate";
+import { AccessGate } from "@/components/AccessGate";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi, gamesApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
-import type { AccessType, UserResponse } from "@/lib/types/auth";
 import type { GameResponse, GameVariantResponse } from "@/lib/types/games";
 
 type FormError = { message: string; details?: string[] } | null;
-
-const ACCESS_TYPES: AccessType[] = ["trial", "invited", "full"];
 
 export default function AdminPage() {
   // Lista juegos y variantes, que son endpoints de juego: un administrador
   // también acepta los documentos vigentes (§2.2). /admin/legal no pasa por aquí.
   return (
-    <LegalGate>
+    <AccessGate>
       <AdminPanel />
-    </LegalGate>
+    </AccessGate>
   );
 }
 
@@ -37,7 +34,6 @@ function AdminPanel() {
   const router = useRouter();
 
   const [games, setGames] = useState<GameResponse[]>([]);
-  const [users, setUsers] = useState<UserResponse[]>([]);
   const [error, setError] = useState<FormError>(null);
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState<{ gameId: string; variant?: GameVariantResponse } | null>(
@@ -48,12 +44,7 @@ function AdminPanel() {
   const [newGameType, setNewGameType] = useState("");
 
   const refresh = useCallback(async () => {
-    const [g, u] = await Promise.all([
-      withToken((t) => gamesApi.list(t, true)),
-      withToken((t) => adminApi.listUsers(t)),
-    ]);
-    setGames(g);
-    setUsers(u);
+    setGames(await withToken((t) => gamesApi.list(t, true)));
   }, [withToken]);
 
   useEffect(() => {
@@ -95,10 +86,16 @@ function AdminPanel() {
         <div>
           <h1 className="text-xl font-extrabold">Panel de administración</h1>
           <p className="mt-1 text-sm text-muted">
-            Juegos, variantes y acceso de usuarios. Formulario estructurado, sin builder visual.
+            Juegos, variantes y métricas del motor. Formulario estructurado, sin builder visual.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={() => router.push("/admin/usuarios")}>
+            Usuarios
+          </Button>
+          <Button variant="ghost" onClick={() => router.push("/admin/auditoria")}>
+            Bitácora
+          </Button>
           <Button variant="ghost" onClick={() => router.push("/admin/legal")}>
             Documentos legales
           </Button>
@@ -239,46 +236,6 @@ function AdminPanel() {
 
       {/* Métricas internas del motor (§2.10). Sólo admin: no las ve el cliente. */}
       <BacktestPanel variants={games.flatMap((g) => g.variants)} />
-
-      <Card>
-        <CardHeader title="Usuarios" subtitle="Cambia el tipo de acceso de cada cuenta." />
-        <ul className="space-y-2">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-edge bg-ink px-3.5 py-3"
-            >
-              <div className="text-sm">
-                <span className="font-bold">{u.display_name ?? u.email}</span>
-                {u.display_name ? <span className="ml-2 text-muted">{u.email}</span> : null}
-                {u.role === "admin" ? (
-                  <span className="ml-2">
-                    <Badge>admin</Badge>
-                  </span>
-                ) : null}
-              </div>
-              <select
-                value={u.access_type}
-                disabled={pending}
-                onChange={(e) =>
-                  run(() =>
-                    withToken((t) =>
-                      adminApi.updateUserAccess(t, u.id, e.target.value as AccessType),
-                    ),
-                  )
-                }
-                className="rounded-lg border border-edge bg-ink-sunken px-3 py-2 text-sm text-white outline-none focus:border-gold/60"
-              >
-                {ACCESS_TYPES.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </li>
-          ))}
-        </ul>
-      </Card>
     </main>
   );
 }

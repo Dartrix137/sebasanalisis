@@ -368,7 +368,7 @@ function ExportCard() {
 }
 
 function DeleteAccountCard() {
-  const { withToken, signOut } = useSession();
+  const { user, withToken, signOut } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
@@ -387,6 +387,19 @@ function DeleteAccountCard() {
       setError(messageOf(err));
       setPending(false);
     }
+  }
+
+  // El servidor no deja eliminar la cuenta al único administrador activo: en
+  // vez de ofrecer un botón que va a fallar, se explica por qué.
+  if (user && !user.can_delete_account) {
+    return (
+      <Card>
+        <CardHeader
+          title="Eliminar cuenta"
+          subtitle="Eres el único administrador activo de la plataforma: esta cuenta no se puede eliminar mientras no haya otro administrador."
+        />
+      </Card>
+    );
   }
 
   return (

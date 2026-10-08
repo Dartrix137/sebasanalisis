@@ -135,6 +135,16 @@ python -m app.db.seed
 Crea el administrador y precarga la ruleta europea y americana. Es idempotente:
 si se vuelve a correr no duplica nada ni cambia la clave del administrador.
 
+El administrador solo se crea si no existe ninguno. Si ya hay uno, con el correo
+que sea, el seed no crea otro: `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` son
+solo para el primer arranque. Despues de entrar la primera vez, cambia la
+contrasena desde "Mi cuenta": asi la del entorno deja de servir para entrar.
+
+Para tener otro administrador: que la persona se registre, y desde
+`/admin/usuarios` abrir su cuenta y usar "Nombrar administrador". Queda en la
+bitacora. Conviene tener dos: el unico administrador activo no puede eliminar
+su cuenta ni suspenderse, y si pierde el acceso al correo no hay relevo.
+
 ### Documentos legales (Fase 4, paso 2)
 
 La migracion `c3f81a5d7e20` publica la version 1 de los cuatro documentos
@@ -151,6 +161,17 @@ Que pasa al desplegar este paso:
 - El texto revisado por el abogado se publica desde `/admin/legal` como version
   nueva, marcando "exigir aceptacion": eso se lo vuelve a pedir a todas las
   cuentas.
+
+### Control de acceso (Fase 4, paso 3)
+
+Que pasa al desplegar este paso:
+
+- Las cuentas `trial` que ya existian pasan a `invited` sin vencimiento: siguen
+  usando la mesa. La migracion lo hace sola.
+- **Toda cuenta nueva queda sin acceso** hasta que un administrador se lo de en
+  `/admin/usuarios` (buscar la cuenta, "Ver", tipo de acceso "Invitado", motivo,
+  "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
+- Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
 
 ## Comprobacion despues del primer despliegue
 

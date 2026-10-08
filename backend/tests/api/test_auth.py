@@ -24,8 +24,10 @@ def test_register_login_me_flujo_completo(client: TestClient) -> None:
     assert registered["access_token"] and registered["refresh_token"]
     assert registered["user"]["email"] == email
     assert registered["user"]["display_name"] == "Sebastian"
-    # El registro deja la cuenta activa de inmediato, sin verificacion de correo.
-    assert registered["user"]["access_type"] == "trial"
+    # Una cuenta nueva nace sin acceso: hasta pagar o hasta que un admin se lo
+    # de (§2 de la Fase 4). El cliente de los tests se lo da despues de responder.
+    assert registered["user"]["access_type"] == "none"
+    assert registered["user"]["is_active"] is True
     assert registered["user"]["role"] == "user"
     assert "password" not in r.text and "password_hash" not in r.text
 

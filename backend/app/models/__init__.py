@@ -1,5 +1,6 @@
 """Registro unico de modelos: Alembic autogenera contra `Base.metadata`."""
 
+from app.models.audit import AdminAuditLog
 from app.models.base import Base
 from app.models.bet import Bet
 from app.models.game import Game, GameVariant
@@ -12,6 +13,7 @@ from app.models.user import PaymentEvent, Subscription, User
 from app.models.user_token import UserToken
 
 __all__ = [
+    "AdminAuditLog",
     "Base",
     "Bet",
     "Game",

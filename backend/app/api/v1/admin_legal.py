@@ -4,18 +4,17 @@ El texto se edita como Markdown mientras es borrador. Publicar lo congela: una
 version publicada no se edita, se publica otra. Asi cada aceptacion apunta al
 texto exacto que el usuario vio.
 
-Pendiente del paso 3: publicar un documento legal debe dejar fila en
-`admin_audit_log` (§4.6); esa tabla se crea en ese paso. Hoy la traza es
-`created_by` y `published_at`.
+Publicar deja fila en `admin_audit_log` (§4.6), en la misma transaccion.
 """
 
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import func, select
 
 from app.api.deps import AdminUser, DbSession
+from app.core import audit
 from app.models import LegalDocument
 from app.schemas.legal import (
     AdminLegalDocumentResponse,
@@ -98,7 +97,9 @@ def update_document(
 
 
 @router.post("/{document_id}/publish", response_model=AdminLegalDocumentResponse)
-def publish_document(document_id: UUID, db: DbSession, admin: AdminUser) -> LegalDocument:
+def publish_document(
+    document_id: UUID, db: DbSession, admin: AdminUser, request: Request
+) -> LegalDocument:
     """Publica el borrador. Desde aqui es la version vigente y no se edita.
 
     Si exige aceptacion, toda cuenta que no la haya aceptado deja de tener
@@ -110,6 +111,19 @@ def publish_document(document_id: UUID, db: DbSession, admin: AdminUser) -> Lega
             status_code=status.HTTP_409_CONFLICT, detail="Esta versión ya está publicada"
         )
     document.published_at = datetime.now(UTC)
+    audit.record(
+        db,
+        admin,
+        action="legal_document.publish",
+        target_type="legal_document",
+        target_id=document.id,
+        after={
+            "kind": document.kind,
+            "version": document.version,
+            "requires_acceptance": document.requires_acceptance,
+        },
+        ip=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(document)
     return document

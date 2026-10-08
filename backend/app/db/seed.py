@@ -46,9 +46,19 @@ def seed_admin(db: Session) -> User:
             email=settings.seed_admin_email, password=settings.seed_admin_password
         ).email
     ).lower()
+    # Si ya hay un administrador, no se crea otro, tenga el correo que tenga.
+    # Antes se buscaba por el correo del .env: bastaba con que el administrador
+    # cambiara su correo desde "Mi cuenta" para que volver a correr el seed
+    # creara un segundo administrador con la clave del .env.
+    existing = db.scalar(select(User).where(User.role == "admin").order_by(User.created_at))
+    if existing:
+        print(f"  ya hay un administrador ({existing.email}): no se crea otro")
+        return existing
     user = db.scalar(select(User).where(User.email == email))
     if user:
-        print(f"  admin ya existe: {email}")
+        # Una cuenta comun con el correo del .env no se promueve sola: el seed
+        # no decide quien administra una base que ya tiene cuentas.
+        print(f"  {email} ya existe y no es administrador: no se modifica")
         return user
     user = User(
         email=email,

@@ -21,9 +21,55 @@
         "title": "AcceptLegalRequest",
         "type": "object"
       },
+      "AccessInfo": {
+        "description": "La decision de acceso, para que el cliente sepa que pantalla mostrar.\n\nEs informativa: el servidor vuelve a decidir en cada llamada a un endpoint\nde juego (§2.1 de la Fase 4).",
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AccessReason"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "granted",
+          "reason",
+          "until"
+        ],
+        "title": "AccessInfo",
+        "type": "object"
+      },
+      "AccessReason": {
+        "description": "Por que una cuenta tiene o no acceso a la mesa (`core/access.has_access`).",
+        "enum": [
+          "admin",
+          "full",
+          "invited",
+          "subscription",
+          "suspended",
+          "consent_required",
+          "expired",
+          "no_access"
+        ],
+        "title": "AccessReason",
+        "type": "string"
+      },
       "AccessType": {
         "enum": [
-          "trial",
+          "none",
           "invited",
           "full"
         ],
@@ -88,6 +134,71 @@
         "title": "AdminLegalDocumentResponse",
         "type": "object"
       },
+      "AdminUserDetailResponse": {
+        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y el historial de pagos se suman en el paso 5.",
+        "properties": {
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            },
+            "title": "Audit",
+            "type": "array"
+          },
+          "consents": {
+            "items": {
+              "$ref": "#/components/schemas/ConsentResponse"
+            },
+            "title": "Consents",
+            "type": "array"
+          },
+          "sessions_count": {
+            "title": "Sessions Count",
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "required": [
+          "user",
+          "consents",
+          "sessions_count",
+          "audit"
+        ],
+        "title": "AdminUserDetailResponse",
+        "type": "object"
+      },
+      "AdminUserListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminUserListResponse",
+        "type": "object"
+      },
       "AllowedCombination": {
         "description": "Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).\n\nVive en los datos y no en el motor porque \"dos docenas\" es una regla de la\nmesa, no una verdad matemática: un juego nuevo declara las suyas y\n`engine/recommendation.py` no cambia (§2.10).",
         "properties": {
@@ -119,6 +230,138 @@
           "group_ids"
         ],
         "title": "AllowedCombination",
+        "type": "object"
+      },
+      "AuditLogEntry": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "admin_email": {
+            "title": "Admin Email",
+            "type": "string"
+          },
+          "admin_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin User Id"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "admin_user_id",
+          "admin_email",
+          "action",
+          "target_type",
+          "target_id",
+          "before",
+          "after",
+          "reason",
+          "ip",
+          "created_at"
+        ],
+        "title": "AuditLogEntry",
+        "type": "object"
+      },
+      "AuditLogListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AuditLogListResponse",
         "type": "object"
       },
       "BacktestBandRow": {
@@ -2930,20 +3173,96 @@
         "type": "object"
       },
       "UpdateUserAccessRequest": {
-        "description": "PATCH /admin/users/:id/access — §3.4.\n\nAgregado en el paso 3: el endpoint estaba en el documento de arquitectura\npero no tenia schema definido.",
+        "description": "PATCH /admin/users/:id/access: otorga o retira el acceso manual.",
         "properties": {
+          "access_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Expires At"
+          },
           "access_type": {
             "$ref": "#/components/schemas/AccessType"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
           }
         },
         "required": [
-          "access_type"
+          "access_type",
+          "reason"
         ],
         "title": "UpdateUserAccessRequest",
         "type": "object"
       },
-      "UserResponse": {
+      "UpdateUserRoleRequest": {
+        "description": "PATCH /admin/users/:id/role: nombra un administrador o le quita el rol.",
         "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "required": [
+          "role",
+          "reason"
+        ],
+        "title": "UpdateUserRoleRequest",
+        "type": "object"
+      },
+      "UpdateUserStatusRequest": {
+        "description": "PATCH /admin/users/:id/status: suspende o reactiva la cuenta.",
+        "properties": {
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "is_active",
+          "reason"
+        ],
+        "title": "UpdateUserStatusRequest",
+        "type": "object"
+      },
+      "UserResponse": {
+        "description": "La cuenta mas su decision de acceso. Se arma con\n`api/presenters.user_response`, no con `model_validate`: `access` no es una\ncolumna, lo calcula `has_access`.",
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/AccessInfo"
+          },
+          "access_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Expires At"
+          },
           "access_type": {
             "$ref": "#/components/schemas/AccessType"
           },
@@ -2958,6 +3277,10 @@
               }
             ],
             "title": "Adult Confirmed At"
+          },
+          "can_delete_account": {
+            "title": "Can Delete Account",
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -2989,6 +3312,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
           "onboarding_completed_at": {
             "anyOf": [
               {
@@ -3011,10 +3338,14 @@
           "display_name",
           "email_verified",
           "access_type",
+          "access_expires_at",
+          "is_active",
           "role",
           "created_at",
           "adult_confirmed_at",
-          "onboarding_completed_at"
+          "onboarding_completed_at",
+          "access",
+          "can_delete_account"
         ],
         "title": "UserResponse",
         "type": "object"
@@ -3135,6 +3466,68 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/audit-log": {
+      "get": {
+        "description": "La bitacora, lo mas reciente primero. Solo lectura: no hay como borrarla.",
+        "operationId": "list_audit_log_admin_audit_log_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Audit Log",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/games": {
       "post": {
         "operationId": "create_game_admin_games_post",
@@ -3707,21 +4100,134 @@
     },
     "/admin/users": {
       "get": {
+        "description": "Cuentas por pagina, las mas recientes primero. Busca por correo o nombre.",
         "operationId": "list_users_admin_users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "access_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AccessType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/UserRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email_verified",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Email Verified"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/UserResponse"
-                  },
-                  "title": "Response List Users Admin Users Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/AdminUserListResponse"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -3735,8 +4241,57 @@
         ]
       }
     },
+    "/admin/users/{user_id}": {
+      "get": {
+        "operationId": "get_user_admin_users__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/users/{user_id}/access": {
       "patch": {
+        "description": "Otorga acceso manual (`invited` con vencimiento opcional, o `full`) o lo\nretira (`none`).",
         "operationId": "update_user_access_admin_users__user_id__access_patch",
         "parameters": [
           {
@@ -3788,6 +4343,124 @@
           }
         ],
         "summary": "Update User Access",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/role": {
+      "patch": {
+        "description": "Nombra administrador a una cuenta o le quita el rol.\n\nEs la unica forma de tener mas de un administrador: el seed solo crea el\nprimero. Al quitar el rol, la cuenta vuelve a depender de su acceso manual\n(`access_type`), que no se toca aqui.",
+        "operationId": "update_user_role_admin_users__user_id__role_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update User Role",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/status": {
+      "patch": {
+        "description": "Suspende o reactiva una cuenta. Suspendida, entra a su cuenta pero no a la mesa.",
+        "operationId": "update_user_status_admin_users__user_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update User Status",
         "tags": [
           "admin"
         ]
@@ -4010,6 +4683,7 @@
         ]
       },
       "get": {
+        "description": "La cuenta y su decision de acceso (`access`), para que el cliente sepa\nsi mostrar la mesa. Es informativa: el servidor decide en cada llamada.",
         "operationId": "me_auth_me_get",
         "responses": {
           "200": {

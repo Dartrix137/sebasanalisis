@@ -45,7 +45,8 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 def require_admin(user: CurrentUser) -> User:
-    if user.role != "admin":
+    # Un administrador suspendido deja de serlo hasta que otro lo reactive.
+    if user.role != "admin" or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Requiere permisos de administrador"
         )
@@ -55,10 +56,17 @@ def require_admin(user: CurrentUser) -> User:
 AdminUser = Annotated[User, Depends(require_admin)]
 
 
-CONSENT_REQUIRED_MESSAGE = (
-    "Antes de continuar debes aceptar la versión vigente de los documentos legales. "
-    "Recarga la página."
-)
+# Lo que se le dice a la cuenta por cada motivo de rechazo. El cliente decide
+# la pantalla por `detail.code`; el texto es el respaldo si no la reconoce.
+ACCESS_DENIED_MESSAGES = {
+    "suspended": "Tu cuenta está suspendida.",
+    "consent_required": (
+        "Antes de continuar debes aceptar la versión vigente de los documentos legales. "
+        "Recarga la página."
+    ),
+    "expired": "Tu acceso venció.",
+    "no_access": "Tu cuenta no tiene acceso activo.",
+}
 
 
 def require_access(user: CurrentUser, db: DbSession) -> User:
@@ -71,7 +79,7 @@ def require_access(user: CurrentUser, db: DbSession) -> User:
     if not decision.granted:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": decision.reason, "message": CONSENT_REQUIRED_MESSAGE},
+            detail={"code": decision.reason, "message": ACCESS_DENIED_MESSAGES[decision.reason]},
         )
     return user
 

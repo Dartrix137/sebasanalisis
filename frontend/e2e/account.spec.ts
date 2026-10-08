@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   checkRegisterConsents,
   expectEmail,
+  grantAccess,
   linkFromEmail,
   loginViaUi,
   PASSWORD,
@@ -15,7 +16,7 @@ import {
  * que no puede confirmar su correo o recuperar su cuenta.
  */
 
-test("registro → correo de verificación → cuenta verificada", async ({ page }) => {
+test("registro → correo de verificación → cuenta verificada", async ({ page, request }) => {
   const email = uniqueEmail();
 
   await page.goto("/register");
@@ -33,6 +34,9 @@ test("registro → correo de verificación → cuenta verificada", async ({ page
   // El enlace llega por correo; abrirlo confirma la cuenta.
   await page.goto(await linkFromEmail(email, "Confirma tu correo"));
   await expect(page.getByText("Tu correo quedó confirmado")).toBeVisible();
+
+  // Una cuenta nueva no tiene acceso a la mesa: se lo da el administrador.
+  await grantAccess(request, email);
 
   await page.getByRole("link", { name: "Ir al menú principal" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
