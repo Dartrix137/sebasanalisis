@@ -295,6 +295,31 @@ def test_cambio_de_acceso_invalido_no_cambia_nada_ni_deja_bitacora(
     )
 
 
+def test_el_acceso_manual_no_aplica_a_un_administrador(
+    client: TestClient, admin_token: str, db
+) -> None:
+    """Entra por su rol: guardar el cambio no tendria efecto, asi que se rechaza."""
+    yo = _me(client, admin_token)
+    for access_type in ("none", "invited", "full"):
+        r = client.patch(
+            f"/admin/users/{yo['id']}/access",
+            json={"access_type": access_type, "reason": MOTIVO},
+            headers=auth(admin_token),
+        )
+        assert r.status_code == 409, r.text
+        assert "por su rol" in r.json()["detail"]
+
+    despues = _me(client, admin_token)
+    assert despues["access_type"] == yo["access_type"]
+    assert despues["access"]["reason"] == "admin"
+    assert (
+        db.execute(
+            text("SELECT count(*) FROM admin_audit_log WHERE target_id = :u"), {"u": yo["id"]}
+        ).scalar_one()
+        == 0
+    )
+
+
 def test_admin_suspende_y_reactiva_una_cuenta(client: TestClient, admin_token: str, db) -> None:
     registro = _sin_acceso(client)
     token, user_id = registro["access_token"], registro["user"]["id"]

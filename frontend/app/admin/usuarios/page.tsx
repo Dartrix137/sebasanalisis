@@ -310,7 +310,9 @@ function UserDetail({
     <div className="space-y-5 border-t border-edge p-3.5">
       <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <Data label="Acceso a la mesa" value={accessSummary(u)} />
-        <Data label="Acceso manual" value={ACCESS_TYPE_LABEL[u.access_type]} />
+        {u.role === "admin" ? null : (
+          <Data label="Acceso manual" value={ACCESS_TYPE_LABEL[u.access_type]} />
+        )}
         <Data label="Estado" value={u.is_active ? "Activa" : "Suspendida"} />
         <Data label="Correo" value={u.email_verified ? "Confirmado" : "Sin confirmar"} />
         <Data label="Registrada" value={formatLegalDate(u.created_at)} />
@@ -327,7 +329,15 @@ function UserDetail({
         />
       </dl>
 
-      <AccessForm user={u} onDone={refresh} />
+      {u.role === "admin" ? (
+        // Entra por su rol, no por el acceso manual: cambiarlo no tendría efecto.
+        <p className="rounded-lg border border-edge p-3.5 text-sm leading-relaxed text-muted">
+          <span className="font-bold text-white">Acceso manual: no aplica.</span> Un administrador
+          siempre tiene acceso a la mesa por su rol.
+        </p>
+      ) : (
+        <AccessForm user={u} onDone={refresh} />
+      )}
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />
 
       <section>

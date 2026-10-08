@@ -59,6 +59,15 @@ test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso",
   await expect(fila.getByText("Acceso actualizado")).toBeVisible();
   await expect(fila.getByText("Invitado", { exact: true }).first()).toBeVisible();
 
+  // En la cuenta de un administrador no se ofrece el acceso manual: entra por
+  // su rol, y cambiarlo no tendría efecto.
+  await panel.getByLabel("Buscar por correo o nombre").fill(ADMIN_EMAIL);
+  await panel.getByRole("button", { name: "Buscar" }).click();
+  const filaAdmin = panel.locator("li", { hasText: ADMIN_EMAIL });
+  await filaAdmin.getByRole("button", { name: "Ver" }).click();
+  await expect(filaAdmin.getByText("Acceso manual: no aplica.")).toBeVisible();
+  await expect(filaAdmin.getByRole("button", { name: "Guardar acceso" })).toHaveCount(0);
+
   // Quedó en la bitácora, con quién, qué y por qué.
   await panel.goto("/admin/auditoria");
   const entrada = panel.locator("li", { hasText: "Cortesía de prueba" });

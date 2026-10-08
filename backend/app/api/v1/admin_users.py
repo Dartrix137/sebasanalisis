@@ -36,6 +36,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 Limit = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0)]
 
+ADMIN_ACCESS_MESSAGE = (
+    "Un administrador siempre tiene acceso a la mesa por su rol: el acceso manual no le aplica"
+)
+
 # Cuantas filas de bitacora trae el detalle de una cuenta.
 _DETAIL_AUDIT_ROWS = 20
 
@@ -133,6 +137,10 @@ def update_user_access(
     """Otorga acceso manual (`invited` con vencimiento opcional, o `full`) o lo
     retira (`none`)."""
     user = _get_or_404(db, user_id)
+    # Un administrador entra por su rol (§2.2), no por el acceso manual: el
+    # cambio se guardaria sin tener ningun efecto, y eso confunde a quien lo hace.
+    if user.role == "admin":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ADMIN_ACCESS_MESSAGE)
     now = datetime.now(UTC)
     expires_at = payload.access_expires_at
     if expires_at is not None:
