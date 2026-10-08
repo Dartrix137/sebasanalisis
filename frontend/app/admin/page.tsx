@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { BacktestPanel } from "@/components/admin/BacktestPanel";
 import { VariantForm } from "@/components/admin/VariantForm";
+import { LegalGate } from "@/components/legal/LegalGate";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi, gamesApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
@@ -22,6 +23,16 @@ type FormError = { message: string; details?: string[] } | null;
 const ACCESS_TYPES: AccessType[] = ["trial", "invited", "full"];
 
 export default function AdminPage() {
+  // Lista juegos y variantes, que son endpoints de juego: un administrador
+  // también acepta los documentos vigentes (§2.2). /admin/legal no pasa por aquí.
+  return (
+    <LegalGate>
+      <AdminPanel />
+    </LegalGate>
+  );
+}
+
+function AdminPanel() {
   const { user, loading, withToken } = useSession();
   const router = useRouter();
 
@@ -87,9 +98,14 @@ export default function AdminPage() {
             Juegos, variantes y acceso de usuarios. Formulario estructurado, sin builder visual.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/dashboard")}>
-          Volver
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={() => router.push("/admin/legal")}>
+            Documentos legales
+          </Button>
+          <Button variant="ghost" onClick={() => router.push("/dashboard")}>
+            Volver
+          </Button>
+        </div>
       </header>
 
       {error ? <ErrorBox message={error.message} details={error.details} /> : null}

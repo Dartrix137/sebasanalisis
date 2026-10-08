@@ -13,13 +13,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ApiError, authApi } from "@/lib/api-client";
+import { ApiError, authApi, legalApi } from "@/lib/api-client";
+import { legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
+import type { LegalDocumentResponse } from "@/lib/types/legal";
 
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "./AuthShell";
-import { BrandMark, Button, Card, ErrorBox, Field, PasswordField } from "./ui";
+import { BrandMark, Button, Card, Checkbox, ErrorBox, Field, PasswordField } from "./ui";
 
 const SUBTITLE = "Registra los números de tu mesa y revisa lo que ya salió. Tu progreso queda guardado en tu cuenta.";
+
+/** Cómo empieza la frase de cada casilla; el enlace al documento la termina. */
+const CONSENT_LEAD: Partial<Record<LegalDocumentResponse["kind"], string>> = {
+  terms: "Acepto los",
+  privacy: "Autorizo el tratamiento de mis datos personales según la",
+};
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const isRegister = mode === "register";
@@ -31,6 +39,21 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Consentimientos del registro (§6.3): los documentos vigentes que hay que
+  // aceptar, cuáles se marcaron, y la declaración de mayoría de edad.
+  const [documents, setDocuments] = useState<LegalDocumentResponse[] | null>(null);
+  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [adult, setAdult] = useState(false);
+
+  useEffect(() => {
+    if (!isRegister) return;
+    legalApi
+      .required()
+      .then(setDocuments)
+      .catch(() =>
+        setError("No se pudieron cargar los documentos legales. Recarga la página"),
+      );
+  }, [isRegister]);
 
   // Con sesion abierta no hay nada que hacer aqui: mostrar el formulario
   // invita a entrar con otra cuenta sin querer, y deja el boton "atras" del
@@ -49,6 +72,10 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             email,
             password,
             display_name: displayName.trim() || null,
+            // Los ids de las versiones que se mostraron: la aceptación queda
+            // atada al texto exacto. El servidor rechaza el registro si faltan.
+            accepted_document_ids: (documents ?? []).filter((d) => accepted[d.id]).map((d) => d.id),
+            adult_confirmed: adult,
           })
         : await authApi.login({ email, password });
       signIn(tokens);
@@ -65,7 +92,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   if (loading || user) return null;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
       <BrandMark />
       <h1 className="mt-5 font-display text-5xl font-semibold leading-none tracking-tight">
         Sebas<span className="text-gold">análisis</span>
@@ -123,9 +150,41 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             </p>
           )}
 
+          {isRegister ? (
+            <fieldset className="space-y-3 border-t border-edge pt-4">
+              <legend className="sr-only">Consentimientos</legend>
+              {(documents ?? []).map((doc) => (
+                <Checkbox
+                  key={doc.id}
+                  required
+                  checked={!!accepted[doc.id]}
+                  onChange={(e) => setAccepted((prev) => ({ ...prev, [doc.id]: e.target.checked }))}
+                >
+                  {CONSENT_LEAD[doc.kind] ?? "Acepto:"}{" "}
+                  <a
+                    href={legalPath(doc.kind)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-gold hover:text-gold-soft"
+                  >
+                    {doc.title}
+                  </a>
+                  .
+                </Checkbox>
+              ))}
+              <Checkbox required checked={adult} onChange={(e) => setAdult(e.target.checked)}>
+                Declaro que soy mayor de edad (18 años o más).
+              </Checkbox>
+            </fieldset>
+          ) : null}
+
           {error ? <ErrorBox message={error} /> : null}
 
-          <Button type="submit" disabled={pending} className="w-full">
+          <Button
+            type="submit"
+            disabled={pending || (isRegister && documents === null)}
+            className="w-full"
+          >
             {pending ? "Un momento…" : isRegister ? "Crear mi cuenta" : "Entrar"}
           </Button>
         </form>

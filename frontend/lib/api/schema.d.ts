@@ -72,6 +72,70 @@ export interface paths {
         patch: operations["update_variant_admin_games__game_id__variants__variant_id__patch"];
         trace?: never;
     };
+    "/admin/legal-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Documents
+         * @description Todas las versiones, borradores incluidos; la mas reciente de cada tipo primero.
+         */
+        get: operations["list_documents_admin_legal_documents_get"];
+        put?: never;
+        /**
+         * Create Document
+         * @description Crea el borrador de la version siguiente de un documento.
+         */
+        post: operations["create_document_admin_legal_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/legal-documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Document */
+        patch: operations["update_document_admin_legal_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/admin/legal-documents/{document_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish Document
+         * @description Publica el borrador. Desde aqui es la version vigente y no se edita.
+         *
+         *     Si exige aceptacion, toda cuenta que no la haya aceptado deja de tener
+         *     acceso a la mesa hasta que lo haga (`core/access.has_access`).
+         */
+        post: operations["publish_document_admin_legal_documents__document_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/recommendations/backtest": {
         parameters: {
             query?: never;
@@ -244,6 +308,52 @@ export interface paths {
         head?: never;
         /** Update Profile */
         patch: operations["update_profile_auth_me_patch"];
+        trace?: never;
+    };
+    "/auth/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export My Data
+         * @description Todos los datos de la cuenta en un JSON (derecho de consulta, §6.4).
+         *
+         *     No exige `RequireAccess`: consultar los datos propios no depende de tener
+         *     acceso a la mesa ni de haber aceptado la version vigente de un documento.
+         */
+        get: operations["export_my_data_auth_me_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Onboarding
+         * @description Anota que la cuenta leyo la pantalla de bienvenida de la mesa (§6.3).
+         *
+         *     Es informativa, no un consentimiento legal: por eso vive aqui y no en
+         *     `user_consents`, y por eso no decide el acceso.
+         */
+        post: operations["complete_onboarding_auth_me_onboarding_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/auth/refresh": {
@@ -425,6 +535,106 @@ export interface paths {
         };
         /** Health */
         get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/legal/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept
+         * @description Registra la aceptacion y devuelve lo que todavia queda pendiente.
+         */
+        post: operations["accept_legal_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/legal/consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consents
+         * @description Los documentos que la cuenta acepto, del mas reciente al mas antiguo.
+         */
+        get: operations["consents_legal_consents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/legal/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pending
+         * @description Lo que esta cuenta debe aceptar antes de usar la mesa.
+         */
+        get: operations["pending_legal_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/legal/required": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Required Documents
+         * @description Los documentos que hay que aceptar para crear una cuenta. Publico.
+         */
+        get: operations["required_documents_legal_required_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/legal/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current Document
+         * @description La ultima version publicada de un documento. Publico.
+         */
+        get: operations["current_document_legal__kind__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -844,11 +1054,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptLegalRequest */
+        AcceptLegalRequest: {
+            /**
+             * Adult Confirmed
+             * @default false
+             */
+            adult_confirmed: boolean;
+            /** Legal Document Ids */
+            legal_document_ids?: string[];
+        };
         /**
          * AccessType
          * @enum {string}
          */
         AccessType: "trial" | "invited" | "full";
+        /**
+         * AdminLegalDocumentResponse
+         * @description Cualquier version, publicada o borrador.
+         */
+        AdminLegalDocumentResponse: {
+            /** Content Md */
+            content_md: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["LegalKind"];
+            /** Published At */
+            published_at: string | null;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
         /**
          * AllowedCombination
          * @description Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).
@@ -1140,6 +1387,29 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /**
+         * ConsentResponse
+         * @description Un documento que el usuario acepto, para la pagina de cuenta.
+         */
+        ConsentResponse: {
+            /**
+             * Accepted At
+             * Format: date-time
+             */
+            accepted_at: string;
+            /** Current */
+            current: boolean;
+            kind: components["schemas"]["LegalKind"];
+            /**
+             * Legal Document Id
+             * Format: uuid
+             */
+            legal_document_id: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
         /** CreateBetRequest */
         CreateBetRequest: {
             /** Amount */
@@ -1179,6 +1449,16 @@ export interface components {
             house_edge: number;
             /** Name */
             name: string;
+        };
+        /** CreateLegalDocumentRequest */
+        CreateLegalDocumentRequest: {
+            /** Content Md */
+            content_md: string;
+            kind: components["schemas"]["LegalKind"];
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Title */
+            title: string;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -1245,6 +1525,37 @@ export interface components {
          * @enum {string}
          */
         EntryOrder: "most_recent_first" | "most_recent_last";
+        /**
+         * ExportResponse
+         * @description GET /auth/me/export: los datos de la cuenta (§6.4 de la Fase 4).
+         */
+        ExportResponse: {
+            account: components["schemas"]["UserResponse"];
+            /** Consents */
+            consents: components["schemas"]["ConsentResponse"][];
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Payments */
+            payments: {
+                [key: string]: string;
+            }[];
+            /** Sessions */
+            sessions: components["schemas"]["ExportSession"][];
+        };
+        /**
+         * ExportSession
+         * @description Una mesa con todo lo que el usuario registro en ella.
+         */
+        ExportSession: {
+            /** Bets */
+            bets: components["schemas"]["BetResponse"][];
+            session: components["schemas"]["SessionResponse"];
+            /** Spins */
+            spins: components["schemas"]["SpinResponse"][];
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -1387,6 +1698,36 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * LegalDocumentResponse
+         * @description Una version publicada, con su texto en Markdown.
+         */
+        LegalDocumentResponse: {
+            /** Content Md */
+            content_md: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["LegalKind"];
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * LegalKind
+         * @enum {string}
+         */
+        LegalKind: "terms" | "privacy" | "refunds" | "cookies";
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -1486,6 +1827,16 @@ export interface components {
          * @enum {string}
          */
         NoBetReason: "insufficient_data" | "below_threshold";
+        /**
+         * PendingConsentResponse
+         * @description Lo que la cuenta debe aceptar antes de usar la mesa.
+         */
+        PendingConsentResponse: {
+            /** Adult Confirmation Required */
+            adult_confirmation_required: boolean;
+            /** Documents */
+            documents: components["schemas"]["LegalDocumentResponse"][];
+        };
         /**
          * ProgressionRowResponse
          * @description Una fila de la tabla de riesgo, con montos reales del usuario.
@@ -1648,6 +1999,13 @@ export interface components {
         };
         /** RegisterRequest */
         RegisterRequest: {
+            /** Accepted Document Ids */
+            accepted_document_ids?: string[];
+            /**
+             * Adult Confirmed
+             * @default false
+             */
+            adult_confirmed: boolean;
             /** Display Name */
             display_name?: string | null;
             /**
@@ -1966,6 +2324,15 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** UpdateLegalDocumentRequest */
+        UpdateLegalDocumentRequest: {
+            /** Content Md */
+            content_md: string;
+            /** Requires Acceptance */
+            requires_acceptance: boolean;
+            /** Title */
+            title: string;
+        };
         /** UpdateProfileRequest */
         UpdateProfileRequest: {
             /** Display Name */
@@ -1995,6 +2362,8 @@ export interface components {
         /** UserResponse */
         UserResponse: {
             access_type: components["schemas"]["AccessType"];
+            /** Adult Confirmed At */
+            adult_confirmed_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -2014,6 +2383,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Onboarding Completed At */
+            onboarding_completed_at: string | null;
             role: components["schemas"]["UserRole"];
         };
         /**
@@ -2193,6 +2564,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameVariantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_documents_admin_legal_documents_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["LegalKind"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLegalDocumentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_document_admin_legal_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLegalDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLegalDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_document_admin_legal_documents__document_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLegalDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLegalDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_document_admin_legal_documents__document_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminLegalDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2515,6 +3016,46 @@ export interface operations {
             };
         };
     };
+    export_my_data_auth_me_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportResponse"];
+                };
+            };
+        };
+    };
+    complete_onboarding_auth_me_onboarding_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
     refresh_auth_refresh_post: {
         parameters: {
             query?: never;
@@ -2815,6 +3356,130 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    accept_legal_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptLegalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingConsentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consents_legal_consents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentResponse"][];
+                };
+            };
+        };
+    };
+    pending_legal_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingConsentResponse"];
+                };
+            };
+        };
+    };
+    required_documents_legal_required_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalDocumentResponse"][];
+                };
+            };
+        };
+    };
+    current_document_legal__kind__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["LegalKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

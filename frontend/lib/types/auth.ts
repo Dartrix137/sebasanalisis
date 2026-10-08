@@ -29,3 +29,4 @@ export type ChangePasswordRequest = S["ChangePasswordRequest"];
 export type UpdateProfileRequest = S["UpdateProfileRequest"];
 export type ChangeEmailRequest = S["ChangeEmailRequest"];
 export type DeleteAccountRequest = S["DeleteAccountRequest"];
+export type ExportResponse = S["ExportResponse"];

@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.api.v1.sessions import get_owned_session
 from app.engine import bankroll as bk
 from app.engine.probability import GameConfig, expected_value
@@ -43,7 +43,7 @@ from app.schemas.suggestions import (
     WindowStatResponse,
 )
 
-router = APIRouter(prefix="/sessions", tags=["recommendations"])
+router = APIRouter(prefix="/sessions", tags=["recommendations"], dependencies=[RequireAccess])
 
 #: Linea fija al pie de la tarjeta. Es el unico recordatorio que queda en la
 #: pantalla de ruleta desde la Fase 3: el banner fijo de §0 se retiro porque el

@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "AcceptLegalRequest": {
+        "properties": {
+          "adult_confirmed": {
+            "default": false,
+            "title": "Adult Confirmed",
+            "type": "boolean"
+          },
+          "legal_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Legal Document Ids",
+            "type": "array"
+          }
+        },
+        "title": "AcceptLegalRequest",
+        "type": "object"
+      },
       "AccessType": {
         "enum": [
           "trial",
@@ -9,6 +29,64 @@
         ],
         "title": "AccessType",
         "type": "string"
+      },
+      "AdminLegalDocumentResponse": {
+        "description": "Cualquier version, publicada o borrador.",
+        "properties": {
+          "content_md": {
+            "title": "Content Md",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LegalKind"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "requires_acceptance": {
+            "title": "Requires Acceptance",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "title",
+          "content_md",
+          "requires_acceptance",
+          "published_at",
+          "created_at"
+        ],
+        "title": "AdminLegalDocumentResponse",
+        "type": "object"
       },
       "AllowedCombination": {
         "description": "Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).\n\nVive en los datos y no en el motor porque \"dos docenas\" es una regla de la\nmesa, no una verdad matemática: un juego nuevo declara las suyas y\n`engine/recommendation.py` no cambia (§2.10).",
@@ -668,6 +746,46 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "ConsentResponse": {
+        "description": "Un documento que el usuario acepto, para la pagina de cuenta.",
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LegalKind"
+          },
+          "legal_document_id": {
+            "format": "uuid",
+            "title": "Legal Document Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "legal_document_id",
+          "kind",
+          "title",
+          "version",
+          "accepted_at",
+          "current"
+        ],
+        "title": "ConsentResponse",
+        "type": "object"
+      },
       "CreateBetRequest": {
         "properties": {
           "amount": {
@@ -757,6 +875,37 @@
           "config"
         ],
         "title": "CreateGameVariantRequest",
+        "type": "object"
+      },
+      "CreateLegalDocumentRequest": {
+        "properties": {
+          "content_md": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Content Md",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LegalKind"
+          },
+          "requires_acceptance": {
+            "title": "Requires Acceptance",
+            "type": "boolean"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "content_md",
+          "requires_acceptance"
+        ],
+        "title": "CreateLegalDocumentRequest",
         "type": "object"
       },
       "CreateSessionRequest": {
@@ -897,6 +1046,81 @@
         ],
         "title": "EntryOrder",
         "type": "string"
+      },
+      "ExportResponse": {
+        "description": "GET /auth/me/export: los datos de la cuenta (§6.4 de la Fase 4).",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "consents": {
+            "items": {
+              "$ref": "#/components/schemas/ConsentResponse"
+            },
+            "title": "Consents",
+            "type": "array"
+          },
+          "exported_at": {
+            "format": "date-time",
+            "title": "Exported At",
+            "type": "string"
+          },
+          "payments": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/ExportSession"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exported_at",
+          "account",
+          "sessions",
+          "consents",
+          "payments"
+        ],
+        "title": "ExportResponse",
+        "type": "object"
+      },
+      "ExportSession": {
+        "description": "Una mesa con todo lo que el usuario registro en ella.",
+        "properties": {
+          "bets": {
+            "items": {
+              "$ref": "#/components/schemas/BetResponse"
+            },
+            "title": "Bets",
+            "type": "array"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionResponse"
+          },
+          "spins": {
+            "items": {
+              "$ref": "#/components/schemas/SpinResponse"
+            },
+            "title": "Spins",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session",
+          "spins",
+          "bets"
+        ],
+        "title": "ExportSession",
+        "type": "object"
       },
       "ForgotPasswordRequest": {
         "properties": {
@@ -1172,6 +1396,61 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LegalDocumentResponse": {
+        "description": "Una version publicada, con su texto en Markdown.",
+        "properties": {
+          "content_md": {
+            "title": "Content Md",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LegalKind"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "requires_acceptance": {
+            "title": "Requires Acceptance",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "title",
+          "content_md",
+          "requires_acceptance",
+          "published_at"
+        ],
+        "title": "LegalDocumentResponse",
+        "type": "object"
+      },
+      "LegalKind": {
+        "enum": [
+          "terms",
+          "privacy",
+          "refunds",
+          "cookies"
+        ],
+        "title": "LegalKind",
+        "type": "string"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -1379,6 +1658,28 @@
         ],
         "title": "NoBetReason",
         "type": "string"
+      },
+      "PendingConsentResponse": {
+        "description": "Lo que la cuenta debe aceptar antes de usar la mesa.",
+        "properties": {
+          "adult_confirmation_required": {
+            "title": "Adult Confirmation Required",
+            "type": "boolean"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/LegalDocumentResponse"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "documents",
+          "adult_confirmation_required"
+        ],
+        "title": "PendingConsentResponse",
+        "type": "object"
       },
       "ProgressionRowResponse": {
         "description": "Una fila de la tabla de riesgo, con montos reales del usuario.",
@@ -1769,6 +2070,20 @@
       },
       "RegisterRequest": {
         "properties": {
+          "accepted_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Accepted Document Ids",
+            "type": "array"
+          },
+          "adult_confirmed": {
+            "default": false,
+            "title": "Adult Confirmed",
+            "type": "boolean"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -2511,6 +2826,33 @@
         "title": "UpdateGameVariantRequest",
         "type": "object"
       },
+      "UpdateLegalDocumentRequest": {
+        "properties": {
+          "content_md": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Content Md",
+            "type": "string"
+          },
+          "requires_acceptance": {
+            "title": "Requires Acceptance",
+            "type": "boolean"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "content_md",
+          "requires_acceptance"
+        ],
+        "title": "UpdateLegalDocumentRequest",
+        "type": "object"
+      },
       "UpdateProfileRequest": {
         "properties": {
           "display_name": {
@@ -2605,6 +2947,18 @@
           "access_type": {
             "$ref": "#/components/schemas/AccessType"
           },
+          "adult_confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adult Confirmed At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2635,6 +2989,18 @@
             "title": "Id",
             "type": "string"
           },
+          "onboarding_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Completed At"
+          },
           "role": {
             "$ref": "#/components/schemas/UserRole"
           }
@@ -2646,7 +3012,9 @@
           "email_verified",
           "access_type",
           "role",
-          "created_at"
+          "created_at",
+          "adult_confirmed_at",
+          "onboarding_completed_at"
         ],
         "title": "UserResponse",
         "type": "object"
@@ -2992,6 +3360,217 @@
           }
         ],
         "summary": "Update Variant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/legal-documents": {
+      "get": {
+        "description": "Todas las versiones, borradores incluidos; la mas reciente de cada tipo primero.",
+        "operationId": "list_documents_admin_legal_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/LegalKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminLegalDocumentResponse"
+                  },
+                  "title": "Response List Documents Admin Legal Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Documents",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Crea el borrador de la version siguiente de un documento.",
+        "operationId": "create_document_admin_legal_documents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLegalDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLegalDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Document",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/legal-documents/{document_id}": {
+      "patch": {
+        "operationId": "update_document_admin_legal_documents__document_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLegalDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLegalDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Document",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/legal-documents/{document_id}/publish": {
+      "post": {
+        "description": "Publica el borrador. Desde aqui es la version vigente y no se edita.\n\nSi exige aceptacion, toda cuenta que no la haya aceptado deja de tener\nacceso a la mesa hasta que lo haga (`core/access.has_access`).",
+        "operationId": "publish_document_admin_legal_documents__document_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLegalDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Document",
         "tags": [
           "admin"
         ]
@@ -3499,6 +4078,60 @@
         ]
       }
     },
+    "/auth/me/export": {
+      "get": {
+        "description": "Todos los datos de la cuenta en un JSON (derecho de consulta, §6.4).\n\nNo exige `RequireAccess`: consultar los datos propios no depende de tener\nacceso a la mesa ni de haber aceptado la version vigente de un documento.",
+        "operationId": "export_my_data_auth_me_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export My Data",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me/onboarding": {
+      "post": {
+        "description": "Anota que la cuenta leyo la pantalla de bienvenida de la mesa (§6.3).\n\nEs informativa, no un consentimiento legal: por eso vive aqui y no en\n`user_consents`, y por eso no decide el acceso.",
+        "operationId": "complete_onboarding_auth_me_onboarding_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete Onboarding",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/refresh": {
       "post": {
         "operationId": "refresh_auth_refresh_post",
@@ -3979,6 +4612,179 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/legal/accept": {
+      "post": {
+        "description": "Registra la aceptacion y devuelve lo que todavia queda pendiente.",
+        "operationId": "accept_legal_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptLegalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Accept",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/legal/consents": {
+      "get": {
+        "description": "Los documentos que la cuenta acepto, del mas reciente al mas antiguo.",
+        "operationId": "consents_legal_consents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConsentResponse"
+                  },
+                  "title": "Response Consents Legal Consents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Consents",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/legal/pending": {
+      "get": {
+        "description": "Lo que esta cuenta debe aceptar antes de usar la mesa.",
+        "operationId": "pending_legal_pending_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pending",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/legal/required": {
+      "get": {
+        "description": "Los documentos que hay que aceptar para crear una cuenta. Publico.",
+        "operationId": "required_documents_legal_required_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LegalDocumentResponse"
+                  },
+                  "title": "Response Required Documents Legal Required Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Required Documents",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/legal/{kind}": {
+      "get": {
+        "description": "La ultima version publicada de un documento. Publico.",
+        "operationId": "current_document_legal__kind__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LegalKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Current Document",
+        "tags": [
+          "legal"
+        ]
       }
     },
     "/sessions": {

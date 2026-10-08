@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Inter } from "next/font/google";
 import "./globals.css";
+import { LegalFooter } from "@/components/LegalFooter";
 import { SessionProvider } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -20,8 +21,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${inter.variable} ${display.variable}`}>
-      <body className="min-h-screen font-sans">
-        <SessionProvider>{children}</SessionProvider>
+      <body className="flex min-h-screen flex-col font-sans">
+        <SessionProvider>
+          {/* Cada página llena el alto que deja el pie con `flex-1`. */}
+          <div className="flex flex-1 flex-col">{children}</div>
+        </SessionProvider>
+        <LegalFooter />
       </body>
     </html>
   );

@@ -84,6 +84,23 @@ export function Field({
   );
 }
 
+/** Casilla con su texto al lado; el texto puede llevar enlaces. */
+export function Checkbox({
+  children,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { children: ReactNode }) {
+  return (
+    <label className="flex items-start gap-2.5 text-sm leading-relaxed text-white">
+      <input
+        {...props}
+        type="checkbox"
+        className="mt-1 h-4 w-4 shrink-0 rounded border-edge bg-ink-sunken accent-gold"
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
 /**
  * Campo de contraseña con botón para verla. Escribir a ciegas en el celular es
  * la causa más común de "contraseña incorrecta" en un registro recién hecho.

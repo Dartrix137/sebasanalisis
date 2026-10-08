@@ -94,9 +94,42 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
+        register_with_consents(c)
         yield c
     app.dependency_overrides.pop(get_db, None)
     engine.dispose()
+
+
+def register_with_consents(client: TestClient) -> None:
+    """Hace que `client.post("/auth/register", ...)` acepte los documentos.
+
+    Desde el paso 2 de la Fase 4 el registro exige los consentimientos (§6.3).
+    Casi ningun test trata de eso: solo necesitan una cuenta. Para no repetir
+    los mismos dos campos en cada uno, un registro que no menciona NINGUNO de
+    los dos recibe los vigentes.
+
+    Un test que si trata de consentimientos escribe al menos uno de los campos
+    (y entonces no se toca nada), o usa `client.request("POST", ...)`.
+    """
+    original = client.post
+
+    def post(url, *args, json=None, **kwargs):
+        if (
+            url == "/auth/register"
+            and isinstance(json, dict)
+            and "accepted_document_ids" not in json
+            and "adult_confirmed" not in json
+        ):
+            json = {**json, **consent_fields(client)}
+        return original(url, *args, json=json, **kwargs)
+
+    client.post = post  # type: ignore[method-assign]
+
+
+def consent_fields(client: TestClient) -> dict:
+    """Los campos de consentimiento de un registro valido, con los documentos vigentes."""
+    required = client.get("/legal/required").json()
+    return {"accepted_document_ids": [d["id"] for d in required], "adult_confirmed": True}
 
 
 @pytest.fixture(autouse=True)

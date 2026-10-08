@@ -149,7 +149,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   if (loading || !user) return null;
   if (error && !session) {
     return (
-      <div className="min-h-screen">
+      <div className="flex-1">
         <AppHeader />
         <main className="mx-auto max-w-3xl p-6">
           <ErrorBox message={error} />
@@ -216,7 +216,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="flex-1">
       <AppHeader>
         <Badge>{spins.length} números</Badge>
         <Badge tone={abierta ? "ok" : "off"}>{abierta ? "sesión abierta" : "cerrada"}</Badge>

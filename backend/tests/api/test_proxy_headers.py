@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.rate_limit import MAX_ATTEMPTS
+from tests.api.conftest import register_with_consents
 
 PROXY_IP = "10.0.1.5"
 PROXY_NETWORK = "10.0.1.0/24"
@@ -53,7 +54,9 @@ def proxied_client(test_database: str) -> Iterator[type[TestClient]]:
                 scope = {**scope, "client": (peer_ip, 50000)}
             await wrapped(scope, receive, send)
 
-        return TestClient(from_peer)
+        client = TestClient(from_peer)
+        register_with_consents(client)
+        return client
 
     yield make  # type: ignore[misc]
     app.dependency_overrides.clear()

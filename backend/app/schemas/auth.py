@@ -11,6 +11,10 @@ from pydantic_core import PydanticCustomError
 
 from app.core.password_policy import PasswordPolicyError, validate_password
 from app.schemas.base import ApiModel
+from app.schemas.bets import BetResponse
+from app.schemas.legal import ConsentResponse
+from app.schemas.sessions import SessionResponse
+from app.schemas.spins import SpinResponse
 
 
 class AccessType(str, Enum):
@@ -45,6 +49,12 @@ class RegisterRequest(ApiModel):
     email: EmailStr
     password: NewPassword
     display_name: str | None = Field(default=None, max_length=100)
+    # Consentimientos del registro (§6.3 de la Fase 4). Los ids son los de las
+    # versiones que el formulario mostro (`GET /legal/required`): la aceptacion
+    # queda atada al texto exacto que la persona tuvo delante. Tienen valor por
+    # defecto para que, si faltan, responda el endpoint con un mensaje claro.
+    accepted_document_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    adult_confirmed: bool = False
 
 
 class LoginRequest(ApiModel):
@@ -101,6 +111,9 @@ class UserResponse(ApiModel):
     access_type: AccessType
     role: UserRole
     created_at: datetime
+    adult_confirmed_at: datetime | None = None
+    # Null hasta que lee la pantalla de bienvenida de la mesa (§6.3).
+    onboarding_completed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -115,6 +128,23 @@ class TokenResponse(ApiModel):
 class MessageResponse(ApiModel):
     """Respuesta de las acciones que no devuelven un recurso."""
     message: str
+
+
+class ExportSession(ApiModel):
+    """Una mesa con todo lo que el usuario registro en ella."""
+    session: SessionResponse
+    spins: list[SpinResponse]
+    bets: list[BetResponse]
+
+
+class ExportResponse(ApiModel):
+    """GET /auth/me/export: los datos de la cuenta (§6.4 de la Fase 4)."""
+    exported_at: datetime
+    account: UserResponse
+    sessions: list[ExportSession]
+    consents: list[ConsentResponse]
+    # Vacio hasta el paso 5: todavia no hay cobros.
+    payments: list[dict[str, str]]
 
 
 class UpdateUserAccessRequest(ApiModel):

@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.bet import Bet
 from app.models.game import Game, GameVariant
 from app.models.game_session import GameSession
+from app.models.legal import LegalDocument, UserConsent
 from app.models.performance import SessionPerformance
 from app.models.spin import Spin
 from app.models.suggestion import BankrollSuggestion, StatisticalSuggestion
@@ -16,6 +17,7 @@ __all__ = [
     "Game",
     "GameVariant",
     "GameSession",
+    "LegalDocument",
     "PaymentEvent",
     "SessionPerformance",
     "Spin",
@@ -23,5 +25,6 @@ __all__ = [
     "BankrollSuggestion",
     "Subscription",
     "User",
+    "UserConsent",
     "UserToken",
 ]

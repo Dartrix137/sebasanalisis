@@ -3,8 +3,9 @@
 /**
  * Mi cuenta: perfil, correo y seguridad (§5.4 de la Fase 4).
  *
- * La suscripción, el método de pago, el historial de pagos y los documentos
- * aceptados se suman en sus pasos (2 y 5).
+ * Desde el paso 2 suma los documentos aceptados y la descarga de los datos
+ * (§6.4). La suscripción, el método de pago y el historial de pagos llegan en
+ * el paso 5.
  */
 
 import { useRouter } from "next/navigation";
@@ -13,8 +14,10 @@ import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, PasswordField } from "@/components/ui";
-import { ApiError, authApi } from "@/lib/api-client";
+import { ApiError, authApi, legalApi } from "@/lib/api-client";
+import { formatLegalDate, legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
+import type { ConsentResponse } from "@/lib/types/legal";
 import { useResendVerification } from "@/lib/useResendVerification";
 
 type Outcome = { ok: boolean; message: string } | null;
@@ -43,7 +46,7 @@ export default function AccountPage() {
   if (loading || !user) return null;
 
   return (
-    <div className="min-h-screen">
+    <div className="flex-1">
       <AppHeader />
       <main className="mx-auto max-w-2xl space-y-5 px-4 pb-12 pt-8 sm:px-6">
         <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
@@ -52,6 +55,8 @@ export default function AccountPage() {
         <ProfileCard />
         <EmailCard />
         <PasswordCard />
+        <DocumentsCard />
+        <ExportCard />
         <DeleteAccountCard />
       </main>
     </div>
@@ -264,6 +269,100 @@ function PasswordCard() {
           {pending ? "Un momento…" : "Cambiar contraseña"}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+function DocumentsCard() {
+  const { withToken } = useSession();
+  const [consents, setConsents] = useState<ConsentResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    withToken((t) => legalApi.consents(t))
+      .then(setConsents)
+      .catch((err) => setError(messageOf(err)));
+  }, [withToken]);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Documentos aceptados"
+        subtitle="Las versiones que aceptaste y cuándo. El enlace abre la versión vigente de cada documento."
+      />
+      {error ? <ErrorBox message={error} /> : null}
+      {consents?.length === 0 ? (
+        <p className="text-sm text-muted">
+          Todavía no has aceptado ningún documento. Se te pedirá al entrar a la mesa.
+        </p>
+      ) : null}
+      {consents?.length ? (
+        <ul className="divide-y divide-edge">
+          {consents.map((c) => (
+            <li
+              key={c.legal_document_id}
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 text-sm"
+            >
+              <div className="min-w-0">
+                <a
+                  href={legalPath(c.kind)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-white hover:text-gold"
+                >
+                  {c.title}
+                </a>
+                <p className="text-xs text-muted">
+                  Versión {c.version} · Aceptado el {formatLegalDate(c.accepted_at)}
+                </p>
+              </div>
+              {c.current ? <Badge tone="ok">Vigente</Badge> : <Badge tone="off">Versión anterior</Badge>}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Card>
+  );
+}
+
+function ExportCard() {
+  const { withToken } = useSession();
+  const [outcome, setOutcome] = useState<Outcome>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleDownload() {
+    setOutcome(null);
+    setPending(true);
+    try {
+      const data = await withToken((t) => authApi.exportData(t));
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "sebasanalisis-mis-datos.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setOutcome({ ok: true, message: "Descarga lista" });
+    } catch (err) {
+      setOutcome({ ok: false, message: messageOf(err) });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Mis datos"
+        subtitle="Descarga en un archivo todo lo que la plataforma guarda de tu cuenta: perfil, mesas, números registrados, apuestas anotadas y documentos aceptados."
+      />
+      <div className="space-y-4">
+        <OutcomeBox outcome={outcome} />
+        <Button variant="ghost" onClick={handleDownload} disabled={pending}>
+          {pending ? "Preparando…" : "Descargar mis datos"}
+        </Button>
+      </div>
     </Card>
   );
 }

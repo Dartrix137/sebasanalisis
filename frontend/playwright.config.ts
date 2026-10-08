@@ -27,7 +27,24 @@ export default defineConfig({
     baseURL: WEB_URL,
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /.*\.serial\.spec\.ts/,
+    },
+    {
+      // Publicar una versión nueva de un documento legal le pide re-aceptar a
+      // TODAS las cuentas de la base. Corre aparte y al final, para no cortarle
+      // el acceso a la mesa a los tests que corren en paralelo.
+      name: "serial",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /.*\.serial\.spec\.ts/,
+      dependencies: ["chromium"],
+      fullyParallel: false,
+      workers: 1,
+    },
+  ],
   webServer: [
     {
       command: "node e2e/start-api.mjs",

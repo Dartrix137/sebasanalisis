@@ -45,6 +45,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         enum_col(*USER_ROLES, name="user_role"), default="user", nullable=False
     )
+    # Declaracion de mayoria de edad (§6.3 de la Fase 4). Null en las cuentas
+    # anteriores al paso 2 hasta que la confirmen al entrar a la mesa.
+    adult_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cuando leyo hasta el final la pantalla que explica que hace y que no hace
+    # la plataforma. Es informativa: no es un consentimiento legal.
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
 
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")

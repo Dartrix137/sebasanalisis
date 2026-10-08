@@ -11,6 +11,7 @@ import type {
   ChangeEmailRequest,
   ChangePasswordRequest,
   DeleteAccountRequest,
+  ExportResponse,
   ForgotPasswordRequest,
   LoginRequest,
   MessageResponse,
@@ -41,6 +42,16 @@ import type {
 } from "./types/sessions";
 import type { BetResponse, CreateBetRequest } from "./types/bets";
 import type {
+  AcceptLegalRequest,
+  AdminLegalDocumentResponse,
+  ConsentResponse,
+  CreateLegalDocumentRequest,
+  LegalDocumentResponse,
+  LegalKind,
+  PendingConsentResponse,
+  UpdateLegalDocumentRequest,
+} from "./types/legal";
+import type {
   BulkSpinsRequest,
   BulkSpinsResponse,
   CreateSpinRequest,
@@ -65,6 +76,8 @@ export class ApiError extends Error {
     message: string,
     /** Lista de errores del validador de configuración, cuando el 422 la trae. */
     readonly validationErrors?: string[],
+    /** Motivo legible por código, cuando el `detail` lo trae (`consent_required`). */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -72,7 +85,11 @@ export class ApiError extends Error {
 }
 
 /** Extrae un mensaje legible del `detail` de FastAPI, que tiene tres formas. */
-function parseDetail(detail: unknown): { message: string; errors?: string[] } {
+function parseDetail(detail: unknown): {
+  message: string;
+  errors?: string[];
+  code?: string;
+} {
   if (typeof detail === "string") return { message: detail };
 
   if (Array.isArray(detail)) {
@@ -84,8 +101,8 @@ function parseDetail(detail: unknown): { message: string; errors?: string[] } {
   }
 
   if (typeof detail === "object" && detail !== null) {
-    const obj = detail as { message?: string; errors?: string[] };
-    return { message: obj.message ?? "Datos inválidos", errors: obj.errors };
+    const obj = detail as { message?: string; errors?: string[]; code?: string };
+    return { message: obj.message ?? "Datos inválidos", errors: obj.errors, code: obj.code };
   }
 
   return { message: "Error inesperado" };
@@ -108,14 +125,16 @@ export async function apiFetch<T>(
   if (!res.ok) {
     let message = `Error ${res.status}`;
     let errors: string[] | undefined;
+    let code: string | undefined;
     try {
       const parsed = parseDetail((await res.json()).detail);
       message = parsed.message;
       errors = parsed.errors;
+      code = parsed.code;
     } catch {
       // Respuesta sin cuerpo JSON: se conserva el mensaje genérico.
     }
-    throw new ApiError(res.status, message, errors);
+    throw new ApiError(res.status, message, errors, code);
   }
 
   if (res.status === 204) return undefined as T;
@@ -199,6 +218,35 @@ export const authApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  /** Anota que la cuenta leyó la pantalla de bienvenida de la mesa. */
+  completeOnboarding: (token: string) =>
+    apiFetch<UserResponse>("/auth/me/onboarding", { method: "POST", token }),
+
+  /** Todos los datos de la cuenta, para descargarlos (§6.4). */
+  exportData: (token: string) => apiFetch<ExportResponse>("/auth/me/export", { token }),
+};
+
+/** Documentos legales y su aceptación (§6 de la Fase 4). */
+export const legalApi = {
+  /** La última versión publicada de un documento. Pública. */
+  current: (kind: LegalKind) => apiFetch<LegalDocumentResponse>(`/legal/${kind}`),
+
+  /** Los documentos que el registro pide aceptar. Pública. */
+  required: () => apiFetch<LegalDocumentResponse[]>("/legal/required"),
+
+  /** Lo que la cuenta debe aceptar antes de usar la mesa. */
+  pending: (token: string) => apiFetch<PendingConsentResponse>("/legal/pending", { token }),
+
+  accept: (token: string, body: AcceptLegalRequest) =>
+    apiFetch<PendingConsentResponse>("/legal/accept", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Los documentos que la cuenta aceptó. */
+  consents: (token: string) => apiFetch<ConsentResponse[]>("/legal/consents", { token }),
 };
 
 export const gamesApi = {
@@ -462,6 +510,31 @@ export const adminApi = {
     apiFetch<GameVariantResponse>(`/admin/games/${gameId}/variants/${variantId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Todas las versiones de los documentos legales, borradores incluidos. */
+  listLegalDocuments: (token: string) =>
+    apiFetch<AdminLegalDocumentResponse[]>("/admin/legal-documents", { token }),
+
+  createLegalDocument: (token: string, body: CreateLegalDocumentRequest) =>
+    apiFetch<AdminLegalDocumentResponse>("/admin/legal-documents", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Solo un borrador: una versión publicada no se edita. */
+  updateLegalDocument: (token: string, documentId: UUID, body: UpdateLegalDocumentRequest) =>
+    apiFetch<AdminLegalDocumentResponse>(`/admin/legal-documents/${documentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  publishLegalDocument: (token: string, documentId: UUID) =>
+    apiFetch<AdminLegalDocumentResponse>(`/admin/legal-documents/${documentId}/publish`, {
+      method: "POST",
       token,
     }),
 

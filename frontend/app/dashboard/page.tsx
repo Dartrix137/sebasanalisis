@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
 import { Disclaimer } from "@/components/Disclaimer";
+import { LegalGate } from "@/components/legal/LegalGate";
 import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
 import { NewSessionForm } from "@/components/roulette/NewSessionForm";
 import { Button, ErrorBox } from "@/components/ui";
@@ -51,6 +52,16 @@ function variantLabel(v: GameVariantResponse | undefined): string {
 }
 
 export default function DashboardPage() {
+  // El menú llama a los endpoints de juego: sin los documentos vigentes
+  // aceptados responderían 403, así que primero pasa por la compuerta.
+  return (
+    <LegalGate>
+      <Dashboard />
+    </LegalGate>
+  );
+}
+
+function Dashboard() {
   const { user, loading, withToken } = useSession();
   const router = useRouter();
 
@@ -147,7 +158,7 @@ export default function DashboardPage() {
   const abrir = (id: string) => router.push(`/games/roulette/${id}`);
 
   return (
-    <div className="min-h-screen">
+    <div className="flex-1">
       <AppHeader />
 
       <main className="mx-auto max-w-5xl px-4 pb-12 pt-8 sm:px-6">

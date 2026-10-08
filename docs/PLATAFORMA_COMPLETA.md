@@ -70,7 +70,7 @@ Lo que el MVP ya tiene y lo que falta, revisado contra el código el 2026-10-02.
 | **Recuperación de contraseña** | No existe. | Se implementa. §5. |
 | **Revocación de sesiones** | JWT sin estado (`core/security.py`): un refresh token vale 30 días pase lo que pase. | Cambiar la contraseña tiene que cerrar las demás sesiones. §5. |
 | **Rate limit** | Solo en login, en memoria y por proceso (`core/rate_limit.py`). | Se extiende a los endpoints nuevos sensibles. §5. |
-| **Páginas legales** | No existe ninguna. Tampoco el onboarding scroll-to-accept ni la página de Juego Responsable que exige §0 del doc de arquitectura. | Se construyen con versionado y registro de aceptación. §6. |
+| **Páginas legales** | No existe ninguna. Tampoco el onboarding scroll-to-accept ni la página de Juego Responsable que exige §0 del doc de arquitectura (esta última se descartó el 2026-10-08). | Se construyen con versionado y registro de aceptación. §6. |
 | **Admin** | Una sola página (`frontend/app/admin/page.tsx`) con juegos, variantes, usuarios y backtest. `GET /admin/users` devuelve todos, sin paginar. | Se reorganiza en secciones. §4. |
 | **Multijuego** | El motor y `categories_json` ya son genéricos. El acoplamiento a ruleta está en el **frontend y el seed**: ruta `/games/roulette/[sessionId]`, `components/roulette/*`, `dashboard/page.tsx` redirige a `/games/roulette/…`. `lib/outcomes.ts` ya cae en `neutral` si no hay categoría `color`. | El trabajo es de frontend y de metadatos del juego, no del motor. §7. |
 
@@ -474,7 +474,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 |---|---|---|
 | Términos y Condiciones | `/legal/terminos` | Contrato de uso y de suscripción. |
 | Política de Tratamiento de Datos Personales | `/legal/privacidad` | Ley 1581 de 2012 y Decreto 1377 de 2013 (Colombia): finalidades, derechos del titular, canal de consultas y reclamos, responsable del tratamiento. |
-| Juego Responsable | `/legal/juego-responsable` | Exigida por §0 del doc de arquitectura y todavía sin construir. Contenido tomado de `docs/reference/ESTRATEGIA_DE_RULETA_CORREGIDA_Y_VERIFICADA.txt`: límites de tiempo y dinero, nunca usar dinero de obligaciones, detenerse ante progresiones incómodas, líneas de ayuda. |
+| ~~Juego Responsable~~ | ~~`/legal/juego-responsable`~~ | **Descartado por el usuario el 2026-10-08**: no se construye. |
 | Cancelación y Reembolsos | `/legal/reembolsos` | Cómo cancelar, qué pasa con el período pagado, reembolsos. Revisar con abogado el derecho de retracto del Estatuto del Consumidor (Ley 1480 de 2011) en ventas a distancia. |
 | Cookies y almacenamiento local | `/legal/cookies` | Hoy la sesión vive en `localStorage` y no hay analítica de terceros; el documento lo dice así. Si se agrega analítica, se actualiza. |
 | Aviso sobre la naturaleza del servicio | dentro de T&C | Ver §6.5. |
@@ -483,7 +483,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 
 ```sql
 legal_documents (
-  id, kind,                -- 'terms' | 'privacy' | 'responsible_gaming' | 'refunds' | 'cookies'
+  id, kind,                -- 'terms' | 'privacy' | 'refunds' | 'cookies'
   version,                 -- entero creciente por kind
   title, content_md,
   requires_acceptance,     -- terms y privacy: true
@@ -532,6 +532,32 @@ El texto final lo redacta o revisa un abogado. Lo que el producto necesita que d
 
 - Pie de página con enlaces a todos los documentos en **todas** las pantallas, incluidas login y registro.
 - La línea fija de la tarjeta de recomendación (§2.10 del doc de arquitectura) se mantiene tal cual.
+
+### 6.7 Cómo quedó construido (2026-10-08)
+
+Decisiones de implementación que este documento no fijaba, confirmadas por el usuario el 2026-10-08.
+
+- **No hay página de Juego Responsable.** El usuario la descartó: los documentos son cuatro (`terms`, `privacy`, `refunds`, `cookies`). El documento de arquitectura la exigía en §0 y quedó anotado allá.
+- **Los textos publicados son borradores.** La versión 1 de los cuatro la inserta una migración de datos, ya publicada, porque el registro exige aceptar los términos y la política de datos: sin una versión publicada nadie podría crear una cuenta tras desplegar. Cada uno abre con un aviso de que es un borrador pendiente de abogado, y marca con `[PENDIENTE]` o `[PENDIENTE DE ABOGADO]` lo que falta: los datos del responsable y prestador (nombre, identificación, domicilio), el derecho de retracto y la política de reembolsos (Ley 1480), la transferencia internacional de datos, los plazos de conservación y el procedimiento de reclamos (Ley 1581), la limitación de responsabilidad y la jurisdicción. El texto del abogado se publica desde `/admin/legal` como versión 2 con "exigir aceptación", y eso se lo pide a todas las cuentas.
+- **El texto de la versión 1 vive con la migración** (`backend/app/db/migrations/data/legal_v1/*.md`) y no se edita: un cambio de texto es una versión nueva.
+- **Cuentas anteriores a este paso**: no se les crean consentimientos por migración, porque sería registrar una aceptación que no ocurrió. `adult_confirmed_at` queda en null y no tienen filas en `user_consents`; la próxima vez que entran a la mesa ven la pantalla de aceptación con los dos documentos y la casilla de mayoría de edad. Mientras tanto conservan el login, `/cuenta`, la exportación y eliminar la cuenta. Aplica también a los administradores, incluido el que crea el seed.
+- **`core/access.py` nace aquí, con una sola regla.** §6.3 pide que una versión nueva responda `403 consent_required` "desde el control de acceso de §2.2", que es del paso 3. Para no escribir esa regla fuera de `core/access.py`, `has_access` y la dependencia `RequireAccess` se crearon en este paso con la regla n.º 2 de §2.2 y nada más: una cuenta al día con sus consentimientos usa la mesa como antes (motivo `open`). `RequireAccess` ya está en los seis routers de juego y el test que recorre todas las rutas de juego (§2.4) ya existe. **El paso 3 agrega las demás reglas dentro de `has_access`**, en el orden de §2.2, y reemplaza `open`. La firma es `has_access(db, user, now)`: recibe la sesión de base porque los consentimientos se consultan; `game` se suma en el paso 7.
+- **El `403` lleva el motivo en `detail.code`** (`{"code": "consent_required", "message": …}`); `ApiError.code` lo expone en el frontend.
+- **Qué significa "al día"**: una cuenta está al día con un documento si aceptó una versión igual o posterior a la última publicada con `requires_acceptance`. Por eso `requires_acceptance` se decide por versión: una versión nueva que no la exige (corregir una errata) no le pide nada a nadie. El registro pide la versión vigente de cada documento que alguna vez la exigió (hoy, términos y datos).
+- **La aceptación apunta al texto que se vio.** El registro y `POST /legal/accept` reciben los ids de las versiones que la pantalla mostró. Si entre mostrar y aceptar se publicó otra versión, `POST /legal/accept` responde `409` y la pantalla trae la nueva. Un mismo documento no se acepta dos veces (restricción única por usuario y documento).
+- **Registro**: `accepted_document_ids` y `adult_confirmed` en `POST /auth/register`. Si falta la mayoría de edad o alguno de los documentos exigidos, responde `422` con un mensaje propio, antes de mirar si el correo ya existe. Solo se guardan consentimientos de los documentos exigidos: un id de más en la petición se ignora.
+- **IP y navegador**: la IP es la del cliente tras el proxy (§13.1); el user agent se recorta a 400 caracteres.
+- **Un solo borrador por documento** en `/admin/legal`: con dos, el número de versión dependería de cuál se publique primero. No hay endpoint para borrar un borrador; se edita.
+- **Auditoría**: publicar un documento legal todavía no escribe en `admin_audit_log` (§4.6), porque esa tabla se crea en el paso 3. Hoy la traza es `created_by` y `published_at`. **Pendiente para el paso 3**: conectar `POST /admin/legal-documents/:id/publish` a la bitácora.
+- **Onboarding**: `users.onboarding_completed_at` y `POST /auth/me/onboarding` (no estaban en §11). Es una pantalla informativa, no un consentimiento legal: se guarda en el servidor para que no reaparezca en cada dispositivo, la exige el frontend al entrar a la mesa y no participa en `has_access`. Su texto es fijo en el frontend (`components/legal/LegalGate.tsx`), no un documento versionado.
+- **Compuerta del frontend** (`LegalGate`): envuelve el menú principal, la mesa y el panel de admin (que lista juegos). Pregunta `GET /legal/pending` antes de montar la pantalla. Es presentación: quien decide es el servidor.
+- **Markdown**: `react-markdown` 10.1.0, sin `rehype-raw` ni `remark-gfm` (los documentos se escriben sin tablas). Las imágenes se descartan. `npm audit --omit=dev` quedó sin vulnerabilidades tras instalarla.
+- **Rutas públicas en español, `kind` en inglés**: `/legal/terminos`, `/legal/privacidad`, `/legal/reembolsos`, `/legal/cookies` (`frontend/lib/legal.ts`). Las páginas se renderizan en el navegador, pidiendo `GET /legal/:kind`.
+- **Endpoints que no estaban en §11**: `GET /legal/required` (público: lo que el registro pide aceptar), `GET /legal/consents` (lo que la cuenta aceptó, para `/cuenta`) y `POST /auth/me/onboarding`.
+- **`GET /auth/me/export`**: cuenta, mesas con sus giros y apuestas, y consentimientos. `payments` va vacío hasta el paso 5. Límite: 10 cada 15 min por usuario. No exige `RequireAccess`.
+- **Eliminar la cuenta** borra en cascada sus `user_consents`. Si el abogado pide conservar la constancia de la autorización después de la supresión, hay que cambiar ese `ON DELETE`.
+- **Pie de página**: en el layout raíz, así que aparece en todas las pantallas. Las pantallas dejaron de ocupar el alto completo por su cuenta (`min-h-screen`) para que el pie quede a la vista en login y registro.
+- **Tests de punta a punta**: el de re-aceptación corre en un proyecto aparte de Playwright (`*.serial.spec.ts`), al final: publicar una versión le pide re-aceptar a todas las cuentas de la base y en paralelo le cortaría la mesa a los demás tests. `start-api.mjs` fija las credenciales del administrador sembrado para esa base desechable.
 
 ---
 
@@ -643,7 +669,7 @@ Como en `CLAUDE.md`: no se avanza a un paso sin que el anterior tenga tests o un
 |---|---|---|---|
 | 0 | **Preparación del stack** (§13) | Hay vulnerabilidades críticas abiertas en el frontend y no hay CI; las dos cosas se cierran antes de escribir código que maneja dinero. | Lista "Fase 0 hecha cuando" de §13.5 completa. |
 | 1 | **Correo + verificación + restablecimiento + `token_version`** (§5) | Sin correo no hay recibos, avisos de cobro fallido ni recuperación de cuenta, y verificar el correo es requisito para pagar. | Tests de §5.8 en verde; correo real recibido desde el SMTP elegido. |
-| 2 | **Legal**: documentos versionados, consentimientos en el registro, páginas públicas, Juego Responsable, onboarding (§6) | No se puede cobrar sin T&C y política de datos aceptados. | Registro sin consentimientos → rechazado; versión nueva → re-aceptación. |
+| 2 | **Legal**: documentos versionados, consentimientos en el registro, páginas públicas, onboarding (§6). La página de Juego Responsable se descartó el 2026-10-08 | No se puede cobrar sin T&C y política de datos aceptados. | Registro sin consentimientos → rechazado; versión nueva → re-aceptación. |
 | 3 | **Modelo de acceso** (`has_access`, `RequireAccess`, migraciones de `access_type`) (§2) | Sin esto el pago no compra nada. Se hace antes de Wompi para probarlo con accesos manuales. | Tests de §2.4 en verde, incluido el que recorre todos los routers. |
 | 4 | **Planes y cupones**: modelo, `billing/pricing.py`, CRUD en el admin, página `/planes` (§3.2, §3.3, §4.4, §4.5) | Wompi necesita algo que cobrar. | Cotizaciones correctas en todos los casos de cupón. |
 | 5 | **Wompi**: alta, webhook, reconsulta, renovación, reintentos, cancelación, cambio de tarjeta, `/cuenta` (§3) | Es el núcleo del negocio y depende de 1-4. | Los 12 casos de §3.9 en verde + flujo completo probado a mano en el sandbox. |
@@ -682,7 +708,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | Manuales en Wompi y registrados en el admin. |
 | 8 | Textos legales definitivos | Los redacta o revisa un abogado; el equipo entrega la estructura de §6.5. |
 | 9 | Proveedor SMTP concreto | **Resuelta (2026-10-05): Resend**, enviando desde un subdominio propio. Resend confirmó que su política de uso admite el producto y el correo quedó encendido el 2026-10-07. Ver §13.6 y `DESPLIEGUE.md`. |
-| 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente del usuario. |
+| 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente: el usuario decidió el 2026-10-08 no ponerlo todavía, y los borradores publicados lo llevan como `[PENDIENTE]`. Bloquea el lanzamiento. |
 | 11 | Servicio de monitoreo de errores | **Resuelta (2026-10-05): GlitchTip autohospedado** en el mismo VPS. Ver §13.6. |
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. Los tests de frontend ya están decididos (§13.3). |
 

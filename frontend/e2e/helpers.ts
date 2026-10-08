@@ -12,11 +12,53 @@ export function uniqueEmail(): string {
   return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ejemplo.com`;
 }
 
-export async function registerViaApi(request: APIRequestContext, email: string): Promise<void> {
+/** Las credenciales del administrador que siembra `e2e/start-api.mjs`. */
+export const ADMIN_EMAIL = "admin-e2e@ejemplo.com";
+export const ADMIN_PASSWORD = "clave-del-admin-e2e-789";
+
+/**
+ * Registra una cuenta por la API, con los consentimientos que exige el registro
+ * (§6.3), y devuelve su access token.
+ *
+ * Por defecto deja anotada la pantalla de bienvenida de la mesa como leída:
+ * casi ningún test trata de ella. El que sí, pasa `onboarding: "pendiente"`.
+ */
+export async function registerViaApi(
+  request: APIRequestContext,
+  email: string,
+  options: { onboarding?: "leido" | "pendiente" } = {},
+): Promise<string> {
+  const required = await request.get(`${API_URL}/legal/required`);
+  expect(required.ok()).toBeTruthy();
+  const documents = (await required.json()) as { id: string }[];
+
   const response = await request.post(`${API_URL}/auth/register`, {
-    data: { email, password: PASSWORD },
+    data: {
+      email,
+      password: PASSWORD,
+      accepted_document_ids: documents.map((d) => d.id),
+      adult_confirmed: true,
+    },
   });
   expect(response.ok()).toBeTruthy();
+  const token = ((await response.json()) as { access_token: string }).access_token;
+
+  if (options.onboarding !== "pendiente") {
+    const done = await request.post(`${API_URL}/auth/me/onboarding`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(done.ok()).toBeTruthy();
+  }
+  return token;
+}
+
+/** Marca las casillas de consentimiento del formulario de registro. */
+export async function checkRegisterConsents(page: Page): Promise<void> {
+  await page.getByRole("checkbox", { name: /Acepto los Términos y Condiciones/ }).check();
+  await page
+    .getByRole("checkbox", { name: /Autorizo el tratamiento de mis datos personales/ })
+    .check();
+  await page.getByRole("checkbox", { name: /Declaro que soy mayor de edad/ }).check();
 }
 
 export async function loginViaUi(page: Page, email: string, password = PASSWORD): Promise<void> {
