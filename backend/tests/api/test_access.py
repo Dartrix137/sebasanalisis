@@ -295,6 +295,48 @@ def test_cambio_de_acceso_invalido_no_cambia_nada_ni_deja_bitacora(
     )
 
 
+def test_un_cambio_que_no_cambia_nada_se_rechaza_y_no_deja_bitacora(
+    client: TestClient, admin_token: str, db
+) -> None:
+    user_id = _sin_acceso(client)["user"]["id"]
+    h = auth(admin_token)
+    vence = (datetime.now(UTC) + timedelta(days=10)).isoformat()
+
+    def acceso(**body):
+        return client.patch(
+            f"/admin/users/{user_id}/access", json={**body, "reason": MOTIVO}, headers=h
+        )
+
+    def estado(is_active: bool):
+        return client.patch(
+            f"/admin/users/{user_id}/status",
+            json={"is_active": is_active, "reason": MOTIVO},
+            headers=h,
+        )
+
+    # La cuenta nace sin acceso y activa: pedir eso mismo no cambia nada.
+    assert acceso(access_type="none").status_code == 409
+    assert estado(True).status_code == 409
+
+    assert acceso(access_type="invited", access_expires_at=vence).status_code == 200
+    r = acceso(access_type="invited", access_expires_at=vence)
+    assert r.status_code == 409
+    assert "no hay nada que cambiar" in r.json()["detail"]
+    # Mismo tipo con otro vencimiento si es un cambio.
+    assert acceso(access_type="invited").status_code == 200
+
+    assert estado(False).status_code == 200
+    r = estado(False)
+    assert r.status_code == 409
+    assert "ya está suspendida" in r.json()["detail"]
+
+    acciones = db.execute(
+        text("SELECT action FROM admin_audit_log WHERE target_id = :u ORDER BY created_at"),
+        {"u": user_id},
+    ).scalars().all()
+    assert acciones == ["user.access.update", "user.access.update", "user.status.update"]
+
+
 def test_el_acceso_manual_no_aplica_a_un_administrador(
     client: TestClient, admin_token: str, db
 ) -> None:

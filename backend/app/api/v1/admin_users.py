@@ -157,6 +157,14 @@ def update_user_access(
                 detail="El vencimiento debe ser una fecha futura",
             )
 
+    # Un cambio que no cambia nada no se guarda: dejaria en la bitacora una
+    # fila que no dice nada.
+    if user.access_type == payload.access_type.value and user.access_expires_at == expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La cuenta ya tiene ese acceso: no hay nada que cambiar",
+        )
+
     before = {
         "access_type": user.access_type,
         "access_expires_at": _iso(user.access_expires_at),
@@ -193,6 +201,11 @@ def update_user_status(
     if user.id == admin.id and not payload.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="No puedes suspender tu propia cuenta"
+        )
+    if user.is_active == payload.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La cuenta ya está activa" if user.is_active else "La cuenta ya está suspendida",
         )
     before = {"is_active": user.is_active}
     user.is_active = payload.is_active
