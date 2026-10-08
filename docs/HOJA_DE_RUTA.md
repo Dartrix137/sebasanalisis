@@ -177,6 +177,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 |---|---|
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
+| Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
 | Qué pasa con los usuarios `trial` actuales | Paso 3 |
 | Planes y precios iniciales | Paso 4 |
 | Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |

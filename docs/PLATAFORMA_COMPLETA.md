@@ -557,6 +557,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **`GET /auth/me/export`**: cuenta, mesas con sus giros y apuestas, y consentimientos. `payments` va vacío hasta el paso 5. Límite: 10 cada 15 min por usuario. No exige `RequireAccess`.
 - **Eliminar la cuenta** borra en cascada sus `user_consents`. Si el abogado pide conservar la constancia de la autorización después de la supresión, hay que cambiar ese `ON DELETE`.
 - **Pie de página**: en el layout raíz, así que aparece en todas las pantallas. Las pantallas dejaron de ocupar el alto completo por su cuenta (`min-h-screen`) para que el pie quede a la vista en login y registro.
+- **Pendiente para el lanzamiento: aviso por correo de una versión nueva** (anotado por decisión del usuario el 2026-10-08). Publicar una versión que exige aceptación hoy **no envía correo**: cada cuenta ve la pantalla de aceptación la próxima vez que entra, y quien no entra no se entera. Con cobros activos eso deja a una cuenta con renovación automática pagando bajo términos que no ha visto. Lo que falta construir: un correo a cada cuenta al publicar, que diga qué documento cambió y enlace a su página pública, enviado por tandas para respetar `EMAIL_DAILY_LIMIT` (por eso va después de pasar Resend al plan Pro). La pantalla de aceptación se mantiene: es la que deja la constancia. A confirmar con el abogado: si el aviso es obligatorio y si debe salir con antelación a la entrada en vigor.
 - **Tests de punta a punta**: el de re-aceptación corre en un proyecto aparte de Playwright (`*.serial.spec.ts`), al final: publicar una versión le pide re-aceptar a todas las cuentas de la base y en paralelo le cortaría la mesa a los demás tests. `start-api.mjs` fija las credenciales del administrador sembrado para esa base desechable.
 
 ---
@@ -689,7 +690,7 @@ Trámites con tiempo de espera externo, que se inician al empezar la Fase 0 y no
 - Abogado para los textos de §6 (bloquea el lanzamiento, no la construcción: se construye con textos de borrador).
 - Compra del dominio, proveedor SMTP y registros DNS (bloquea el cierre del paso 1; mientras tanto se trabaja con `ConsoleEmailSender`).
 
-Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, y que un abogado haya revisado los textos de §6.
+Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, que un abogado haya revisado los textos de §6, y el aviso por correo de versiones nuevas de los documentos legales (§6.7).
 
 ---
 
