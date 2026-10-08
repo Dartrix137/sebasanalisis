@@ -156,7 +156,7 @@ Estas reglas se fijaron el 2026-09-17 (la antigua "Fase 2") y siguen vigentes ta
 - **Idempotencia** por `payment_events.provider_event_id` (único). Los webhooks se reintentan: reprocesar el mismo evento no puede otorgar dos períodos de acceso.
 - Secretos solo por variable de entorno — `.env` está en `.gitignore` y Dokploy las inyecta. `.env.example` lista los nombres, nunca los valores.
 - Montos en enteros (centavos), nunca `float`, con la moneda explícita en el campo.
-- Cobro con **renovación automática** (tarjeta tokenizada). El cálculo puro de precios, cupones y calendario de cobros vive en `backend/app/billing/`, con la misma disciplina que `engine/`: sin DB, sin red, con tests.
+- Dos modos de cobro (2026-10-08, §3.10 del documento de la Fase 4): **renovación automática** con una fuente de pago tokenizada, y **pago manual mes a mes**. Las reglas de esta lista aplican igual a los dos. Un solo plan, mensual, de 100.000 COP; los 30 USD que se muestran son solo visuales y nunca se usan para cobrar. El cálculo puro de precios, cupones y calendario de cobros vive en `backend/app/billing/`, con la misma disciplina que `engine/`: sin DB, sin red, con tests.
 - El precio de una suscripción queda **congelado** al suscribirse; el precio nuevo de un plan aplica solo a suscripciones nuevas.
 - Copy de las pantallas de suscripción: ninguna promesa de resultados o de "ventaja".
 
