@@ -37,7 +37,7 @@ El núcleo (los ocho pasos del MVP más la Fase 3, motor de recomendación; ver 
 
 | Tema | Decisión |
 |---|---|
-| Modalidad de cobro | **Renovación automática** con tarjeta tokenizada en Wompi. El backend cobra cada período sin intervención del usuario. |
+| Modalidad de cobro | **Dos modos** (ampliado el 2026-10-08, ver §3.10): **renovación automática** con una fuente de pago tokenizada en Wompi, donde el backend cobra cada período sin intervención del usuario; y **pago manual mes a mes**, para quien no tiene o no quiere tokenizar un medio de pago. |
 | Cuenta recién registrada | **Sin acceso hasta pagar.** La única otra vía es el acceso manual que otorga un administrador. Desaparece la prueba gratuita (`trial`). |
 | Envío de correo | **SMTP genérico.** El código habla con una interfaz, no con un proveedor; el proveedor concreto es configuración. |
 | Apuestas deportivas | **Solo se deja la base lista** y se documentan las preguntas abiertas. No se construye en esta fase. |
@@ -320,6 +320,35 @@ Los cuatro obligatorios de `CLAUDE.md`, más los que cubren lo nuevo de esta fas
 | Evento de una referencia desconocida | Se guarda en `payment_events` sin suscripción y no mueve nada. |
 
 Los tests de API usan un cliente falso de Wompi (inyectado como dependencia); ningún test llama a la red. Las pruebas contra el sandbox real de Wompi se hacen a mano antes de salir a producción y quedan anotadas en `docs/DESPLIEGUE.md`.
+
+### 3.10 Monetización: decisiones del 2026-10-08
+
+Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a §3.6 donde se contradigan; lo que no se menciona aquí sigue igual.
+
+**Público y precio**
+
+- El público es **internacional**, no solo Colombia.
+- **Un solo plan, mensual, de 100.000 COP.** No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: el plan único es una fila, y nada impide crear otro después.
+- **El precio se muestra también como 30 USD, fijo**, para el público internacional. Es solo visual: **el cobro es siempre de 100.000 COP**, que es la moneda en la que opera Wompi. Los 30 USD no salen de una tasa de cambio ni se usan para cobrar. Implica un campo de presentación en el plan (por ejemplo `display_price_cents` y `display_currency`), distinto de `price_cents` y `currency`, que son los que cobran.
+- **Pendiente de resolver en el paso 4, y a revisar con el abogado**: cómo se redacta el precio en pantalla. 30 USD no es el equivalente exacto de 100.000 COP, y a quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes y la de pago deben decir sin ambigüedad cuál es el monto que se cobra y en qué moneda; mostrar solo "30 USD" a alguien a quien se le cobran 100.000 COP puede ser información engañosa al consumidor.
+- **Los cupones se mantienen** (§3.3, §4.5).
+
+**Dos modos de pago**
+
+- **Automático**: lo que ya describían §3.4 y §3.5. Fuente de pago tokenizada, cobro en cada período, reintentos.
+- **Manual mes a mes**: el usuario paga un período cada vez, sin tokenizar nada. El pago aprobado fija o extiende `current_period_end`; no hay cobro automático ni reintentos. Antes del vencimiento se le avisa por correo para que pague el siguiente; si no paga, el acceso cae en `current_period_end`, igual que una suscripción vencida.
+- El control de acceso no cambia: `has_access` ya decide por `status` y `current_period_end` (§2.2 n.º 6), sin importar cómo se pagó el período.
+- Las reglas no negociables de §3.1 aplican igual a los dos modos: firma verificada, reconsulta de la transacción, idempotencia, montos en centavos y acceso decidido en el servidor.
+- Por definir en el paso 5: cómo se representa el modo en `subscriptions` (por ejemplo un campo `renewal_mode`), si un pago manual hecho antes del vencimiento extiende desde `current_period_end` o desde la fecha de pago, y cómo se pasa de un modo al otro.
+
+**Pasarela**
+
+- **Wompi es la pasarela principal.** Consultado en su documentación oficial el 2026-10-08: opera en COP; ofrece tarjetas, PSE, Nequi, Daviplata, Botón Bancolombia, corresponsales en efectivo y cuotas; y se pueden tokenizar para cobro automático las tarjetas y las cuentas Nequi, Daviplata y Bancolombia. Estos datos se vuelven a leer de la documentación vigente al construir el paso 5 (§3.1).
+- **Por confirmar con Wompi, por escrito, antes del paso 5**: que acepta esta categoría de negocio (análisis estadístico por suscripción, adyacente a juegos de azar, que no recibe apuestas) y que acepta tarjetas internacionales. Un directorio de terceros dice que sí acepta Visa y MasterCard internacionales; no se vio en la documentación oficial.
+- **El paso 5 se construye detrás de una interfaz de proveedor**, como el correo (`EmailSender`), para que una segunda pasarela no obligue a reescribir. `subscriptions.provider` ya existe.
+- **Hueco conocido**: un cliente de fuera de Colombia sin tarjeta no puede pagar con Wompi.
+- **Premium Pay** (`premiumpay.pro`, operada por BETANDEAL USA, CORP., Florida) se evaluó el 2026-10-08 para cubrir ese hueco. **No sirve como base del cobro**: no es una pasarela sino una plataforma de venta para creadores con página de pago propia; no se le vio API ni webhooks, así que la aplicación no puede activar el acceso sola; cobra entre 7 % y 11 %; su aviso legal le permite retener saldos hasta 180 días por "riesgo regulatorio"; y no actúa como comerciante de registro. Acepta transferencia, criptomonedas y Skrill. **Uso posible**: canal manual para pocos clientes internacionales sin tarjeta, en el que el cliente paga por su enlace y el administrador le da acceso `invited` con vencimiento desde `/admin/usuarios`. No requiere código. Antes de usarla: pedirle los términos para vendedores y preguntar si tiene API o webhooks firmados.
+- Si el volumen internacional sin tarjeta crece, la opción a evaluar es una pasarela de criptomonedas con API, que sí se puede automatizar con las reglas de §3.1.
 
 ---
 
@@ -727,8 +756,8 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | # | Decisión | Propuesta por defecto (la más conservadora) |
 |---|---|---|
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
-| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | Un plan mensual y uno anual. |
-| 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | No se ofrecen en esta fase; solo tarjeta (y Nequi si la documentación vigente de Wompi permite tokenizarlo para cobros recurrentes). Reevaluar con datos de conversión. |
+| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-08): un solo plan, mensual, de 100.000 COP.** No hay plan anual. En pantalla se muestra además un precio fijo de 30 USD como referencia para el público internacional; el cobro es siempre de 100.000 COP. Ver §3.10. |
+| 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. Cuáles se habilitan se decide en el paso 5, con la documentación vigente de Wompi. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | No se permite en cupones; una cortesía total se da como acceso `invited` desde el admin. |

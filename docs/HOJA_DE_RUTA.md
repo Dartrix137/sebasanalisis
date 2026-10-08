@@ -92,6 +92,8 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Cualquier cuenta registrada usa la mesa. | El acceso lo decide una sola función en el servidor, en todos los endpoints de juego. | Fase 4, paso 3 |
 | Tipos TypeScript del cliente API mantenidos a mano. | Generados desde el OpenAPI de FastAPI. | Fase 4, paso 0 |
 | Pagos como "Fase 2" independiente. | Parte de la Fase 4, con renovación automática, planes y cupones. | Fase 4 |
+| Cobro solo con renovación automática y tarjeta tokenizada; PSE y transferencias descartados. | Dos modos: renovación automática con fuente tokenizada, y pago manual mes a mes para quien no tokeniza. | 2026-10-08 |
+| Varios planes (mensual y anual). | Un solo plan, mensual, de 100.000 COP. Se muestra además como 30 USD fijos; el cobro es siempre en COP. | 2026-10-08 |
 | Buzón de soporte en Hostinger sobre el dominio (`soporte@sebasanalisis.com`). | El correo de soporte y de contacto es una cuenta de Gmail: `sebas.analisis.ia.com@gmail.com`. | 2026-10-07 |
 | Chequeo externo de disponibilidad sobre la API y la página de inicio. | No se hace. Si el VPS se cae, no hay aviso. | 2026-10-07 |
 | Página de Juego Responsable (`/legal/juego-responsable`), exigida por §0 del documento de arquitectura. | Descartada por decisión del usuario: no se construye. Los documentos legales son cuatro (términos, datos, reembolsos, cookies). | 2026-10-08 |
@@ -177,7 +179,9 @@ Quedó para después, a propósito: reenviar la verificación y forzar el restab
 
 ### Decisiones tomadas para la Fase 4
 
-- Cobro con renovación automática y tarjeta tokenizada en Wompi.
+- Cobro con renovación automática y fuente de pago tokenizada en Wompi, **y además pago manual mes a mes** para quien no tokeniza (2026-10-08).
+- El público es internacional. Un solo plan, mensual, de 100.000 COP; en pantalla se muestra también un precio fijo de 30 USD, solo visual. Los cupones se mantienen (2026-10-08).
+- Wompi es la pasarela principal y el paso 5 se construye detrás de una interfaz de proveedor. Premium Pay se evaluó y no sirve como base del cobro; queda como posible canal manual para clientes internacionales sin tarjeta (2026-10-08). Detalle en `PLATAFORMA_COMPLETA.md` §3.10.
 - Correo transaccional con Resend por SMTP. El correo de soporte y de contacto es `sebas.analisis.ia.com@gmail.com` (2026-10-07); no hay buzón en Hostinger.
 - Monitoreo de errores con GlitchTip autohospedado en el VPS, en `errores.sebasanalisis.com` desde el 2026-10-07.
 - Tests de frontend de punta a punta con Playwright.
@@ -203,8 +207,8 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
-| Planes y precios iniciales | Paso 4 |
-| Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |
+| Cómo se redacta el precio en pantalla (se cobra 100.000 COP; se muestra además 30 USD), a revisar con el abogado | Paso 4 |
+| Cuenta de comercio en Wompi (sandbox y producción); confirmación escrita de Wompi de que acepta esta categoría de negocio y tarjetas internacionales; qué medios se habilitan para el pago manual; facturación electrónica | Paso 5 |
 
 ---
 
