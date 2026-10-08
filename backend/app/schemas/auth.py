@@ -153,6 +153,10 @@ class UserResponse(UserAccount):
     `api/presenters.user_response`, no con `model_validate`: `access` no es una
     columna, lo calcula `has_access`."""
     access: AccessInfo
+    # False para el unico administrador activo: `DELETE /auth/me` lo rechazaria
+    # (`core/accounts.is_last_active_admin`). La pantalla lo usa para no
+    # ofrecer algo que el servidor no va a hacer.
+    can_delete_account: bool
 
 
 class TokenResponse(ApiModel):

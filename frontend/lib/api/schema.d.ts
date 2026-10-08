@@ -2539,6 +2539,8 @@ export interface components {
             access_type: components["schemas"]["AccessType"];
             /** Adult Confirmed At */
             adult_confirmed_at: string | null;
+            /** Can Delete Account */
+            can_delete_account: boolean;
             /**
              * Created At
              * Format: date-time

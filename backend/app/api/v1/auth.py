@@ -18,12 +18,13 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.api.presenters import user_response
 from app.api.v1.legal import client_ip, list_consents
 from app.core import legal, rate_limit
+from app.core.accounts import is_last_active_admin
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.password_policy import PasswordPolicyError, validate_password
@@ -368,17 +369,13 @@ def delete_account(
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_WRONG_PASSWORD)
 
-    # Sin administrador nadie puede gestionar juegos ni usuarios, y no hay forma
-    # de crear otro desde la aplicacion.
-    if user.role == "admin":
-        otros = db.scalar(
-            select(func.count()).select_from(User).where(User.role == "admin", User.id != user.id)
+    # Sin administrador activo nadie puede gestionar juegos ni usuarios. La
+    # misma regla decide `can_delete_account`, que es lo que mira la pantalla.
+    if is_last_active_admin(db, user):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Eres el único administrador activo: nombra otro antes de eliminar tu cuenta",
         )
-        if not otros:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Eres el único administrador: nombra otro antes de eliminar tu cuenta",
-            )
 
     # El correo se arma antes de borrar: despues ya no hay a quien escribirle.
     message = build_email("account_deleted", to=user.email, display_name=user.display_name)

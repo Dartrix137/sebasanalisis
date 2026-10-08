@@ -135,6 +135,11 @@ python -m app.db.seed
 Crea el administrador y precarga la ruleta europea y americana. Es idempotente:
 si se vuelve a correr no duplica nada ni cambia la clave del administrador.
 
+El administrador solo se crea si no existe ninguno. Si ya hay uno, con el correo
+que sea, el seed no crea otro: `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` son
+solo para el primer arranque. Despues de entrar la primera vez, cambia la
+contrasena desde "Mi cuenta": asi la del entorno deja de servir para entrar.
+
 ### Documentos legales (Fase 4, paso 2)
 
 La migracion `c3f81a5d7e20` publica la version 1 de los cuatro documentos

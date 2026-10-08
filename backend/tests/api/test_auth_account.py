@@ -19,6 +19,7 @@ from app.core.user_tokens import hash_token
 from app.models import User, UserToken
 
 # Fixture y ayudante de los tests de mesa, para darle datos de juego a una cuenta.
+from tests.api.conftest import auth
 from tests.api.test_spins import _crear_sesion, variant_id  # noqa: F401, I001
 
 PASSWORD = "clave-segura-123"
@@ -749,8 +750,89 @@ def test_el_unico_administrador_no_puede_eliminar_su_cuenta(
     assert r.status_code == 409
     assert "administrador" in r.json()["detail"]
 
+    assert client.get("/auth/me", headers=auth(tokens["access_token"])).json()[
+        "can_delete_account"
+    ] is False
+
     # Con otro administrador ya puede.
     otro = _register(client)
     db.execute(text("UPDATE users SET role = 'admin' WHERE id = :u"), {"u": otro["user"]["id"]})
     db.commit()
     assert _delete_account(client, tokens).status_code == 204
+
+
+def test_un_administrador_suspendido_no_cuenta_como_relevo(
+    client: TestClient, db: Session
+) -> None:
+    """Con dos administradores y uno suspendido, el otro es el unico que puede
+    operar la plataforma: tampoco puede eliminar su cuenta."""
+    tokens = _register(client)
+    otro = _register(client)
+    db.execute(text("UPDATE users SET role = 'user' WHERE role = 'admin'"))
+    db.execute(
+        text("UPDATE users SET role = 'admin' WHERE id IN (:a, :b)"),
+        {"a": tokens["user"]["id"], "b": otro["user"]["id"]},
+    )
+    db.execute(
+        text("UPDATE users SET is_active = false WHERE id = :u"), {"u": otro["user"]["id"]}
+    )
+    db.commit()
+
+    yo = client.get("/auth/me", headers=auth(tokens["access_token"])).json()
+    assert yo["can_delete_account"] is False
+    r = _delete_account(client, tokens)
+    assert r.status_code == 409
+    assert "único administrador activo" in r.json()["detail"]
+
+    # Reactivado el otro, ya hay relevo.
+    db.execute(text("UPDATE users SET is_active = true WHERE id = :u"), {"u": otro["user"]["id"]})
+    db.commit()
+    yo = client.get("/auth/me", headers=auth(tokens["access_token"])).json()
+    assert yo["can_delete_account"] is True
+    assert _delete_account(client, tokens).status_code == 204
+
+
+def test_una_cuenta_comun_siempre_puede_eliminarse(client: TestClient) -> None:
+    tokens = _register(client)
+    assert tokens["user"]["can_delete_account"] is True
+
+
+def test_el_seed_no_crea_un_segundo_administrador(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El .env solo sirve para crear el primer administrador. Si ese
+    administrador cambia su correo, volver a correr el seed no crea otro con la
+    clave del .env."""
+    from app.core.config import get_settings
+    from app.db.seed import seed_admin
+
+    correo = f"semilla-{uuid.uuid4().hex[:10]}@ejemplo.com"
+    monkeypatch.setenv("SEED_ADMIN_EMAIL", correo)
+    monkeypatch.setenv("SEED_ADMIN_PASSWORD", "clave-de-semilla-segura-1")
+    get_settings.cache_clear()
+    try:
+        db.execute(text("UPDATE users SET role = 'user' WHERE role = 'admin'"))
+        db.commit()
+
+        creado = seed_admin(db)
+        db.commit()
+        assert (creado.email, creado.role, creado.access_type) == (correo, "admin", "full")
+
+        # El administrador cambia su correo desde "Mi cuenta"...
+        nuevo = f"cambiado-{uuid.uuid4().hex[:10]}@ejemplo.com"
+        db.execute(text("UPDATE users SET email = :e WHERE id = :u"), {"e": nuevo, "u": creado.id})
+        db.commit()
+
+        # ...y el seed vuelve a correr: sigue habiendo un solo administrador.
+        otra_vez = seed_admin(db)
+        db.commit()
+        assert otra_vez.id == creado.id
+        assert db.execute(text("SELECT count(*) FROM users WHERE role = 'admin'")).scalar_one() == 1
+        assert (
+            db.execute(
+                text("SELECT count(*) FROM users WHERE email = :e"), {"e": correo}
+            ).scalar_one()
+            == 0
+        )
+    finally:
+        get_settings.cache_clear()

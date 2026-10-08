@@ -3258,6 +3258,10 @@
             ],
             "title": "Adult Confirmed At"
           },
+          "can_delete_account": {
+            "title": "Can Delete Account",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -3320,7 +3324,8 @@
           "created_at",
           "adult_confirmed_at",
           "onboarding_completed_at",
-          "access"
+          "access",
+          "can_delete_account"
         ],
         "title": "UserResponse",
         "type": "object"
