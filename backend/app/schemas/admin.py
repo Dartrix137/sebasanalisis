@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field
 
-from app.schemas.auth import AccessType, UserResponse
+from app.schemas.auth import AccessType, UserResponse, UserRole
 from app.schemas.base import ApiModel
 from app.schemas.legal import ConsentResponse
 
@@ -34,6 +34,12 @@ class UpdateUserAccessRequest(ApiModel):
 class UpdateUserStatusRequest(ApiModel):
     """PATCH /admin/users/:id/status: suspende o reactiva la cuenta."""
     is_active: bool
+    reason: str = Reason
+
+
+class UpdateUserRoleRequest(ApiModel):
+    """PATCH /admin/users/:id/role: nombra un administrador o le quita el rol."""
+    role: UserRole
     reason: str = Reason
 
 

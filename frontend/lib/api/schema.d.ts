@@ -243,6 +243,30 @@ export interface paths {
         patch: operations["update_user_access_admin_users__user_id__access_patch"];
         trace?: never;
     };
+    "/admin/users/{user_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update User Role
+         * @description Nombra administrador a una cuenta o le quita el rol.
+         *
+         *     Es la unica forma de tener mas de un administrador: el seed solo crea el
+         *     primero. Al quitar el rol, la cuenta vuelve a depender de su acceso manual
+         *     (`access_type`), que no se toca aqui.
+         */
+        patch: operations["update_user_role_admin_users__user_id__role_patch"];
+        trace?: never;
+    };
     "/admin/users/{user_id}/status": {
         parameters: {
             query?: never;
@@ -2517,6 +2541,15 @@ export interface components {
             reason: string;
         };
         /**
+         * UpdateUserRoleRequest
+         * @description PATCH /admin/users/:id/role: nombra un administrador o le quita el rol.
+         */
+        UpdateUserRoleRequest: {
+            /** Reason */
+            reason: string;
+            role: components["schemas"]["UserRole"];
+        };
+        /**
          * UpdateUserStatusRequest
          * @description PATCH /admin/users/:id/status: suspende o reactiva la cuenta.
          */
@@ -3036,6 +3069,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateUserAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_role_admin_users__user_id__role_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRoleRequest"];
             };
         };
         responses: {

@@ -12,6 +12,7 @@ import type {
   AdminUserListResponse,
   AuditLogListResponse,
   UpdateUserAccessRequest,
+  UpdateUserRoleRequest,
   UpdateUserStatusRequest,
 } from "./types/admin";
 import type {
@@ -588,6 +589,14 @@ export const adminApi = {
   /** Suspende o reactiva la cuenta. Pide motivo y queda en la bitácora. */
   updateUserStatus: (token: string, userId: UUID, body: UpdateUserStatusRequest) =>
     apiFetch<UserResponse>(`/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Nombra administrador a una cuenta o le quita el rol. Pide motivo. */
+  updateUserRole: (token: string, userId: UUID, body: UpdateUserRoleRequest) =>
+    apiFetch<UserResponse>(`/admin/users/${userId}/role`, {
       method: "PATCH",
       body: JSON.stringify(body),
       token,

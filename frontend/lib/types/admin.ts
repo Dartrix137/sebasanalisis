@@ -13,5 +13,6 @@ export type AdminUserListResponse = S["AdminUserListResponse"];
 export type AdminUserDetailResponse = S["AdminUserDetailResponse"];
 export type UpdateUserAccessRequest = S["UpdateUserAccessRequest"];
 export type UpdateUserStatusRequest = S["UpdateUserStatusRequest"];
+export type UpdateUserRoleRequest = S["UpdateUserRoleRequest"];
 export type AuditLogEntry = S["AuditLogEntry"];
 export type AuditLogListResponse = S["AuditLogListResponse"];

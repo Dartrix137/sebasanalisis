@@ -3204,6 +3204,26 @@
         "title": "UpdateUserAccessRequest",
         "type": "object"
       },
+      "UpdateUserRoleRequest": {
+        "description": "PATCH /admin/users/:id/role: nombra un administrador o le quita el rol.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "required": [
+          "role",
+          "reason"
+        ],
+        "title": "UpdateUserRoleRequest",
+        "type": "object"
+      },
       "UpdateUserStatusRequest": {
         "description": "PATCH /admin/users/:id/status: suspende o reactiva la cuenta.",
         "properties": {
@@ -4323,6 +4343,65 @@
           }
         ],
         "summary": "Update User Access",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/role": {
+      "patch": {
+        "description": "Nombra administrador a una cuenta o le quita el rol.\n\nEs la unica forma de tener mas de un administrador: el seed solo crea el\nprimero. Al quitar el rol, la cuenta vuelve a depender de su acceso manual\n(`access_type`), que no se toca aqui.",
+        "operationId": "update_user_role_admin_users__user_id__role_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update User Role",
         "tags": [
           "admin"
         ]

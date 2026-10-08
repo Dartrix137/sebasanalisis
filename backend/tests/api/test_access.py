@@ -448,6 +448,94 @@ def test_usuario_inexistente_es_404(client: TestClient, admin_token: str) -> Non
     assert r.status_code == 404
 
 
+# ---------- Rol ----------
+
+
+def _rol(client: TestClient, token: str, user_id: str, role: str, reason: str | None = MOTIVO):
+    body = {"role": role} if reason is None else {"role": role, "reason": reason}
+    return client.patch(f"/admin/users/{user_id}/role", json=body, headers=auth(token))
+
+
+def test_admin_nombra_otro_administrador_y_le_quita_el_rol(
+    client: TestClient, admin_token: str, db
+) -> None:
+    registro = _sin_acceso(client)
+    token, user_id = registro["access_token"], registro["user"]["id"]
+    assert client.get("/admin/users", headers=auth(token)).status_code == 403
+
+    r = _rol(client, admin_token, user_id, "admin")
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "admin"
+    assert r.json()["access"]["reason"] == "admin"
+    # Ya administra y entra a la mesa por su rol, sin acceso manual.
+    assert client.get("/admin/users", headers=auth(token)).status_code == 200
+    _permitido(client, token)
+    # Y con dos administradores activos, el primero ya puede eliminar su cuenta.
+    assert _me(client, admin_token)["can_delete_account"] is True
+
+    r = _rol(client, admin_token, user_id, "user", "Deja el equipo")
+    assert r.status_code == 200, r.text
+    # Sin el rol vuelve a depender de su acceso manual, que seguia en `none`.
+    assert r.json()["access"]["reason"] == "no_access"
+    assert client.get("/admin/users", headers=auth(token)).status_code == 403
+    _denegado(client, token, "no_access")
+
+    filas = db.execute(
+        text(
+            "SELECT action, before, after, reason FROM admin_audit_log "
+            "WHERE target_id = :u ORDER BY created_at"
+        ),
+        {"u": user_id},
+    ).all()
+    assert [(f.action, f.before, f.after, f.reason) for f in filas] == [
+        ("user.role.update", {"role": "user"}, {"role": "admin"}, MOTIVO),
+        ("user.role.update", {"role": "admin"}, {"role": "user"}, "Deja el equipo"),
+    ]
+
+
+def test_cambios_de_rol_que_se_rechazan(client: TestClient, admin_token: str, db) -> None:
+    yo = _me(client, admin_token)["id"]
+    user_id = _sin_acceso(client)["user"]["id"]
+
+    # Nadie se quita el rol a si mismo: siempre queda al menos un administrador.
+    r = _rol(client, admin_token, yo, "user")
+    assert r.status_code == 409
+    assert "tu propio rol" in r.json()["detail"]
+    assert _me(client, admin_token)["role"] == "admin"
+
+    # Un cambio que no cambia nada.
+    assert _rol(client, admin_token, user_id, "user").status_code == 409
+    # Sin motivo, o con un rol que no existe.
+    assert _rol(client, admin_token, user_id, "admin", reason=None).status_code == 422
+    assert _rol(client, admin_token, user_id, "superadmin").status_code == 422
+    assert _rol(client, admin_token, str(uuid.uuid4()), "admin").status_code == 404
+
+    # Una cuenta suspendida no se nombra administradora.
+    _set(db, user_id, is_active=False)
+    r = _rol(client, admin_token, user_id, "admin")
+    assert r.status_code == 409
+    assert "suspendida" in r.json()["detail"]
+
+    assert (
+        db.execute(text("SELECT role FROM users WHERE id = :u"), {"u": user_id}).scalar_one()
+        == "user"
+    )
+    assert (
+        db.execute(
+            text("SELECT count(*) FROM admin_audit_log WHERE target_id IN (:a, :b)"),
+            {"a": user_id, "b": yo},
+        ).scalar_one()
+        == 0
+    )
+
+
+def test_solo_un_administrador_cambia_roles(client: TestClient, user_token: str) -> None:
+    yo = _me(client, user_token)["id"]
+    assert _rol(client, user_token, yo, "admin").status_code == 403
+    assert client.patch(f"/admin/users/{yo}/role", json={"role": "admin", "reason": MOTIVO}).status_code == 401
+    assert _me(client, user_token)["role"] == "user"
+
+
 # ---------- Lista, busqueda y detalle ----------
 
 

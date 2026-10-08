@@ -82,6 +82,60 @@ test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso",
   await expect(page.getByRole("heading", { name: "Tu cuenta no tiene acceso activo" })).toHaveCount(0);
 });
 
+test("el administrador nombra a otro administrador desde /admin/usuarios", async ({
+  page,
+  request,
+  browser,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+
+  const admin = await browser.newContext();
+  const panel = await admin.newPage();
+  await loginViaUi(panel, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await expect(panel).toHaveURL(/\/dashboard/);
+  await panel.goto("/admin/usuarios");
+
+  // En su propia cuenta no puede cambiarse el rol ni suspenderse.
+  await panel.getByLabel("Buscar por correo o nombre").fill(ADMIN_EMAIL);
+  await panel.getByRole("button", { name: "Buscar" }).click();
+  const propia = panel.locator("li", { hasText: ADMIN_EMAIL });
+  await propia.getByRole("button", { name: "Ver" }).click();
+  await expect(propia.getByText("Historial de acciones sobre esta cuenta")).toBeVisible();
+  await expect(propia.getByRole("button", { name: "Quitar rol de administrador" })).toHaveCount(0);
+  await expect(propia.getByRole("button", { name: "Suspender cuenta" })).toHaveCount(0);
+
+  // Nombra administradora a la otra cuenta, con motivo.
+  await panel.getByLabel("Buscar por correo o nombre").fill(email);
+  await panel.getByRole("button", { name: "Buscar" }).click();
+  const fila = panel.locator("li", { hasText: email });
+  await fila.getByRole("button", { name: "Ver" }).click();
+  await fila.getByLabel("Motivo del nombramiento").fill("Segunda persona del equipo");
+  await fila.getByRole("button", { name: "Nombrar administrador" }).click();
+  await expect(fila.getByText("Administrador", { exact: true }).first()).toBeVisible();
+  await expect(fila.getByRole("button", { name: "Quitar rol de administrador" })).toBeVisible();
+  // Antes de quitar el rol, la pantalla dice con qué acceso quedaría la cuenta.
+  await expect(fila.getByText(/acceso manual que tiene guardado: sin acceso manual/)).toBeVisible();
+
+  // La cuenta nombrada ya entra al panel y a la mesa.
+  await loginViaUi(page, email);
+  await expect(page.getByRole("heading", MESA)).toBeVisible();
+  await page.goto("/admin/usuarios");
+  await expect(page.getByRole("heading", { level: 1, name: "Usuarios" })).toBeVisible();
+  await expect(page.getByLabel("Buscar por correo o nombre")).toBeVisible();
+
+  // Se le quita el rol: deja de administrar y vuelve a quedar sin acceso.
+  await fila.getByLabel("Motivo para quitar el rol").fill("Fin de la prueba");
+  await fila.getByRole("button", { name: "Quitar rol de administrador" }).click();
+  await expect(fila.getByRole("button", { name: "Nombrar administrador" })).toBeVisible();
+  await admin.close();
+
+  await page.goto("/dashboard");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Tu cuenta no tiene acceso activo" }),
+  ).toBeVisible();
+});
+
 test("cuenta suspendida: ve el aviso y no la mesa", async ({ page, request, browser }) => {
   const email = uniqueEmail();
   await registerViaApi(request, email);

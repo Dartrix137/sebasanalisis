@@ -8,8 +8,8 @@
  * (`core/access.py`): aquí no se calcula nada. Toda acción pide un motivo y
  * queda en la bitácora.
  *
- * Quedan para el paso 6: cambiar el rol, reenviar la verificación y forzar el
- * restablecimiento de contraseña. La suscripción y los pagos, para el paso 5.
+ * Quedan para el paso 6: reenviar la verificación y forzar el restablecimiento
+ * de contraseña. La suscripción y los pagos, para el paso 5.
  */
 
 import { useRouter } from "next/navigation";
@@ -339,6 +339,7 @@ function UserDetail({
         <AccessForm user={u} onDone={refresh} />
       )}
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />
+      <RoleForm user={u} isSelf={isSelf} onDone={refresh} />
 
       <section>
         <h3 className="text-sm font-bold text-white">Historial de acciones sobre esta cuenta</h3>
@@ -459,6 +460,74 @@ function AccessForm({ user, onDone }: { user: UserResponse; onDone: () => Promis
       <Button type="submit" disabled={pending}>
         {pending ? "Guardando…" : "Guardar acceso"}
       </Button>
+    </form>
+  );
+}
+
+/** Nombrar administrador o quitar el rol. Es la única forma de tener más de uno. */
+function RoleForm({
+  user,
+  isSelf,
+  onDone,
+}: {
+  user: UserResponse;
+  isSelf: boolean;
+  onDone: () => Promise<void>;
+}) {
+  const { withToken } = useSession();
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isAdmin = user.role === "admin";
+
+  // Nadie cambia su propio rol: así siempre queda al menos un administrador.
+  if (isSelf) return null;
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      await withToken((t) =>
+        adminApi.updateUserRole(t, user.id, { role: isAdmin ? "user" : "admin", reason }),
+      );
+      setReason("");
+      await onDone();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-edge p-3.5">
+      <CardHeader
+        title={isAdmin ? "Quitar el rol de administrador" : "Nombrar administrador"}
+        subtitle={
+          isAdmin
+            ? `Dejará de administrar. Su acceso a la mesa pasará a depender del acceso manual que tiene guardado: ${ACCESS_TYPE_LABEL[user.access_type].toLowerCase()}.`
+            : user.is_active
+              ? "Podrá gestionar usuarios, juegos y documentos legales, y entrará a la mesa por su rol."
+              : "La cuenta está suspendida: reactívala antes de nombrarla administradora."
+        }
+      />
+      {isAdmin || user.is_active ? (
+        <>
+          <Field
+            label={isAdmin ? "Motivo para quitar el rol" : "Motivo del nombramiento"}
+            required
+            minLength={3}
+            maxLength={500}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          {error ? <ErrorBox message={error} /> : null}
+          <Button type="submit" variant={isAdmin ? "danger" : "ghost"} disabled={pending}>
+            {pending ? "Un momento…" : isAdmin ? "Quitar rol de administrador" : "Nombrar administrador"}
+          </Button>
+        </>
+      ) : null}
     </form>
   );
 }

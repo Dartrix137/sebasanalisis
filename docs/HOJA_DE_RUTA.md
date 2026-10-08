@@ -171,7 +171,9 @@ Construido el 2026-10-08 en la rama `fase-4-paso-3-acceso`. El detalle está en 
 
 Comprobado: 654 tests de backend, entre ellos los de §2.4 y el que recorre todos los routers de juego con una cuenta sin acceso; 18 tests de Playwright, entre ellos "cuenta sin acceso → no ve la mesa hasta que el administrador le da acceso" y "cuenta suspendida".
 
-Quedó para después, a propósito: cambiar el rol, reenviar la verificación y forzar el restablecimiento desde el admin (paso 6); el filtro por estado de suscripción y la suscripción y los pagos en el detalle de la cuenta (paso 5); la navegación lateral del admin (paso 6).
+Ajustes hechos al probarlo el usuario (2026-10-08): el acceso manual no aplica a un administrador; un cambio que no cambia nada se rechaza; el seed no crea un segundo administrador y el único administrador activo no puede eliminar su cuenta; y el cambio de rol se adelantó del paso 6, porque sin él no había forma de nombrar otro administrador.
+
+Quedó para después, a propósito: reenviar la verificación y forzar el restablecimiento desde el admin (paso 6); el filtro por estado de suscripción y la suscripción y los pagos en el detalle de la cuenta (paso 5); la navegación lateral del admin (paso 6).
 
 ### Decisiones tomadas para la Fase 4
 
@@ -188,6 +190,7 @@ Quedó para después, a propósito: cambiar el rol, reenviar la verificación y 
 - El paso 3 se despliega sin esperar al pago: las cuentas nuevas entran solo con acceso manual (2026-10-08).
 - La pantalla de una cuenta sin acceso no muestra correo de contacto: solo dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto (2026-10-08).
 - `/admin/usuarios` con búsqueda, filtros, paginación y detalle se adelanta del paso 6 al 3 (2026-10-08).
+- El cambio de rol (nombrar o quitar administradores) también se adelanta al paso 3. Al quitar el rol, la cuenta conserva el acceso manual que tenía guardado (2026-10-08).
 - Las cuentas anteriores al paso 2 aceptan los documentos y declaran la mayoría de edad al volver a la mesa; no se les crean consentimientos por migración (2026-10-08).
 - La versión 1 de los documentos legales se publica como borrador marcado; el texto del abogado entra como versión 2 y pide re-aceptación a todas las cuentas (2026-10-08).
 

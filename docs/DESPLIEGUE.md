@@ -140,6 +140,11 @@ que sea, el seed no crea otro: `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` son
 solo para el primer arranque. Despues de entrar la primera vez, cambia la
 contrasena desde "Mi cuenta": asi la del entorno deja de servir para entrar.
 
+Para tener otro administrador: que la persona se registre, y desde
+`/admin/usuarios` abrir su cuenta y usar "Nombrar administrador". Queda en la
+bitacora. Conviene tener dos: el unico administrador activo no puede eliminar
+su cuenta ni suspenderse, y si pierde el acceso al correo no hay relevo.
+
 ### Documentos legales (Fase 4, paso 2)
 
 La migracion `c3f81a5d7e20` publica la version 1 de los cuatro documentos

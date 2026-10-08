@@ -24,6 +24,7 @@ export const ACCESS_TYPE_LABEL: Record<AccessType, string> = {
 const ACTION_LABEL: Record<string, string> = {
   "user.access.update": "Cambió el acceso",
   "user.status.update": "Suspendió o reactivó la cuenta",
+  "user.role.update": "Cambió el rol",
   "legal_document.publish": "Publicó un documento legal",
 };
 

@@ -27,6 +27,7 @@ from app.schemas.admin import (
     AuditLogEntry,
     AuditLogListResponse,
     UpdateUserAccessRequest,
+    UpdateUserRoleRequest,
     UpdateUserStatusRequest,
 )
 from app.schemas.auth import AccessType, UserResponse, UserRole
@@ -217,6 +218,55 @@ def update_user_status(
         target_id=user.id,
         before=before,
         after={"is_active": user.is_active},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    db.refresh(user)
+    return user_response(db, user)
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+def update_user_role(
+    user_id: UUID,
+    payload: UpdateUserRoleRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> UserResponse:
+    """Nombra administrador a una cuenta o le quita el rol.
+
+    Es la unica forma de tener mas de un administrador: el seed solo crea el
+    primero. Al quitar el rol, la cuenta vuelve a depender de su acceso manual
+    (`access_type`), que no se toca aqui.
+    """
+    user = _get_or_404(db, user_id)
+    # Quien llama es un administrador activo y no puede cambiarse a si mismo:
+    # asi, pase lo que pase, siempre queda al menos uno (§4.2).
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="No puedes cambiar tu propio rol"
+        )
+    if user.role == payload.role.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La cuenta ya tiene ese rol: no hay nada que cambiar",
+        )
+    if payload.role is UserRole.admin and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La cuenta está suspendida: reactívala antes de nombrarla administradora",
+        )
+    before = {"role": user.role}
+    user.role = payload.role.value
+    audit.record(
+        db,
+        admin,
+        action="user.role.update",
+        target_type="user",
+        target_id=user.id,
+        before=before,
+        after={"role": user.role},
         reason=payload.reason.strip(),
         ip=client_ip(request),
     )
