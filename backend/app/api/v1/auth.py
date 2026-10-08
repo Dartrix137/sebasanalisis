@@ -2,7 +2,7 @@
 
 Registro, login y refresh; verificacion del correo; olvido, restablecimiento y
 cambio de contrasena con revocacion de sesiones; nombre visible y cambio de
-correo.
+correo; consentimientos del registro y exportacion de datos (§6.3 y §6.4).
 
 Tres reglas que atraviesan el archivo:
 
@@ -21,7 +21,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy import delete, func, select
 
 from app.api.deps import CurrentUser, DbSession
-from app.core import rate_limit
+from app.api.v1.legal import client_ip, list_consents
+from app.core import legal, rate_limit
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.password_policy import PasswordPolicyError, validate_password
@@ -35,11 +36,13 @@ from app.core.security import (
 )
 from app.core.user_tokens import TOKEN_TTL, InvalidTokenError, consume_token, issue_token
 from app.emails import build_email
-from app.models import User
+from app.models import Bet, GameSession, Spin, User
 from app.schemas.auth import (
     ChangeEmailRequest,
     ChangePasswordRequest,
     DeleteAccountRequest,
+    ExportResponse,
+    ExportSession,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
@@ -51,6 +54,9 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     UserResponse,
 )
+from app.schemas.bets import BetResponse
+from app.schemas.sessions import SessionResponse
+from app.schemas.spins import SpinResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,6 +71,12 @@ _TOO_MANY = "Demasiados intentos. Espera unos minutos antes de reintentar"
 # La misma respuesta exista o no el correo (§5.3).
 _FORGOT_SENT = (
     "Si ese correo tiene una cuenta, te enviamos un enlace para restablecer la contraseña"
+)
+
+_ADULT_REQUIRED = "Para crear una cuenta debes declarar que eres mayor de edad"
+_CONSENTS_REQUIRED = (
+    "Para crear una cuenta debes aceptar los Términos y Condiciones y la "
+    "Política de Tratamiento de Datos Personales vigentes"
 )
 
 _MINUTE = 60
@@ -159,19 +171,46 @@ def register(
 
     email = payload.email.lower()
     _check_new_password(payload.password, email)
+
+    # Sin consentimientos no hay cuenta (§6.3). Se revisa antes de mirar si el
+    # correo existe: un registro incompleto no revela nada sobre otras cuentas.
+    if not payload.adult_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_ADULT_REQUIRED
+        )
+    required = legal.required_documents(db)
+    accepted = set(payload.accepted_document_ids)
+    if any(doc.id not in accepted for doc in required):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_CONSENTS_REQUIRED
+        )
+
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Ya existe una cuenta con ese correo"
         )
+    now = _now()
     user = User(
         email=email,
         password_hash=hash_password(payload.password),
         display_name=payload.display_name,
         access_type="trial",
         role="user",
+        adult_confirmed_at=now,
     )
     db.add(user)
     db.flush()
+    # Solo los exigidos: un id de mas en la peticion no crea una aceptacion de
+    # un documento que el formulario no pide. Todos son la version vigente
+    # (salen de `required_documents`), asi que aqui no hay version vencida.
+    legal.record_consents(
+        db,
+        user,
+        [doc.id for doc in required],
+        now=now,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
     _queue_verification_email(db, user, background, sender)
     db.commit()
     db.refresh(user)
@@ -242,6 +281,64 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, db: DbSessi
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/me/onboarding", response_model=UserResponse)
+def complete_onboarding(user: CurrentUser, db: DbSession) -> User:
+    """Anota que la cuenta leyo la pantalla de bienvenida de la mesa (§6.3).
+
+    Es informativa, no un consentimiento legal: por eso vive aqui y no en
+    `user_consents`, y por eso no decide el acceso.
+    """
+    if user.onboarding_completed_at is None:
+        user.onboarding_completed_at = _now()
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+@router.get("/me/export", response_model=ExportResponse)
+def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
+    """Todos los datos de la cuenta en un JSON (derecho de consulta, §6.4).
+
+    No exige `RequireAccess`: consultar los datos propios no depende de tener
+    acceso a la mesa ni de haber aceptado la version vigente de un documento.
+    """
+    _limit(f"export:{user.id}", limit=10, window=15 * _MINUTE)
+
+    sessions = list(
+        db.scalars(
+            select(GameSession)
+            .where(GameSession.user_id == user.id)
+            .order_by(GameSession.started_at)
+        )
+    )
+    ids = [s.id for s in sessions]
+    spins: dict[object, list[SpinResponse]] = {i: [] for i in ids}
+    bets: dict[object, list[BetResponse]] = {i: [] for i in ids}
+    if ids:
+        for spin in db.scalars(
+            select(Spin).where(Spin.session_id.in_(ids)).order_by(Spin.spin_index)
+        ):
+            spins[spin.session_id].append(SpinResponse.model_validate(spin))
+        for bet in db.scalars(
+            select(Bet).where(Bet.session_id.in_(ids)).order_by(Bet.created_at)
+        ):
+            bets[bet.session_id].append(BetResponse.model_validate(bet))
+
+    return ExportResponse(
+        exported_at=_now(),
+        account=UserResponse.model_validate(user),
+        sessions=[
+            ExportSession(
+                session=SessionResponse.model_validate(s), spins=spins[s.id], bets=bets[s.id]
+            )
+            for s in sessions
+        ],
+        consents=list_consents(db, user.id),
+        # Los cobros llegan en el paso 5 (Wompi). Hasta entonces no hay ninguno.
+        payments=[],
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.engine import bankroll as bk
 from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
 from app.engine.probability import GameConfig
@@ -29,7 +29,7 @@ from app.schemas.sessions import (
 )
 from app.schemas.spins import BulkSpinsRequest, BulkSpinsResponse, CreateSpinRequest, SpinResponse
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
+router = APIRouter(prefix="/sessions", tags=["sessions"], dependencies=[RequireAccess])
 
 
 def get_owned_session(db: DbSession, user_id: UUID, session_id: UUID) -> GameSession:

@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.api.v1.sessions import get_owned_session
 from app.engine.baseline import evaluate
 from app.engine.probability import GameConfig
@@ -24,7 +24,7 @@ from app.schemas.suggestions import (
     StreakAlert,
 )
 
-router = APIRouter(prefix="/sessions", tags=["suggestions"])
+router = APIRouter(prefix="/sessions", tags=["suggestions"], dependencies=[RequireAccess])
 
 
 def _load_context(

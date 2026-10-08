@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  checkRegisterConsents,
   expectEmail,
   linkFromEmail,
   loginViaUi,
@@ -21,6 +22,7 @@ test("registro → correo de verificación → cuenta verificada", async ({ page
   await page.getByLabel("Tu nombre").fill("Ana");
   await page.getByLabel("Correo electrónico").fill(email);
   await page.locator("#password").fill(PASSWORD);
+  await checkRegisterConsents(page);
   await page.getByRole("button", { name: "Crear mi cuenta" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 

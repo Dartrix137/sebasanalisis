@@ -135,6 +135,23 @@ python -m app.db.seed
 Crea el administrador y precarga la ruleta europea y americana. Es idempotente:
 si se vuelve a correr no duplica nada ni cambia la clave del administrador.
 
+### Documentos legales (Fase 4, paso 2)
+
+La migracion `c3f81a5d7e20` publica la version 1 de los cuatro documentos
+legales (terminos, datos, reembolsos, cookies). Son **borradores** pendientes de
+abogado y lo dicen en su primer parrafo. No hay que correr nada a mano.
+
+Que pasa al desplegar este paso:
+
+- El registro empieza a exigir las tres casillas (terminos, datos, mayoria de
+  edad).
+- **Toda cuenta que ya existia, incluido el administrador, ve la pantalla de
+  aceptacion la proxima vez que entra a la mesa.** No pierde la sesion ni el
+  acceso a `/cuenta`.
+- El texto revisado por el abogado se publica desde `/admin/legal` como version
+  nueva, marcando "exigir aceptacion": eso se lo vuelve a pedir a todas las
+  cuentas.
+
 ## Comprobacion despues del primer despliegue
 
 1. `https://api.sebasanalisis.com/health` devuelve `{"status":"ok"}`.

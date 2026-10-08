@@ -37,7 +37,7 @@ Todo endpoint, componente de UI y texto de marketing debe pasar este filtro. Si 
 
 - ~~Banner fijo y visible en toda pantalla donde se muestren sugerencias.~~ **Retirado en la Fase 3** (2026-09-22): el carácter estadístico y no predictivo del producto está cubierto en los términos y condiciones. Lo que queda en la vista de ruleta es la línea fija al pie de la tarjeta de recomendación (§2.10): _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_
 - Onboarding con scroll-to-accept explicando esto antes de dar acceso.
-- Página de "Juego responsable": límites de tiempo/dinero, nunca usar dinero de obligaciones, detenerse ante progresiones incómodas (contenido tomado del documento de estrategia verificado).
+- ~~Página de "Juego responsable": límites de tiempo/dinero, nunca usar dinero de obligaciones, detenerse ante progresiones incómodas (contenido tomado del documento de estrategia verificado).~~ **Descartada por decisión del usuario** (2026-10-08): no se construye. Lo que la plataforma hace y no hace queda dicho en el onboarding y en los términos y condiciones (`docs/PLATAFORMA_COMPLETA.md` §6.7).
 
 ---
 
@@ -679,7 +679,7 @@ Documento que define la fase: `docs/reference/Comparativo_Software_Actual_vs_Sof
 - **Pagos y suscripciones con Wompi** con renovación automática, planes, cupones de descuento y precio congelado por suscripción. Implementa lo que la Fase 2 dejó definido arriba, con las mismas reglas.
 - **Admin dashboard** por secciones: usuarios, suscripciones, pagos, planes, descuentos, juegos, documentos legales, métricas del motor y auditoría.
 - **Auth**: verificación de correo, recuperación y cambio de contraseña con revocación de sesiones, eliminación y exportación de la cuenta.
-- **Términos y políticas** versionados con registro de aceptación, incluida la página de Juego Responsable y el onboarding scroll-to-accept de §0, que el MVP no llegó a construir.
+- **Términos y políticas** versionados con registro de aceptación, y el onboarding scroll-to-accept de §0, que el MVP no llegó a construir. La página de Juego Responsable se descartó el 2026-10-08.
 - **Base multijuego**: metadatos y módulos de juego para que un juego de resultados discretos nuevo se cree desde el admin sin código, y estructura reservada para apuestas deportivas (que no se construyen en esta fase).
 
 Siguen fuera: las señales avanzadas de §2.9, el builder visual, el juego de dados como producto (entra solo como fixture de test) y el CSV.

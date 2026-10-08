@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.api.v1.sessions import get_owned_session
 from app.engine import bankroll as engine
 from app.models import GameVariant
@@ -24,7 +24,7 @@ from app.schemas.suggestions import (
     ProgressionTableResponse,
 )
 
-router = APIRouter(tags=["bankroll"])
+router = APIRouter(tags=["bankroll"], dependencies=[RequireAccess])
 
 #: Tope de escalones que se pueden pedir en una tabla de progresion. Mas alla
 #: de esto los montos dejan de ser informativos y solo cargan la respuesta.

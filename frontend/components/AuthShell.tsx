@@ -34,7 +34,7 @@ export function AuthShell({
   const { loading } = useSession();
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
       <Link href="/" aria-label="Sebasanálisis, ir al inicio">
         <BrandMark />
       </Link>

@@ -21,7 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.api.v1.sessions import get_owned_session, require_active
 from app.engine.bankroll import StopReason, stop_reason
 from app.engine.probability import GameConfig
@@ -29,7 +29,7 @@ from app.engine.settlement import settle
 from app.models import Bet, GameSession, GameVariant, Spin
 from app.schemas.bets import BetResponse, CreateBetRequest
 
-router = APIRouter(prefix="/sessions", tags=["bets"])
+router = APIRouter(prefix="/sessions", tags=["bets"], dependencies=[RequireAccess])
 
 
 def _group_id_for_label(

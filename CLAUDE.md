@@ -140,7 +140,8 @@ No avances a un paso sin que el anterior tenga al menos un test o una verificaci
 
 ### Acceso y cuentas
 
-- **Hoy el acceso no se verifica en ningún endpoint de juego.** El paso 3 lo cierra con una sola función (`core/access.py`, `has_access`) y la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado.
+- **El acceso lo decide una sola función** (`core/access.py`, `has_access`), aplicada con la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado. Desde el paso 2 existe con una sola regla, la de consentimiento legal (`403 consent_required`); **el pago todavía no se verifica**: el paso 3 agrega las demás reglas de §2.2 dentro de esa misma función.
+- **Legal** (paso 2, §6 y §6.7 del documento de la Fase 4): una versión publicada de un documento legal no se edita, se publica otra. El registro exige aceptar los documentos vigentes y declarar la mayoría de edad; no se crean consentimientos por migración ni por código en nombre de nadie. Los textos publicados son borradores pendientes de abogado: no los presentes como revisados. No hay página de Juego Responsable (descartada el 2026-10-08).
 - Cuenta nueva = **sin acceso hasta pagar** (o acceso manual del admin). `trial` desaparece; `access_type` pasa a `none | invited | full`.
 - El acceso se decide **siempre en el servidor** a partir de `access_type` y `current_period_end`. Nada que dependa de lo que mande el cliente.
 - Correo por **SMTP genérico** detrás de la interfaz `EmailSender`; los tests usan un sender falso. Los tokens de correo se guardan **hasheados** y son de un solo uso.

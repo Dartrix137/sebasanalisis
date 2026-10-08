@@ -9,11 +9,11 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, RequireAccess
 from app.models import Game, GameVariant
 from app.schemas.games import GameResponse, GameVariantResponse
 
-router = APIRouter(tags=["games"])
+router = APIRouter(tags=["games"], dependencies=[RequireAccess])
 
 
 @router.get("/games", response_model=list[GameResponse])
