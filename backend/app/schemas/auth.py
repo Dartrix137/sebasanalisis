@@ -18,9 +18,22 @@ from app.schemas.spins import SpinResponse
 
 
 class AccessType(str, Enum):
-    trial = "trial"
+    none = "none"
     invited = "invited"
     full = "full"
+
+
+class AccessReason(str, Enum):
+    """Por que una cuenta tiene o no acceso a la mesa (`core/access.has_access`)."""
+
+    admin = "admin"
+    full = "full"
+    invited = "invited"
+    subscription = "subscription"
+    suspended = "suspended"
+    consent_required = "consent_required"
+    expired = "expired"
+    no_access = "no_access"
 
 
 class UserRole(str, Enum):
@@ -103,12 +116,29 @@ class DeleteAccountRequest(ApiModel):
 
 # ---------- Responses ----------
 
-class UserResponse(ApiModel):
+class AccessInfo(ApiModel):
+    """La decision de acceso, para que el cliente sepa que pantalla mostrar.
+
+    Es informativa: el servidor vuelve a decidir en cada llamada a un endpoint
+    de juego (§2.1 de la Fase 4).
+    """
+    granted: bool
+    reason: AccessReason
+    # Hasta cuando vale, si vence; o cuando vencio, si `reason` es `expired`.
+    until: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserAccount(ApiModel):
+    """Los campos de la cuenta que salen tal cual de la tabla `users`."""
     id: UUID
     email: EmailStr
     display_name: str | None = None
     email_verified: bool
     access_type: AccessType
+    access_expires_at: datetime | None = None
+    is_active: bool
     role: UserRole
     created_at: datetime
     adult_confirmed_at: datetime | None = None
@@ -116,6 +146,13 @@ class UserResponse(ApiModel):
     onboarding_completed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserResponse(UserAccount):
+    """La cuenta mas su decision de acceso. Se arma con
+    `api/presenters.user_response`, no con `model_validate`: `access` no es una
+    columna, lo calcula `has_access`."""
+    access: AccessInfo
 
 
 class TokenResponse(ApiModel):
@@ -147,10 +184,3 @@ class ExportResponse(ApiModel):
     payments: list[dict[str, str]]
 
 
-class UpdateUserAccessRequest(ApiModel):
-    """PATCH /admin/users/:id/access — §3.4.
-
-    Agregado en el paso 3: el endpoint estaba en el documento de arquitectura
-    pero no tenia schema definido.
-    """
-    access_type: AccessType

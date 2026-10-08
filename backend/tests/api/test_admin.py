@@ -271,38 +271,6 @@ def test_ruleta_precargada_aparece_con_sus_dos_variantes(
     assert sorted(v["name"] for v in juego["variants"]) == ["american", "european"]
 
 
-# ---------- Usuarios ----------
-
-
-def test_listar_usuarios_y_cambiar_acceso(client: TestClient, admin_token: str) -> None:
-    email = f"objetivo-{uuid.uuid4().hex[:8]}@ejemplo.com"
-    creado = client.post(
-        "/auth/register", json={"email": email, "password": "clave-segura-123"}
-    ).json()["user"]
-    assert creado["access_type"] == "trial"
-
-    r = client.get("/admin/users", headers=auth(admin_token))
-    assert r.status_code == 200
-    assert email in [u["email"] for u in r.json()]
-
-    r = client.patch(
-        f"/admin/users/{creado['id']}/access",
-        json={"access_type": "full"},
-        headers=auth(admin_token),
-    )
-    assert r.status_code == 200
-    assert r.json()["access_type"] == "full"
-
-
-def test_access_type_invalido_es_rechazado(client: TestClient, admin_token: str) -> None:
-    users = client.get("/admin/users", headers=auth(admin_token)).json()
-    r = client.patch(
-        f"/admin/users/{users[0]['id']}/access",
-        json={"access_type": "premium"},
-        headers=auth(admin_token),
-    )
-    assert r.status_code == 422
-
 
 # ---------- Variante por id (la usa la vista de sesion) ----------
 

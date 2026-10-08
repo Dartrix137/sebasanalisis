@@ -1,4 +1,7 @@
-"""Panel de administracion: CRUD de juegos/variantes y gestion de acceso (§3.4).
+"""Panel de administracion: CRUD de juegos/variantes y backtest del motor (§3.4).
+
+Los usuarios y la bitacora viven en `admin_users.py`; los documentos legales, en
+`admin_legal.py`.
 
 El MVP usa un formulario estructurado simple, NO un builder visual de categorias
 (decision explicita de CLAUDE.md). Toda `categories_json` que entre por aqui pasa
@@ -21,8 +24,7 @@ from app.engine.backtest import WARMUP, backtest, fair_wheel_histories
 from app.engine.probability import GameConfig
 from app.engine.recommendation import SignalBand as EngineSignalBand
 from app.engine.recommendation import weak_threshold_for
-from app.models import Game, GameSession, GameVariant, Spin, User
-from app.schemas.auth import UpdateUserAccessRequest, UserResponse
+from app.models import Game, GameSession, GameVariant, Spin
 from app.schemas.games import (
     CreateGameRequest,
     CreateGameVariantRequest,
@@ -171,27 +173,6 @@ def update_variant(
     db.commit()
     db.refresh(variant)
     return variant
-
-
-# ---------- Usuarios ----------
-
-
-@router.get("/users", response_model=list[UserResponse])
-def list_users(db: DbSession, admin: AdminUser) -> list[User]:
-    return list(db.scalars(select(User).order_by(User.created_at.desc())))
-
-
-@router.patch("/users/{user_id}/access", response_model=UserResponse)
-def update_user_access(
-    user_id: UUID, payload: UpdateUserAccessRequest, db: DbSession, admin: AdminUser
-) -> User:
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-    user.access_type = payload.access_type.value
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 # ---------- Metricas internas del motor (§2.10) ----------

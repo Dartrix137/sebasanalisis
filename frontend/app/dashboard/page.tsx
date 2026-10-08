@@ -16,8 +16,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
+import { AccessGate } from "@/components/AccessGate";
 import { Disclaimer } from "@/components/Disclaimer";
-import { LegalGate } from "@/components/legal/LegalGate";
 import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
 import { NewSessionForm } from "@/components/roulette/NewSessionForm";
 import { Button, ErrorBox } from "@/components/ui";
@@ -52,12 +52,12 @@ function variantLabel(v: GameVariantResponse | undefined): string {
 }
 
 export default function DashboardPage() {
-  // El menú llama a los endpoints de juego: sin los documentos vigentes
-  // aceptados responderían 403, así que primero pasa por la compuerta.
+  // El menú llama a los endpoints de juego: sin acceso responderían 403, así
+  // que primero pasa por la compuerta.
   return (
-    <LegalGate>
+    <AccessGate>
       <Dashboard />
-    </LegalGate>
+    </AccessGate>
   );
 }
 

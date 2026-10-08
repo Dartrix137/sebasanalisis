@@ -8,6 +8,14 @@
  */
 
 import type {
+  AdminUserDetailResponse,
+  AdminUserListResponse,
+  AuditLogListResponse,
+  UpdateUserAccessRequest,
+  UpdateUserStatusRequest,
+} from "./types/admin";
+import type {
+  AccessType,
   ChangeEmailRequest,
   ChangePasswordRequest,
   DeleteAccountRequest,
@@ -22,6 +30,7 @@ import type {
   TokenResponse,
   UpdateProfileRequest,
   UserResponse,
+  UserRole,
   UUID,
 } from "./types/auth";
 import type {
@@ -538,12 +547,58 @@ export const adminApi = {
       token,
     }),
 
-  listUsers: (token: string) => apiFetch<UserResponse[]>("/admin/users", { token }),
+  /** Cuentas por página, las más recientes primero. Filtra en el servidor. */
+  listUsers: (
+    token: string,
+    options: {
+      query?: string;
+      accessType?: AccessType;
+      role?: UserRole;
+      emailVerified?: boolean;
+      isActive?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.query) qs.set("query", options.query);
+    if (options.accessType !== undefined) qs.set("access_type", options.accessType);
+    if (options.role !== undefined) qs.set("role", options.role);
+    if (options.emailVerified !== undefined) {
+      qs.set("email_verified", String(options.emailVerified));
+    }
+    if (options.isActive !== undefined) qs.set("is_active", String(options.isActive));
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<AdminUserListResponse>(`/admin/users${sufijo}`, { token });
+  },
 
-  updateUserAccess: (token: string, userId: UUID, accessType: UserResponse["access_type"]) =>
+  getUser: (token: string, userId: UUID) =>
+    apiFetch<AdminUserDetailResponse>(`/admin/users/${userId}`, { token }),
+
+  /** Otorga o retira el acceso manual. Pide motivo y queda en la bitácora. */
+  updateUserAccess: (token: string, userId: UUID, body: UpdateUserAccessRequest) =>
     apiFetch<UserResponse>(`/admin/users/${userId}/access`, {
       method: "PATCH",
-      body: JSON.stringify({ access_type: accessType }),
+      body: JSON.stringify(body),
       token,
     }),
+
+  /** Suspende o reactiva la cuenta. Pide motivo y queda en la bitácora. */
+  updateUserStatus: (token: string, userId: UUID, body: UpdateUserStatusRequest) =>
+    apiFetch<UserResponse>(`/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** La bitácora de acciones de administradores, lo más reciente primero. */
+  auditLog: (token: string, options: { limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<AuditLogListResponse>(`/admin/audit-log${sufijo}`, { token });
+  },
 };

@@ -1,17 +1,20 @@
 "use client";
 
 /**
- * Compuerta de las pantallas de juego (§6.3 de la Fase 4).
+ * Compuerta de las pantallas de juego (§2.1 y §6.3 de la Fase 4).
  *
- * Antes de montar la pantalla pregunta a la API qué le falta aceptar a la
- * cuenta. Si hay algo —un documento vigente sin aceptar o la declaración de
- * mayoría de edad—, muestra la pantalla de aceptación en lugar del contenido.
- * Con `onboarding`, además muestra una vez la pantalla que explica qué hace y
- * qué no hace la plataforma.
+ * Antes de montar la pantalla le pide al servidor la decisión de acceso de la
+ * cuenta (`GET /auth/me`, campo `access`) y muestra lo que corresponde:
  *
- * Esto es presentación, no control de acceso: quien decide es el servidor, que
- * responde `403 consent_required` en todos los endpoints de juego. La compuerta
- * solo evita mostrar una mesa llena de errores.
+ * - con acceso: la pantalla (y, con `onboarding`, una vez la bienvenida que
+ *   explica qué hace y qué no hace la plataforma);
+ * - falta aceptar un documento vigente o declarar la mayoría de edad: la
+ *   pantalla de aceptación;
+ * - sin acceso, acceso vencido o cuenta suspendida: un aviso.
+ *
+ * Esto es presentación, no control de acceso: quien decide es el servidor
+ * (`core/access.py`), que responde `403` con el motivo en todos los endpoints
+ * de juego. La compuerta solo evita mostrar una mesa llena de errores.
  */
 
 import Link from "next/link";
@@ -24,14 +27,15 @@ import { formatLegalDate, legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
 import type { LegalDocumentResponse, PendingConsentResponse } from "@/lib/types/legal";
 
-import { BrandMark, Button, Card, Checkbox, ErrorBox } from "../ui";
-import { Markdown } from "./Markdown";
+import { Markdown } from "./legal/Markdown";
+import { BrandMark, Button, Card, Checkbox, ErrorBox } from "./ui";
+import { VerifyEmailNotice } from "./VerifyEmailNotice";
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
 }
 
-export function LegalGate({
+export function AccessGate({
   children,
   onboarding = false,
 }: {
@@ -39,11 +43,15 @@ export function LegalGate({
   /** Muestra la pantalla de bienvenida si la cuenta no la ha leído. */
   onboarding?: boolean;
 }) {
-  const { user, loading, withToken } = useSession();
+  const { user, loading, withToken, refreshUser } = useSession();
   const router = useRouter();
+  // La decisión guardada en la sesión puede ser vieja (un admin pudo dar o
+  // quitar el acceso): no se muestra nada hasta volver a pedirla.
+  const [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<PendingConsentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const userId = user?.id ?? null;
+  const reason = user?.access.reason ?? null;
 
   useEffect(() => {
     if (loading) return;
@@ -51,26 +59,68 @@ export function LegalGate({
       router.replace("/login");
       return;
     }
+    refreshUser()
+      .then(() => setFresh(true))
+      .catch((e) => setError(messageOf(e)));
+  }, [loading, userId, router, refreshUser]);
+
+  useEffect(() => {
+    if (!fresh || reason !== "consent_required") return;
     withToken((t) => legalApi.pending(t))
       .then(setPending)
       .catch((e) => setError(messageOf(e)));
-  }, [loading, userId, router, withToken]);
+  }, [fresh, reason, withToken]);
 
   if (loading || !user) return null;
-  if (error && !pending) {
+  if (error) {
     return (
       <Shell title="No se pudo continuar">
         <ErrorBox message={error} />
       </Shell>
     );
   }
-  if (!pending) return null;
+  if (!fresh) return null;
 
-  if (pending.documents.length > 0 || pending.adult_confirmation_required) {
-    return <ConsentScreen pending={pending} onAccepted={setPending} />;
+  if (user.access.granted) {
+    if (onboarding && !user.onboarding_completed_at) return <OnboardingScreen />;
+    return <>{children}</>;
   }
-  if (onboarding && !user.onboarding_completed_at) return <OnboardingScreen />;
-  return <>{children}</>;
+  if (user.access.reason === "consent_required") {
+    return pending ? <ConsentScreen pending={pending} onAccepted={setPending} /> : null;
+  }
+  return <NoAccessScreen />;
+}
+
+/**
+ * Lo que ve una cuenta que no puede usar la mesa. Provisional hasta el paso 4,
+ * que la reemplaza por la página de planes: por eso no ofrece nada que comprar.
+ */
+function NoAccessScreen() {
+  const { user } = useSession();
+  if (!user) return null;
+  const { reason, until } = user.access;
+
+  if (reason === "suspended") {
+    return (
+      <Shell
+        title="Tu cuenta está suspendida"
+        subtitle="No puedes usar la mesa mientras la cuenta esté suspendida. Desde Mi cuenta puedes consultar y descargar tus datos."
+      >
+        {null}
+      </Shell>
+    );
+  }
+  return (
+    <Shell
+      title={reason === "expired" ? "Tu acceso venció" : "Tu cuenta no tiene acceso activo"}
+      subtitle={
+        (reason === "expired" && until ? `Venció el ${formatLegalDate(until)}. ` : "") +
+        "Las suscripciones estarán disponibles pronto."
+      }
+    >
+      <VerifyEmailNotice />
+    </Shell>
+  );
 }
 
 function Shell({

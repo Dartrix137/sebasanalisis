@@ -152,6 +152,17 @@ Que pasa al desplegar este paso:
   nueva, marcando "exigir aceptacion": eso se lo vuelve a pedir a todas las
   cuentas.
 
+### Control de acceso (Fase 4, paso 3)
+
+Que pasa al desplegar este paso:
+
+- Las cuentas `trial` que ya existian pasan a `invited` sin vencimiento: siguen
+  usando la mesa. La migracion lo hace sola.
+- **Toda cuenta nueva queda sin acceso** hasta que un administrador se lo de en
+  `/admin/usuarios` (buscar la cuenta, "Ver", tipo de acceso "Invitado", motivo,
+  "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
+- Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
+
 ## Comprobacion despues del primer despliegue
 
 1. `https://api.sebasanalisis.com/health` devuelve `{"status":"ok"}`.

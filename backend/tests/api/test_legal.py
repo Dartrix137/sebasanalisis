@@ -404,7 +404,7 @@ def test_has_access_decide_por_el_consentimiento(client: TestClient, admin_token
     now = datetime.now(UTC)
 
     decision = has_access(db, user, now)
-    assert (decision.granted, decision.reason) == (True, "open")
+    assert (decision.granted, decision.reason) == (True, "invited")
 
     _publish(client, admin_token, "privacy")
     decision = has_access(db, user, now)

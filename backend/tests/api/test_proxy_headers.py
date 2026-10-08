@@ -55,7 +55,7 @@ def proxied_client(test_database: str) -> Iterator[type[TestClient]]:
             await wrapped(scope, receive, send)
 
         client = TestClient(from_peer)
-        register_with_consents(client)
+        register_with_consents(client, test_database)
         return client
 
     yield make  # type: ignore[misc]

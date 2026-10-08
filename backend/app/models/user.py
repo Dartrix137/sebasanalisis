@@ -11,13 +11,14 @@ de verdad por si solo, idempotencia por `provider_event_id`).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
 
-ACCESS_TYPES = ("trial", "invited", "full")
+# `none`: sin acceso hasta pagar o hasta que un administrador se lo otorgue.
+ACCESS_TYPES = ("none", "invited", "full")
 USER_ROLES = ("user", "admin")
 
 
@@ -40,7 +41,14 @@ class User(Base):
         Integer, default=0, server_default="0", nullable=False
     )
     access_type: Mapped[str] = mapped_column(
-        enum_col(*ACCESS_TYPES, name="access_type"), default="trial", nullable=False
+        enum_col(*ACCESS_TYPES, name="access_type"), default="none", nullable=False
+    )
+    # Vencimiento del acceso `invited`. Null = sin vencimiento.
+    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # False = cuenta suspendida por un administrador: entra a su cuenta, no a la
+    # mesa. Quien decide el acceso es `core/access.has_access`, no este campo.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
     )
     role: Mapped[str] = mapped_column(
         enum_col(*USER_ROLES, name="user_role"), default="user", nullable=False

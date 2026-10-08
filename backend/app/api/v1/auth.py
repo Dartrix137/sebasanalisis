@@ -21,6 +21,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy import delete, func, select
 
 from app.api.deps import CurrentUser, DbSession
+from app.api.presenters import user_response
 from app.api.v1.legal import client_ip, list_consents
 from app.core import legal, rate_limit
 from app.core.config import get_settings
@@ -104,11 +105,11 @@ def _limit(key: str, *, limit: int, window: int) -> None:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY)
 
 
-def _tokens_for(user: User) -> TokenResponse:
+def _tokens_for(db: DbSession, user: User) -> TokenResponse:
     return TokenResponse(
         access_token=create_token(user.id, "access", token_version=user.token_version),
         refresh_token=create_token(user.id, "refresh", token_version=user.token_version),
-        user=UserResponse.model_validate(user),
+        user=user_response(db, user),
     )
 
 
@@ -194,7 +195,8 @@ def register(
         email=email,
         password_hash=hash_password(payload.password),
         display_name=payload.display_name,
-        access_type="trial",
+        # Sin acceso hasta pagar o hasta que un administrador se lo otorgue (§2).
+        access_type="none",
         role="user",
         adult_confirmed_at=now,
     )
@@ -214,7 +216,7 @@ def register(
     _queue_verification_email(db, user, background, sender)
     db.commit()
     db.refresh(user)
-    return _tokens_for(user)
+    return _tokens_for(db, user)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -249,7 +251,7 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
         db.commit()
 
     rate_limit.reset(key)
-    return _tokens_for(user)
+    return _tokens_for(db, user)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -263,28 +265,32 @@ def refresh(payload: RefreshRequest, db: DbSession) -> TokenResponse:
     # Version distinta: la contrasena cambio y esa sesion quedo revocada (§5.3).
     if user is None or claims.token_version != user.token_version:
         raise expired
-    return _tokens_for(user)
+    return _tokens_for(db, user)
 
 
 # ---------- Perfil ----------
 
 
 @router.get("/me", response_model=UserResponse)
-def me(user: CurrentUser) -> User:
-    return user
+def me(user: CurrentUser, db: DbSession) -> UserResponse:
+    """La cuenta y su decision de acceso (`access`), para que el cliente sepa
+    si mostrar la mesa. Es informativa: el servidor decide en cada llamada."""
+    return user_response(db, user)
 
 
 @router.patch("/me", response_model=UserResponse)
-def update_profile(payload: UpdateProfileRequest, user: CurrentUser, db: DbSession) -> User:
+def update_profile(
+    payload: UpdateProfileRequest, user: CurrentUser, db: DbSession
+) -> UserResponse:
     nombre = (payload.display_name or "").strip()
     user.display_name = nombre or None
     db.commit()
     db.refresh(user)
-    return user
+    return user_response(db, user)
 
 
 @router.post("/me/onboarding", response_model=UserResponse)
-def complete_onboarding(user: CurrentUser, db: DbSession) -> User:
+def complete_onboarding(user: CurrentUser, db: DbSession) -> UserResponse:
     """Anota que la cuenta leyo la pantalla de bienvenida de la mesa (§6.3).
 
     Es informativa, no un consentimiento legal: por eso vive aqui y no en
@@ -294,7 +300,7 @@ def complete_onboarding(user: CurrentUser, db: DbSession) -> User:
         user.onboarding_completed_at = _now()
         db.commit()
         db.refresh(user)
-    return user
+    return user_response(db, user)
 
 
 @router.get("/me/export", response_model=ExportResponse)
@@ -328,7 +334,7 @@ def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
 
     return ExportResponse(
         exported_at=_now(),
-        account=UserResponse.model_validate(user),
+        account=user_response(db, user),
         sessions=[
             ExportSession(
                 session=SessionResponse.model_validate(s), spins=spins[s.id], bets=bets[s.id]
@@ -538,7 +544,7 @@ def change_password(
     db.refresh(user)
 
     _queue_password_changed_email(user, background, sender)
-    return _tokens_for(user)
+    return _tokens_for(db, user)
 
 
 # ---------- Cambio de correo ----------

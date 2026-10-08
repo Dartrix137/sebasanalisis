@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import (
     admin,
     admin_legal,
+    admin_users,
     auth,
     bankroll,
     bets,
@@ -57,6 +58,7 @@ app.include_router(bankroll.router)
 app.include_router(bets.router)
 app.include_router(admin.router)
 app.include_router(admin_legal.router)
+app.include_router(admin_users.router)
 app.include_router(legal.router)
 
 

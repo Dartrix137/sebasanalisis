@@ -12,7 +12,7 @@ Sebasanálisis es una plataforma web por suscripción. El usuario registra a man
 
 La recomendación sale de reglas estadísticas sobre los resultados registrados. **No es una predicción**: cada giro es independiente y ninguna gestión de banca cambia la ventaja de la casa. Esa regla de lenguaje es la más importante del proyecto (`ARQUITECTURA_Y_ESTADISTICA.md` §0).
 
-**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. Todavía no cobra: cualquier cuenta registrada usa la mesa, siempre que haya aceptado los documentos legales vigentes (desde el paso 2 de la Fase 4).
+**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. Todavía no cobra. Desde el paso 3 de la Fase 4 la mesa exige acceso: una cuenta nueva no entra hasta que un administrador se lo otorgue, porque el pago todavía no existe (paso 5).
 
 **Hacia dónde va:** la Fase 4 lo convierte en plataforma comercial. Control de acceso, pagos con Wompi, correo, textos legales, admin completo y una base que admita más juegos.
 
@@ -95,6 +95,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Buzón de soporte en Hostinger sobre el dominio (`soporte@sebasanalisis.com`). | El correo de soporte y de contacto es una cuenta de Gmail: `sebas.analisis.ia.com@gmail.com`. | 2026-10-07 |
 | Chequeo externo de disponibilidad sobre la API y la página de inicio. | No se hace. Si el VPS se cae, no hay aviso. | 2026-10-07 |
 | Página de Juego Responsable (`/legal/juego-responsable`), exigida por §0 del documento de arquitectura. | Descartada por decisión del usuario: no se construye. Los documentos legales son cuatro (términos, datos, reembolsos, cookies). | 2026-10-08 |
+| `GET /admin/users` devolvía todas las cuentas y el acceso se cambiaba con un desplegable, sin dejar rastro. | `/admin/usuarios` pagina, busca y filtra en el servidor; cada cambio de acceso pide un motivo y queda en la bitácora. | Fase 4, paso 3 |
 | El registro pedía correo y contraseña. | Exige además aceptar los términos y la política de datos vigentes y declarar la mayoría de edad. | Fase 4, paso 2 |
 
 ---
@@ -108,7 +109,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 0 | Preparación del stack: actualización de Next.js y React, CI, generador de tipos, IP real tras el proxy, Playwright, GlitchTip | §13 | **Cerrado el 2026-10-07.** Construido y en `main` el 2026-10-06; GlitchTip instalado y comprobado el 2026-10-07 (ver abajo) |
 | 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Cerrado el 2026-10-07.** Construido el 2026-10-06 (rama `fase-4-paso-1-correo`); correo real encendido con Resend sobre `correo.sebasanalisis.com` y comprobado por el usuario con una cuenta nueva: registro, restablecimiento y aviso de cuenta eliminada (ver `DESPLIEGUE.md`, "Correo"). Queda anotado: en Hotmail el correo llegó a no deseado |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
-| 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | Pendiente |
+| 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §4.4, §4.5 | Pendiente |
 | 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3 | Pendiente |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
@@ -155,6 +156,23 @@ Comprobado: 628 tests de backend, entre ellos "registro sin consentimientos → 
 
 Quedó para después, a propósito: la fila de `admin_audit_log` al publicar un documento (la tabla es del paso 3) y la sección de pagos de la exportación (paso 5).
 
+### Paso 3: qué quedó hecho
+
+Construido el 2026-10-08 en la rama `fase-4-paso-3-acceso`. El detalle está en `PLATAFORMA_COMPLETA.md` §2.5.
+
+- `has_access` con todas las reglas de §2.2 menos la de juego incluido en el plan (paso 7): cuenta suspendida, consentimiento, administrador, acceso `full`, acceso `invited` con vencimiento, suscripción con el período vigente.
+- `users.access_type` pasa a `none | invited | full`, con `access_expires_at` e `is_active`. Tres migraciones: DDL, backfill y retiro de `trial`. **Las cuentas `trial` pasaron a `invited` sin vencimiento.**
+- `GET /auth/me` (y toda respuesta con la cuenta) trae `access: {granted, reason, until}`.
+- `admin_audit_log`, escrito en la misma transacción que el cambio. Publicar un documento legal ya deja su fila.
+- `/admin/usuarios` (adelantado del paso 6 por decisión del usuario): lista paginada con búsqueda y filtros, detalle de la cuenta, otorgar o retirar acceso y suspender o reactivar, todo con motivo. `/admin/auditoria` muestra la bitácora.
+- Una cuenta sin acceso, con el acceso vencido o suspendida ve un aviso en lugar de la mesa. Es provisional: el paso 4 lo reemplaza por la página de planes.
+
+**Efecto al desplegar:** toda cuenta nueva queda sin acceso hasta que un administrador le dé `invited` desde `/admin/usuarios`. Entre este paso y el 5 nadie entra por su cuenta (decisión del usuario).
+
+Comprobado: 654 tests de backend, entre ellos los de §2.4 y el que recorre todos los routers de juego con una cuenta sin acceso; 18 tests de Playwright, entre ellos "cuenta sin acceso → no ve la mesa hasta que el administrador le da acceso" y "cuenta suspendida".
+
+Quedó para después, a propósito: cambiar el rol, reenviar la verificación y forzar el restablecimiento desde el admin (paso 6); el filtro por estado de suscripción y la suscripción y los pagos en el detalle de la cuenta (paso 5); la navegación lateral del admin (paso 6).
+
 ### Decisiones tomadas para la Fase 4
 
 - Cobro con renovación automática y tarjeta tokenizada en Wompi.
@@ -166,6 +184,10 @@ Quedó para después, a propósito: la fila de `admin_audit_log` al publicar un 
 - Resend en el plan gratuito (100 correos al día) mientras se construye, con `EMAIL_DAILY_LIMIT=80`; se pasa al plan Pro antes del lanzamiento comercial.
 - El VPS tiene 8 GB de RAM (confirmado el 2026-10-06): alcanza para GlitchTip junto a la aplicación.
 - No hay página de Juego Responsable (2026-10-08).
+- Las cuentas `trial` pasan a `invited` sin vencimiento y sin correo de aviso; el administrador les retira el acceso a mano cuando exista el pago (2026-10-08).
+- El paso 3 se despliega sin esperar al pago: las cuentas nuevas entran solo con acceso manual (2026-10-08).
+- La pantalla de una cuenta sin acceso no muestra correo de contacto: solo dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto (2026-10-08).
+- `/admin/usuarios` con búsqueda, filtros, paginación y detalle se adelanta del paso 6 al 3 (2026-10-08).
 - Las cuentas anteriores al paso 2 aceptan los documentos y declaran la mayoría de edad al volver a la mesa; no se les crean consentimientos por migración (2026-10-08).
 - La versión 1 de los documentos legales se publica como borrador marcado; el texto del abogado entra como versión 2 y pide re-aceptación a todas las cuentas (2026-10-08).
 
@@ -178,7 +200,6 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
-| Qué pasa con los usuarios `trial` actuales | Paso 3 |
 | Planes y precios iniciales | Paso 4 |
 | Cuenta de comercio en Wompi (sandbox y producción); medios de pago; facturación electrónica | Paso 5 |
 

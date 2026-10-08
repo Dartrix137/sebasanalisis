@@ -94,36 +94,62 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
-        register_with_consents(c)
+        register_with_consents(c, test_database)
         yield c
     app.dependency_overrides.pop(get_db, None)
     engine.dispose()
 
 
-def register_with_consents(client: TestClient) -> None:
-    """Hace que `client.post("/auth/register", ...)` acepte los documentos.
+def register_with_consents(client: TestClient, database_url: str) -> None:
+    """Hace que `client.post("/auth/register", ...)` deje una cuenta lista para
+    usar la mesa: con los documentos aceptados y con acceso.
 
-    Desde el paso 2 de la Fase 4 el registro exige los consentimientos (§6.3).
-    Casi ningun test trata de eso: solo necesitan una cuenta. Para no repetir
-    los mismos dos campos en cada uno, un registro que no menciona NINGUNO de
-    los dos recibe los vigentes.
+    Desde la Fase 4 una cuenta nueva necesita dos cosas que casi ningun test
+    trata: los consentimientos del registro (paso 2, §6.3) y que alguien le de
+    acceso (paso 3, §2). Para no repetirlo en cada uno:
 
-    Un test que si trata de consentimientos escribe al menos uno de los campos
-    (y entonces no se toca nada), o usa `client.request("POST", ...)`.
+    - un registro que no menciona NINGUNO de los dos campos de consentimiento
+      recibe los vigentes;
+    - y la cuenta queda como `invited` sin vencimiento, directo en la base.
+
+    Ojo: la respuesta del registro se arma antes de ese cambio, asi que sigue
+    diciendo `access_type: "none"`.
+
+    Un test que SI trata de consentimientos o de acceso registra con
+    `client.request("POST", "/auth/register", ...)`, que no pasa por aqui, o
+    con `register_raw`.
     """
     original = client.post
 
     def post(url, *args, json=None, **kwargs):
-        if (
-            url == "/auth/register"
-            and isinstance(json, dict)
-            and "accepted_document_ids" not in json
-            and "adult_confirmed" not in json
-        ):
+        if url != "/auth/register" or not isinstance(json, dict):
+            return original(url, *args, json=json, **kwargs)
+        if "accepted_document_ids" not in json and "adult_confirmed" not in json:
             json = {**json, **consent_fields(client)}
-        return original(url, *args, json=json, **kwargs)
+        response = original(url, *args, json=json, **kwargs)
+        if response.status_code == 201:
+            engine = create_engine(database_url)
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE users SET access_type='invited' WHERE id=:id"),
+                    {"id": response.json()["user"]["id"]},
+                )
+            engine.dispose()
+        return response
 
     client.post = post  # type: ignore[method-assign]
+
+
+def register_raw(client: TestClient, email: str, password: str = "clave-segura-123") -> dict:
+    """Registra como lo hace un cliente real: con los consentimientos y SIN
+    acceso (`access_type = none`). Para los tests de acceso."""
+    r = client.request(
+        "POST",
+        "/auth/register",
+        json={"email": email, "password": password, **consent_fields(client)},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
 
 
 def consent_fields(client: TestClient) -> dict:
@@ -148,7 +174,7 @@ def _register(client, email: str, password: str = "clave-segura-123") -> dict:
 
 @pytest.fixture
 def user_token(client) -> str:
-    """Access token de un usuario normal (access_type='trial', role='user')."""
+    """Access token de un usuario normal con acceso a la mesa (`invited`)."""
     import uuid
 
     return _register(client, f"user-{uuid.uuid4().hex[:12]}@ejemplo.com")["access_token"]

@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/admin/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Log
+         * @description La bitacora, lo mas reciente primero. Solo lectura: no hay como borrarla.
+         */
+        get: operations["list_audit_log_admin_audit_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/games": {
         parameters: {
             query?: never;
@@ -172,8 +192,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Users */
+        /**
+         * List Users
+         * @description Cuentas por pagina, las mas recientes primero. Busca por correo o nombre.
+         */
         get: operations["list_users_admin_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User */
+        get: operations["get_user_admin_users__user_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -195,8 +235,32 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update User Access */
+        /**
+         * Update User Access
+         * @description Otorga acceso manual (`invited` con vencimiento opcional, o `full`) o lo
+         *     retira (`none`).
+         */
         patch: operations["update_user_access_admin_users__user_id__access_patch"];
+        trace?: never;
+    };
+    "/admin/users/{user_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update User Status
+         * @description Suspende o reactiva una cuenta. Suspendida, entra a su cuenta pero no a la mesa.
+         */
+        patch: operations["update_user_status_admin_users__user_id__status_patch"];
         trace?: never;
     };
     "/auth/change-email": {
@@ -289,7 +353,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Me */
+        /**
+         * Me
+         * @description La cuenta y su decision de acceso (`access`), para que el cliente sepa
+         *     si mostrar la mesa. Es informativa: el servidor decide en cada llamada.
+         */
         get: operations["me_auth_me_get"];
         put?: never;
         post?: never;
@@ -1065,10 +1133,30 @@ export interface components {
             legal_document_ids?: string[];
         };
         /**
+         * AccessInfo
+         * @description La decision de acceso, para que el cliente sepa que pantalla mostrar.
+         *
+         *     Es informativa: el servidor vuelve a decidir en cada llamada a un endpoint
+         *     de juego (§2.1 de la Fase 4).
+         */
+        AccessInfo: {
+            /** Granted */
+            granted: boolean;
+            reason: components["schemas"]["AccessReason"];
+            /** Until */
+            until: string | null;
+        };
+        /**
+         * AccessReason
+         * @description Por que una cuenta tiene o no acceso a la mesa (`core/access.has_access`).
+         * @enum {string}
+         */
+        AccessReason: "admin" | "full" | "invited" | "subscription" | "suspended" | "consent_required" | "expired" | "no_access";
+        /**
          * AccessType
          * @enum {string}
          */
-        AccessType: "trial" | "invited" | "full";
+        AccessType: "none" | "invited" | "full";
         /**
          * AdminLegalDocumentResponse
          * @description Cualquier version, publicada o borrador.
@@ -1097,6 +1185,32 @@ export interface components {
             version: number;
         };
         /**
+         * AdminUserDetailResponse
+         * @description Una cuenta vista por el administrador (§4.2).
+         *
+         *     La suscripcion y el historial de pagos se suman en el paso 5.
+         */
+        AdminUserDetailResponse: {
+            /** Audit */
+            audit: components["schemas"]["AuditLogEntry"][];
+            /** Consents */
+            consents: components["schemas"]["ConsentResponse"][];
+            /** Sessions Count */
+            sessions_count: number;
+            user: components["schemas"]["UserResponse"];
+        };
+        /** AdminUserListResponse */
+        AdminUserListResponse: {
+            /** Items */
+            items: components["schemas"]["UserResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * AllowedCombination
          * @description Una apuesta a varios grupos de la misma categoría a la vez (dos docenas).
          *
@@ -1113,6 +1227,48 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+        };
+        /** AuditLogEntry */
+        AuditLogEntry: {
+            /** Action */
+            action: string;
+            /** Admin Email */
+            admin_email: string;
+            /** Admin User Id */
+            admin_user_id: string | null;
+            /** After */
+            after: Record<string, never> | null;
+            /** Before */
+            before: Record<string, never> | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ip */
+            ip: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Target Id */
+            target_id: string;
+            /** Target Type */
+            target_type: string;
+        };
+        /** AuditLogListResponse */
+        AuditLogListResponse: {
+            /** Items */
+            items: components["schemas"]["AuditLogEntry"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /** BacktestBandRow */
         BacktestBandRow: {
@@ -2351,16 +2507,35 @@ export interface components {
         };
         /**
          * UpdateUserAccessRequest
-         * @description PATCH /admin/users/:id/access — §3.4.
-         *
-         *     Agregado en el paso 3: el endpoint estaba en el documento de arquitectura
-         *     pero no tenia schema definido.
+         * @description PATCH /admin/users/:id/access: otorga o retira el acceso manual.
          */
         UpdateUserAccessRequest: {
+            /** Access Expires At */
+            access_expires_at?: string | null;
             access_type: components["schemas"]["AccessType"];
+            /** Reason */
+            reason: string;
         };
-        /** UserResponse */
+        /**
+         * UpdateUserStatusRequest
+         * @description PATCH /admin/users/:id/status: suspende o reactiva la cuenta.
+         */
+        UpdateUserStatusRequest: {
+            /** Is Active */
+            is_active: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * UserResponse
+         * @description La cuenta mas su decision de acceso. Se arma con
+         *     `api/presenters.user_response`, no con `model_validate`: `access` no es una
+         *     columna, lo calcula `has_access`.
+         */
         UserResponse: {
+            access: components["schemas"]["AccessInfo"];
+            /** Access Expires At */
+            access_expires_at: string | null;
             access_type: components["schemas"]["AccessType"];
             /** Adult Confirmed At */
             adult_confirmed_at: string | null;
@@ -2383,6 +2558,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Active */
+            is_active: boolean;
             /** Onboarding Completed At */
             onboarding_completed_at: string | null;
             role: components["schemas"]["UserRole"];
@@ -2438,6 +2615,38 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_audit_log_admin_audit_log_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_game_admin_games_post: {
         parameters: {
             query?: never;
@@ -2747,7 +2956,15 @@ export interface operations {
     };
     list_users_admin_users_get: {
         parameters: {
-            query?: never;
+            query?: {
+                query?: string | null;
+                access_type?: components["schemas"]["AccessType"] | null;
+                role?: components["schemas"]["UserRole"] | null;
+                email_verified?: boolean | null;
+                is_active?: boolean | null;
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2760,7 +2977,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserResponse"][];
+                    "application/json": components["schemas"]["AdminUserListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_admin_users__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2777,6 +3034,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateUserAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_status_admin_users__user_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserStatusRequest"];
             };
         };
         responses: {

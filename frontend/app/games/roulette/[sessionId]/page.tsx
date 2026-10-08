@@ -1,4 +1,4 @@
-import { LegalGate } from "@/components/legal/LegalGate";
+import { AccessGate } from "@/components/AccessGate";
 
 import { RouletteSession } from "./RouletteSession";
 
@@ -8,11 +8,12 @@ export default async function RouletteSessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  // La primera vez que se entra a la mesa, la compuerta muestra además la
-  // pantalla que explica qué hace y qué no hace la plataforma (§6.3).
+  // Sin acceso no hay mesa. Y la primera vez que se entra, la compuerta
+  // muestra además la pantalla que explica qué hace y qué no hace la
+  // plataforma (§6.3).
   return (
-    <LegalGate onboarding>
+    <AccessGate onboarding>
       <RouletteSession sessionId={sessionId} />
-    </LegalGate>
+    </AccessGate>
   );
 }

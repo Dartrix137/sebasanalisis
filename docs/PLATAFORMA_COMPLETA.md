@@ -123,6 +123,29 @@ La verificación del correo no da ni quita acceso a la mesa por sí sola: es req
 - Admin siempre accede, aunque no tenga suscripción.
 - Un test que recorre **todos** los routers de juego con una cuenta sin acceso y confirma `403` en cada uno: así un router nuevo que olvide `RequireAccess` rompe un test en vez de quedar abierto.
 
+### 2.5 Cómo quedó construido (2026-10-08)
+
+Decisiones de implementación que este documento no fijaba, confirmadas por el usuario el 2026-10-08.
+
+- **`core/access.py` ya existía** desde el paso 2, con la regla de consentimiento. Este paso agregó las demás en el orden de §2.2. La firma es `has_access(db, user, now)`; `game` y la regla n.º 7 llegan en el paso 7.
+- **Motivos**: `admin`, `full`, `invited`, `subscription` cuando hay acceso; `suspended`, `consent_required`, `expired`, `no_access` cuando no. `expired` se usa cuando la cuenta tuvo un acceso `invited` o una suscripción y venció; `no_access`, cuando nunca tuvo. `email_not_verified` no es un motivo de acceso a la mesa (§2.2): es requisito para pagar y lo responde `POST /billing/subscriptions` en el paso 5.
+- **`until`**: hasta cuándo vale el acceso si vence, o cuándo venció si el motivo es `expired`. Null en los accesos sin vencimiento.
+- **La suscripción se lee con lo que hay hoy** en la tabla (`status` y `current_period_end`): da acceso con `status` `active` o `canceled` y el período en el futuro. No hay ninguna suscripción todavía; los tests insertan filas a mano. El paso 5 amplía la tabla sin cambiar esta regla.
+- **Cuentas `trial`**: pasaron a `invited` sin vencimiento (decisión de §10 n.º 1). Tres migraciones, como pedía §2.3: DDL (`none`, `access_expires_at`, `is_active`), backfill, y retiro de `trial` del CHECK. El backfill no tiene vuelta: después de subir, una cuenta que venía de `trial` no se distingue de una invitada.
+- **Despliegue sin esperar al pago** (decisión del usuario): desde que este paso sale, una cuenta nueva nace con `access_type = none` y no entra a la mesa hasta que un administrador le dé acceso. No hay interruptor para apagarlo.
+- **`access` viaja en toda respuesta que trae la cuenta**, no solo en `GET /auth/me`: también en el login, el registro y el refresh, que es de donde el frontend toma la cuenta al entrar. Se arma en `api/presenters.user_response` con la decisión de `has_access`.
+- **El `403` de un endpoint de juego** lleva `detail.code` con el motivo y un mensaje de respaldo.
+- **Cuenta suspendida**: inicia sesión, entra a `/cuenta`, exporta y elimina sus datos; no usa la mesa. Un administrador suspendido deja de administrar (`require_admin` lo rechaza) hasta que otro lo reactive. Nadie se suspende a sí mismo (`409`).
+- **Qué ve una cuenta sin acceso** (decisión del usuario): una pantalla que dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto, **sin correo de contacto**. Si el acceso venció, dice cuándo. Si está suspendida, lo dice. Si le falta confirmar el correo, se lo recuerda. Es provisional: el paso 4 la reemplaza por `/planes`.
+- **Compuerta del frontend**: `LegalGate` pasó a llamarse `AccessGate`. Antes de montar una pantalla de juego vuelve a pedir la cuenta al servidor, porque la decisión guardada en la sesión puede ser vieja, y muestra la mesa, la aceptación de documentos o el aviso según `access`. Sigue siendo presentación: decide el servidor.
+- **No se envía correo** al otorgar, retirar o suspender.
+- **`admin_audit_log`** (§4.6) se creó aquí. Además de lo previsto guarda `admin_email`, porque `admin_user_id` queda en null si ese administrador elimina su cuenta, y `target_id` es texto y no una llave foránea, para que la fila sobreviva al objeto. Lo escribe `core/audit.record`, que no hace commit: el cambio y su fila se confirman juntos. Acciones de hoy: `user.access.update`, `user.status.update` y `legal_document.publish`.
+- **El motivo es obligatorio** (3 a 500 caracteres) en los cambios de acceso y de estado. Un cambio rechazado no deja fila.
+- **`/admin/usuarios` se adelantó del paso 6** (decisión del usuario): `GET /admin/users` pagina (`limit` hasta 100, `offset`) y filtra en el servidor por texto (correo o nombre), acceso manual, rol, correo confirmado y estado; devuelve `{items, total, limit, offset}`. `GET /admin/users/:id` trae la cuenta, su decisión de acceso, los documentos aceptados, la cantidad de mesas y las últimas 20 acciones sobre ella. `PATCH /admin/users/:id/access` recibe `{access_type, access_expires_at?, reason}`; el vencimiento solo aplica a `invited` y debe ser futuro. `PATCH /admin/users/:id/status` recibe `{is_active, reason}`.
+- **`/admin/auditoria`**: `GET /admin/audit-log` paginado, lo más reciente primero. No hay endpoint para editar ni borrar.
+- **Queda para el paso 6**: `PATCH /admin/users/:id/role`, `POST …/force-password-reset`, `POST …/resend-verification` y la navegación lateral. **Para el paso 5**: el filtro por estado de suscripción, y la suscripción y los pagos en el detalle de la cuenta.
+- **Tests**: el cliente de los tests de API deja cada cuenta que registra con acceso `invited`, porque casi ningún test trata del acceso; los que sí usan `register_raw`, que registra como un cliente real. En Playwright, `registerViaApi` le pide el acceso al administrador sembrado.
+
 ---
 
 ## 3. Pagos y suscripciones con Wompi
@@ -548,9 +571,9 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **Registro**: `accepted_document_ids` y `adult_confirmed` en `POST /auth/register`. Si falta la mayoría de edad o alguno de los documentos exigidos, responde `422` con un mensaje propio, antes de mirar si el correo ya existe. Solo se guardan consentimientos de los documentos exigidos: un id de más en la petición se ignora.
 - **IP y navegador**: la IP es la del cliente tras el proxy (§13.1); el user agent se recorta a 400 caracteres.
 - **Un solo borrador por documento** en `/admin/legal`: con dos, el número de versión dependería de cuál se publique primero. No hay endpoint para borrar un borrador; se edita.
-- **Auditoría**: publicar un documento legal todavía no escribe en `admin_audit_log` (§4.6), porque esa tabla se crea en el paso 3. Hoy la traza es `created_by` y `published_at`. **Pendiente para el paso 3**: conectar `POST /admin/legal-documents/:id/publish` a la bitácora.
-- **Onboarding**: `users.onboarding_completed_at` y `POST /auth/me/onboarding` (no estaban en §11). Es una pantalla informativa, no un consentimiento legal: se guarda en el servidor para que no reaparezca en cada dispositivo, la exige el frontend al entrar a la mesa y no participa en `has_access`. Su texto es fijo en el frontend (`components/legal/LegalGate.tsx`), no un documento versionado.
-- **Compuerta del frontend** (`LegalGate`): envuelve el menú principal, la mesa y el panel de admin (que lista juegos). Pregunta `GET /legal/pending` antes de montar la pantalla. Es presentación: quien decide es el servidor.
+- **Auditoría**: al cerrar este paso, publicar un documento legal no escribía en `admin_audit_log` (§4.6) porque la tabla no existía. **Hecho en el paso 3** (2026-10-08): `POST /admin/legal-documents/:id/publish` deja su fila.
+- **Onboarding**: `users.onboarding_completed_at` y `POST /auth/me/onboarding` (no estaban en §11). Es una pantalla informativa, no un consentimiento legal: se guarda en el servidor para que no reaparezca en cada dispositivo, la exige el frontend al entrar a la mesa y no participa en `has_access`. Su texto es fijo en el frontend (`components/AccessGate.tsx` desde el paso 3), no un documento versionado.
+- **Compuerta del frontend** (`LegalGate`; `AccessGate` desde el paso 3): envuelve el menú principal, la mesa y el panel de admin (que lista juegos). Pregunta `GET /legal/pending` antes de montar la pantalla. Es presentación: quien decide es el servidor.
 - **Markdown**: `react-markdown` 10.1.0, sin `rehype-raw` ni `remark-gfm` (los documentos se escriben sin tablas). Las imágenes se descartan. `npm audit --omit=dev` quedó sin vulnerabilidades tras instalarla.
 - **Rutas públicas en español, `kind` en inglés**: `/legal/terminos`, `/legal/privacidad`, `/legal/reembolsos`, `/legal/cookies` (`frontend/lib/legal.ts`). Las páginas se renderizan en el navegador, pidiendo `GET /legal/:kind`.
 - **Endpoints que no estaban en §11**: `GET /legal/required` (público: lo que el registro pide aceptar), `GET /legal/consents` (lo que la cuenta aceptó, para `/cuenta`) y `POST /auth/me/onboarding`.
@@ -700,7 +723,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 
 | # | Decisión | Propuesta por defecto (la más conservadora) |
 |---|---|---|
-| 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | Pasan a `invited` con `access_expires_at` 14 días después del despliegue y se les avisa por correo. |
+| 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | Un plan mensual y uno anual. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | No se ofrecen en esta fase; solo tarjeta (y Nequi si la documentación vigente de Wompi permite tokenizarlo para cobros recurrentes). Reevaluar con datos de conversión. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |

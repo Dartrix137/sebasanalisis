@@ -140,12 +140,12 @@ No avances a un paso sin que el anterior tenga al menos un test o una verificaci
 
 ### Acceso y cuentas
 
-- **El acceso lo decide una sola función** (`core/access.py`, `has_access`), aplicada con la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado. Desde el paso 2 existe con una sola regla, la de consentimiento legal (`403 consent_required`); **el pago todavía no se verifica**: el paso 3 agrega las demás reglas de §2.2 dentro de esa misma función.
+- **El acceso lo decide una sola función** (`core/access.py`, `has_access`), aplicada con la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado. Desde el paso 3 aplica las reglas de §2.2 (suspendida, consentimiento, administrador, `full`, `invited`, suscripción vigente) y responde `403` con el motivo en `detail.code`. Falta solo la de juego incluido en el plan (paso 7). La cuenta con su decisión de acceso se arma con `api/presenters.user_response`, nunca con `UserResponse.model_validate`.
 - **Legal** (paso 2, §6 y §6.7 del documento de la Fase 4): una versión publicada de un documento legal no se edita, se publica otra. El registro exige aceptar los documentos vigentes y declarar la mayoría de edad; no se crean consentimientos por migración ni por código en nombre de nadie. Los textos publicados son borradores pendientes de abogado: no los presentes como revisados. No hay página de Juego Responsable (descartada el 2026-10-08).
-- Cuenta nueva = **sin acceso hasta pagar** (o acceso manual del admin). `trial` desaparece; `access_type` pasa a `none | invited | full`.
+- Cuenta nueva = **sin acceso hasta pagar** (o acceso manual del admin). `trial` ya no existe; `access_type` es `none | invited | full`. Mientras no haya pagos (paso 5), la única vía es el acceso manual desde `/admin/usuarios`.
 - El acceso se decide **siempre en el servidor** a partir de `access_type` y `current_period_end`. Nada que dependa de lo que mande el cliente.
 - Correo por **SMTP genérico** detrás de la interfaz `EmailSender`; los tests usan un sender falso. Los tokens de correo se guardan **hasheados** y son de un solo uso.
-- Toda acción de admin que toque acceso o dinero escribe en `admin_audit_log` en la misma transacción.
+- Toda acción de admin que toque acceso o dinero escribe en `admin_audit_log` en la misma transacción, con `core/audit.record` (que no hace commit) y con motivo obligatorio.
 
 ### Pagos con Wompi: reglas no negociables
 
