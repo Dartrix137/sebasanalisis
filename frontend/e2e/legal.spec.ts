@@ -79,7 +79,8 @@ test("registro: sin las casillas no se crea la cuenta; con ellas, sí", async ({
 
   await checkRegisterConsents(page);
   await page.getByRole("button", { name: "Crear mi cuenta" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // Una cuenta nueva nace sin acceso: la mesa la manda a los planes.
+  await expect(page).toHaveURL(/\/planes/);
 
   // Lo aceptado queda a la vista en la cuenta.
   await page.goto("/cuenta");

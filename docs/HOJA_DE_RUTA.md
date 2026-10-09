@@ -112,7 +112,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 1 | Correo, verificación, restablecimiento de contraseña, revocación de sesiones | §5 | **Cerrado el 2026-10-07.** Construido el 2026-10-06 (rama `fase-4-paso-1-correo`); correo real encendido con Resend sobre `correo.sebasanalisis.com` y comprobado por el usuario con una cuenta nueva: registro, restablecimiento y aviso de cuenta eliminada (ver `DESPLIEGUE.md`, "Correo"). Queda anotado: en Hotmail el correo llegó a no deseado |
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
-| 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §4.4, §4.5 | Pendiente |
+| 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
 | 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3 | Pendiente |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
@@ -167,7 +167,7 @@ Construido el 2026-10-08 en la rama `fase-4-paso-3-acceso`. El detalle está en 
 - `GET /auth/me` (y toda respuesta con la cuenta) trae `access: {granted, reason, until}`.
 - `admin_audit_log`, escrito en la misma transacción que el cambio. Publicar un documento legal ya deja su fila.
 - `/admin/usuarios` (adelantado del paso 6 por decisión del usuario): lista paginada con búsqueda y filtros, detalle de la cuenta, otorgar o retirar acceso y suspender o reactivar, todo con motivo. `/admin/auditoria` muestra la bitácora.
-- Una cuenta sin acceso, con el acceso vencido o suspendida ve un aviso en lugar de la mesa. Es provisional: el paso 4 lo reemplaza por la página de planes.
+- Una cuenta sin acceso, con el acceso vencido o suspendida ve un aviso en lugar de la mesa. Era provisional: el paso 4 lo reemplazó por la página de planes.
 
 **Efecto al desplegar:** toda cuenta nueva queda sin acceso hasta que un administrador le dé `invited` desde `/admin/usuarios`. Entre este paso y el 5 nadie entra por su cuenta (decisión del usuario).
 
@@ -176,6 +176,21 @@ Comprobado: 654 tests de backend, entre ellos los de §2.4 y el que recorre todo
 Ajustes hechos al probarlo el usuario (2026-10-08): el acceso manual no aplica a un administrador; un cambio que no cambia nada se rechaza; el seed no crea un segundo administrador y el único administrador activo no puede eliminar su cuenta; y el cambio de rol se adelantó del paso 6, porque sin él no había forma de nombrar otro administrador.
 
 Quedó para después, a propósito: reenviar la verificación y forzar el restablecimiento desde el admin (paso 6); el filtro por estado de suscripción y la suscripción y los pagos en el detalle de la cuenta (paso 5); la navegación lateral del admin (paso 6).
+
+### Paso 4: qué quedó hecho
+
+Construido el 2026-10-09 en la rama `fase-4-paso-4-planes`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §3.11.
+
+- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions`. Dos migraciones: el DDL, y aparte la que siembra el plan único (**Acceso Mensual**, 100.000 COP al mes, con 30 USD de precio de referencia).
+- `backend/app/billing/pricing.py`, puro y con `mypy` estricto: `quote(plan, coupon, now)` con subtotal, descuento, total y moneda, o el motivo por el que el cupón no aplica. El porcentaje redondea hacia abajo.
+- `GET /plans` (pública) y `POST /billing/quote` (con sesión). El cliente manda plan y código; un monto que mande se ignora. Límite de intentos en la cotización con código: 10 cada 15 minutos por cuenta y 30 por hora por IP.
+- `/admin/planes` y `/admin/descuentos`: crear, editar, activar y desactivar, y ver las redenciones de un cupón. No hay borrado. Todo cambio pide motivo y deja fila en la bitácora.
+- **Página `/planes`**, pública. La cuenta sin acceso o con el acceso vencido llega allí en lugar del aviso provisional del paso 3. Muestra `100.000 COP / mes`, `Precio de referencia: 30 USD` y la nota de que el cobro es en pesos colombianos y el banco convierte a su tasa. El botón "Suscribirme" está deshabilitado hasta el paso 5.
+- No existe el cupón del 100 %: el porcentaje va de 1 a 99.
+
+Comprobado: 813 tests de backend, entre ellos cada caso de cupón (vencido, agotado, de otro plan, ya usado por el usuario, de otra moneda, inactivo) y "un monto enviado por el cliente se ignora"; 24 tests de Playwright, entre ellos "cuenta sin acceso: ve /planes con el precio que se cobra". Las dos migraciones se subieron, se bajaron y se volvieron a subir sobre una base desechable, y `alembic check` no reporta diferencias con los modelos.
+
+Quedó para después, a propósito: cobrar y redimir un cupón de verdad, el campo de cupón en la pantalla de pago, y `subscriptions.plan_id` como llave foránea (paso 5); `plan_games` (paso 7). La redacción del precio la revisa el abogado antes del lanzamiento.
 
 ### Decisiones tomadas para la Fase 4
 
@@ -195,6 +210,11 @@ Quedó para después, a propósito: reenviar la verificación y forzar el restab
 - La pantalla de una cuenta sin acceso no muestra correo de contacto: solo dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto (2026-10-08).
 - `/admin/usuarios` con búsqueda, filtros, paginación y detalle se adelanta del paso 6 al 3 (2026-10-08).
 - El cambio de rol (nombrar o quitar administradores) también se adelanta al paso 3. Al quitar el rol, la cuenta conserva el acceso manual que tenía guardado (2026-10-08).
+- El precio se redacta con el cobro como protagonista: `100.000 COP / mes`, debajo `Precio de referencia: 30 USD`, y una nota de que el cobro es en pesos colombianos y el banco de quien paga convierte a su tasa. Sin "equivale" ni "aprox." (2026-10-09).
+- El plan único lo siembra una migración: código `mensual`, nombre **Acceso Mensual** (2026-10-09).
+- No existe el cupón del 100 %: el porcentaje va de 1 a 99 y un cupón nunca deja el total en cero (2026-10-09).
+- Mientras no exista el pago, `/planes` muestra el precio con el botón "Suscribirme" deshabilitado y sin campo de cupón (2026-10-09).
+- Cotizar exige sesión; solo se cobra en COP; todo cambio de plan o cupón pide motivo; no hay borrado; el código de un cupón no se edita (2026-10-09).
 - Las cuentas anteriores al paso 2 aceptan los documentos y declaran la mayoría de edad al volver a la mesa; no se les crean consentimientos por migración (2026-10-08).
 - La versión 1 de los documentos legales se publica como borrador marcado; el texto del abogado entra como versión 2 y pide re-aceptación a todas las cuentas (2026-10-08).
 
@@ -207,7 +227,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
-| Cómo se redacta el precio en pantalla (se cobra 100.000 COP; se muestra además 30 USD), a revisar con el abogado | Paso 4 |
+| Revisión del abogado de cómo se redacta el precio (se cobra 100.000 COP; se muestra además 30 USD como referencia): reglas de información de precios y publicidad de la Ley 1480, impuestos incluidos, ley aplicable a clientes de fuera de Colombia. La redacción ya está construida (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
 | Cuenta de comercio en Wompi (sandbox y producción); confirmación escrita de Wompi de que acepta esta categoría de negocio y tarjetas internacionales; qué medios se habilitan para el pago manual; facturación electrónica | Paso 5 |
 
 ---

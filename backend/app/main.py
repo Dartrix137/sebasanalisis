@@ -7,11 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
     admin,
+    admin_billing,
     admin_legal,
     admin_users,
     auth,
     bankroll,
     bets,
+    billing,
     games,
     legal,
     recommendations,
@@ -60,6 +62,8 @@ app.include_router(admin.router)
 app.include_router(admin_legal.router)
 app.include_router(admin_users.router)
 app.include_router(legal.router)
+app.include_router(billing.router)
+app.include_router(admin_billing.router)
 
 
 @app.get("/health")

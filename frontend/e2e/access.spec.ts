@@ -23,13 +23,10 @@ test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso",
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
   await loginViaUi(page, email);
-  await expect(page).toHaveURL(/\/dashboard/);
 
-  // En lugar del menú de mesas, el aviso. Sin precios ni nada que comprar.
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Tu cuenta no tiene acceso activo" }),
-  ).toBeVisible();
-  await expect(page.getByText("Las suscripciones estarán disponibles pronto.")).toBeVisible();
+  // En lugar del menú de mesas, la página de planes (e2e/plans.spec.ts).
+  await expect(page).toHaveURL(/\/planes/);
+  await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toBeVisible();
   await expect(page.getByRole("heading", MESA)).toHaveCount(0);
 
   // La cuenta no queda bloqueada: "Mi cuenta" abre.
@@ -79,7 +76,8 @@ test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso",
   // La cuenta vuelve al menú: ahora sí ve la mesa.
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", MESA)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Tu cuenta no tiene acceso activo" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toHaveCount(0);
 });
 
 test("el administrador nombra a otro administrador desde /admin/usuarios", async ({
@@ -131,9 +129,8 @@ test("el administrador nombra a otro administrador desde /admin/usuarios", async
   await admin.close();
 
   await page.goto("/dashboard");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Tu cuenta no tiene acceso activo" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/planes/);
+  await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toBeVisible();
 });
 
 test("cuenta suspendida: ve el aviso y no la mesa", async ({ page, request, browser }) => {

@@ -28,8 +28,8 @@ known-first-party = ["app"]
 [tool.mypy]
 python_version = "3.11"
 # Se revisan los modulos puros, donde un tipo mal puesto es un calculo mal
-# hecho: el motor y, cuando exista, billing/. El resto de la app entra despues.
-files = ["app/engine"]
+# hecho: el motor y billing/. El resto de la app entra despues.
+files = ["app/engine", "app/billing"]
 strict = true
 ignore_missing_imports = true
 

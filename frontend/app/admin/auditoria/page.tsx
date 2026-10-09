@@ -47,8 +47,8 @@ export default function AdminAuditPage() {
         <div>
           <h1 className="text-xl font-extrabold">Bitácora</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
-            Lo que los administradores han hecho sobre accesos, cuentas y documentos legales. No
-            se puede editar ni borrar.
+            Lo que los administradores han hecho sobre accesos, cuentas, planes, cupones y
+            documentos legales. No se puede editar ni borrar.
           </p>
         </div>
         <Button variant="ghost" onClick={() => router.push("/admin")}>

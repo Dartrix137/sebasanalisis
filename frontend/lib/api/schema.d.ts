@@ -24,6 +24,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/coupons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Coupons
+         * @description Cupones por pagina, los mas recientes primero. Busca por codigo.
+         */
+        get: operations["list_coupons_admin_coupons_get"];
+        put?: never;
+        /** Create Coupon */
+        post: operations["create_coupon_admin_coupons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/coupons/{coupon_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Coupon
+         * @description Edita, activa o desactiva un cupon. El codigo no cambia.
+         */
+        patch: operations["update_coupon_admin_coupons__coupon_id__patch"];
+        trace?: never;
+    };
+    "/admin/coupons/{coupon_id}/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Redemptions
+         * @description Quien uso el cupon, cuando y en que suscripcion. Lo mas reciente primero.
+         */
+        get: operations["list_redemptions_admin_coupons__coupon_id__redemptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/games": {
         parameters: {
             query?: never;
@@ -154,6 +215,50 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plans
+         * @description Todos los planes, los desactivados tambien.
+         */
+        get: operations["list_plans_admin_plans_get"];
+        put?: never;
+        /** Create Plan */
+        post: operations["create_plan_admin_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Plan
+         * @description Edita, activa o desactiva un plan. El codigo y la moneda de cobro no cambian.
+         *
+         *     El precio nuevo aplica a suscripciones nuevas: las vigentes guardan el suyo
+         *     (§3.7).
+         */
+        patch: operations["update_plan_admin_plans__plan_id__patch"];
         trace?: never;
     };
     "/admin/recommendations/backtest": {
@@ -559,6 +664,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote
+         * @description Cuanto se cobraria por un periodo del plan, con o sin cupon.
+         *
+         *     Un cupon que no aplica no es un error: la cotizacion sale por el precio
+         *     completo y dice por que. No reserva ni redime nada.
+         */
+        post: operations["quote_billing_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/games": {
         parameters: {
             query?: never;
@@ -727,6 +855,26 @@ export interface paths {
          * @description La ultima version publicada de un documento. Publico.
          */
         get: operations["current_document_legal__kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plans
+         * @description Los planes que se ofrecen. Publico.
+         */
+        get: operations["list_plans_plans_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1181,6 +1329,55 @@ export interface components {
          * @enum {string}
          */
         AccessType: "none" | "invited" | "full";
+        /** AdminCouponListResponse */
+        AdminCouponListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminCouponResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** AdminCouponResponse */
+        AdminCouponResponse: {
+            /** Active */
+            active: boolean;
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string | null;
+            duration: components["schemas"]["CouponDuration"];
+            /** Duration Periods */
+            duration_periods: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["CouponKind"];
+            /** Max Redemptions */
+            max_redemptions: number | null;
+            /** Plan Ids */
+            plan_ids: string[];
+            /** Redemptions Count */
+            redemptions_count: number;
+            /**
+             * Valid From
+             * Format: date-time
+             */
+            valid_from: string;
+            /** Valid Until */
+            valid_until: string | null;
+            /** Value */
+            value: number;
+        };
         /**
          * AdminLegalDocumentResponse
          * @description Cualquier version, publicada o borrador.
@@ -1207,6 +1404,56 @@ export interface components {
             title: string;
             /** Version */
             version: number;
+        };
+        /** AdminPlanListResponse */
+        AdminPlanListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminPlanResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** AdminPlanResponse */
+        AdminPlanResponse: {
+            /** Active */
+            active: boolean;
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Display Currency */
+            display_currency: string | null;
+            /** Display Price Cents */
+            display_price_cents: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            interval: components["schemas"]["PlanInterval"];
+            /** Interval Count */
+            interval_count: number;
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * AdminUserDetailResponse
@@ -1590,6 +1837,56 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * CouponDuration
+         * @enum {string}
+         */
+        CouponDuration: "once" | "repeating" | "forever";
+        /**
+         * CouponKind
+         * @description Debe coincidir con `COUPON_KINDS` de `app.models.billing`.
+         * @enum {string}
+         */
+        CouponKind: "percent" | "fixed_cents";
+        /** CouponRedemptionListResponse */
+        CouponRedemptionListResponse: {
+            /** Items */
+            items: components["schemas"]["CouponRedemptionResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** CouponRedemptionResponse */
+        CouponRedemptionResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Subscription Id */
+            subscription_id: string | null;
+            /** User Email */
+            user_email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * CouponRejection
+         * @description Por que un cupon no aplica a una cotizacion.
+         * @enum {string}
+         */
+        CouponRejection: "not_found" | "inactive" | "not_started" | "expired" | "exhausted" | "other_plan" | "currency_mismatch" | "already_used" | "covers_total";
         /** CreateBetRequest */
         CreateBetRequest: {
             /** Amount */
@@ -1604,6 +1901,34 @@ export interface components {
             /** Option Label */
             option_label: string;
             strategy?: components["schemas"]["BankrollStrategy"] | null;
+        };
+        /** CreateCouponRequest */
+        CreateCouponRequest: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Code */
+            code: string;
+            /** Currency */
+            currency?: "COP" | null;
+            duration: components["schemas"]["CouponDuration"];
+            /** Duration Periods */
+            duration_periods?: number | null;
+            kind: components["schemas"]["CouponKind"];
+            /** Max Redemptions */
+            max_redemptions?: number | null;
+            /** Plan Ids */
+            plan_ids?: string[];
+            /** Reason */
+            reason: string;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Value */
+            value: number;
         };
         /** CreateGameRequest */
         CreateGameRequest: {
@@ -1639,6 +1964,45 @@ export interface components {
             requires_acceptance: boolean;
             /** Title */
             title: string;
+        };
+        /** CreatePlanRequest */
+        CreatePlanRequest: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Code */
+            code: string;
+            /**
+             * Currency
+             * @default COP
+             * @constant
+             */
+            currency: "COP";
+            /** Description */
+            description: string;
+            /** Display Currency */
+            display_currency?: string | null;
+            /** Display Price Cents */
+            display_price_cents?: number | null;
+            interval: components["schemas"]["PlanInterval"];
+            /**
+             * Interval Count
+             * @default 1
+             */
+            interval_count: number;
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -2018,6 +2382,39 @@ export interface components {
             documents: components["schemas"]["LegalDocumentResponse"][];
         };
         /**
+         * PlanInterval
+         * @enum {string}
+         */
+        PlanInterval: "month" | "year";
+        /**
+         * PlanResponse
+         * @description Un plan que se ofrece.
+         */
+        PlanResponse: {
+            /** Code */
+            code: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Display Currency */
+            display_currency: string | null;
+            /** Display Price Cents */
+            display_price_cents: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            interval: components["schemas"]["PlanInterval"];
+            /** Interval Count */
+            interval_count: number;
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+        };
+        /**
          * ProgressionRowResponse
          * @description Una fila de la tabla de riesgo, con montos reales del usuario.
          */
@@ -2056,6 +2453,49 @@ export interface components {
             /** Sectors */
             sectors: number;
             strategy: components["schemas"]["BankrollStrategy"];
+        };
+        /**
+         * QuoteCoupon
+         * @description Que paso con el codigo que se mando.
+         */
+        QuoteCoupon: {
+            /** Applied */
+            applied: boolean;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string | null;
+            reason: components["schemas"]["CouponRejection"] | null;
+        };
+        /**
+         * QuoteRequest
+         * @description POST /billing/quote. No lleva montos: un monto que mande el cliente se ignora.
+         */
+        QuoteRequest: {
+            /** Coupon Code */
+            coupon_code?: string | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+        };
+        /** QuoteResponse */
+        QuoteResponse: {
+            coupon: components["schemas"]["QuoteCoupon"] | null;
+            /** Currency */
+            currency: string;
+            /** Discount Cents */
+            discount_cents: number;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Subtotal Cents */
+            subtotal_cents: number;
+            /** Total Cents */
+            total_cents: number;
         };
         /**
          * RecommendationDecision
@@ -2487,6 +2927,35 @@ export interface components {
             token_type: string;
             user: components["schemas"]["UserResponse"];
         };
+        /**
+         * UpdateCouponRequest
+         * @description PATCH /admin/coupons/:id. Solo cambia los campos que se mandan.
+         *
+         *     Con redenciones, el descuento (`kind`, `value`, `currency`, `duration`,
+         *     `duration_periods`) ya no se puede cambiar.
+         */
+        UpdateCouponRequest: {
+            /** Active */
+            active?: boolean | null;
+            /** Currency */
+            currency?: "COP" | null;
+            duration?: components["schemas"]["CouponDuration"] | null;
+            /** Duration Periods */
+            duration_periods?: number | null;
+            kind?: components["schemas"]["CouponKind"] | null;
+            /** Max Redemptions */
+            max_redemptions?: number | null;
+            /** Plan Ids */
+            plan_ids?: string[] | null;
+            /** Reason */
+            reason: string;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Value */
+            value?: number | null;
+        };
         /** UpdateGameRequest */
         UpdateGameRequest: {
             /** Active */
@@ -2512,6 +2981,31 @@ export interface components {
             requires_acceptance: boolean;
             /** Title */
             title: string;
+        };
+        /**
+         * UpdatePlanRequest
+         * @description PATCH /admin/plans/:id. Solo cambia los campos que se mandan.
+         */
+        UpdatePlanRequest: {
+            /** Active */
+            active?: boolean | null;
+            /** Description */
+            description?: string | null;
+            /** Display Currency */
+            display_currency?: string | null;
+            /** Display Price Cents */
+            display_price_cents?: number | null;
+            interval?: components["schemas"]["PlanInterval"] | null;
+            /** Interval Count */
+            interval_count?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Price Cents */
+            price_cents?: number | null;
+            /** Reason */
+            reason: string;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** UpdateProfileRequest */
         UpdateProfileRequest: {
@@ -2669,6 +3163,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_coupons_admin_coupons_get: {
+        parameters: {
+            query?: {
+                query?: string | null;
+                active?: boolean | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCouponListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_coupon_admin_coupons_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCouponRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCouponResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_coupon_admin_coupons__coupon_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                coupon_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCouponRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCouponResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_redemptions_admin_coupons__coupon_id__redemptions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                coupon_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponRedemptionListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2938,6 +3568,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminLegalDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_plans_admin_plans_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_plan_admin_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_plan_admin_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3606,6 +4336,39 @@ export interface operations {
             };
         };
     };
+    quote_billing_quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_games_games_get: {
         parameters: {
             query?: {
@@ -3842,6 +4605,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_plans_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"][];
                 };
             };
         };
