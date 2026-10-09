@@ -32,12 +32,9 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   // Un solo precio: no se muestra ninguna cifra en otra moneda.
   await expect(plan.getByText(/USD/)).toHaveCount(0);
   await expect(
-    plan.getByText("El cobro se hace siempre en pesos colombianos (COP).", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    plan.getByText("tu banco convierte los 100.000 COP a tu moneda con su propia tasa", {
-      exact: false,
-    }),
+    plan.getByText(
+      "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio.",
+    ),
   ).toBeVisible();
   // La descripción no promete resultados.
   await expect(plan.getByText(/no son una predicción y no cambian la ventaja de la casa/)).toBeVisible();
