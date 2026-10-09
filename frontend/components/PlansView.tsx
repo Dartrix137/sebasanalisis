@@ -75,7 +75,8 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
         </p>
 
         <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
-          Cobro en {currencyName}. Con tarjeta de otro país, tu banco aplica su tasa de cambio.
+          Cobro en {currencyName}. Con tarjeta de otro país, tu banco aplica su tasa de cambio y
+          puede cobrar comisiones.
         </p>
 
         <div className="mt-auto flex flex-wrap items-center gap-3 pt-5">

@@ -33,7 +33,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(plan.getByText(/USD/)).toHaveCount(0);
   await expect(
     plan.getByText(
-      "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio.",
+      "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.",
     ),
   ).toBeVisible();
   // La descripción no promete resultados.
