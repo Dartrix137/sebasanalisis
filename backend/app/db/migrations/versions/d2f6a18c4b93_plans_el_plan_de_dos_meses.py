@@ -1,17 +1,15 @@
-"""plans: el plan mensual, de 100.000 COP
+"""plans: el plan de dos meses, de 150.000 COP
 
-Fase 4, paso 4 (docs/PLATAFORMA_COMPLETA.md §3.10). Migracion de datos,
-separada del DDL. Decidido por el usuario el 2026-10-09: el plan lo siembra una
-migracion y despues se edita desde /admin/planes.
+Fase 4, paso 4 (docs/PLATAFORMA_COMPLETA.md §3.10). Migracion de datos.
+Decidido por el usuario el 2026-10-09: ademas del plan mensual hay un plan de
+dos meses. Es un plan aparte, no un cupon: un solo cobro de 150.000 COP cada
+dos meses (`interval = month`, `interval_count = 2`).
 
-Se cobran 100.000 COP al mes (`price_cents` va en centavos). Es el unico
-precio: no hay un precio de referencia en otra moneda (descartado por el
-usuario el 2026-10-09).
+Como el mensual, despues se edita desde /admin/planes, y esta fila inicial no
+deja entrada en `admin_audit_log`: no la hizo un administrador.
 
-No deja fila en `admin_audit_log`: no lo hizo un administrador.
-
-Revision ID: c95a3b7e2d48
-Revises: b84f2a6d1c37
+Revision ID: d2f6a18c4b93
+Revises: c95a3b7e2d48
 Create Date: 2026-10-09
 """
 
@@ -21,19 +19,19 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "c95a3b7e2d48"
-down_revision: str | None = "b84f2a6d1c37"
+revision: str = "d2f6a18c4b93"
+down_revision: str | None = "c95a3b7e2d48"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-PLAN_CODE = "mensual"
+PLAN_CODE = "bimestral"
 
 DESCRIPTION = (
-    "Acceso completo a la plataforma durante un mes: registro de mesas de ruleta "
-    "europea y americana, una recomendación estadística después de cada giro con su "
-    "Signal Score, y las tres gestiones de banca. Las recomendaciones salen del "
-    "análisis de los resultados que registras: no son una predicción y no cambian "
-    "la ventaja de la casa."
+    "Acceso completo a la plataforma durante dos meses, con un solo pago cada dos "
+    "meses: registro de mesas de ruleta europea y americana, una recomendación "
+    "estadística después de cada giro con su Signal Score, y las tres gestiones de "
+    "banca. Las recomendaciones salen del análisis de los resultados que registras: "
+    "no son una predicción y no cambian la ventaja de la casa."
 )
 
 plans = sa.table(
@@ -58,14 +56,15 @@ def upgrade() -> None:
             {
                 "id": uuid.uuid4(),
                 "code": PLAN_CODE,
-                "name": "Acceso Mensual",
+                "name": "Acceso Bimestral",
                 "description": DESCRIPTION,
-                "price_cents": 10_000_000,
+                "price_cents": 15_000_000,
                 "currency": "COP",
                 "interval": "month",
-                "interval_count": 1,
+                "interval_count": 2,
                 "active": True,
-                "sort_order": 0,
+                # Despues del mensual, que va en 0.
+                "sort_order": 1,
             }
         ],
     )

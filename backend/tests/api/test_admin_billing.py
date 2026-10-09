@@ -108,7 +108,7 @@ def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
     assert plan["code"] in [p["code"] for p in client.get("/plans").json()]
     listado = client.get("/admin/plans", headers=auth(admin_token)).json()
     assert plan["id"] in [p["id"] for p in listado["items"]]
-    assert listado["total"] >= 2  # el sembrado y este
+    assert listado["total"] >= 3  # los dos sembrados y este
 
     (fila,) = _bitacora(db, plan["id"])
     assert fila.action == "plan.create"

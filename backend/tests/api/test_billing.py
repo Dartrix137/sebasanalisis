@@ -94,14 +94,34 @@ def test_un_plan_desactivado_no_se_ofrece(client: TestClient, db) -> None:
     assert plan.code not in [p["code"] for p in client.get("/plans").json()]
 
 
-def test_la_descripcion_del_plan_no_promete_resultados(client: TestClient) -> None:
-    mensual = next(p for p in client.get("/plans").json() if p["code"] == "mensual")
-    texto = f"{mensual['name']} {mensual['description']}".lower()
-    for prohibido in ("garantiz", "infalible", "va a salir", "seguro", "predice", "gana"):
-        assert prohibido not in texto
-    # "prediccion" y "ventaja" solo aparecen negadas.
-    assert "no son una predicción" in texto
-    assert "no cambian la ventaja de la casa" in texto
+def test_el_plan_de_dos_meses_es_un_plan_aparte(client: TestClient, user_token: str) -> None:
+    """Un solo cobro de 150.000 COP cada dos meses. No es un cupon."""
+    planes = {p["code"]: p for p in client.get("/plans").json()}
+    bimestral = planes["bimestral"]
+    assert bimestral["name"] == "Acceso Bimestral"
+    assert (bimestral["price_cents"], bimestral["currency"]) == (15_000_000, "COP")
+    assert (bimestral["interval"], bimestral["interval_count"]) == ("month", 2)
+    # El mensual va primero.
+    codigos = [p["code"] for p in client.get("/plans").json()]
+    assert codigos.index("mensual") < codigos.index("bimestral")
+
+    data = _cotizar(client, user_token, bimestral["id"]).json()
+    assert (data["subtotal_cents"], data["discount_cents"], data["total_cents"]) == (
+        15_000_000,
+        0,
+        15_000_000,
+    )
+
+
+def test_la_descripcion_de_los_planes_no_promete_resultados(client: TestClient) -> None:
+    planes = {p["code"]: p for p in client.get("/plans").json()}
+    for code in ("mensual", "bimestral"):
+        texto = f"{planes[code]['name']} {planes[code]['description']}".lower()
+        for prohibido in ("garantiz", "infalible", "va a salir", "seguro", "predice", "gana"):
+            assert prohibido not in texto, code
+        # "prediccion" y "ventaja" solo aparecen negadas.
+        assert "no son una predicción" in texto, code
+        assert "no cambian la ventaja de la casa" in texto, code
 
 
 # ---------- POST /billing/quote ----------

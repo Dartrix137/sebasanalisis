@@ -42,6 +42,12 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   // La descripción no promete resultados.
   await expect(plan.getByText(/no son una predicción y no cambian la ventaja de la casa/)).toBeVisible();
 
+  // El plan de dos meses es un plan aparte, con su propio precio.
+  const bimestral = page.getByRole("article", { name: "Acceso Bimestral" });
+  await expect(bimestral.getByText("150.000 COP", { exact: true })).toBeVisible();
+  await expect(bimestral.getByText("/ 2 meses")).toBeVisible();
+  await expect(bimestral.getByRole("button", { name: "Suscribirme" })).toBeDisabled();
+
   // Todavía no se puede pagar: el botón no hace nada.
   await expect(plan.getByRole("button", { name: "Suscribirme" })).toBeDisabled();
   await expect(plan.getByText("El pago estará disponible pronto.")).toBeVisible();

@@ -300,6 +300,14 @@ Usuario                 Frontend                     Backend                    
 
 Bienvenida al activar, recibo de cada cobro aprobado, cobro fallido con enlace para cambiar la tarjeta, aviso de vencimiento cuando se agotan los reintentos, confirmación de cancelación. Todos pasan el filtro de terminología: describen el servicio, nunca resultados.
 
+**Aviso antes de cada cobro automático** (decidido el 2026-10-09, se construye en el paso 5). Con anticipación suficiente, el usuario recibe un correo que dice que se le va a cobrar: qué plan, cuánto, en qué moneda y qué día. El correo le indica que, si tiene dudas o quiere gestionar su suscripción (cancelarla, cambiar el medio de pago), vaya al apartado de suscripción de su perfil (`/cuenta`), con el enlace. Pesa más en el plan de dos meses, donde pasan dos meses entre un cobro y el siguiente. Reglas:
+
+- Se envía **antes del primer intento de cobro** de §3.5, no después.
+- Uno por período: el job de renovaciones lo marca como enviado para no repetirlo en cada corrida.
+- No se envía a una suscripción cancelada, porque ya no se le va a cobrar.
+- En el pago manual mes a mes el aviso es el de §3.10: que el período está por vencer y cómo pagar el siguiente.
+- **Por definir en el paso 5**: con cuántos días de anticipación. Propuesta: 7 días antes del cobro.
+
 ### 3.9 Tests de aceptación
 
 Los cuatro obligatorios de `CLAUDE.md`, más los que cubren lo nuevo de esta fase:
@@ -328,7 +336,7 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 **Público y precio**
 
 - El público es **internacional**, no solo Colombia.
-- **Un solo plan, mensual, de 100.000 COP.** No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: el plan único es una fila, y nada impide crear otro después.
+- **Dos planes** (2026-10-09; el 2026-10-08 se había decidido uno solo): **mensual, de 100.000 COP**, y **de dos meses, de 150.000 COP**. El de dos meses es un plan aparte, no un cupón: un solo cobro cada dos meses (`interval = month`, `interval_count = 2`). No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: cada plan es una fila, y nada impide crear otro después.
 - **No hay precio de referencia en dólares** (decidido el 2026-10-09, al construir el paso 4). El 2026-10-08 se había decidido mostrar además un precio fijo de 30 USD, solo visual; se descartó: 30 USD no es el equivalente de 100.000 COP, y mostrar una cifra que no se cobra presta a confusión. **Se muestra y se cobra un solo precio: 100.000 COP.** El plan no tiene campos de presentación.
 - A quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes lo dice, y la de pago deberá decirlo también (§3.11).
 - **Los cupones se mantienen** (§3.3, §4.5).
@@ -358,7 +366,7 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 
 - **Un solo precio en pantalla**: `100.000 COP / mes`, el que se cobra. La primera versión de este paso mostraba debajo `Precio de referencia: 30 USD`; el usuario lo descartó el mismo 2026-10-09, antes de mezclar la rama, y los campos `display_price_cents` y `display_currency` se quitaron de la tabla, de la API y del admin. Queda una nota fija bajo el precio: el cobro se hace siempre en pesos colombianos, y a quien pague con una tarjeta de otro país su banco le convierte los 100.000 COP a su tasa y puede cobrarle comisiones.
 - **Para el abogado** (bloquea el lanzamiento, no este paso): si el precio debe decir que incluye impuestos y si aplica IVA (va con §10 n.º 4); qué ley de consumo aplica a un cliente de fuera de Colombia; y si la nota sobre la conversión del banco debe repetirse en la pantalla de pago, en el recibo y en los términos.
-- **El plan lo siembra una migración de datos**, separada del DDL: código `mensual`, nombre **Acceso Mensual**, 100.000 COP al mes. Después se edita desde `/admin/planes`. Esa fila inicial no deja entrada en la bitácora.
+- **Los planes los siembran migraciones de datos**, separadas del DDL: `mensual` (**Acceso Mensual**, 100.000 COP al mes) y `bimestral` (**Acceso Bimestral**, 150.000 COP cada dos meses). Después se editan desde `/admin/planes`. Esas filas iniciales no dejan entrada en la bitácora.
 - **Cupón del 100 %: no existe** (§10 n.º 6). El porcentaje va de 1 a 99 (lo exigen el endpoint y un `CHECK` de la tabla), y un cupón de monto fijo que cubra todo el precio no aplica a ese plan (`covers_total`). Una cortesía total se da como acceso `invited` desde `/admin/usuarios`.
 - **`/planes` sin pago**: el plan con su precio y el botón "Suscribirme" deshabilitado, con la nota "El pago estará disponible pronto". Sin correo de contacto y sin campo de cupón hasta el paso 5.
 
@@ -805,7 +813,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | # | Decisión | Propuesta por defecto (la más conservadora) |
 |---|---|---|
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
-| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-08): un solo plan, mensual, de 100.000 COP.** No hay plan anual. El precio de referencia de 30 USD que se decidió ese día se descartó el 2026-10-09: se muestra y se cobra solo en COP. Ver §3.10. |
+| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. Cuáles se habilitan se decide en el paso 5, con la documentación vigente de Wompi. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |
