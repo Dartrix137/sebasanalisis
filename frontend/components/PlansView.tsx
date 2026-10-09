@@ -38,8 +38,9 @@ export function PlansView() {
   if (plans.length === 0) {
     return <p className="text-sm text-muted">Por ahora no hay planes disponibles.</p>;
   }
+  // Una al lado de la otra; en pantallas angostas, una debajo de la otra.
   return (
-    <div className="space-y-5">
+    <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
       {plans.map((plan) => (
         <PlanCard key={plan.id} plan={plan} />
       ))}
@@ -52,8 +53,13 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
   const currencyName = CURRENCY_NAME[plan.currency] ?? plan.currency;
 
   return (
-    <Card>
-      <article aria-label={plan.name} data-testid={`plan-${plan.code}`}>
+    <Card className="h-full">
+      {/* Columna de alto completo: el botón queda alineado entre tarjetas. */}
+      <article
+        aria-label={plan.name}
+        data-testid={`plan-${plan.code}`}
+        className="flex h-full flex-col"
+      >
         <h2 className="font-display text-2xl font-semibold leading-tight text-white">
           {plan.name}
         </h2>
@@ -74,7 +80,7 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
           así que el valor en tu extracto puede ser distinto.
         </p>
 
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="mt-auto flex flex-wrap items-center gap-3 pt-5">
           <Button disabled aria-describedby={`pago-${plan.id}`}>
             Suscribirme
           </Button>

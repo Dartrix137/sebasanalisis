@@ -34,7 +34,7 @@ export default function PlansPage() {
   }, [loading, userId, refreshUser]);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
+    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
       <div className="flex items-center justify-between gap-3">
         <BrandMark size={38} />
         {loading ? null : user ? (
