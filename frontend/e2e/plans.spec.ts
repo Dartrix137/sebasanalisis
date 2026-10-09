@@ -97,6 +97,14 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
   const mensual = page.getByTestId("plan-mensual");
   await expect(mensual.getByText(/Se cobra 100\.000 COP \/ mes/)).toBeVisible();
 
+  // El formulario dice en una frase qué cobra el plan y qué da cada pago.
+  const bimestral = page.getByTestId("plan-bimestral");
+  await bimestral.getByRole("button", { name: "Editar" }).click();
+  await expect(bimestral.getByTestId("resumen-cobro")).toHaveText(
+    "Se cobran 150.000 COP cada 2 meses. Cada pago da 2 meses de acceso.",
+  );
+  await bimestral.getByRole("button", { name: "Cerrar" }).click();
+
   // Crea uno nuevo.
   const nuevo = page.locator("section", { hasText: "Nuevo plan" });
   await nuevo.getByLabel("Código").fill(code);

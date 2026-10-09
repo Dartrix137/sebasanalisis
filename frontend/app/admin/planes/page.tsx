@@ -23,8 +23,8 @@ import { useSession } from "@/lib/session";
 import type { AdminPlanResponse, PlanInterval } from "@/lib/types/billing";
 
 const INTERVALS: readonly (readonly [PlanInterval, string])[] = [
-  ["month", "Mes"],
-  ["year", "Año"],
+  ["month", "Meses"],
+  ["year", "Años"],
 ];
 
 const TEXTAREA_CLASS =
@@ -80,6 +80,21 @@ function fieldsOf(draft: PlanDraft) {
       sort_order: Number(draft.sortOrder),
     },
   };
+}
+
+/**
+ * En una frase, qué cobra el plan y qué da cada pago: `Se cobran 150.000 COP
+ * cada 2 meses. Cada pago da 2 meses de acceso.` Null mientras el formulario
+ * esté incompleto.
+ */
+function billingSummary(draft: PlanDraft): string | null {
+  const cents = parseMoneyToCents(draft.price);
+  const count = Number(draft.intervalCount);
+  if (cents === null || !Number.isInteger(count) || count < 1) return null;
+  const period = intervalLabel(draft.interval, count);
+  const every = count === 1 ? (draft.interval === "month" ? "cada mes" : "cada año") : `cada ${period}`;
+  const access = count === 1 ? (draft.interval === "month" ? "un mes" : "un año") : period;
+  return `Se cobran ${formatMoney(cents, "COP")} ${every}. Cada pago da ${access} de acceso.`;
 }
 
 export default function AdminPlansPage() {
@@ -248,6 +263,7 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
     );
   }
 
+  const summary = billingSummary(draft);
   const reasonLabel = plan ? `Motivo del cambio en ${plan.code}` : "Motivo de la creación";
 
   return (
@@ -302,21 +318,21 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <SelectField
-          label="Se cobra cada"
-          value={draft.interval}
-          options={INTERVALS}
-          onChange={(v) => set("interval", v)}
-        />
         <Field
-          label="Cantidad de períodos"
+          label="Se cobra cada (cantidad)"
           type="number"
           required
           min={1}
           max={36}
-          hint="1 = cada mes; 3 = trimestral."
+          hint="Con la unidad de al lado: 1 y Meses = cada mes; 2 y Meses = cada dos meses."
           value={draft.intervalCount}
           onChange={(e) => set("intervalCount", e.target.value)}
+        />
+        <SelectField
+          label="Unidad"
+          value={draft.interval}
+          options={INTERVALS}
+          onChange={(v) => set("interval", v)}
         />
         <Field
           label="Orden en la página"
@@ -329,6 +345,13 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
           onChange={(e) => set("sortOrder", e.target.value)}
         />
       </div>
+
+      {/* El cobro y el acceso van siempre juntos: cada pago compra un período. */}
+      {summary ? (
+        <p role="status" className="text-sm text-white" data-testid="resumen-cobro">
+          {summary}
+        </p>
+      ) : null}
 
       <Field
         label={reasonLabel}
