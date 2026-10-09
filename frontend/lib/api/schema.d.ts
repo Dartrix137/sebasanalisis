@@ -1431,10 +1431,6 @@ export interface components {
             currency: string;
             /** Description */
             description: string;
-            /** Display Currency */
-            display_currency: string | null;
-            /** Display Price Cents */
-            display_price_cents: number | null;
             /**
              * Id
              * Format: uuid
@@ -1982,10 +1978,6 @@ export interface components {
             currency: "COP";
             /** Description */
             description: string;
-            /** Display Currency */
-            display_currency?: string | null;
-            /** Display Price Cents */
-            display_price_cents?: number | null;
             interval: components["schemas"]["PlanInterval"];
             /**
              * Interval Count
@@ -2397,10 +2389,6 @@ export interface components {
             currency: string;
             /** Description */
             description: string;
-            /** Display Currency */
-            display_currency: string | null;
-            /** Display Price Cents */
-            display_price_cents: number | null;
             /**
              * Id
              * Format: uuid
@@ -2991,10 +2979,6 @@ export interface components {
             active?: boolean | null;
             /** Description */
             description?: string | null;
-            /** Display Currency */
-            display_currency?: string | null;
-            /** Display Price Cents */
-            display_price_cents?: number | null;
             interval?: components["schemas"]["PlanInterval"] | null;
             /** Interval Count */
             interval_count?: number | null;

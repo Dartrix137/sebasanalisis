@@ -37,15 +37,6 @@ class Plan(Base):
     __table_args__ = (
         CheckConstraint("price_cents > 0", name="ck_plans_price_positive"),
         CheckConstraint("interval_count > 0", name="ck_plans_interval_count_positive"),
-        # El precio de presentacion va completo o no va.
-        CheckConstraint(
-            "(display_price_cents IS NULL) = (display_currency IS NULL)",
-            name="ck_plans_display_price_pair",
-        ),
-        CheckConstraint(
-            "display_price_cents IS NULL OR display_price_cents > 0",
-            name="ck_plans_display_price_positive",
-        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -56,11 +47,6 @@ class Plan(Base):
     # Lo que se cobra y en que moneda.
     price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
-    # Precio de presentacion (§3.10): SOLO visual. Es una cifra fija que escribe
-    # el administrador; no sale de una tasa de cambio y nunca se usa para
-    # cobrar ni para cotizar.
-    display_price_cents: Mapped[int | None] = mapped_column(Integer)
-    display_currency: Mapped[str | None] = mapped_column(String(3))
     interval: Mapped[str] = mapped_column(
         enum_col(*PLAN_INTERVALS, name="plan_interval", length=16), nullable=False
     )

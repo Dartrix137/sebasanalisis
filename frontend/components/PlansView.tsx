@@ -3,9 +3,9 @@
 /**
  * Los planes que se ofrecen, con su precio (§3.10 de la Fase 4).
  *
- * Regla de esta pantalla: el monto que se cobra es el protagonista y va con su
- * moneda. El precio de presentación (`display_price_cents`) es una referencia
- * fija, no una conversión, y nunca se muestra solo ni como "equivalente".
+ * Regla de esta pantalla: se muestra un solo precio, el que se cobra, con su
+ * moneda. No hay precio de referencia en otra moneda (descartado el
+ * 2026-10-09): mostrar una cifra que no se cobra presta a confusión.
  *
  * El botón no hace nada todavía: el pago llega con el paso 5.
  */
@@ -49,10 +49,6 @@ export function PlansView() {
 
 function PlanCard({ plan }: { plan: PlanResponse }) {
   const price = formatMoney(plan.price_cents, plan.currency);
-  const reference =
-    plan.display_price_cents !== null && plan.display_currency !== null
-      ? formatMoney(plan.display_price_cents, plan.display_currency)
-      : null;
   const currencyName = CURRENCY_NAME[plan.currency] ?? plan.currency;
 
   return (
@@ -71,18 +67,11 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
             / {intervalLabel(plan.interval, plan.interval_count)}
           </span>
         </p>
-        {reference ? (
-          <p className="mt-1.5 text-sm text-muted">Precio de referencia: {reference}</p>
-        ) : null}
 
         <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
-          El cobro se hace siempre en {currencyName}.
-          {reference
-            ? ` Los ${reference} son una referencia fija y no una conversión.`
-            : ""}{" "}
-          Si pagas con una tarjeta de otro país, tu banco convierte los {price} a tu moneda con su
-          propia tasa y puede cobrar comisiones, así que el valor en tu extracto puede ser
-          distinto.
+          El cobro se hace siempre en {currencyName}. Si pagas con una tarjeta de otro país, tu
+          banco convierte los {price} a tu moneda con su propia tasa y puede cobrar comisiones,
+          así que el valor en tu extracto puede ser distinto.
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">

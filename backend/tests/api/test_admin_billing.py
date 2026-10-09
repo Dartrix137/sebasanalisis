@@ -101,12 +101,9 @@ def test_no_hay_como_borrar_planes_ni_cupones(client: TestClient, admin_token: s
 def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
     client: TestClient, admin_token: str, db
 ) -> None:
-    plan = _crear_plan(
-        client, admin_token, display_price_cents=2_500, display_currency="USD", sort_order=7
-    )
+    plan = _crear_plan(client, admin_token, sort_order=7)
     assert plan["active"] is True
     assert (plan["price_cents"], plan["currency"]) == (8_000_000, "COP")
-    assert (plan["display_price_cents"], plan["display_currency"]) == (2_500, "USD")
 
     assert plan["code"] in [p["code"] for p in client.get("/plans").json()]
     listado = client.get("/admin/plans", headers=auth(admin_token)).json()
@@ -129,9 +126,6 @@ def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
         {"currency": "USD"},  # solo se cobra en COP
         {"price_cents": 0},
         {"price_cents": 80_000.5},  # nunca float
-        {"display_price_cents": 3_000},  # sin moneda
-        {"display_currency": "USD"},  # sin monto
-        {"display_price_cents": 3_000, "display_currency": "usd"},
         {"interval": "week"},
         {"interval_count": 0},
         {"code": "Con Espacios"},
@@ -199,27 +193,13 @@ def test_desactivar_un_plan_deja_de_ofrecerlo(
     ]
 
 
-def test_quitar_el_precio_de_presentacion(client: TestClient, admin_token: str) -> None:
-    plan = _crear_plan(client, admin_token, display_price_cents=3_000, display_currency="USD")
-    h = auth(admin_token)
-    # Uno solo de los dos deja el par incompleto.
-    r = client.patch(
-        f"/admin/plans/{plan['id']}", json={"display_currency": None, "reason": MOTIVO}, headers=h
-    )
-    assert r.status_code == 422
-    r = client.patch(
-        f"/admin/plans/{plan['id']}",
-        json={"display_price_cents": None, "display_currency": None, "reason": MOTIVO},
-        headers=h,
-    )
-    assert r.status_code == 200, r.text
-    assert (r.json()["display_price_cents"], r.json()["display_currency"]) == (None, None)
-
-
-def test_el_precio_de_presentacion_no_entra_en_la_cotizacion(
+def test_un_plan_no_guarda_un_precio_de_referencia(
     client: TestClient, admin_token: str, user_token: str
 ) -> None:
-    plan = _crear_plan(client, admin_token, display_price_cents=1, display_currency="USD")
+    """Descartado el 2026-10-09: el unico precio es el que se cobra. Si alguien
+    lo manda, se ignora."""
+    plan = _crear_plan(client, admin_token, display_price_cents=3_000, display_currency="USD")
+    assert "display_price_cents" not in plan and "display_currency" not in plan
     data = _cotizar(client, user_token, plan["id"]).json()
     assert (data["total_cents"], data["currency"]) == (8_000_000, "COP")
 

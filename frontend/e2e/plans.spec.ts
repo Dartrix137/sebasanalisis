@@ -29,13 +29,10 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   // Lo que se cobra es el protagonista y va con su moneda.
   await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
   await expect(plan.getByText("/ mes")).toBeVisible();
-  // Los 30 USD son una referencia, y la pantalla lo dice.
-  await expect(plan.getByText("Precio de referencia: 30 USD")).toBeVisible();
+  // Un solo precio: no se muestra ninguna cifra en otra moneda.
+  await expect(plan.getByText(/USD/)).toHaveCount(0);
   await expect(
     plan.getByText("El cobro se hace siempre en pesos colombianos (COP).", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    plan.getByText("Los 30 USD son una referencia fija y no una conversión.", { exact: false }),
   ).toBeVisible();
   await expect(
     plan.getByText("tu banco convierte los 100.000 COP a tu moneda con su propia tasa", {
@@ -60,7 +57,7 @@ test("/planes es pública: se ve sin sesión", async ({ page }) => {
   await page.goto("/planes");
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
-  await expect(plan.getByText("Precio de referencia: 30 USD")).toBeVisible();
+  await expect(page.getByText(/USD/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Crear cuenta" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Entrar" })).toBeVisible();
   await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toHaveCount(0);
@@ -90,10 +87,9 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
   await page.goto("/admin/planes");
   await expect(page.getByRole("heading", { level: 1, name: "Planes" })).toBeVisible();
 
-  // El plan sembrado: lo que se cobra y, aparte, la referencia.
+  // El plan sembrado, con lo que se cobra.
   const mensual = page.getByTestId("plan-mensual");
   await expect(mensual.getByText(/Se cobra 100\.000 COP \/ mes/)).toBeVisible();
-  await expect(mensual.getByText(/Referencia en pantalla: 30 USD/)).toBeVisible();
 
   // Crea uno nuevo.
   const nuevo = page.locator("section", { hasText: "Nuevo plan" });
@@ -118,17 +114,16 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
     visita.getByRole("article", { name }).getByText("50.000 COP", { exact: true }),
   ).toBeVisible();
 
-  // Le cambia el precio y le pone una referencia.
+  // Le cambia el precio.
   await fila.getByRole("button", { name: "Editar" }).click();
   await fila.getByLabel("Precio que se cobra (COP)").fill("60000");
-  await fila.getByLabel("Precio de referencia (opcional)").fill("18");
   // Sin motivo no se guarda.
   await fila.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(fila.getByText("Plan actualizado")).toHaveCount(0);
   await fila.getByLabel(`Motivo del cambio en ${code}`).fill("Ajuste de precio de prueba");
   await fila.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(fila.getByText("Plan actualizado")).toBeVisible();
-  await expect(fila.getByText(/Se cobra 60\.000 COP \/ mes · Referencia en pantalla: 18 USD/)).toBeVisible();
+  await expect(fila.getByText(/Se cobra 60\.000 COP \/ mes/)).toBeVisible();
 
   // Lo desactiva: deja de ofrecerse, pero no se borra.
   await fila.getByLabel(`Motivo del cambio en ${code}`).fill("Fin de la prueba");

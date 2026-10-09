@@ -329,8 +329,8 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 
 - El público es **internacional**, no solo Colombia.
 - **Un solo plan, mensual, de 100.000 COP.** No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: el plan único es una fila, y nada impide crear otro después.
-- **El precio se muestra también como 30 USD, fijo**, para el público internacional. Es solo visual: **el cobro es siempre de 100.000 COP**, que es la moneda en la que opera Wompi. Los 30 USD no salen de una tasa de cambio ni se usan para cobrar. Implica un campo de presentación en el plan (por ejemplo `display_price_cents` y `display_currency`), distinto de `price_cents` y `currency`, que son los que cobran.
-- **Resuelto en el paso 4 (2026-10-09, ver §3.11); la revisión del abogado sigue pendiente**: cómo se redacta el precio en pantalla. 30 USD no es el equivalente exacto de 100.000 COP, y a quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes y la de pago deben decir sin ambigüedad cuál es el monto que se cobra y en qué moneda; mostrar solo "30 USD" a alguien a quien se le cobran 100.000 COP puede ser información engañosa al consumidor.
+- **No hay precio de referencia en dólares** (decidido el 2026-10-09, al construir el paso 4). El 2026-10-08 se había decidido mostrar además un precio fijo de 30 USD, solo visual; se descartó: 30 USD no es el equivalente de 100.000 COP, y mostrar una cifra que no se cobra presta a confusión. **Se muestra y se cobra un solo precio: 100.000 COP.** El plan no tiene campos de presentación.
+- A quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes lo dice, y la de pago deberá decirlo también (§3.11).
 - **Los cupones se mantienen** (§3.3, §4.5).
 
 **Dos modos de pago**
@@ -356,15 +356,15 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 
 **Decisiones del usuario**
 
-- **Redacción del precio**: el monto que se cobra es el protagonista (`100.000 COP / mes`); debajo, `Precio de referencia: 30 USD`, y una nota fija: el cobro se hace siempre en pesos colombianos, los 30 USD son una referencia fija y no una conversión, y a quien pague con una tarjeta de otro país su banco le convierte los 100.000 COP a su tasa y puede cobrarle comisiones. No se usa "equivale" ni "aprox.": los 30 USD no salen de una tasa, así que cualquiera de las dos sería una afirmación falsa el día que la tasa dé otra cifra.
-- **Sigue pendiente de abogado** (bloquea el lanzamiento, no este paso): si mostrar un precio de referencia en otra moneda que no sale de una tasa es compatible con las reglas de información de precios y de publicidad de la Ley 1480; si el precio debe decir que incluye impuestos y si aplica IVA (va con §10 n.º 4); qué ley de consumo aplica a un cliente de fuera de Colombia; y si la nota debe repetirse en la pantalla de pago, en el recibo y en los términos.
-- **El plan lo siembra una migración de datos**, separada del DDL: código `mensual`, nombre **Acceso Mensual**, 100.000 COP al mes, referencia de 30 USD. Después se edita desde `/admin/planes`. Esa fila inicial no deja entrada en la bitácora.
+- **Un solo precio en pantalla**: `100.000 COP / mes`, el que se cobra. La primera versión de este paso mostraba debajo `Precio de referencia: 30 USD`; el usuario lo descartó el mismo 2026-10-09, antes de mezclar la rama, y los campos `display_price_cents` y `display_currency` se quitaron de la tabla, de la API y del admin. Queda una nota fija bajo el precio: el cobro se hace siempre en pesos colombianos, y a quien pague con una tarjeta de otro país su banco le convierte los 100.000 COP a su tasa y puede cobrarle comisiones.
+- **Para el abogado** (bloquea el lanzamiento, no este paso): si el precio debe decir que incluye impuestos y si aplica IVA (va con §10 n.º 4); qué ley de consumo aplica a un cliente de fuera de Colombia; y si la nota sobre la conversión del banco debe repetirse en la pantalla de pago, en el recibo y en los términos.
+- **El plan lo siembra una migración de datos**, separada del DDL: código `mensual`, nombre **Acceso Mensual**, 100.000 COP al mes. Después se edita desde `/admin/planes`. Esa fila inicial no deja entrada en la bitácora.
 - **Cupón del 100 %: no existe** (§10 n.º 6). El porcentaje va de 1 a 99 (lo exigen el endpoint y un `CHECK` de la tabla), y un cupón de monto fijo que cubra todo el precio no aplica a ese plan (`covers_total`). Una cortesía total se da como acceso `invited` desde `/admin/usuarios`.
 - **`/planes` sin pago**: el plan con su precio y el botón "Suscribirme" deshabilitado, con la nota "El pago estará disponible pronto". Sin correo de contacto y sin campo de cupón hasta el paso 5.
 
 **Datos**
 
-- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions` como en §3.2, con dos campos más en `plans`: `display_price_cents` y `display_currency`, el precio de presentación. Van los dos o ninguno (`CHECK`). **Nunca entran en una cotización**: `pricing.quote` ni siquiera los recibe.
+- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions` como en §3.2, sin campos de más: el plan guarda un solo precio (`price_cents`, `currency`), que es el que se cobra y el que se muestra.
 - **Solo se cobra en COP**: los schemas del admin rechazan otra moneda de cobro, en planes y en cupones de monto fijo. Es validación, no estructura: la columna `currency` sigue ahí para el día que haya otra pasarela.
 - `coupon_redemptions.user_id` es `ON DELETE CASCADE`, como el resto de lo que hoy cuelga de la cuenta: eliminar la cuenta borra también el rastro de que usó el cupón. **El paso 5 lo revisa** junto con el `ON DELETE` de `subscriptions` (§5.7.1).
 - `subscriptions.plan_id` sigue siendo texto suelto; pasa a llave foránea en el paso 5. Por eso `/admin/planes` todavía no muestra cuántas suscripciones vigentes conservan su precio (§4.4): el formulario dice la regla, sin el número.
@@ -805,7 +805,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | # | Decisión | Propuesta por defecto (la más conservadora) |
 |---|---|---|
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
-| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-08): un solo plan, mensual, de 100.000 COP.** No hay plan anual. En pantalla se muestra además un precio fijo de 30 USD como referencia para el público internacional; el cobro es siempre de 100.000 COP. Ver §3.10. |
+| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-08): un solo plan, mensual, de 100.000 COP.** No hay plan anual. El precio de referencia de 30 USD que se decidió ese día se descartó el 2026-10-09: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. Cuáles se habilitan se decide en el paso 5, con la documentación vigente de Wompi. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |

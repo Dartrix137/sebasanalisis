@@ -4,9 +4,9 @@ Fase 4, paso 4 (docs/PLATAFORMA_COMPLETA.md §3.10). Migracion de datos,
 separada del DDL. Decidido por el usuario el 2026-10-09: el plan lo siembra una
 migracion y despues se edita desde /admin/planes.
 
-- Se cobran 100.000 COP al mes (`price_cents` va en centavos).
-- Los 30 USD son el precio de presentacion: solo visual, una cifra fija que no
-  sale de una tasa de cambio y nunca se usa para cobrar.
+Se cobran 100.000 COP al mes (`price_cents` va en centavos). Es el unico
+precio: no hay un precio de referencia en otra moneda (descartado por el
+usuario el 2026-10-09).
 
 No deja fila en `admin_audit_log`: no lo hizo un administrador.
 
@@ -44,8 +44,6 @@ plans = sa.table(
     sa.column("description", sa.Text()),
     sa.column("price_cents", sa.Integer()),
     sa.column("currency", sa.String()),
-    sa.column("display_price_cents", sa.Integer()),
-    sa.column("display_currency", sa.String()),
     sa.column("interval", sa.String()),
     sa.column("interval_count", sa.Integer()),
     sa.column("active", sa.Boolean()),
@@ -64,8 +62,6 @@ def upgrade() -> None:
                 "description": DESCRIPTION,
                 "price_cents": 10_000_000,
                 "currency": "COP",
-                "display_price_cents": 3_000,
-                "display_currency": "USD",
                 "interval": "month",
                 "interval_count": 1,
                 "active": True,

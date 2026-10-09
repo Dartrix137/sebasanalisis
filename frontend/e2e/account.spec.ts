@@ -25,7 +25,8 @@ test("registro → correo de verificación → cuenta verificada", async ({ page
   await page.locator("#password").fill(PASSWORD);
   await checkRegisterConsents(page);
   await page.getByRole("button", { name: "Crear mi cuenta" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // Una cuenta nueva nace sin acceso: la mesa la manda a los planes.
+  await expect(page).toHaveURL(/\/planes/);
 
   // La cuenta entra sin confirmar y la aplicación se lo recuerda.
   const aviso = page.getByText("Confirma tu correo.");

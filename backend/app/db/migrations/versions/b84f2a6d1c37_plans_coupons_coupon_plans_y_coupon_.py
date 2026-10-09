@@ -3,8 +3,7 @@
 Fase 4, paso 4 (docs/PLATAFORMA_COMPLETA.md §3.2 y §3.10). Solo DDL: el plan
 unico lo inserta la migracion siguiente.
 
-- `plans`: lo que se cobra (`price_cents`, `currency`) y, aparte, un precio de
-  presentacion (`display_price_cents`, `display_currency`) que es solo visual.
+- `plans`: lo que se cobra (`price_cents`, `currency`) y cada cuanto.
 - `coupons`: el porcentaje va de 1 a 99; un cupon nunca deja el total en cero.
 - `coupon_plans`: sin filas, el cupon aplica a todos los planes.
 - `coupon_redemptions`: un uso por cuenta. Las escribe el pago (paso 5).
@@ -37,8 +36,6 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("price_cents", sa.Integer(), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
-        sa.Column("display_price_cents", sa.Integer(), nullable=True),
-        sa.Column("display_currency", sa.String(length=3), nullable=True),
         sa.Column(
             "interval",
             sa.Enum(
@@ -62,14 +59,6 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("price_cents > 0", name="ck_plans_price_positive"),
         sa.CheckConstraint("interval_count > 0", name="ck_plans_interval_count_positive"),
-        sa.CheckConstraint(
-            "(display_price_cents IS NULL) = (display_currency IS NULL)",
-            name="ck_plans_display_price_pair",
-        ),
-        sa.CheckConstraint(
-            "display_price_cents IS NULL OR display_price_cents > 0",
-            name="ck_plans_display_price_positive",
-        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code"),
     )

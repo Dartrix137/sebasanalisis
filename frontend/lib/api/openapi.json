@@ -331,28 +331,6 @@
             "title": "Description",
             "type": "string"
           },
-          "display_currency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Currency"
-          },
-          "display_price_cents": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Price Cents"
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -390,8 +368,6 @@
           "description",
           "price_cents",
           "currency",
-          "display_price_cents",
-          "display_currency",
           "interval",
           "interval_count",
           "active",
@@ -1665,31 +1641,6 @@
             "title": "Description",
             "type": "string"
           },
-          "display_currency": {
-            "anyOf": [
-              {
-                "pattern": "^[A-Z]{3}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Currency"
-          },
-          "display_price_cents": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 2147483647.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Price Cents"
-          },
           "interval": {
             "$ref": "#/components/schemas/PlanInterval"
           },
@@ -2533,28 +2484,6 @@
             "title": "Description",
             "type": "string"
           },
-          "display_currency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Currency"
-          },
-          "display_price_cents": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Price Cents"
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2583,8 +2512,6 @@
           "description",
           "price_cents",
           "currency",
-          "display_price_cents",
-          "display_currency",
           "interval",
           "interval_count"
         ],
@@ -4041,31 +3968,6 @@
               }
             ],
             "title": "Description"
-          },
-          "display_currency": {
-            "anyOf": [
-              {
-                "pattern": "^[A-Z]{3}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Currency"
-          },
-          "display_price_cents": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 2147483647.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Price Cents"
           },
           "interval": {
             "anyOf": [

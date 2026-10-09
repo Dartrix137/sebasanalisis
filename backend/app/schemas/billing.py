@@ -20,7 +20,6 @@ _MAX_CENTS = 2_147_483_647
 
 # Wompi opera en pesos colombianos (§3.10): es la unica moneda de cobro.
 ChargeCurrency = Literal["COP"]
-_CURRENCY_PATTERN = r"^[A-Z]{3}$"
 
 
 class PlanInterval(str, Enum):
@@ -42,13 +41,9 @@ class PlanResponse(ApiModel):
     code: str
     name: str
     description: str
-    # Lo que se cobra.
+    # Lo que se cobra. Es el unico precio del plan.
     price_cents: int
     currency: str
-    # Precio de presentacion: SOLO visual, fijo. No es una conversion de
-    # `price_cents` ni se usa para cobrar. Los dos campos van juntos o en null.
-    display_price_cents: int | None = None
-    display_currency: str | None = None
     interval: PlanInterval
     interval_count: int
 
@@ -103,8 +98,6 @@ class CreatePlanRequest(ApiModel):
     description: str = Field(min_length=1, max_length=2000)
     price_cents: int = Field(gt=0, le=_MAX_CENTS)
     currency: ChargeCurrency = "COP"
-    display_price_cents: int | None = Field(default=None, gt=0, le=_MAX_CENTS)
-    display_currency: str | None = Field(default=None, pattern=_CURRENCY_PATTERN)
     interval: PlanInterval
     interval_count: int = Field(default=1, ge=1, le=36)
     active: bool = True
@@ -117,9 +110,6 @@ class UpdatePlanRequest(ApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, min_length=1, max_length=2000)
     price_cents: int | None = Field(default=None, gt=0, le=_MAX_CENTS)
-    # Mandar los dos en null quita el precio de presentacion.
-    display_price_cents: int | None = Field(default=None, gt=0, le=_MAX_CENTS)
-    display_currency: str | None = Field(default=None, pattern=_CURRENCY_PATTERN)
     interval: PlanInterval | None = None
     interval_count: int | None = Field(default=None, ge=1, le=36)
     active: bool | None = None

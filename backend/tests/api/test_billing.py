@@ -83,9 +83,9 @@ def test_los_planes_son_publicos_y_traen_el_plan_mensual(client: TestClient) -> 
     assert r.status_code == 200
     mensual = next(p for p in r.json() if p["code"] == "mensual")
     assert mensual["name"] == "Acceso Mensual"
-    # Se cobran 100.000 COP; los 30 USD son solo de presentacion.
     assert (mensual["price_cents"], mensual["currency"]) == (10_000_000, "COP")
-    assert (mensual["display_price_cents"], mensual["display_currency"]) == (3_000, "USD")
+    # Un solo precio: no hay un precio de referencia en otra moneda.
+    assert not [campo for campo in mensual if campo.startswith("display")]
     assert (mensual["interval"], mensual["interval_count"]) == ("month", 1)
 
 

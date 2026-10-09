@@ -8,7 +8,7 @@
  * paso 7.
  *
  * Los montos se escriben en unidades de la moneda (100000) y viajan en
- * centavos. El precio de presentación es solo visual: nunca se cobra.
+ * centavos.
  */
 
 import { useRouter } from "next/navigation";
@@ -39,8 +39,6 @@ interface PlanDraft {
   name: string;
   description: string;
   price: string;
-  displayPrice: string;
-  displayCurrency: string;
   interval: PlanInterval;
   intervalCount: string;
   sortOrder: string;
@@ -51,8 +49,6 @@ const EMPTY: PlanDraft = {
   name: "",
   description: "",
   price: "",
-  displayPrice: "",
-  displayCurrency: "USD",
   interval: "month",
   intervalCount: "1",
   sortOrder: "0",
@@ -64,8 +60,6 @@ function draftOf(plan: AdminPlanResponse): PlanDraft {
     name: plan.name,
     description: plan.description,
     price: centsToInput(plan.price_cents),
-    displayPrice: plan.display_price_cents === null ? "" : centsToInput(plan.display_price_cents),
-    displayCurrency: plan.display_currency ?? "USD",
     interval: plan.interval,
     intervalCount: String(plan.interval_count),
     sortOrder: String(plan.sort_order),
@@ -76,18 +70,11 @@ function draftOf(plan: AdminPlanResponse): PlanDraft {
 function fieldsOf(draft: PlanDraft) {
   const priceCents = parseMoneyToCents(draft.price);
   if (priceCents === null) return { error: "El precio debe ser un monto mayor que cero" };
-  const hasDisplay = draft.displayPrice.trim() !== "";
-  const displayCents = hasDisplay ? parseMoneyToCents(draft.displayPrice) : null;
-  if (hasDisplay && displayCents === null) {
-    return { error: "El precio de referencia debe ser un monto mayor que cero" };
-  }
   return {
     fields: {
       name: draft.name,
       description: draft.description,
       price_cents: priceCents,
-      display_price_cents: displayCents,
-      display_currency: hasDisplay ? draft.displayCurrency.trim().toUpperCase() : null,
       interval: draft.interval,
       interval_count: Number(draft.intervalCount),
       sort_order: Number(draft.sortOrder),
@@ -163,9 +150,6 @@ export default function AdminPlansPage() {
                       <p className="text-xs text-muted">
                         Se cobra {formatMoney(plan.price_cents, plan.currency)} /{" "}
                         {intervalLabel(plan.interval, plan.interval_count)}
-                        {plan.display_price_cents !== null && plan.display_currency !== null
-                          ? ` · Referencia en pantalla: ${formatMoney(plan.display_price_cents, plan.display_currency)}`
-                          : ""}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -314,22 +298,6 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
           }
           value={draft.price}
           onChange={(e) => set("price", e.target.value)}
-        />
-        <Field
-          label="Precio de referencia (opcional)"
-          inputMode="decimal"
-          placeholder="30"
-          hint="Solo se muestra. No es una conversión y nunca se cobra."
-          value={draft.displayPrice}
-          onChange={(e) => set("displayPrice", e.target.value)}
-        />
-        <Field
-          label="Moneda de la referencia"
-          maxLength={3}
-          pattern="[A-Za-z]{3}"
-          placeholder="USD"
-          value={draft.displayCurrency}
-          onChange={(e) => set("displayCurrency", e.target.value)}
         />
       </div>
 

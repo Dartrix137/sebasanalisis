@@ -71,8 +71,6 @@ _PLAN_FIELDS = (
     "name",
     "description",
     "price_cents",
-    "display_price_cents",
-    "display_currency",
     "interval",
     "interval_count",
     "active",
@@ -95,11 +93,6 @@ def _plan_or_404(db: DbSession, plan_id: UUID) -> Plan:
     return plan
 
 
-def _check_display_price(price_cents: int | None, currency: str | None) -> None:
-    if (price_cents is None) != (currency is None):
-        raise _invalid("El precio de presentación lleva monto y moneda, o ninguno de los dos")
-
-
 @router.get("/plans", response_model=AdminPlanListResponse)
 def list_plans(
     db: DbSession, admin: AdminUser, limit: Limit = 50, offset: Offset = 0
@@ -119,7 +112,6 @@ def list_plans(
 def create_plan(
     payload: CreatePlanRequest, db: DbSession, admin: AdminUser, request: Request
 ) -> Plan:
-    _check_display_price(payload.display_price_cents, payload.display_currency)
     if db.scalar(select(Plan.id).where(Plan.code == payload.code)):
         raise _conflict("Ya existe un plan con ese código")
     plan = Plan(
@@ -128,8 +120,6 @@ def create_plan(
         description=payload.description.strip(),
         price_cents=payload.price_cents,
         currency=payload.currency,
-        display_price_cents=payload.display_price_cents,
-        display_currency=payload.display_currency,
         interval=payload.interval.value,
         interval_count=payload.interval_count,
         active=payload.active,
@@ -169,8 +159,7 @@ def update_plan(
         if field not in sent:
             continue
         value = getattr(payload, field)
-        # Solo el precio de presentacion se puede vaciar.
-        if value is None and field not in ("display_price_cents", "display_currency"):
+        if value is None:
             raise _invalid(f"El campo {field} no puede quedar vacío")
         if field == "interval":
             value = value.value
@@ -179,7 +168,6 @@ def update_plan(
             if not value:
                 raise _invalid(f"El campo {field} no puede quedar vacío")
         setattr(plan, field, value)
-    _check_display_price(plan.display_price_cents, plan.display_currency)
 
     after = _plan_snapshot(plan)
     if after == before:

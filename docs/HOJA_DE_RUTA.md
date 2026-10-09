@@ -93,7 +93,8 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Tipos TypeScript del cliente API mantenidos a mano. | Generados desde el OpenAPI de FastAPI. | Fase 4, paso 0 |
 | Pagos como "Fase 2" independiente. | Parte de la Fase 4, con renovación automática, planes y cupones. | Fase 4 |
 | Cobro solo con renovación automática y tarjeta tokenizada; PSE y transferencias descartados. | Dos modos: renovación automática con fuente tokenizada, y pago manual mes a mes para quien no tokeniza. | 2026-10-08 |
-| Varios planes (mensual y anual). | Un solo plan, mensual, de 100.000 COP. Se muestra además como 30 USD fijos; el cobro es siempre en COP. | 2026-10-08 |
+| Varios planes (mensual y anual). | Un solo plan, mensual, de 100.000 COP. Se muestra y se cobra solo en COP. | 2026-10-08 |
+| Mostrar además un precio fijo de 30 USD, solo visual (2026-10-08). | No se muestra: un solo precio, el que se cobra. | 2026-10-09 |
 | Buzón de soporte en Hostinger sobre el dominio (`soporte@sebasanalisis.com`). | El correo de soporte y de contacto es una cuenta de Gmail: `sebas.analisis.ia.com@gmail.com`. | 2026-10-07 |
 | Chequeo externo de disponibilidad sobre la API y la página de inicio. | No se hace. Si el VPS se cae, no hay aviso. | 2026-10-07 |
 | Página de Juego Responsable (`/legal/juego-responsable`), exigida por §0 del documento de arquitectura. | Descartada por decisión del usuario: no se construye. Los documentos legales son cuatro (términos, datos, reembolsos, cookies). | 2026-10-08 |
@@ -181,21 +182,21 @@ Quedó para después, a propósito: reenviar la verificación y forzar el restab
 
 Construido el 2026-10-09 en la rama `fase-4-paso-4-planes`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §3.11.
 
-- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions`. Dos migraciones: el DDL, y aparte la que siembra el plan único (**Acceso Mensual**, 100.000 COP al mes, con 30 USD de precio de referencia).
+- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions`. Dos migraciones: el DDL, y aparte la que siembra el plan único (**Acceso Mensual**, 100.000 COP al mes).
 - `backend/app/billing/pricing.py`, puro y con `mypy` estricto: `quote(plan, coupon, now)` con subtotal, descuento, total y moneda, o el motivo por el que el cupón no aplica. El porcentaje redondea hacia abajo.
 - `GET /plans` (pública) y `POST /billing/quote` (con sesión). El cliente manda plan y código; un monto que mande se ignora. Límite de intentos en la cotización con código: 10 cada 15 minutos por cuenta y 30 por hora por IP.
 - `/admin/planes` y `/admin/descuentos`: crear, editar, activar y desactivar, y ver las redenciones de un cupón. No hay borrado. Todo cambio pide motivo y deja fila en la bitácora.
-- **Página `/planes`**, pública. La cuenta sin acceso o con el acceso vencido llega allí en lugar del aviso provisional del paso 3. Muestra `100.000 COP / mes`, `Precio de referencia: 30 USD` y la nota de que el cobro es en pesos colombianos y el banco convierte a su tasa. El botón "Suscribirme" está deshabilitado hasta el paso 5.
+- **Página `/planes`**, pública. La cuenta sin acceso o con el acceso vencido llega allí en lugar del aviso provisional del paso 3. Muestra un solo precio, `100.000 COP / mes`, y la nota de que el cobro es en pesos colombianos y el banco de quien paga con tarjeta de otro país convierte a su tasa. El botón "Suscribirme" está deshabilitado hasta el paso 5.
 - No existe el cupón del 100 %: el porcentaje va de 1 a 99.
 
-Comprobado: 813 tests de backend, entre ellos cada caso de cupón (vencido, agotado, de otro plan, ya usado por el usuario, de otra moneda, inactivo) y "un monto enviado por el cliente se ignora"; 24 tests de Playwright, entre ellos "cuenta sin acceso: ve /planes con el precio que se cobra". Las dos migraciones se subieron, se bajaron y se volvieron a subir sobre una base desechable, y `alembic check` no reporta diferencias con los modelos.
+Comprobado: 809 tests de backend, entre ellos cada caso de cupón (vencido, agotado, de otro plan, ya usado por el usuario, de otra moneda, inactivo) y "un monto enviado por el cliente se ignora"; 24 tests de Playwright, entre ellos "cuenta sin acceso: ve /planes con el precio que se cobra". Las dos migraciones se subieron, se bajaron y se volvieron a subir sobre una base desechable, y `alembic check` no reporta diferencias con los modelos.
 
 Quedó para después, a propósito: cobrar y redimir un cupón de verdad, el campo de cupón en la pantalla de pago, y `subscriptions.plan_id` como llave foránea (paso 5); `plan_games` (paso 7). La redacción del precio la revisa el abogado antes del lanzamiento.
 
 ### Decisiones tomadas para la Fase 4
 
 - Cobro con renovación automática y fuente de pago tokenizada en Wompi, **y además pago manual mes a mes** para quien no tokeniza (2026-10-08).
-- El público es internacional. Un solo plan, mensual, de 100.000 COP; en pantalla se muestra también un precio fijo de 30 USD, solo visual. Los cupones se mantienen (2026-10-08).
+- El público es internacional. Un solo plan, mensual, de 100.000 COP. Los cupones se mantienen (2026-10-08).
 - Wompi es la pasarela principal y el paso 5 se construye detrás de una interfaz de proveedor. Premium Pay se evaluó y no sirve como base del cobro; queda como posible canal manual para clientes internacionales sin tarjeta (2026-10-08). Detalle en `PLATAFORMA_COMPLETA.md` §3.10.
 - Correo transaccional con Resend por SMTP. El correo de soporte y de contacto es `sebas.analisis.ia.com@gmail.com` (2026-10-07); no hay buzón en Hostinger.
 - Monitoreo de errores con GlitchTip autohospedado en el VPS, en `errores.sebasanalisis.com` desde el 2026-10-07.
@@ -210,7 +211,7 @@ Quedó para después, a propósito: cobrar y redimir un cupón de verdad, el cam
 - La pantalla de una cuenta sin acceso no muestra correo de contacto: solo dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto (2026-10-08).
 - `/admin/usuarios` con búsqueda, filtros, paginación y detalle se adelanta del paso 6 al 3 (2026-10-08).
 - El cambio de rol (nombrar o quitar administradores) también se adelanta al paso 3. Al quitar el rol, la cuenta conserva el acceso manual que tenía guardado (2026-10-08).
-- El precio se redacta con el cobro como protagonista: `100.000 COP / mes`, debajo `Precio de referencia: 30 USD`, y una nota de que el cobro es en pesos colombianos y el banco de quien paga convierte a su tasa. Sin "equivale" ni "aprox." (2026-10-09).
+- **Se muestra un solo precio: 100.000 COP.** El precio de referencia de 30 USD decidido el 2026-10-08 se descartó; el plan no guarda un precio de presentación. Bajo el precio queda la nota de que el cobro es en pesos colombianos y el banco de quien paga con tarjeta de otro país convierte a su tasa (2026-10-09).
 - El plan único lo siembra una migración: código `mensual`, nombre **Acceso Mensual** (2026-10-09).
 - No existe el cupón del 100 %: el porcentaje va de 1 a 99 y un cupón nunca deja el total en cero (2026-10-09).
 - Mientras no exista el pago, `/planes` muestra el precio con el botón "Suscribirme" deshabilitado y sin campo de cupón (2026-10-09).
@@ -227,7 +228,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
-| Revisión del abogado de cómo se redacta el precio (se cobra 100.000 COP; se muestra además 30 USD como referencia): reglas de información de precios y publicidad de la Ley 1480, impuestos incluidos, ley aplicable a clientes de fuera de Colombia. La redacción ya está construida (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
+| Revisión del abogado del precio en pantalla (100.000 COP): si debe decir que incluye impuestos y si aplica IVA, y qué ley de consumo aplica a clientes de fuera de Colombia (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
 | Cuenta de comercio en Wompi (sandbox y producción); confirmación escrita de Wompi de que acepta esta categoría de negocio y tarjetas internacionales; qué medios se habilitan para el pago manual; facturación electrónica | Paso 5 |
 
 ---
