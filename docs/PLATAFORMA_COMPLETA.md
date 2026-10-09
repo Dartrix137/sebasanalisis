@@ -136,7 +136,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **`access` viaja en toda respuesta que trae la cuenta**, no solo en `GET /auth/me`: también en el login, el registro y el refresh, que es de donde el frontend toma la cuenta al entrar. Se arma en `api/presenters.user_response` con la decisión de `has_access`.
 - **El `403` de un endpoint de juego** lleva `detail.code` con el motivo y un mensaje de respaldo.
 - **Cuenta suspendida**: inicia sesión, entra a `/cuenta`, exporta y elimina sus datos; no usa la mesa. Un administrador suspendido deja de administrar (`require_admin` lo rechaza) hasta que otro lo reactive. Nadie se suspende a sí mismo (`409`).
-- **Qué ve una cuenta sin acceso** (decisión del usuario): una pantalla que dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto, **sin correo de contacto**. Si el acceso venció, dice cuándo. Si está suspendida, lo dice. Si le falta confirmar el correo, se lo recuerda. Es provisional: el paso 4 la reemplaza por `/planes`.
+- **Qué ve una cuenta sin acceso** (decisión del usuario): una pantalla que dice que no tiene acceso activo y que las suscripciones estarán disponibles pronto, **sin correo de contacto**. Si el acceso venció, dice cuándo. Si está suspendida, lo dice. Si le falta confirmar el correo, se lo recuerda. Era provisional: desde el paso 4 la cuenta sin acceso o con el acceso vencido va a `/planes` (§3.11); la suspendida conserva su aviso.
 - **Compuerta del frontend**: `LegalGate` pasó a llamarse `AccessGate`. Antes de montar una pantalla de juego vuelve a pedir la cuenta al servidor, porque la decisión guardada en la sesión puede ser vieja, y muestra la mesa, la aceptación de documentos o el aviso según `access`. Sigue siendo presentación: decide el servidor.
 - **El acceso manual no aplica a un administrador** (2026-10-08, lo señaló el usuario al probarlo): entra por su rol, así que guardar un cambio no tendría efecto y confunde. `PATCH /admin/users/:id/access` responde `409` sobre una cuenta de administrador y la pantalla muestra una nota en lugar del formulario.
 - **Un cambio que no cambia nada se rechaza** (`409`), tanto de acceso como de estado, para no llenar la bitácora de filas que no dicen nada (2026-10-08).
@@ -300,6 +300,14 @@ Usuario                 Frontend                     Backend                    
 
 Bienvenida al activar, recibo de cada cobro aprobado, cobro fallido con enlace para cambiar la tarjeta, aviso de vencimiento cuando se agotan los reintentos, confirmación de cancelación. Todos pasan el filtro de terminología: describen el servicio, nunca resultados.
 
+**Aviso antes de cada cobro automático** (decidido el 2026-10-09, se construye en el paso 5). Con anticipación suficiente, el usuario recibe un correo que dice que se le va a cobrar: qué plan, cuánto, en qué moneda y qué día. El correo le indica que, si tiene dudas o quiere gestionar su suscripción (cancelarla, cambiar el medio de pago), vaya al apartado de suscripción de su perfil (`/cuenta`), con el enlace. Pesa más en el plan de dos meses, donde pasan dos meses entre un cobro y el siguiente. Reglas:
+
+- Se envía **antes del primer intento de cobro** de §3.5, no después.
+- Uno por período: el job de renovaciones lo marca como enviado para no repetirlo en cada corrida.
+- No se envía a una suscripción cancelada, porque ya no se le va a cobrar.
+- En el pago manual mes a mes el aviso es el de §3.10: que el período está por vencer y cómo pagar el siguiente.
+- **Por definir en el paso 5**: con cuántos días de anticipación. Propuesta: 7 días antes del cobro.
+
 ### 3.9 Tests de aceptación
 
 Los cuatro obligatorios de `CLAUDE.md`, más los que cubren lo nuevo de esta fase:
@@ -328,9 +336,9 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 **Público y precio**
 
 - El público es **internacional**, no solo Colombia.
-- **Un solo plan, mensual, de 100.000 COP.** No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: el plan único es una fila, y nada impide crear otro después.
-- **El precio se muestra también como 30 USD, fijo**, para el público internacional. Es solo visual: **el cobro es siempre de 100.000 COP**, que es la moneda en la que opera Wompi. Los 30 USD no salen de una tasa de cambio ni se usan para cobrar. Implica un campo de presentación en el plan (por ejemplo `display_price_cents` y `display_currency`), distinto de `price_cents` y `currency`, que son los que cobran.
-- **Pendiente de resolver en el paso 4, y a revisar con el abogado**: cómo se redacta el precio en pantalla. 30 USD no es el equivalente exacto de 100.000 COP, y a quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes y la de pago deben decir sin ambigüedad cuál es el monto que se cobra y en qué moneda; mostrar solo "30 USD" a alguien a quien se le cobran 100.000 COP puede ser información engañosa al consumidor.
+- **Dos planes** (2026-10-09; el 2026-10-08 se había decidido uno solo): **mensual, de 100.000 COP**, y **de dos meses, de 150.000 COP**. El de dos meses es un plan aparte, no un cupón: un solo cobro cada dos meses (`interval = month`, `interval_count = 2`). No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: cada plan es una fila, y nada impide crear otro después.
+- **No hay precio de referencia en dólares** (decidido el 2026-10-09, al construir el paso 4). El 2026-10-08 se había decidido mostrar además un precio fijo de 30 USD, solo visual; se descartó: 30 USD no es el equivalente de 100.000 COP, y mostrar una cifra que no se cobra presta a confusión. **Se muestra y se cobra un solo precio: 100.000 COP.** El plan no tiene campos de presentación.
+- A quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes lo dice, y la de pago deberá decirlo también (§3.11).
 - **Los cupones se mantienen** (§3.3, §4.5).
 
 **Dos modos de pago**
@@ -349,6 +357,55 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 - **Hueco conocido**: un cliente de fuera de Colombia sin tarjeta no puede pagar con Wompi.
 - **Premium Pay** (`premiumpay.pro`, operada por BETANDEAL USA, CORP., Florida) se evaluó el 2026-10-08 para cubrir ese hueco. **No sirve como base del cobro**: no es una pasarela sino una plataforma de venta para creadores con página de pago propia; no se le vio API ni webhooks, así que la aplicación no puede activar el acceso sola; cobra entre 7 % y 11 %; su aviso legal le permite retener saldos hasta 180 días por "riesgo regulatorio"; y no actúa como comerciante de registro. Acepta transferencia, criptomonedas y Skrill. **Uso posible**: canal manual para pocos clientes internacionales sin tarjeta, en el que el cliente paga por su enlace y el administrador le da acceso `invited` con vencimiento desde `/admin/usuarios`. No requiere código. Antes de usarla: pedirle los términos para vendedores y preguntar si tiene API o webhooks firmados.
 - Si el volumen internacional sin tarjeta crece, la opción a evaluar es una pasarela de criptomonedas con API, que sí se puede automatizar con las reglas de §3.1.
+
+### 3.11 Planes y cupones: cómo quedó construido (2026-10-09)
+
+Paso 4 del orden de §9. Decisiones de implementación que este documento no fijaba, confirmadas por el usuario el 2026-10-09. Aquí no se cobra ni se redime nada: eso es del paso 5.
+
+**Decisiones del usuario**
+
+- **Un solo precio en pantalla**: `100.000 COP / mes`, el que se cobra. La primera versión de este paso mostraba debajo `Precio de referencia: 30 USD`; el usuario lo descartó el mismo 2026-10-09, antes de mezclar la rama, y los campos `display_price_cents` y `display_currency` se quitaron de la tabla, de la API y del admin. Queda una nota corta bajo el precio: "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones." (el usuario pidió acortarla el 2026-10-09).
+- **Para el abogado** (bloquea el lanzamiento, no este paso): si el precio debe decir que incluye impuestos y si aplica IVA (va con §10 n.º 4); qué ley de consumo aplica a un cliente de fuera de Colombia; y si la nota sobre la conversión del banco debe repetirse en la pantalla de pago, en el recibo y en los términos.
+- **Los planes los siembran migraciones de datos**, separadas del DDL: `mensual` (**Acceso Mensual**, 100.000 COP al mes) y `bimestral` (**Acceso Bimestral**, 150.000 COP cada dos meses). Después se editan desde `/admin/planes`. Esas filas iniciales no dejan entrada en la bitácora.
+- **Cupón del 100 %: no existe** (§10 n.º 6). El porcentaje va de 1 a 99 (lo exigen el endpoint y un `CHECK` de la tabla), y un cupón de monto fijo que cubra todo el precio no aplica a ese plan (`covers_total`). Una cortesía total se da como acceso `invited` desde `/admin/usuarios`.
+- **`/planes` sin pago**: el plan con su precio y el botón "Suscribirme" deshabilitado, con la nota "El pago estará disponible pronto". Sin correo de contacto y sin campo de cupón hasta el paso 5.
+
+**Datos**
+
+- Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions` como en §3.2, sin campos de más: el plan guarda un solo precio (`price_cents`, `currency`), que es el que se cobra y el que se muestra.
+- **Solo se cobra en COP**: los schemas del admin rechazan otra moneda de cobro, en planes y en cupones de monto fijo. Es validación, no estructura: la columna `currency` sigue ahí para el día que haya otra pasarela.
+- `coupon_redemptions.user_id` es `ON DELETE CASCADE`, como el resto de lo que hoy cuelga de la cuenta: eliminar la cuenta borra también el rastro de que usó el cupón. **El paso 5 lo revisa** junto con el `ON DELETE` de `subscriptions` (§5.7.1).
+- `subscriptions.plan_id` sigue siendo texto suelto; pasa a llave foránea en el paso 5. Por eso `/admin/planes` todavía no muestra cuántas suscripciones vigentes conservan su precio (§4.4): el formulario dice la regla, sin el número.
+- `plan_games` no se creó: es del paso 7.
+
+**Cálculo (`backend/app/billing/`, puro, con `mypy` estricto)**
+
+- `pricing.quote(plan, coupon, now)` devuelve subtotal, descuento, total y moneda, y el motivo si el cupón no aplica. Un cupón que no aplica **no es un error**: la cotización sale por el precio completo.
+- Motivos, en el orden en que se revisan: `inactive`, `not_started`, `expired`, `exhausted`, `other_plan`, `currency_mismatch`, `already_used`, `covers_total`. `not_found` lo pone el endpoint cuando el código no existe. `valid_until` es exclusivo.
+- El porcentaje se calcula con división entera (`monto * porcentaje // 100`): redondea el descuento hacia abajo al centavo, sin pasar por `float`.
+- La cotización calcula **el primer cobro**. `duration` y `duration_periods` se guardan, pero quienes los aplican son las renovaciones del paso 5.
+- `coupon_codes.py`: un código se guarda en mayúsculas, lleva de 3 a 40 caracteres (letras sin tilde, números, guion y guion bajo) y no puede contener una lista corta de fragmentos (`GANA`, `SEGUR`, `GARANT`, `INFALIB`, `PREDIC`, `VENTAJA`, `ACIERT`, `WIN`, `SUERTE`, `PREMIO`…). La lista es tosca a propósito: prefiere rechazar un código inocente a dejar pasar uno que suene a promesa.
+
+**API**
+
+- `GET /plans`: pública, solo los planes activos.
+- `POST /billing/quote {plan_id, coupon_code?}`: **exige sesión** (hace falta saber quién cotiza para "ya usado por el usuario") pero no acceso a la mesa. No reserva ni redime nada. Cualquier otro campo del cuerpo, un monto incluido, se ignora. Un plan desactivado responde `404`.
+- **Límite de intentos** (pendiente de §5.7.1): solo cuentan las cotizaciones que traen código, 10 cada 15 minutos por cuenta y 30 por hora por IP; al pasarse, `429`. Sin código no hay límite. En memoria, como los demás, y lo apaga `RATE_LIMIT_ENABLED`.
+- Admin: `GET|POST /admin/plans`, `PATCH /admin/plans/:id`, `GET|POST /admin/coupons`, `PATCH /admin/coupons/:id`, `GET /admin/coupons/:id/redemptions`. Las listas paginan con `limit` y `offset`. **No hay `DELETE`**: activar y desactivar es el campo `active` del `PATCH`.
+- **Motivo obligatorio** (3 a 500 caracteres) en toda creación y todo cambio; cada uno deja su fila en `admin_audit_log` (`plan.create`, `plan.update`, `coupon.create`, `coupon.update`) con el antes y el después. Un cambio que no cambia nada responde `409` y no deja fila.
+- **Lo que no se edita**: el código de un plan, su moneda de cobro y el código de un cupón. **Con redenciones**, tampoco el descuento del cupón (`kind`, `value`, `currency`, `duration`, `duration_periods`): se desactiva y se crea otro. El tope de usos no puede bajar de lo ya usado.
+
+**Frontend**
+
+- `/planes` es pública. `AccessGate` manda allí a la cuenta sin acceso o con el acceso vencido, en lugar del aviso provisional del paso 3. La cuenta suspendida sigue viendo su aviso: no se le ofrecen planes.
+- `/admin/planes` y `/admin/descuentos`, enlazadas desde `/admin`. Los montos se escriben en pesos y viajan en centavos (`lib/money.ts` los convierte sin pasar por decimales de coma flotante).
+- El nombre y la descripción de un plan son texto libre del administrador. El formulario recuerda la regla de lenguaje, pero **no hay filtro automático** sobre esos dos campos: la descripción aprobada usa "predicción" y "ventaja" en negativo, y un filtro por palabras la rechazaría.
+
+**Tests**
+
+- `tests/billing/`: 59 tests del módulo puro, sin base de datos (redondeo, cada motivo, el orden de los motivos, el total que nunca llega a cero, los códigos).
+- `tests/api/test_billing.py` y `tests/api/test_admin_billing.py`: cada caso de cupón del "hecho cuando" de §9 por el endpoint (vencido, agotado, de otro plan, ya usado por el usuario, de otra moneda, inactivo), el monto enviado por el cliente que se ignora, el límite de intentos, y el admin con su bitácora.
+- Playwright (`e2e/plans.spec.ts`): una cuenta sin acceso ve `/planes` con el precio; la página se ve sin sesión; el administrador crea, edita y desactiva un plan y un cupón, y los cambios aparecen en la bitácora.
 
 ---
 
@@ -504,7 +561,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **Límites** (por ventana, en memoria): `register` 10 por hora y 20 por día por IP; `verify-email` 20 cada 15 min por IP; `resend-verification` 1 por minuto, 3 cada 15 min y 10 por día por usuario (el minuto de espera y el tope diario se agregaron el 2026-10-07: 3 cada 15 min eran 288 correos al día desde una sola cuenta, más que la cuota diaria del proveedor; el botón muestra la espera); `forgot-password` 10 cada 15 min por IP, y 3 cada 15 min y 10 por día por correo; `reset-password` 10 cada 15 min por IP; `change-password` 10 cada 15 min por usuario; `change-email` 5 por hora y 10 por día por usuario (los topes diarios de `forgot-password` y `change-email` son del 2026-10-07, por la misma razón que el del reenvío); `DELETE /auth/me` 10 cada 15 min por usuario.
 - **Login**: además del límite por IP y correo (5 fallos en 5 min), 30 fallos en 15 min por IP sin importar el correo. El primero no frenaba probar pocas contraseñas contra muchos correos. Un login correcto no borra la cuenta de fallos de la IP.
 - **Tope diario de correos** (`EMAIL_DAILY_LIMIT`, 300 por defecto, no estaba en §12): al llegar, la API deja de enviar hasta el día siguiente (UTC) y lo registra como error, que llega al monitoreo. Existe porque el registro envía un correo a cualquier dirección que se escriba: sin tope, la plataforma serviría para mandar correo a terceros y gastar la cuota del proveedor. Debe quedar por debajo del límite diario del plan de Resend. En memoria: un reinicio lo pone en cero.
-- **Pendiente para el paso 4**: límite de intentos en la cotización con cupón, para que no se puedan adivinar códigos.
+- **Límite de intentos en la cotización con cupón**, para que no se puedan adivinar códigos: hecho en el paso 4 (§3.11).
 - **Variable `RATE_LIMIT_ENABLED`** (no estaba en §12): apaga los límites por endpoint. Existe solo para los tests de punta a punta, donde todas las peticiones salen de la misma IP. Los límites de login no la miran.
 - **De §5.4 queda para después**: `GET /auth/me/export` (paso 2, con el resto de derechos del titular de §6.4) y las secciones de `/cuenta` de suscripción, método de pago, historial de pagos y documentos aceptados. `/cuenta` trae hoy perfil, correo, contraseña y eliminar cuenta.
 - **De §5.8 queda para el paso 5**: "cuenta sin verificar → no puede crear suscripción", porque `POST /billing/subscriptions` todavía no existe.
@@ -756,11 +813,11 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | # | Decisión | Propuesta por defecto (la más conservadora) |
 |---|---|---|
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
-| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-08): un solo plan, mensual, de 100.000 COP.** No hay plan anual. En pantalla se muestra además un precio fijo de 30 USD como referencia para el público internacional; el cobro es siempre de 100.000 COP. Ver §3.10. |
+| 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. Cuáles se habilitan se decide en el paso 5, con la documentación vigente de Wompi. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |
-| 6 | Cupón que deja el total en cero (100 % de descuento) | No se permite en cupones; una cortesía total se da como acceso `invited` desde el admin. |
+| 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | Manuales en Wompi y registrados en el admin. |
 | 8 | Textos legales definitivos | Los redacta o revisa un abogado; el equipo entrega la estructura de §6.5. |
 | 9 | Proveedor SMTP concreto | **Resuelta (2026-10-05): Resend**, enviando desde un subdominio propio. Resend confirmó que su política de uso admite el producto y el correo quedó encendido el 2026-10-07. Ver §13.6 y `DESPLIEGUE.md`. |
@@ -785,7 +842,7 @@ Legal:     GET  /legal/:kind                 (última versión publicada, públi
            POST /legal/accept                {legal_document_ids}
 
 Billing:   GET  /plans                       (pública)
-           POST /billing/quote               {plan_id, coupon_code?}
+           POST /billing/quote               {plan_id, coupon_code?}   (con sesión)
            GET  /billing/acceptance          (acceptance token y enlace de términos de Wompi)
            POST /billing/subscriptions       {plan_id, coupon_code?, card_token, acceptance_token}
            GET  /billing/subscription

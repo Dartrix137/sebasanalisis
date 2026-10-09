@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 from app.core.access import has_access
 from app.models import User
-from tests.api.conftest import auth, register_raw
+from tests.api.conftest import OPEN_PREFIXES, auth, register_raw
 
 PASSWORD = "clave-segura-123"
 MOTIVO = "Prueba de acceso manual"
@@ -168,10 +168,6 @@ def test_acceso_full_no_vence(client: TestClient, db) -> None:
     assert _me(client, registro["access_token"])["access"]["reason"] == "full"
 
 
-# Lo que no es juego y por eso no exige `RequireAccess`.
-_OPEN_PREFIXES = ("/auth", "/legal", "/admin", "/health", "/docs", "/redoc", "/openapi.json")
-
-
 def test_todos_los_routers_de_juego_rechazan_una_cuenta_sin_acceso(client: TestClient) -> None:
     """Recorre TODAS las rutas de juego con una cuenta sin acceso. Un router
     nuevo que olvide `RequireAccess` rompe este test en vez de quedar abierto."""
@@ -181,7 +177,7 @@ def test_todos_los_routers_de_juego_rechazan_una_cuenta_sin_acceso(client: TestC
 
     probadas = 0
     for ruta, operaciones in app.openapi()["paths"].items():
-        if ruta.startswith(_OPEN_PREFIXES):
+        if ruta.startswith(OPEN_PREFIXES):
             continue
         path = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), ruta)
         for method in operaciones:

@@ -1,0 +1,93 @@
+"use client";
+
+/**
+ * Los planes que se ofrecen, con su precio (§3.10 de la Fase 4).
+ *
+ * Regla de esta pantalla: se muestra un solo precio, el que se cobra, con su
+ * moneda. No hay precio de referencia en otra moneda (descartado el
+ * 2026-10-09): mostrar una cifra que no se cobra presta a confusión.
+ *
+ * El botón no hace nada todavía: el pago llega con el paso 5.
+ */
+
+import { useEffect, useState } from "react";
+
+import { ApiError, billingApi } from "@/lib/api-client";
+import { formatMoney, intervalLabel } from "@/lib/money";
+import type { PlanResponse } from "@/lib/types/billing";
+
+import { Button, Card, ErrorBox } from "./ui";
+
+const CURRENCY_NAME: Record<string, string> = {
+  COP: "pesos colombianos (COP)",
+};
+
+export function PlansView() {
+  const [plans, setPlans] = useState<PlanResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    billingApi
+      .plans()
+      .then(setPlans)
+      .catch((e) => setError(e instanceof ApiError ? e.message : "No se pudieron cargar los planes"));
+  }, []);
+
+  if (error) return <ErrorBox message={error} />;
+  if (!plans) return null;
+  if (plans.length === 0) {
+    return <p className="text-sm text-muted">Por ahora no hay planes disponibles.</p>;
+  }
+  // Una al lado de la otra; en pantallas angostas, una debajo de la otra.
+  return (
+    <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
+      {plans.map((plan) => (
+        <PlanCard key={plan.id} plan={plan} />
+      ))}
+    </div>
+  );
+}
+
+function PlanCard({ plan }: { plan: PlanResponse }) {
+  const price = formatMoney(plan.price_cents, plan.currency);
+  const currencyName = CURRENCY_NAME[plan.currency] ?? plan.currency;
+
+  return (
+    <Card className="h-full">
+      {/* Columna de alto completo: el botón queda alineado entre tarjetas. */}
+      <article
+        aria-label={plan.name}
+        data-testid={`plan-${plan.code}`}
+        className="flex h-full flex-col"
+      >
+        <h2 className="font-display text-2xl font-semibold leading-tight text-white">
+          {plan.name}
+        </h2>
+        <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">{plan.description}</p>
+
+        <p className="mt-5 flex flex-wrap items-baseline gap-x-2">
+          <span className="font-display text-4xl font-semibold leading-none text-white">
+            {price}
+          </span>
+          <span className="text-sm text-muted">
+            / {intervalLabel(plan.interval, plan.interval_count)}
+          </span>
+        </p>
+
+        <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
+          Cobro en {currencyName}. Con tarjeta de otro país, tu banco aplica su tasa de cambio y
+          puede cobrar comisiones.
+        </p>
+
+        <div className="mt-auto flex flex-wrap items-center gap-3 pt-5">
+          <Button disabled aria-describedby={`pago-${plan.id}`}>
+            Suscribirme
+          </Button>
+          <p id={`pago-${plan.id}`} className="text-xs text-muted">
+            El pago estará disponible pronto.
+          </p>
+        </div>
+      </article>
+    </Card>
+  );
+}

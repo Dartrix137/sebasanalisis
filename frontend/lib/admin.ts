@@ -26,6 +26,10 @@ const ACTION_LABEL: Record<string, string> = {
   "user.status.update": "Suspendió o reactivó la cuenta",
   "user.role.update": "Cambió el rol",
   "legal_document.publish": "Publicó un documento legal",
+  "plan.create": "Creó un plan",
+  "plan.update": "Editó un plan",
+  "coupon.create": "Creó un cupón",
+  "coupon.update": "Editó un cupón",
 };
 
 export function actionLabel(entry: AuditLogEntry): string {

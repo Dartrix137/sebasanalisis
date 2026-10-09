@@ -35,6 +35,20 @@ import type {
   UUID,
 } from "./types/auth";
 import type {
+  AdminCouponListResponse,
+  AdminCouponResponse,
+  AdminPlanListResponse,
+  AdminPlanResponse,
+  CouponRedemptionListResponse,
+  CreateCouponRequest,
+  CreatePlanRequest,
+  PlanResponse,
+  QuoteRequest,
+  QuoteResponse,
+  UpdateCouponRequest,
+  UpdatePlanRequest,
+} from "./types/billing";
+import type {
   CreateGameRequest,
   CreateGameVariantRequest,
   GameResponse,
@@ -257,6 +271,22 @@ export const legalApi = {
 
   /** Los documentos que la cuenta aceptó. */
   consents: (token: string) => apiFetch<ConsentResponse[]>("/legal/consents", { token }),
+};
+
+export const billingApi = {
+  /** Los planes que se ofrecen. Público. */
+  plans: () => apiFetch<PlanResponse[]>("/plans"),
+
+  /**
+   * Cuánto se cobraría. Solo viajan el plan y el código: el monto lo calcula
+   * el servidor.
+   */
+  quote: (token: string, body: QuoteRequest) =>
+    apiFetch<QuoteResponse>("/billing/quote", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
 };
 
 export const gamesApi = {
@@ -609,5 +639,69 @@ export const adminApi = {
     if (options.offset !== undefined) qs.set("offset", String(options.offset));
     const sufijo = qs.toString() ? `?${qs}` : "";
     return apiFetch<AuditLogListResponse>(`/admin/audit-log${sufijo}`, { token });
+  },
+
+  /** Todos los planes, los desactivados también. */
+  listPlans: (token: string) =>
+    apiFetch<AdminPlanListResponse>("/admin/plans?limit=100", { token }),
+
+  createPlan: (token: string, body: CreatePlanRequest) =>
+    apiFetch<AdminPlanResponse>("/admin/plans", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Edita, activa o desactiva. Pide motivo y queda en la bitácora. */
+  updatePlan: (token: string, planId: UUID, body: UpdatePlanRequest) =>
+    apiFetch<AdminPlanResponse>(`/admin/plans/${planId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Cupones por página, los más recientes primero. Busca por código. */
+  listCoupons: (
+    token: string,
+    options: { query?: string; active?: boolean; limit?: number; offset?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.query) qs.set("query", options.query);
+    if (options.active !== undefined) qs.set("active", String(options.active));
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<AdminCouponListResponse>(`/admin/coupons${sufijo}`, { token });
+  },
+
+  createCoupon: (token: string, body: CreateCouponRequest) =>
+    apiFetch<AdminCouponResponse>("/admin/coupons", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Edita, activa o desactiva. Pide motivo y queda en la bitácora. */
+  updateCoupon: (token: string, couponId: UUID, body: UpdateCouponRequest) =>
+    apiFetch<AdminCouponResponse>(`/admin/coupons/${couponId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Quién usó el cupón y cuándo, lo más reciente primero. */
+  couponRedemptions: (
+    token: string,
+    couponId: UUID,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<CouponRedemptionListResponse>(
+      `/admin/coupons/${couponId}/redemptions${sufijo}`,
+      { token },
+    );
   },
 };

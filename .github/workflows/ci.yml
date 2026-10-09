@@ -50,8 +50,7 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      # Por ahora solo los modulos puros (pyproject.toml): engine/ y, cuando
-      # exista, billing/.
+      # Por ahora solo los modulos puros (pyproject.toml): engine/ y billing/.
       - name: Tipos (mypy)
         run: mypy
 

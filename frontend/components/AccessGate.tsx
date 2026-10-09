@@ -10,7 +10,8 @@
  *   explica qué hace y qué no hace la plataforma);
  * - falta aceptar un documento vigente o declarar la mayoría de edad: la
  *   pantalla de aceptación;
- * - sin acceso, acceso vencido o cuenta suspendida: un aviso.
+ * - sin acceso o con el acceso vencido: la página de planes (`/planes`);
+ * - cuenta suspendida: un aviso.
  *
  * Esto es presentación, no control de acceso: quien decide es el servidor
  * (`core/access.py`), que responde `403` con el motivo en todos los endpoints
@@ -29,7 +30,6 @@ import type { LegalDocumentResponse, PendingConsentResponse } from "@/lib/types/
 
 import { Markdown } from "./legal/Markdown";
 import { BrandMark, Button, Card, Checkbox, ErrorBox } from "./ui";
-import { VerifyEmailNotice } from "./VerifyEmailNotice";
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -52,6 +52,8 @@ export function AccessGate({
   const [error, setError] = useState<string | null>(null);
   const userId = user?.id ?? null;
   const reason = user?.access.reason ?? null;
+  // Sin acceso o con el acceso vencido: lo que hay para ofrecer son los planes.
+  const toPlans = fresh && (reason === "no_access" || reason === "expired");
 
   useEffect(() => {
     if (loading) return;
@@ -71,6 +73,10 @@ export function AccessGate({
       .catch((e) => setError(messageOf(e)));
   }, [fresh, reason, withToken]);
 
+  useEffect(() => {
+    if (toPlans) router.replace("/planes");
+  }, [toPlans, router]);
+
   if (loading || !user) return null;
   if (error) {
     return (
@@ -88,19 +94,8 @@ export function AccessGate({
   if (user.access.reason === "consent_required") {
     return pending ? <ConsentScreen pending={pending} onAccepted={setPending} /> : null;
   }
-  return <NoAccessScreen />;
-}
-
-/**
- * Lo que ve una cuenta que no puede usar la mesa. Provisional hasta el paso 4,
- * que la reemplaza por la página de planes: por eso no ofrece nada que comprar.
- */
-function NoAccessScreen() {
-  const { user } = useSession();
-  if (!user) return null;
-  const { reason, until } = user.access;
-
-  if (reason === "suspended") {
+  if (user.access.reason === "suspended") {
+    // Una cuenta suspendida no resuelve nada pagando: no se le ofrecen planes.
     return (
       <Shell
         title="Tu cuenta está suspendida"
@@ -110,17 +105,8 @@ function NoAccessScreen() {
       </Shell>
     );
   }
-  return (
-    <Shell
-      title={reason === "expired" ? "Tu acceso venció" : "Tu cuenta no tiene acceso activo"}
-      subtitle={
-        (reason === "expired" && until ? `Venció el ${formatLegalDate(until)}. ` : "") +
-        "Las suscripciones estarán disponibles pronto."
-      }
-    >
-      <VerifyEmailNotice />
-    </Shell>
-  );
+  // Sin acceso: el efecto de arriba ya está llevando a /planes.
+  return null;
 }
 
 function Shell({

@@ -15,7 +15,7 @@ from sqlalchemy import text
 
 from app.core.access import has_access
 from app.models import User
-from tests.api.conftest import auth, consent_fields
+from tests.api.conftest import OPEN_PREFIXES, auth, consent_fields
 from tests.api.test_spins import _crear_sesion, variant_id  # noqa: F401, I001
 
 PASSWORD = "clave-segura-123"
@@ -367,10 +367,6 @@ def test_un_administrador_tambien_debe_aceptar(client: TestClient, admin_token: 
 
 # ---------- Control de acceso ----------
 
-# Lo que no es juego y por eso no exige `RequireAccess`.
-_OPEN_PREFIXES = ("/auth", "/legal", "/admin", "/health", "/docs", "/redoc", "/openapi.json")
-
-
 def test_todos_los_routers_de_juego_exigen_el_consentimiento(
     client: TestClient, admin_token: str
 ) -> None:
@@ -386,7 +382,7 @@ def test_todos_los_routers_de_juego_exigen_el_consentimiento(
     # depender de como FastAPI guarda por dentro los routers incluidos.
     probadas = 0
     for ruta, operaciones in app.openapi()["paths"].items():
-        if ruta.startswith(_OPEN_PREFIXES):
+        if ruta.startswith(OPEN_PREFIXES):
             continue
         path = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), ruta)
         for method in operaciones:

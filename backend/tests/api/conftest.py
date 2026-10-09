@@ -196,5 +196,21 @@ def admin_token(client, test_database: str) -> str:
     ).json()["access_token"]
 
 
+# Lo que no es juego y por eso no exige `RequireAccess`. Lo usan los dos tests
+# que recorren todas las rutas de juego (acceso y consentimiento).
+OPEN_PREFIXES = (
+    "/auth",
+    "/legal",
+    "/admin",
+    # Planes y cotizacion: los usa justo quien todavia no tiene acceso.
+    "/plans",
+    "/billing",
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+
+
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
