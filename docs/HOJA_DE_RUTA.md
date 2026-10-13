@@ -12,7 +12,7 @@ Sebasanálisis es una plataforma web por suscripción. El usuario registra a man
 
 La recomendación sale de reglas estadísticas sobre los resultados registrados. **No es una predicción**: cada giro es independiente y ninguna gestión de banca cambia la ventaja de la casa. Esa regla de lenguaje es la más importante del proyecto (`ARQUITECTURA_Y_ESTADISTICA.md` §0).
 
-**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. Todavía no cobra. Desde el paso 3 de la Fase 4 la mesa exige acceso: una cuenta nueva no entra hasta que un administrador se lo otorgue, porque el pago todavía no existe (paso 5).
+**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. Desde el paso 3 de la Fase 4 la mesa exige acceso, y desde el paso 5 (cerrado el 2026-10-13) una cuenta nueva lo obtiene suscribiéndose con Wompi o por acceso manual de un administrador. **El VPS cobra todavía contra el sandbox de Wompi**: con las llaves de prueba cualquiera obtiene acceso con una tarjeta de prueba, sin que se mueva dinero. Antes de abrir al público hay que pasar a las llaves de producción (`DESPLIEGUE.md`).
 
 **Hacia dónde va:** la Fase 4 lo convierte en plataforma comercial. Control de acceso, pagos con Wompi, correo, textos legales, admin completo y una base que admita más juegos.
 
@@ -114,7 +114,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
-| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. **Para cerrar el paso faltan** la prueba en el VPS y que el usuario lo dé por cerrado. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
+| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Cerrado el 2026-10-13**, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
@@ -251,7 +251,9 @@ Comprobado: los tests de `tests/api/test_subscription_changes.py`; tres recorrid
 
 El usuario probó además en `/cuenta`, con la ventana de Wompi, las acciones nuevas con tarjeta y con Nequi, y un cobro a Nequi rechazado y otro aprobado (§3.15).
 
-**Sin probar:** tarjetas con 3D Secure, y todo esto en el VPS. **Fuera del paso 5:** las acciones del admin sobre suscripciones y pagos (paso 6).
+Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y dio el paso 5 por cerrado ese día.
+
+**Sin probar:** tarjetas con 3D Secure, y un cobro con llaves de producción. **Fuera del paso 5:** las acciones del admin sobre suscripciones y pagos (paso 6).
 
 ### Decisiones tomadas para la Fase 4
 
