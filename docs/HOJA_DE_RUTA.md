@@ -249,7 +249,9 @@ Lo que el encargo del paso 5 listaba en la entrega 3 y ya había entrado antes: 
 
 Comprobado: los tests de `tests/api/test_subscription_changes.py`; tres recorridos nuevos en Playwright; la migración subida, bajada y vuelta a subir en una base desechable; y la prueba contra el sandbox que está al final de §3.15.
 
-**Sin probar:** Nequi y tarjetas con 3D Secure. **Fuera del paso 5:** las acciones del admin sobre suscripciones y pagos (paso 6).
+El usuario probó además en `/cuenta`, con la ventana de Wompi, las acciones nuevas con tarjeta y con Nequi, y un cobro a Nequi rechazado y otro aprobado (§3.15).
+
+**Sin probar:** tarjetas con 3D Secure, y todo esto en el VPS. **Fuera del paso 5:** las acciones del admin sobre suscripciones y pagos (paso 6).
 
 ### Decisiones tomadas para la Fase 4
 

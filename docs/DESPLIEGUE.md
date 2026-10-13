@@ -374,10 +374,20 @@ detalle queda en el log y en el monitoreo de errores.
 **Prueba de la entrega 3 contra el sandbox (2026-10-13, en local):** cambiar
 el medio de pago, pasar de un modo al otro, el reintento al cambiar la tarjeta
 con un cobro rechazado, la exportacion y el borrado de la cuenta. El detalle
-esta al final de `PLATAFORMA_COMPLETA.md` §3.15.
+esta al final de `PLATAFORMA_COMPLETA.md` §3.15. El usuario probo ademas las
+acciones de `/cuenta` con la ventana de Wompi, con tarjeta y con Nequi:
 
-**Sin probar**: Nequi (`3991111111`), tarjetas con 3D Secure, y todo lo
-anterior en el VPS.
+- Nequi `3992222222` guardado: el job cobro y el cobro quedo rechazado; la
+  suscripcion paso a "Cobro pendiente" sin perder el acceso.
+- Nequi `3991111111` guardado despues: el reintento salio de inmediato y
+  quedo aprobado; el periodo se extendio.
+
+Los numeros de prueba "de rechazo" de Wompi rechazan el cobro, no el
+guardado: guardar uno de esos en `/cuenta` siempre funciona, porque ahi no se
+cobra nada. Para ver el rechazo hay que cobrarle: en el alta, o adelantando el
+vencimiento en una base de prueba y corriendo el job.
+
+**Sin probar**: tarjetas con 3D Secure, y todo lo anterior en el VPS.
 
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a

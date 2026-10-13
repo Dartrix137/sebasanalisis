@@ -598,7 +598,7 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 **Lo que queda sin probar o sin hacer**
 
 - **Lo que la prueba contra el sandbox corrigió o aclaró (2026-10-13)**: el widget entrega el token como se leyó en su código y ofrece tarjeta y Nequi. **La fuente de pago no trae la marca de la tarjeta** (su `public_data` solo tiene `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`); la marca viene en la transacción (`payment_method.extra.brand`), así que `apply_transaction` la anota con el primer cobro aprobado. **El widget solo tokeniza en un contexto seguro** (https o `localhost`): cifra la tarjeta en el navegador, y abierto desde `http://localtest.me` falla con "Tu tarjeta no pudo ser verificada (error desconocido)". En producción no afecta; para probar en local, `DESPLIEGUE.md`. En la ventana de Wompi los botones de tarjeta y Nequi se veían como deshabilitados aunque funcionaban; no se investigó.
-- **Nequi**: el token queda pendiente hasta que el cliente lo aprueba en su app. Se asume que el widget espera esa aprobación antes de devolverlo; si no, Wompi rechaza la fuente y el alta responde `payment_source_rejected`. No se escucha todavía el evento `nequi_token.updated`.
+- **Nequi**: el token queda pendiente hasta que el cliente lo aprueba en su app. Se asumía que el widget espera esa aprobación antes de devolverlo. **Probado en la entrega 3** (§3.15): en el sandbox el widget entregó un token que Wompi aceptó como fuente de pago, y los cobros a esa fuente se aprobaron y se rechazaron según el número de prueba. No se escucha todavía el evento `nequi_token.updated`.
 - **Tarjetas que exigen 3D Secure**: la documentación tiene una guía aparte (3RI) que no se implementó. Si el banco pide autenticación en un cobro sin el cliente presente, ese cobro se rechaza y sigue el camino de los reintentos.
 - El cron no estaba programado al construir esta entrega. **El usuario lo programó en Dokploy el 2026-10-13**, al desplegarla (`DESPLIEGUE.md`). Sin él no hay cobros, ni avisos, ni vencimientos marcados (el acceso sí cae en su fecha, porque lo decide `has_access`).
 - Cambiar el medio de pago, pasar de un modo al otro y el borrado de la cuenta con una renovación activa: **hechos en la entrega 3** (§3.15). Las acciones del admin sobre una suscripción son del paso 6.
@@ -658,9 +658,14 @@ Con las tarjetas de prueba publicadas por Wompi, tokenizadas por su API (sin el 
 - Exportación con la suscripción y los tres pagos.
 - Cuenta eliminada: sin usuario ni suscripción, los tres pagos sin cuenta, y el job sin nada que hacer.
 
+Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://localhost`): cambiar el medio de pago, pasar a pago manual, activar la renovación automática, cancelar y reanudar, con tarjeta y con Nequi.
+
+- **Nequi, de punta a punta**: guardó el Nequi de prueba que rechaza los cobros (`3992222222`); con el vencimiento adelantado, el job avisó, cobró y el cobro quedó rechazado ("Pago automático DECLINADO en Sandbox"), con la suscripción en mora y el acceso intacto. Después guardó el Nequi que aprueba (`3991111111`): el reintento salió de inmediato, quedó aprobado y el período se extendió.
+- **Los números de prueba "de rechazo" de Wompi rechazan el cobro, no el guardado**: una tarjeta o un Nequi de esos se guarda sin problema, y el rechazo aparece al cobrarle (en el alta o en la renovación). En `/cuenta` no se cobra nada, así que ahí siempre "pasa".
+
 **Lo que queda sin probar o sin hacer**
 
-- **Nequi** y las **tarjetas con 3D Secure** siguen como en §3.14.
+- **Tarjetas con 3D Secure**: siguen como en §3.14. Nequi ya se probó (arriba); lo que no se escucha todavía es el evento `nequi_token.updated`, que en el sandbox no hizo falta.
 - En el sandbox un cobro a una fuente de pago responde `PENDING` y se resuelve segundos después. Con el webhook (VPS) llega solo; en local lo resuelve la siguiente corrida del job. Por eso, tras cambiar la tarjeta en mora, `/cuenta` puede decir que el cobro "todavía no pasó" y el resultado llega por correo.
 - **La fuente de pago no se anula en Wompi** al cambiarla, al pasar a manual ni al eliminar la cuenta: se borra nuestra referencia, que es lo único con lo que se le puede cobrar desde aquí. La documentación solo describe anularla para Daviplata y Bancolombia.
 - Un cobro del job que coincida en el mismo instante con el borrado de la cuenta puede quedar aprobado sin cuenta. Queda en el log como error ("aprobado sin suscripción") y se devuelve a mano desde el panel de Wompi.
