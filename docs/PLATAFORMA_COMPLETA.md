@@ -411,7 +411,7 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 
 Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook y reconsulta (rama `fase-4-paso-5a-alta-y-webhook`). La tokenización y la renovación automática son de la entrega 2; cancelar, `/cuenta`, el admin de pagos y la prueba en el sandbox, de la 3. **El paso 5 no está cerrado.**
 
-**Probado en parte contra el sandbox de Wompi (2026-10-13).** Se construyó sin llaves, contra respuestas simuladas. El mismo día el usuario puso las llaves de sandbox y se hizo un pago real de prueba en local: el checkout aceptó la firma de integridad, la redirección volvió con `?id=`, y la reconsulta activó la suscripción y envió los correos. **El webhook no se ha probado con un evento real**; el detalle y lo que falta están en `DESPLIEGUE.md`, "Pagos con Wompi", y al final de esta sección. El usuario confirmó también el 2026-10-13 que Wompi respondió que acepta esta categoría de negocio y tarjetas internacionales (§3.10).
+**Probado en parte contra el sandbox de Wompi (2026-10-13).** Se construyó sin llaves, contra respuestas simuladas. El mismo día el usuario puso las llaves de sandbox y se hizo un pago real de prueba en local: el checkout aceptó la firma de integridad, la redirección volvió con `?id=`, y la reconsulta activó la suscripción y envió los correos. Ese mismo día, ya desplegado en el VPS con llaves de sandbox, **el webhook recibió dos eventos reales y los aceptó** (`200`). El detalle y lo que falta (un pago rechazado y un medio que no responde de inmediato) están en `DESPLIEGUE.md`, "Pagos con Wompi", y al final de esta sección. El usuario confirmó también el 2026-10-13 que Wompi respondió que acepta esta categoría de negocio y tarjetas internacionales (§3.10).
 
 **Decisiones del usuario (2026-10-13)**
 
@@ -478,7 +478,8 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 
 **Lo que queda sin probar o sin hacer**
 
-- **El webhook no se ha probado contra Wompi**: ni la forma real del evento ni su checksum. Se prueba en el VPS con llaves de sandbox. Lo demás del alta sí se probó el 2026-10-13 con un pago de prueba aprobado (firma de integridad, regreso con `?id=`, reconsulta); faltan un pago rechazado y un medio que no responde de inmediato. Queda anotado en `DESPLIEGUE.md`.
+- Contra el sandbox se probó el 2026-10-13 el pago aprobado con tarjeta: firma de integridad, regreso con `?id=`, reconsulta y, en el VPS, el webhook con eventos reales. **Faltan un pago rechazado y un medio que no responde de inmediato** (PSE o Nequi), que es el caso en que el webhook resuelve el pago sin ayuda de la pantalla. Queda anotado en `DESPLIEGUE.md`.
+- El VPS corre con llaves de sandbox: hasta pasar a las de producción, cualquier cuenta obtiene acceso pagando con la tarjeta de prueba.
 - Wompi rechaza una dirección de regreso con `localhost` o `127.0.0.1` (`403` en el checkout). No afecta a producción; para probar en local se usa `localtest.me` (`DESPLIEGUE.md`).
 - La documentación de Wompi no describe una consulta por referencia. Si el cliente no vuelve del checkout y el webhook no llega, el pago queda `pending` hasta que llegue un evento.
 - **Un pago aprobado que después se anula o se reembolsa no quita el acceso**: el pago ya está resuelto y el evento posterior no lo mueve. Hoy se corrige a mano; el admin de pagos es de la entrega 3 y del paso 6.
