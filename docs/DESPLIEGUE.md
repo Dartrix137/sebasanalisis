@@ -202,11 +202,40 @@ en `backend/.env`, una base aparte y el frontend abierto por `localtest.me`:
   periodo de un mes, la cuenta entro a la mesa y salieron la bienvenida y el
   recibo.
 
-**Falta probar, en el VPS con llaves de sandbox** (requisito para cerrar el
-paso 5): el webhook (Wompi no alcanza un equipo local, asi que no se ha visto
-un evento real ni su firma), el recorrido completo por la interfaz, un pago
-rechazado (`4111 1111 1111 1111`) y un medio que no responde de inmediato (PSE
-o Nequi).
+**Prueba en el VPS, con llaves de sandbox (2026-10-13).** Desplegada la
+entrega 1 y con la URL de eventos puesta en el panel de Wompi, el usuario hizo
+dos pagos aprobados con la tarjeta de prueba, cada uno con una cuenta distinta,
+por la interfaz:
+
+- `POST /billing/subscriptions` respondio `202` y el checkout cobro.
+- **Llego el webhook de Wompi y respondio `200`** las dos veces, antes de que
+  el navegador volviera del checkout: la firma de un evento real pasa la
+  verificacion (habria sido `401`) y la reconsulta responde (habria sido
+  `502`).
+- La pantalla mostro "Pago aprobado" en la primera consulta, la cuenta entro
+  a la mesa y llegaron los correos de bienvenida y de recibo.
+
+El log de la API no muestra el cuerpo de la respuesta, asi que no distingue si
+la suscripcion la activo el webhook o la consulta de la pantalla que llego
+enseguida (las dos pasan por la misma funcion). Se confirma leyendo la base:
+
+```sql
+SELECT e.event_type, e.status, e.signature_verified,
+       e.payment_id IS NOT NULL AS unido_al_pago,
+       p.status AS pago, p.resolved_at, e.processed_at
+FROM payment_events e LEFT JOIN payments p ON p.id = e.payment_id
+ORDER BY e.created_at DESC LIMIT 5;
+```
+
+**Falta probar** (requisito para cerrar el paso 5): un pago rechazado
+(`4111 1111 1111 1111`), un medio que no responde de inmediato (PSE o Nequi),
+que es el caso en que el webhook resuelve el pago sin ayuda de la pantalla, y
+que `/planes` marque "Tu plan actual" despues de pagar.
+
+**Mientras el VPS tenga llaves de sandbox, cualquier cuenta puede obtener
+acceso pagando con la tarjeta de prueba, sin que se mueva dinero.** Antes de
+abrir el producto al publico hay que pasar a las llaves de produccion, y
+retirar el acceso de las suscripciones de prueba.
 
 **Wompi rechaza una direccion de regreso con `localhost` o `127.0.0.1`**: el
 checkout responde `403` antes de mostrar nada. En produccion no afecta
