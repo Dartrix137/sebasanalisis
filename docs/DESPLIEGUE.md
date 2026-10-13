@@ -387,7 +387,34 @@ guardado: guardar uno de esos en `/cuenta` siempre funciona, porque ahi no se
 cobra nada. Para ver el rechazo hay que cobrarle: en el alta, o adelantando el
 vencimiento en una base de prueba y corriendo el job.
 
-**Sin probar**: tarjetas con 3D Secure, y todo lo anterior en el VPS.
+El 2026-10-13 la entrega 3 quedo desplegada y el usuario la probo en el VPS,
+con llaves de sandbox. **Sin probar**: tarjetas con 3D Secure, y un cobro con
+llaves de produccion.
+
+### Pasar de sandbox a produccion
+
+La URL de la API de Wompi no se configura: sale del prefijo de las llaves. Con
+las cuatro de produccion (`pub_prod_`, `prv_prod_`, `prod_events_`,
+`prod_integrity_`) la API usa `https://production.wompi.co/v1`, y el arranque
+lo dice en el log: `Pagos: Wompi, ambiente production (...)`. La pagina de pago
+y el widget no cambian de direccion: Wompi decide el ambiente por la llave
+publica.
+
+1. **Antes de cambiar las llaves, retirar las suscripciones de prueba.** Las de
+   renovacion automatica tienen fuentes de pago del sandbox, que en produccion
+   no existen: el job intentaria cobrarles, fallaria tres veces y las dejaria
+   vencidas, con correos de cobro fallido. Y todas dan acceso sin que nadie
+   haya pagado. Lo mas limpio es eliminar esas cuentas o pasarlas a pago manual
+   desde su `/cuenta`.
+2. Poner las cuatro llaves de produccion. **Las cuatro**: con llaves mezcladas
+   la API no arranca, a proposito.
+3. Si `WOMPI_API_BASE_URL` esta puesta con la URL del sandbox, borrarla. Si no
+   coincide con las llaves, la API tampoco arranca.
+4. En el panel de Wompi, **en modo produccion**, configurar la URL de eventos
+   (`https://api.<dominio>/webhooks/wompi`): se guarda aparte para cada
+   ambiente, y el secreto de eventos de produccion es otro.
+5. Redesplegar, mirar la linea del log, y hacer un pago real de punta a punta
+   antes de anunciar nada.
 
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a

@@ -606,7 +606,7 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 
 ### 3.15 Wompi, entrega 3: gestión de la suscripción y cierre de la cuenta (2026-10-13)
 
-Tercera y última entrega del paso 5 (rama `fase-4-paso-5c-cuenta-y-cierre`). Cancelar y reanudar, el apartado de suscripción de `/cuenta`, el historial de pagos, la suscripción en el detalle del admin y su filtro ya habían entrado en las entregas anteriores (§3.13 y §3.14); aquí está lo que faltaba.
+Tercera y última entrega del paso 5 (rama `fase-4-paso-5c-cuenta-y-cierre`). **Con ella el usuario dio el paso 5 por cerrado el 2026-10-13**, después de desplegarla y probarla en el VPS con llaves de sandbox. Cancelar y reanudar, el apartado de suscripción de `/cuenta`, el historial de pagos, la suscripción en el detalle del admin y su filtro ya habían entrado en las entregas anteriores (§3.13 y §3.14); aquí está lo que faltaba.
 
 **Qué NO entra** (es del paso 6, como decía el encargo del paso 5): las acciones del admin sobre una suscripción o un pago (extender, cancelar, reconsultar) y `/admin/suscripciones` y `/admin/pagos`. Tampoco los reembolsos por API.
 
