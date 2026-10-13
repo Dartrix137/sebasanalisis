@@ -3,6 +3,9 @@
 El precio lo calcula siempre el servidor, con `app.billing.pricing.quote`. El
 cliente manda el plan y, si tiene, un codigo: nunca un monto.
 
+Tambien la gestion de la suscripcion ya pagada: cancelar, reanudar, cambiar el
+medio de pago y pasar de un modo de pago al otro (§3.6).
+
 Este router NO exige `RequireAccess`: quien cotiza y paga es justo quien todavia
 no tiene acceso. El pago en si ocurre en la pagina del proveedor; aqui se abre
 (`POST /billing/subscriptions`) y se consulta como termino
@@ -24,7 +27,7 @@ from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.pricing import CouponRejection
-from app.core import billing_emails, rate_limit, subscriptions
+from app.core import billing_emails, rate_limit, renewals, subscriptions
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.subscriptions import (
@@ -40,6 +43,7 @@ from app.schemas.billing import (
     AcceptanceResponse,
     BillingAvailabilityResponse,
     PaymentListResponse,
+    PaymentMethodRequest,
     PaymentResponse,
     PlanResponse,
     QuoteCoupon,
@@ -401,4 +405,88 @@ def resume_subscription(user: CurrentUser, db: DbSession) -> SubscriptionRespons
     except SubscribeError as exc:
         db.rollback()
         raise _http_error(exc) from exc
+    return subscription_response(db, subscription, now)
+
+
+# ---------- Medio de pago y modo de pago (§3.6 y §3.10) ----------
+
+
+@router.put("/billing/payment-method", response_model=SubscriptionResponse)
+def set_payment_method(
+    payload: PaymentMethodRequest,
+    user: CurrentUser,
+    db: DbSession,
+    provider: PaymentProviderDep,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+) -> SubscriptionResponse:
+    """Guarda un medio de pago en la suscripcion vigente, que queda renovandose
+    sola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion
+    automatica, o reanuda una renovacion cancelada con otro medio.
+
+    No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
+    un cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca
+    pasan datos de tarjeta: solo el token que el procesador le dio al navegador.
+    """
+    if get_settings().rate_limit_enabled and not rate_limit.hit(
+        f"payment-method:user:{user.id}", limit=10, window=15 * _MINUTE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
+        )
+    now = datetime.now(UTC)
+    try:
+        change = subscriptions.set_payment_source(
+            db,
+            user=user,
+            provider=provider,
+            source=SourceInput(
+                type=payload.payment_source_type.value,
+                token=payload.payment_source_token,
+                acceptance_token=payload.acceptance_token,
+                personal_data_token=payload.personal_data_token,
+            ),
+            now=now,
+        )
+    except SubscribeError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+
+    subscription = change.subscription
+    amount = pricing.renewal_quote(
+        subscription.price_cents,
+        subscription.currency,
+        subscriptions.renewal_discount(db, subscription),
+    ).total_cents
+    background.add_task(
+        send_safely,
+        sender,
+        billing_emails.payment_method_updated(
+            user, subscription, amount, activated_renewal=change.activated_renewal
+        ),
+    )
+    if change.retry_due:
+        report = renewals.retry_now(db, provider, subscription, user, now)
+        for message in report.emails:
+            background.add_task(send_safely, sender, message)
+        db.refresh(subscription)
+    return subscription_response(db, subscription, now)
+
+
+@router.delete("/billing/payment-method", response_model=SubscriptionResponse)
+def remove_payment_method(
+    user: CurrentUser, db: DbSession, background: BackgroundTasks, sender: EmailSenderDep
+) -> SubscriptionResponse:
+    """Pasa la renovacion automatica a pago manual: deja de guardarse el medio
+    de pago y no se cobra mas. La cuenta conserva el acceso hasta que termine
+    el periodo que ya pago, y paga el siguiente cuando quiera."""
+    now = datetime.now(UTC)
+    try:
+        subscription = subscriptions.switch_to_manual(db, user, now)
+    except SubscribeError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    background.add_task(
+        send_safely, sender, billing_emails.switched_to_manual(user, subscription)
+    )
     return subscription_response(db, subscription, now)

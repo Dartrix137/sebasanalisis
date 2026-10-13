@@ -422,7 +422,8 @@ def list_redemptions(
     )
     rows = db.execute(
         select(CouponRedemption, User.email)
-        .join(User, User.id == CouponRedemption.user_id)
+        # La cuenta que lo uso puede haberse eliminado: el uso sigue en la lista.
+        .outerjoin(User, User.id == CouponRedemption.user_id)
         .where(CouponRedemption.coupon_id == coupon.id)
         .order_by(CouponRedemption.created_at.desc(), CouponRedemption.id)
         .limit(limit)

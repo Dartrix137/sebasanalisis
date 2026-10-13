@@ -21,9 +21,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUser, DbSession
-from app.api.presenters import user_response
+from app.api.presenters import payment_response, subscription_response, user_response
 from app.api.v1.legal import client_ip, list_consents
-from app.core import legal, rate_limit
+from app.core import legal, payment_privacy, rate_limit, subscriptions
 from app.core.accounts import is_last_active_admin
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
@@ -38,7 +38,7 @@ from app.core.security import (
 )
 from app.core.user_tokens import TOKEN_TTL, InvalidTokenError, consume_token, issue_token
 from app.emails import build_email
-from app.models import Bet, GameSession, Spin, User
+from app.models import Bet, GameSession, Payment, Spin, User
 from app.schemas.auth import (
     ChangeEmailRequest,
     ChangePasswordRequest,
@@ -333,6 +333,11 @@ def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
         ):
             bets[bet.session_id].append(BetResponse.model_validate(bet))
 
+    subscription = subscriptions.current_subscription(db, user.id)
+    payments = db.scalars(
+        select(Payment).where(Payment.user_id == user.id).order_by(Payment.created_at, Payment.id)
+    )
+
     return ExportResponse(
         exported_at=_now(),
         account=user_response(db, user),
@@ -343,8 +348,10 @@ def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
             for s in sessions
         ],
         consents=list_consents(db, user.id),
-        # Los cobros llegan en el paso 5 (Wompi). Hasta entonces no hay ninguno.
-        payments=[],
+        subscription=(
+            subscription_response(db, subscription, _now()) if subscription is not None else None
+        ),
+        payments=[payment_response(p) for p in payments],
     )
 
 
@@ -359,10 +366,13 @@ def delete_account(
     """Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).
 
     Borra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,
-    recomendaciones y tokens. No queda nada que lo identifique.
+    recomendaciones, tokens y su suscripcion. No queda nada que lo identifique.
 
-    Pendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y
-    los registros de pago se conservan anonimizados por obligacion contable.
+    Con la suscripcion se va la referencia del medio de pago: la renovacion
+    automatica queda cancelada porque ya no hay a que cobrarle. Los registros
+    de pago se conservan anonimizados por obligacion contable
+    (`core/payment_privacy`): sin cuenta, y con sus eventos reducidos a lo que
+    explica el pago.
     """
     _limit(f"delete-account:{user.id}", limit=10, window=15 * _MINUTE)
 
@@ -377,8 +387,34 @@ def delete_account(
             detail="Eres el único administrador activo: nombra otro antes de eliminar tu cuenta",
         )
 
+    # Un cobro que el proveedor ya recibio y no ha resuelto: si se aprobara
+    # despues de borrar, quedaria cobrado sin cuenta a la cual darle el periodo.
+    if payment_privacy.payment_in_flight(db, user.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Tienes un pago en proceso. Espera unos minutos a que termine y vuelve a "
+                "intentarlo."
+            ),
+        )
+
+    now = _now()
+    subscription = subscriptions.current_subscription(db, user.id)
+    had_subscription = subscription is not None and subscriptions.in_force(subscription, now)
     # El correo se arma antes de borrar: despues ya no hay a quien escribirle.
-    message = build_email("account_deleted", to=user.email, display_name=user.display_name)
+    message = build_email(
+        "account_deleted",
+        to=user.email,
+        display_name=user.display_name,
+        had_subscription=had_subscription,
+        had_renewal=(
+            had_subscription
+            and subscription is not None
+            and subscription.renewal_mode == "automatic"
+            and subscription.status != "canceled"
+        ),
+    )
+    payment_privacy.anonymize_payment_trail(db, user.id)
     # DELETE directo y no db.delete(user): el borrado en cascada lo hace la base
     # (ON DELETE CASCADE), no el ORM cargando y anulando fila por fila.
     db.execute(delete(User).where(User.id == user.id))

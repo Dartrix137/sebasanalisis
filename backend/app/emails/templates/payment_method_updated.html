@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  {% if activated_renewal %}Activaste la renovación automática de tu plan
+  <strong>{{ plan_name }}</strong>. Desde ahora se renueva sola con {{ source_label }}.
+  {% else %}Cambiaste el medio de pago de tu plan <strong>{{ plan_name }}</strong>. Los próximos
+  cobros se hacen a {{ source_label }}.{% endif %}
+</p>
+<p style="margin:0 0 12px 0;">
+  Hoy no te cobramos nada por este cambio. El próximo cobro es de
+  <strong>{{ amount_cents | money(currency) }}</strong>{% if charge_at %}, a partir del
+  <strong>{{ charge_at | fecha }}</strong>{% endif %}, y antes te avisamos por correo. Puedes
+  cambiar el medio de pago, cancelar la renovación o volver al pago manual cuando quieras desde
+  tu cuenta.
+</p>
+{{ button(url, "Ver mi suscripción") }}
+<p style="margin:0;">
+  Si no fuiste tú, cambia tu contraseña y cancela la renovación desde tu cuenta.
+</p>
+{% endblock %}

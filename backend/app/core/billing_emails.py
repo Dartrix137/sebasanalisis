@@ -24,8 +24,10 @@ def source_label(subscription: Subscription) -> str:
     if subscription.payment_source_type == "NEQUI":
         return "tu cuenta Nequi"
     if subscription.card_last4:
-        brand = (subscription.card_brand or "tarjeta").capitalize()
-        return f"tu tarjeta {brand} terminada en {subscription.card_last4}"
+        # La marca llega con el primer cobro aprobado: una tarjeta recien
+        # guardada todavia no la tiene.
+        brand = f" {subscription.card_brand.capitalize()}" if subscription.card_brand else ""
+        return f"tu tarjeta{brand} terminada en {subscription.card_last4}"
     return "tu medio de pago guardado"
 
 
@@ -140,6 +142,37 @@ def subscription_expired(user: User, subscription: Subscription, *, automatic: b
 def subscription_canceled(user: User, subscription: Subscription) -> EmailMessage:
     return build_email(
         "subscription_canceled",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        period_end=subscription.current_period_end,
+        url=frontend_url("/cuenta"),
+    )
+
+
+def payment_method_updated(
+    user: User, subscription: Subscription, amount_cents: int, *, activated_renewal: bool
+) -> EmailMessage:
+    """Se guardo un medio de pago nuevo. `activated_renewal`: con eso la
+    suscripcion paso a renovarse sola."""
+    return build_email(
+        "payment_method_updated",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        source_label=source_label(subscription),
+        activated_renewal=activated_renewal,
+        amount_cents=amount_cents,
+        currency=subscription.currency,
+        charge_at=subscription.next_charge_at,
+        period_end=subscription.current_period_end,
+        url=frontend_url("/cuenta"),
+    )
+
+
+def switched_to_manual(user: User, subscription: Subscription) -> EmailMessage:
+    return build_email(
+        "switched_to_manual",
         to=user.email,
         display_name=user.display_name,
         plan_name=subscription.plan.name,

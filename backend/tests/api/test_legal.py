@@ -534,7 +534,7 @@ def test_exportar_devuelve_solo_los_datos_de_la_cuenta(
     assert [s["session"]["id"] for s in datos["sessions"]] == [sesion]
     assert [sp["result_value"] for sp in datos["sessions"][0]["spins"]] == [NUMERO]
     assert {c["kind"] for c in datos["consents"]} == {"terms", "privacy"}
-    assert datos["payments"] == []
+    assert (datos["subscription"], datos["payments"]) == (None, [])
     assert otra not in r.text
     assert "password" not in r.text
 

@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession
 from app.api.v1.billing import EmailSenderDep, PaymentProviderDep, queue_payment_emails
-from app.core import subscriptions
+from app.core import payment_privacy, subscriptions
 from app.models import PaymentEvent
 from app.payments.base import PaymentProviderError, ProviderEvent
 
@@ -108,6 +108,9 @@ def wompi_webhook(
     if settlement is not None:
         row.payment_id = settlement.payment.id
         row.subscription_id = settlement.payment.subscription_id
+        if settlement.payment.user_id is None:
+            # La cuenta se elimino: el evento no conserva sus datos (§5.4).
+            row.raw_payload = payment_privacy.scrub_event_payload(row.raw_payload)
         queue_payment_emails(db, settlement, background, sender)
     # Sin pago: la referencia no es nuestra. Se guarda y no mueve nada.
     row.processed_at = now

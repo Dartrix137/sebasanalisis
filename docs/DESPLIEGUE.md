@@ -313,12 +313,34 @@ suscripciones no se cobran nunca: el cliente pierde el acceso al terminar su
 primer periodo sin que nadie le haya cobrado ni avisado. Hay que programarlo en
 el mismo despliegue.
 
-En Dokploy, en la aplicacion API, pestana "Schedules": una tarea cada hora
-(`0 * * * *`) que corra dentro del contenedor de la API:
+**Programado en Dokploy el 2026-10-13.** Como se crea (los nombres de los
+campos salen del codigo fuente de Dokploy, rama `canary`, leido ese dia; pueden
+variar con la version):
+
+1. Aplicacion API -> pestana "Schedules" -> crear una tarea ("Create Schedule").
+2. Task Name: `Renovaciones`. Schedule: `0 * * * *` (cada hora). Timezone:
+   vacia (UTC). Shell Type: `Bash`. Command:
 
 ```
 cd /app && python scripts/run_renewals.py
 ```
+
+3. Guardar, dejarla habilitada y correrla una vez a mano desde la lista para
+   ver el resumen en su log.
+
+La tarea vive en la base de datos de Dokploy, no en el contenedor de la API:
+
+- **Sobrevive a un deploy y a un reinicio del contenedor.** En cada ejecucion
+  Dokploy busca el contenedor que este corriendo por el nombre de la aplicacion
+  y corre el comando ahi (`docker exec`): usa el codigo y las variables del
+  deploy vigente.
+- **Sobrevive a un reinicio del VPS o de Dokploy**: al arrancar vuelve a cargar
+  las tareas habilitadas.
+- **Se pierde si se borra la aplicacion API** en Dokploy y se crea de nuevo.
+- Una ejecucion que cae durante un deploy o con el VPS apagado no se repone. No
+  hace falta: la siguiente corrida hace lo atrasado, de a un cobro por corrida.
+- Nadie avisa si la tarea deja de correr: conviene mirar su log de vez en
+  cuando.
 
 Que hace cada corrida: avisa por correo antes de cada cobro automatico (7 dias
 antes del primer intento) y antes de cada vencimiento del pago manual; cobra las
@@ -348,6 +370,11 @@ detalle queda en el log y en el monitoreo de errores.
   mes desde el vencimiento anterior y envio el recibo (`aprobados=1`).
 - Tarjeta `4111 1111 1111 1111`: el medio se guarda, el cobro queda rechazado
   y la cuenta no entra.
+
+**Prueba de la entrega 3 contra el sandbox (2026-10-13, en local):** cambiar
+el medio de pago, pasar de un modo al otro, el reintento al cambiar la tarjeta
+con un cobro rechazado, la exportacion y el borrado de la cuenta. El detalle
+esta al final de `PLATAFORMA_COMPLETA.md` §3.15.
 
 **Sin probar**: Nequi (`3991111111`), tarjetas con 3D Secure, y todo lo
 anterior en el VPS.

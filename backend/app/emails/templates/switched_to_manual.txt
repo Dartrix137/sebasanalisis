@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Tu plan {{ plan_name }} pasó a pago manual. Ya no se renueva solo, no te vamos a hacer más cobros automáticos y dejamos de guardar la referencia de tu medio de pago.
+
+Conservas el acceso hasta el {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Si quieres seguir después, paga el siguiente período desde tu cuenta antes de esa fecha; unos días antes te lo recordamos por correo.
+
+Tu suscripción: {{ url }}
+
+Si no fuiste tú, cambia tu contraseña desde tu cuenta.
+{% endblock %}

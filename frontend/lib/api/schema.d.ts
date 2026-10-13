@@ -495,10 +495,13 @@ export interface paths {
          * @description Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).
          *
          *     Borra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,
-         *     recomendaciones y tokens. No queda nada que lo identifique.
+         *     recomendaciones, tokens y su suscripcion. No queda nada que lo identifique.
          *
-         *     Pendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y
-         *     los registros de pago se conservan anonimizados por obligacion contable.
+         *     Con la suscripcion se va la referencia del medio de pago: la renovacion
+         *     automatica queda cancelada porque ya no hay a que cobrarle. Los registros
+         *     de pago se conservan anonimizados por obligacion contable
+         *     (`core/payment_privacy`): sin cuenta, y con sus eventos reducidos a lo que
+         *     explica el pago.
          */
         delete: operations["delete_account_auth_me_delete"];
         options?: never;
@@ -701,6 +704,38 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/payment-method": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Payment Method
+         * @description Guarda un medio de pago en la suscripcion vigente, que queda renovandose
+         *     sola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion
+         *     automatica, o reanuda una renovacion cancelada con otro medio.
+         *
+         *     No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
+         *     un cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca
+         *     pasan datos de tarjeta: solo el token que el procesador le dio al navegador.
+         */
+        put: operations["set_payment_method_billing_payment_method_put"];
+        post?: never;
+        /**
+         * Remove Payment Method
+         * @description Pasa la renovacion automatica a pago manual: deja de guardarse el medio
+         *     de pago y no se cobra mas. La cuenta conserva el acceso hasta que termine
+         *     el periodo que ya pago, y paga el siguiente cuando quiera.
+         */
+        delete: operations["remove_payment_method_billing_payment_method_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1722,7 +1757,7 @@ export interface components {
          * @description Una cuenta vista por el administrador (§4.2).
          *
          *     La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
-         *     llegan con la entrega 3 del paso 5.
+         *     llegan con el paso 6 (§4.3).
          */
         AdminUserDetailResponse: {
             /** Audit */
@@ -2151,12 +2186,9 @@ export interface components {
             /** Subscription Id */
             subscription_id: string | null;
             /** User Email */
-            user_email: string;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
+            user_email: string | null;
+            /** User Id */
+            user_id: string | null;
         };
         /**
          * CouponRejection
@@ -2356,11 +2388,10 @@ export interface components {
              */
             exported_at: string;
             /** Payments */
-            payments: {
-                [key: string]: string;
-            }[];
+            payments: components["schemas"]["PaymentResponse"][];
             /** Sessions */
             sessions: components["schemas"]["ExportSession"][];
+            subscription: components["schemas"]["SubscriptionResponse"] | null;
         };
         /**
          * ExportSession
@@ -2662,6 +2693,20 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PaymentMethodRequest
+         * @description PUT /billing/payment-method: el medio de pago que el cliente tokenizo en
+         *     la ventana del procesador. No son datos de tarjeta.
+         */
+        PaymentMethodRequest: {
+            /** Acceptance Token */
+            acceptance_token: string;
+            /** Payment Source Token */
+            payment_source_token: string;
+            payment_source_type: components["schemas"]["PaymentSourceKind"];
+            /** Personal Data Token */
+            personal_data_token: string;
         };
         /** PaymentResponse */
         PaymentResponse: {
@@ -4803,6 +4848,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingAvailabilityResponse"];
+                };
+            };
+        };
+    };
+    set_payment_method_billing_payment_method_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentMethodRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_payment_method_billing_payment_method_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
                 };
             };
         };

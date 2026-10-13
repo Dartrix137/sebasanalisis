@@ -10,7 +10,7 @@
  *
  * Quedan para el paso 6: reenviar la verificación y forzar el restablecimiento
  * de contraseña. La suscripción y los pagos de cada cuenta se ven aquí, de
- * solo lectura; las acciones sobre ellos llegan con la entrega 3 del paso 5.
+ * solo lectura; las acciones sobre ellos llegan con el paso 6 (§4.3).
  */
 
 import { useRouter } from "next/navigation";

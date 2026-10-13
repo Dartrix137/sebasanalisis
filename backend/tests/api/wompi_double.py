@@ -173,6 +173,9 @@ class Wompi:
                     "amount_in_cents": tx.get("amount_in_cents", 1),
                     "reference": tx.get("reference", "x"),
                     "currency": "COP",
+                    # Lo que Wompi manda de mas y no hace falta guardar para siempre.
+                    "customer_email": "cliente@ejemplo.com",
+                    "payment_method": {"type": "CARD", "extra": {"last_four": "4242"}},
                 }
             },
             "environment": "test",

@@ -126,6 +126,43 @@ def run_renewals(db: Session, provider: PaymentProvider, now: datetime) -> Renew
     return report
 
 
+def retry_now(
+    db: Session, provider: PaymentProvider, subscription: Subscription, user: User, now: datetime
+) -> RenewalReport:
+    """El cliente cambio su medio de pago con un cobro sin aprobar: se intenta
+    ya con el medio nuevo, sin esperar a la hora del siguiente intento (§3.6).
+
+    Es un intento mas de los tres del periodo, con la misma referencia que
+    usaria el job: si el job llegara a hacerlo a la vez, uno de los dos choca
+    con la referencia unica. Agotados los tres no se cobra.
+    """
+    report = RenewalReport()
+    period_end = subscription.current_period_end
+    if (
+        period_end is None
+        or subscription.status != "past_due"
+        or subscription.renewal_mode != "automatic"
+        or not provider.enabled
+    ):
+        return report
+    prefix = _reference_prefix(subscription, period_end)
+    for payment in _attempts(db, prefix):
+        if payment.status == "pending":
+            _settle_in_flight(db, provider, payment, now, report)
+    db.refresh(subscription)
+    if subscription.current_period_end != period_end or subscription.status != "past_due":
+        return report
+    attempts = _attempts(db, prefix)
+    if (
+        not attempts
+        or any(p.status == "pending" for p in attempts)
+        or schedule.attempts_exhausted(len(attempts))
+    ):
+        return report
+    _charge(db, provider, subscription, user, period_end, len(attempts) + 1, now, report)
+    return report
+
+
 def _process(
     db: Session,
     provider: PaymentProvider,

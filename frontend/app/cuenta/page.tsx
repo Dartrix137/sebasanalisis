@@ -4,8 +4,8 @@
  * Mi cuenta: perfil, correo y seguridad (§5.4 de la Fase 4).
  *
  * Desde el paso 2 suma los documentos aceptados y la descarga de los datos
- * (§6.4), y desde el paso 5 la suscripción y el historial de pagos, de solo
- * lectura. Cancelar y cambiar el medio de pago llegan con la entrega 3.
+ * (§6.4), y desde el paso 5 la suscripción, con su gestión, y el historial
+ * de pagos (`components/account/SubscriptionCards.tsx`).
  */
 
 import { useRouter } from "next/navigation";
@@ -411,6 +411,11 @@ function DeleteAccountCard() {
         title="Eliminar cuenta"
         subtitle="Borra tu perfil, tus mesas, los números que registraste y tus apuestas anotadas. No se puede deshacer."
       />
+      <p className="mb-4 text-sm leading-relaxed text-muted">
+        Si tienes una suscripción, se elimina con la cuenta: pierdes el acceso del período que ya
+        pagaste y, si se renovaba sola, no se te vuelve a cobrar. De tus pagos conservamos solo el
+        registro contable, sin datos que te identifiquen.
+      </p>
       {open ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <PasswordField

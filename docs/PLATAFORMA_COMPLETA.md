@@ -374,7 +374,7 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 
 - Tablas `plans`, `coupons`, `coupon_plans` y `coupon_redemptions` como en §3.2, sin campos de más: el plan guarda un solo precio (`price_cents`, `currency`), que es el que se cobra y el que se muestra.
 - **Solo se cobra en COP**: los schemas del admin rechazan otra moneda de cobro, en planes y en cupones de monto fijo. Es validación, no estructura: la columna `currency` sigue ahí para el día que haya otra pasarela.
-- `coupon_redemptions.user_id` es `ON DELETE CASCADE`, como el resto de lo que hoy cuelga de la cuenta: eliminar la cuenta borra también el rastro de que usó el cupón. **El paso 5 lo revisa** junto con el `ON DELETE` de `subscriptions` (§5.7.1).
+- `coupon_redemptions.user_id` es `ON DELETE CASCADE`, como el resto de lo que hoy cuelga de la cuenta: eliminar la cuenta borra también el rastro de que usó el cupón. **El paso 5 lo revisa** junto con el `ON DELETE` de `subscriptions` (§5.7.1). **Revisado en la entrega 3 del paso 5: pasó a `SET NULL`** (§3.15).
 - `subscriptions.plan_id` sigue siendo texto suelto; pasa a llave foránea en el paso 5. Por eso `/admin/planes` todavía no muestra cuántas suscripciones vigentes conservan su precio (§4.4): el formulario dice la regla, sin el número.
 - `plan_games` no se creó: es del paso 7.
 
@@ -440,7 +440,7 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - `subscriptions` queda como en §3.2, más `renewal_mode`. **Índice único parcial `uq_subscriptions_one_live_per_user`**: una cuenta no tiene dos suscripciones `pending`, `active` o `past_due` a la vez.
 - `payments` lleva, además de lo previsto en §3.2, **`plan_id`, `coupon_id` y `provider`**: una cuenta puede abrir el pago de un plan, devolverse y abrir el de otro, y lo que se compró lo dice el pago que se aprueba, no la suscripción pendiente. `period_start` y `period_end` son nulos hasta que el pago se aprueba, porque en el pago manual el período depende de cuándo se paga.
 - `payment_events`: `subscription_id` nullable, `payment_id`, `event_type`, `processed_at` y `created_at`. Las llaves a la suscripción y al pago son `SET NULL`.
-- `coupon_redemptions.user_id` sigue en `CASCADE`: se revisa en la entrega 3, con el borrado de la cuenta.
+- `coupon_redemptions.user_id` seguía en `CASCADE`. **Desde la entrega 3 es `SET NULL`** (§3.15).
 
 **Alta (`POST /billing/subscriptions`)**
 
@@ -486,7 +486,7 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - Una renovación manual no aplicaba el descuento de un cupón `repeating` o `forever`. **Corregido en la entrega 2** (§3.14).
 - No se usa `expiration-time` en el checkout: un pago abierto se puede completar más tarde, al precio con que se abrió.
 - `past_due` no daba acceso en `has_access`. **Desde la entrega 2 sí**, mientras el período pagado esté vigente (§3.14).
-- La exportación de datos de la cuenta (`GET /auth/me/export`) sigue devolviendo `payments` vacío: entra con el historial de pagos de la entrega 3.
+- La exportación de datos de la cuenta (`GET /auth/me/export`) devolvía `payments` vacío. **Desde la entrega 3 trae la suscripción y los pagos** (§3.15).
 
 ### 3.13 Wompi, entrega corta: la suscripción en `/cuenta` y en el admin (2026-10-13)
 
@@ -517,7 +517,7 @@ Adelantada de la entrega 3 por decisión del usuario, antes de la entrega 2 (ram
 - Los tests de API ya no dependen de las llaves de `backend/.env`: el cliente de tests arranca siempre sin pasarela, y el test que necesita una la pone encima. Con las llaves de sandbox en el `.env` local, un test habría construido el proveedor real.
 - `tests/api/test_subscriptions.py`: historial de la cuenta, detalle del admin y los cuatro valores del filtro. Playwright: `/cuenta` después de pagar, el admin que encuentra la cuenta por su suscripción, el suscriptor con acceso manual, y la cuenta que nunca ha pagado.
 
-**Sigue pendiente de la entrega 3**: cancelar y reanudar, cambiar el medio de pago y el modo, las acciones del admin (extender, cancelar, reconsultar), los reembolsos en el admin, la sección de pagos de la exportación de datos y el borrado de la cuenta con pagos.
+**Lo que seguía pendiente** y dónde quedó: cancelar y reanudar (§3.14); cambiar el medio de pago y el modo, la sección de pagos de la exportación de datos y el borrado de la cuenta con pagos (§3.15). Las acciones del admin (extender, cancelar, reconsultar) y los reembolsos en el admin son del paso 6.
 
 ### 3.14 Wompi, entrega 2: tokenización y renovación automática (2026-10-13)
 
@@ -600,9 +600,71 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 - **Lo que la prueba contra el sandbox corrigió o aclaró (2026-10-13)**: el widget entrega el token como se leyó en su código y ofrece tarjeta y Nequi. **La fuente de pago no trae la marca de la tarjeta** (su `public_data` solo tiene `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`); la marca viene en la transacción (`payment_method.extra.brand`), así que `apply_transaction` la anota con el primer cobro aprobado. **El widget solo tokeniza en un contexto seguro** (https o `localhost`): cifra la tarjeta en el navegador, y abierto desde `http://localtest.me` falla con "Tu tarjeta no pudo ser verificada (error desconocido)". En producción no afecta; para probar en local, `DESPLIEGUE.md`. En la ventana de Wompi los botones de tarjeta y Nequi se veían como deshabilitados aunque funcionaban; no se investigó.
 - **Nequi**: el token queda pendiente hasta que el cliente lo aprueba en su app. Se asume que el widget espera esa aprobación antes de devolverlo; si no, Wompi rechaza la fuente y el alta responde `payment_source_rejected`. No se escucha todavía el evento `nequi_token.updated`.
 - **Tarjetas que exigen 3D Secure**: la documentación tiene una guía aparte (3RI) que no se implementó. Si el banco pide autenticación en un cobro sin el cliente presente, ese cobro se rechaza y sigue el camino de los reintentos.
-- **El cron no está programado.** Sin él no hay cobros, ni avisos, ni vencimientos marcados (el acceso sí cae en su fecha, porque lo decide `has_access`). Hay que programarlo al desplegar esta entrega: `DESPLIEGUE.md`.
-- Cambiar el medio de pago, pasar de manual a automática con un período vigente, las acciones del admin sobre una suscripción y el borrado de la cuenta con una renovación activa: entrega 3. **Eliminar la cuenta con una renovación automática activa borra la suscripción** (ya no se le cobra), pero no anula la fuente de pago en Wompi.
+- El cron no estaba programado al construir esta entrega. **El usuario lo programó en Dokploy el 2026-10-13**, al desplegarla (`DESPLIEGUE.md`). Sin él no hay cobros, ni avisos, ni vencimientos marcados (el acceso sí cae en su fecha, porque lo decide `has_access`).
+- Cambiar el medio de pago, pasar de un modo al otro y el borrado de la cuenta con una renovación activa: **hechos en la entrega 3** (§3.15). Las acciones del admin sobre una suscripción son del paso 6.
 - Una fuente de pago no se anula en Wompi al cancelar: la documentación solo describe anularla para Daviplata y Bancolombia.
+
+### 3.15 Wompi, entrega 3: gestión de la suscripción y cierre de la cuenta (2026-10-13)
+
+Tercera y última entrega del paso 5 (rama `fase-4-paso-5c-cuenta-y-cierre`). Cancelar y reanudar, el apartado de suscripción de `/cuenta`, el historial de pagos, la suscripción en el detalle del admin y su filtro ya habían entrado en las entregas anteriores (§3.13 y §3.14); aquí está lo que faltaba.
+
+**Qué NO entra** (es del paso 6, como decía el encargo del paso 5): las acciones del admin sobre una suscripción o un pago (extender, cancelar, reconsultar) y `/admin/suscripciones` y `/admin/pagos`. Tampoco los reembolsos por API.
+
+**Cambiar el medio de pago y pasar de un modo al otro**
+
+Las dos cosas son sobre la misma suscripción, sin perder el período pagado, y ninguna cobra nada: el período vigente ya está pagado.
+
+- `PUT /billing/payment-method {payment_source_token, payment_source_type, acceptance_token, personal_data_token}` guarda un medio de pago en la suscripción vigente, que queda renovándose sola con él. Un solo endpoint para tres casos: **cambiar la tarjeta o el Nequi** de una renovación automática, **pasar de pago manual a renovación automática**, y **reanudar una renovación cancelada con otro medio**. El medio se guarda en Wompi antes de escribir nada: si Wompi no lo acepta (`400 payment_source_rejected`), todo queda como estaba. Pide otra vez los dos contratos de Wompi, porque cada fuente de pago se crea con ellos.
+- El primer cobro al medio nuevo es el de la renovación, con su aviso por correo antes. Al pasar de manual a automática se borra `notice_sent_for`: el aviso de vencimiento del pago manual no vale como aviso del cobro.
+- **En mora (`past_due`)**: guardar un medio nuevo reintenta el cobro de inmediato (`core/renewals.retry_now`), sin esperar a la hora del siguiente intento. Es uno de los tres intentos del período y lleva la misma referencia que usaría el job, así que si el job llegara a hacerlo a la vez, uno de los dos choca con la referencia única. **Agotados los tres no se cobra más**: la suscripción vence en su fecha, y el cliente puede pasar a pago manual y pagar a mano antes.
+- `DELETE /billing/payment-method` pasa a **pago manual**: se borra la referencia del medio de pago, la marca y los últimos cuatro, y no se cobra más. La diferencia con cancelar es lo que pasa después: a la de pago manual se le avisa del vencimiento y paga el período siguiente cuando quiera. Vale también desde una renovación cancelada o en mora.
+- Abrir un pago con `renewal_mode: automatic` teniendo un período pagado sigue rechazado (`409 mode_change_in_account`): eso cobraría un período, y el cambio de modo no cobra.
+- Correos: "Cambió el medio de pago" (dice si con eso se activó la renovación, que hoy no se cobró nada, y cuánto y cuándo es el próximo cobro) y "Tu suscripción pasó a pago manual". Los dos terminan con qué hacer si no fue el titular.
+- La marca de una tarjeta recién guardada no se conoce hasta su primer cobro (§3.14): mientras tanto `/cuenta` muestra "Tarjeta •••• 4242". Ahora se anota con el primer cobro **resuelto**, aprobado o no, y solo si los últimos cuatro de la transacción son los de la tarjeta guardada (un cobro tardío a la tarjeta anterior no le pone su marca a la nueva).
+- Un pago aprobado cuya suscripción pendiente se descartó (al reanudar o cambiar de modo con ese pago en curso) extiende la suscripción viva de la cuenta, en vez de quedar sin a quién darle el período.
+
+**Eliminar la cuenta con pagos** (`DELETE /auth/me`; decidido el 2026-10-13: se conservan los pagos anonimizados y la suscripción se borra)
+
+- La suscripción se borra en cascada, y con ella la referencia del medio de pago: eso es lo que cancela la renovación. Sin esa referencia no hay cómo volver a cobrar, y el job ya no encuentra la suscripción.
+- `payments` queda sin cuenta (`user_id` null). La fila no tiene nada más que identifique a nadie.
+- **`payment_events` se anonimiza** (`core/payment_privacy.py`): el evento de Wompi trae el correo del cliente y datos de su medio de pago, así que se reduce a qué transacción fue, su estado, su monto y su fecha. Un evento que llegue después de borrada la cuenta se guarda ya reducido.
+- **`coupon_redemptions.user_id` pasa de `CASCADE` a `SET NULL`** (migración `c8e3a5d7f216`, solo DDL): el uso del cupón queda sin cuenta y `redemptions_count` sigue coincidiendo con las filas. En el admin aparece como "Cuenta eliminada". El downgrade borra los usos que ya quedaron sin cuenta.
+- **Con un cobro en proceso no se elimina todavía** (`409`): un pago que Wompi ya recibió y no ha resuelto, si se aprobara después, quedaría cobrado sin cuenta. Un pago abierto que nunca llegó a Wompi no lo impide.
+- El correo de despedida dice, si había suscripción, que se eliminó con la cuenta, que la renovación quedó cancelada y qué se conserva de los pagos. `/cuenta` lo avisa antes de confirmar: se pierde el acceso del período ya pagado.
+- `user_consents` sigue borrándose en cascada (§6.7): no se tocó.
+
+**Exportar los datos** (`GET /auth/me/export`): trae `subscription` y `payments` (todos, también los que no se completaron), como los ve su dueño: sin la referencia del pago ni la del medio de pago.
+
+**Frontend**
+
+- `components/billing/PaymentSourceForm.tsx`: los dos contratos de Wompi, la ventana de Wompi y el botón. Lo usan la pantalla de pago y `/cuenta`; no hay otro sitio donde se guarde un medio de pago.
+- `/cuenta`, apartado de suscripción: "Cambiar el medio de pago", "Pasar a pago manual" y "Cancelar la renovación" en la automática; "Activar la renovación automática" en la de pago manual; "Reanudar" y "Reanudar con otro medio de pago" en la cancelada. Todo se confirma en la misma tarjeta.
+- Una cuenta con acceso manual que además tiene una renovación automática ve las mismas acciones (antes solo veía la nota, sin forma de cancelar).
+- `/planes/pagar`, al pagar a mano el período siguiente, enlaza a `/cuenta` para quien prefiera que se renueve sola.
+
+**Tests**
+
+- `tests/api/test_subscription_changes.py`: cambio de tarjeta sin cobro y renovación a la tarjeta nueva; medio rechazado; de manual a automática con su aviso antes del cobro; de automática a manual; reanudar con otro medio; en mora, reintento inmediato, tope de tres y cobro en curso; borrado con renovación activa (pagos, evento, cupón, job); cobro en proceso; evento tardío; exportación.
+- Playwright (`e2e/subscription-manage.spec.ts`): de manual a automática, cambio de medio y vuelta a manual; reanudar con otro medio; eliminar la cuenta con renovación.
+- La migración se subió, se bajó (con un uso de cupón sin cuenta, que el downgrade borra) y se volvió a subir en una base desechable.
+
+**Prueba contra el sandbox (2026-10-13, en local)**
+
+Con las tarjetas de prueba publicadas por Wompi, tokenizadas por su API (sin el widget), y nuestra API para todo lo demás:
+
+- Alta automática aprobada; paso a pago manual; de vuelta a automática con un medio nuevo, sin ningún cobro.
+- Cambio a la tarjeta que Wompi rechaza; con el vencimiento adelantado en la base de la prueba, el job avisó, cobró y el cobro quedó rechazado: `past_due`, con acceso, y la marca de esa tarjeta anotada.
+- En mora, cambio a la tarjeta buena: el reintento salió de inmediato con la referencia del segundo intento y quedó aprobado; el período se extendió desde el vencimiento.
+- Exportación con la suscripción y los tres pagos.
+- Cuenta eliminada: sin usuario ni suscripción, los tres pagos sin cuenta, y el job sin nada que hacer.
+
+**Lo que queda sin probar o sin hacer**
+
+- **Nequi** y las **tarjetas con 3D Secure** siguen como en §3.14.
+- En el sandbox un cobro a una fuente de pago responde `PENDING` y se resuelve segundos después. Con el webhook (VPS) llega solo; en local lo resuelve la siguiente corrida del job. Por eso, tras cambiar la tarjeta en mora, `/cuenta` puede decir que el cobro "todavía no pasó" y el resultado llega por correo.
+- **La fuente de pago no se anula en Wompi** al cambiarla, al pasar a manual ni al eliminar la cuenta: se borra nuestra referencia, que es lo único con lo que se le puede cobrar desde aquí. La documentación solo describe anularla para Daviplata y Bancolombia.
+- Un cobro del job que coincida en el mismo instante con el borrado de la cuenta puede quedar aprobado sin cuenta. Queda en el log como error ("aprobado sin suscripción") y se devuelve a mano desde el panel de Wompi.
+- Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6.
 
 ---
 
@@ -1047,7 +1109,9 @@ Billing:   GET  /plans                       (pública)
            GET  /billing/subscription
            POST /billing/subscription/cancel
            POST /billing/subscription/resume
-           PUT  /billing/payment-method      {card_token, acceptance_token}
+           PUT  /billing/payment-method      {payment_source_token, payment_source_type,
+                                              acceptance_token, personal_data_token}
+           DELETE /billing/payment-method    (pasa a pago manual)
            GET  /billing/payments            GET /billing/payments/:id
 
 Webhooks:  POST /webhooks/wompi              (sin JWT; autenticado por firma)

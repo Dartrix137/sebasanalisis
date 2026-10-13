@@ -114,7 +114,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
-| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Falta la 3 (cambiar el medio de pago y el modo, admin de suscripciones y pagos, borrado de la cuenta, prueba completa en el sandbox y cierre) |
+| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. **Para cerrar el paso faltan** la prueba en el VPS y que el usuario lo dé por cerrado. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
@@ -233,6 +233,23 @@ Construido el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`. El detalle y la
 Comprobado: los doce casos de §3.9 en verde (los cuatro que faltaban: dos corridas sobre el mismo período, cancelación, precio congelado y tres intentos fallidos); renovación automática de punta a punta en Playwright con la pasarela simulada; la migración subida, bajada y vuelta a subir en una base desechable; y el script del job corrido allí, también con el candado tomado.
 
 **Prueba contra el sandbox (2026-10-13, en local):** el usuario guardó la tarjeta de prueba en el widget de Wompi y el primer cobro quedó aprobado; el job, con el vencimiento adelantado en la base de la prueba, avisó, cobró a la tarjeta guardada y extendió el período; la tarjeta que Wompi rechaza no dio acceso. De ahí salieron dos cosas: la marca de la tarjeta viene en la transacción y no en la fuente de pago (corregido), y el widget solo tokeniza desde https o `localhost`. **Sin probar:** Nequi y tarjetas con 3D Secure. El detalle está al final de §3.14.
+
+### Paso 5, entrega 3: qué quedó hecho
+
+Construido el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre`. El detalle está en `PLATAFORMA_COMPLETA.md` §3.15.
+
+- **Cambiar el medio de pago** de una renovación automática desde `/cuenta`. No cobra nada; si la suscripción tenía un cobro sin aprobar, lo reintenta de inmediato con el medio nuevo.
+- **Pasar de un modo al otro** sobre la misma suscripción y sin perder el período: de pago manual a renovación automática (guardando un medio de pago, sin cobro), y de automática a pago manual (se borra la referencia del medio de pago).
+- **Reanudar una renovación cancelada con otro medio de pago.**
+- **Eliminar la cuenta con pagos**: la suscripción se borra (eso cancela la renovación), los pagos quedan sin cuenta, sus eventos se reducen a lo que explica el pago, y el uso de un cupón queda sin cuenta (`coupon_redemptions.user_id` pasó a `SET NULL`). Con un cobro en proceso no se elimina todavía.
+- **Exportar los datos** trae la suscripción y los pagos.
+- Correos: cambio del medio de pago y paso a pago manual.
+
+Lo que el encargo del paso 5 listaba en la entrega 3 y ya había entrado antes: cancelar y reanudar y el correo de cancelación (entrega 2); la suscripción y los pagos en `/cuenta` y en el detalle del admin, y el filtro por suscripción (entrega corta).
+
+Comprobado: los tests de `tests/api/test_subscription_changes.py`; tres recorridos nuevos en Playwright; la migración subida, bajada y vuelta a subir en una base desechable; y la prueba contra el sandbox que está al final de §3.15.
+
+**Sin probar:** Nequi y tarjetas con 3D Secure. **Fuera del paso 5:** las acciones del admin sobre suscripciones y pagos (paso 6).
 
 ### Decisiones tomadas para la Fase 4
 

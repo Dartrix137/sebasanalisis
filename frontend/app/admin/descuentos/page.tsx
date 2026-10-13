@@ -565,7 +565,7 @@ function Redemptions({ couponId }: { couponId: string }) {
             <ul className="space-y-1.5 text-xs text-muted">
               {page.items.map((r) => (
                 <li key={r.id} className="break-words">
-                  <span className="font-bold text-white">{r.user_email}</span> ·{" "}
+                  <span className="font-bold text-white">{r.user_email ?? "Cuenta eliminada"}</span> ·{" "}
                   {formatDateTime(r.created_at)}
                   {r.subscription_id ? ` · suscripción ${r.subscription_id}` : ""}
                 </li>

@@ -5,6 +5,14 @@
   Tu cuenta de Sebasanálisis fue eliminada, como lo pediste. Borramos tus datos: tu perfil,
   tus mesas, los números que registraste y tus apuestas anotadas.
 </p>
+{% if had_subscription %}
+<p style="margin:0 0 12px 0;">
+  Tu suscripción se eliminó con la cuenta{% if had_renewal %}: la renovación automática quedó
+  cancelada, no te vamos a hacer ningún cobro más y ya no guardamos la referencia de tu medio
+  de pago{% endif %}. De tus pagos conservamos solo el registro contable (fecha, monto y
+  estado), sin nada que te identifique.
+</p>
+{% endif %}
 <p style="margin:0;">
   Este es el último correo que recibes de nosotros. Si quieres volver, puedes crear una cuenta
   nueva cuando quieras.
