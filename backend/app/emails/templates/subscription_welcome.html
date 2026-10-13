@@ -7,11 +7,20 @@
   Tienes acceso a la plataforma hasta el <strong>{{ period_end | fecha }}</strong>.
 </p>
 {{ button(url, "Ir a la mesa") }}
+{% if automatic %}
+<p style="margin:0 0 12px 0;">
+  Tu plan se renueva solo: antes de cada cobro te avisamos por correo con el monto y la
+  fecha. Puedes cancelar la renovación cuando quieras desde
+  <a href="{{ account_url }}" style="color:#e0b341;">tu cuenta</a>, y conservas el acceso
+  hasta que termine el período que ya pagaste.
+</p>
+{% else %}
 <p style="margin:0 0 12px 0;">
   Este plan no se renueva solo ni guarda tu medio de pago. Si quieres seguir después de esa
   fecha, paga el siguiente período desde la página de planes antes de que venza: los días que
   te queden no se pierden.
 </p>
+{% endif %}
 <p style="margin:0;">
   La suscripción da acceso a la herramienta. No cambia el resultado de ningún juego.
 </p>

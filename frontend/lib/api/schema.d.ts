@@ -664,6 +664,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Acceptance
+         * @description Los contratos del procesador de pagos que hay que aceptar antes de
+         *     guardar un medio de pago (§3.4). Se piden al momento: no se guardan.
+         */
+        get: operations["acceptance_billing_acceptance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/availability": {
         parameters: {
             query?: never;
@@ -673,7 +694,8 @@ export interface paths {
         };
         /**
          * Availability
-         * @description Si se puede pagar. Publico: /planes lo usa para encender el boton.
+         * @description Si se puede pagar, y como se guarda un medio de pago. Publico: /planes
+         *     lo usa para encender el boton.
          */
         get: operations["availability_billing_availability_get"];
         put?: never;
@@ -777,6 +799,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/subscription/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Subscription
+         * @description Cancela la renovacion automatica (§3.6). La cuenta conserva el acceso
+         *     hasta que termine el periodo que ya pago, y no se le vuelve a cobrar.
+         */
+        post: operations["cancel_subscription_billing_subscription_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/subscription/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Subscription
+         * @description Revierte la cancelacion antes del vencimiento: la suscripcion vuelve a
+         *     renovarse sola con el medio de pago que tenia guardado.
+         */
+        post: operations["resume_subscription_billing_subscription_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/subscriptions": {
         parameters: {
             query?: never;
@@ -788,13 +852,19 @@ export interface paths {
         put?: never;
         /**
          * Subscribe
-         * @description Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.
+         * @description Abre el pago de un periodo.
          *
-         *     No tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del
-         *     proveedor. Exige correo confirmado y documentos legales aceptados. El total
-         *     sale de `pricing.quote`; cualquier monto que mande el cliente se ignora.
+         *     Pago manual (`renewal_mode: manual`): devuelve la pagina del proveedor
+         *     donde el cliente paga. No se tokeniza nada.
          *
-         *     Responde 202: la suscripcion no queda activa hasta que el proveedor
+         *     Renovacion automatica (`automatic`): recibe el token que el procesador le
+         *     dio al navegador, guarda el medio de pago en el proveedor y le hace el
+         *     primer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la
+         *     referencia del proveedor, la marca y los ultimos cuatro digitos.
+         *
+         *     En los dos casos exige correo confirmado y documentos legales aceptados, y
+         *     el total sale de `billing/pricing`: cualquier monto que mande el cliente se
+         *     ignora. Responde 202: la suscripcion no queda activa hasta que el proveedor
          *     confirme el pago (`GET /billing/payments/:id`).
          */
         post: operations["subscribe_billing_subscriptions_post"];
@@ -1443,6 +1513,21 @@ export interface components {
             legal_document_ids?: string[];
         };
         /**
+         * AcceptanceResponse
+         * @description Los dos contratos del procesador de pagos que el cliente acepta antes
+         *     de guardar un medio de pago. Los tokens se devuelven al suscribirse.
+         */
+        AcceptanceResponse: {
+            /** Acceptance Token */
+            acceptance_token: string;
+            /** Personal Data Token */
+            personal_data_token: string;
+            /** Personal Data Url */
+            personal_data_url: string;
+            /** Terms Url */
+            terms_url: string;
+        };
+        /**
          * AccessInfo
          * @description La decision de acceso, para que el cliente sepa que pantalla mostrar.
          *
@@ -1924,6 +2009,9 @@ export interface components {
         BillingAvailabilityResponse: {
             /** Enabled */
             enabled: boolean;
+            /** Public Key */
+            public_key: string | null;
+            tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
          * BulkSpinsRequest
@@ -2610,6 +2698,12 @@ export interface components {
             status: components["schemas"]["PaymentStatus"];
         };
         /**
+         * PaymentSourceKind
+         * @description Medios que se pueden guardar para la renovacion automatica.
+         * @enum {string}
+         */
+        PaymentSourceKind: "CARD" | "NEQUI";
+        /**
          * PaymentStatus
          * @enum {string}
          */
@@ -3156,21 +3250,31 @@ export interface components {
          *     cliente se ignora.
          */
         SubscribeRequest: {
+            /** Acceptance Token */
+            acceptance_token?: string | null;
             /** Coupon Code */
             coupon_code?: string | null;
+            /** Payment Source Token */
+            payment_source_token?: string | null;
+            payment_source_type?: components["schemas"]["PaymentSourceKind"] | null;
+            /** Personal Data Token */
+            personal_data_token?: string | null;
             /**
              * Plan Id
              * Format: uuid
              */
             plan_id: string;
+            /** @default manual */
+            renewal_mode: components["schemas"]["RenewalMode"];
         };
         /**
          * SubscribeResponse
-         * @description El pago quedo abierto: falta que el cliente pague en la pasarela.
+         * @description El pago quedo abierto. En el pago manual falta que el cliente pague en
+         *     la pasarela; con un medio guardado, el cobro ya se envio.
          */
         SubscribeResponse: {
             /** Checkout Url */
-            checkout_url: string;
+            checkout_url: string | null;
             /** Currency */
             currency: string;
             /** Discount Cents */
@@ -3198,6 +3302,10 @@ export interface components {
         SubscriptionResponse: {
             /** Cancel At Period End */
             cancel_at_period_end: boolean;
+            /** Card Brand */
+            card_brand: string | null;
+            /** Card Last4 */
+            card_last4: string | null;
             /** Currency */
             currency: string;
             /** Current Period End */
@@ -3211,6 +3319,11 @@ export interface components {
             id: string;
             /** In Force */
             in_force: boolean;
+            /** Next Charge At */
+            next_charge_at: string | null;
+            /** Next Charge Cents */
+            next_charge_cents: number | null;
+            payment_source_type: components["schemas"]["PaymentSourceKind"] | null;
             plan: components["schemas"]["PlanResponse"];
             /** Price Cents */
             price_cents: number;
@@ -3243,6 +3356,11 @@ export interface components {
             token_type: string;
             user: components["schemas"]["UserResponse"];
         };
+        /**
+         * TokenizerKind
+         * @enum {string}
+         */
+        TokenizerKind: "wompi_widget" | "fake";
         /**
          * UpdateCouponRequest
          * @description PATCH /admin/coupons/:id. Solo cambia los campos que se mandan.
@@ -4649,6 +4767,26 @@ export interface operations {
             };
         };
     };
+    acceptance_billing_acceptance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceResponse"];
+                };
+            };
+        };
+    };
     availability_billing_availability_get: {
         parameters: {
             query?: never;
@@ -4783,6 +4921,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionResponse"] | null;
+                };
+            };
+        };
+    };
+    cancel_subscription_billing_subscription_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+        };
+    };
+    resume_subscription_billing_subscription_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
                 };
             };
         };

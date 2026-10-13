@@ -69,6 +69,12 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await expect(resumen.getByText("100.000 COP")).toBeVisible();
   await expect(resumen.getByText("− 20.000 COP")).toBeVisible();
 
+  // Ningún modo entra marcado: hasta elegir, no se puede pagar.
+  await expect(page.getByRole("button", { name: "Ir a pagar 80.000 COP" })).toBeDisabled();
+  await expect(page.getByText("Elige cómo quieres pagar para continuar.")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Pago manual" })).not.toBeChecked();
+  await expect(page.getByRole("radio", { name: "Renovación automática" })).not.toBeChecked();
+  await page.getByRole("radio", { name: "Pago manual" }).check();
   await page.getByRole("button", { name: "Ir a pagar 80.000 COP" }).click();
 
   // La pasarela simulada recibe el monto del servidor, no uno del navegador.
@@ -107,6 +113,8 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await expect(page.getByText(/El período nuevo empieza ese día/)).toBeVisible();
   await expect(page.getByLabel("Cupón (opcional)")).toHaveCount(0);
   await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+  await expect(page.getByRole("radio", { name: "Renovación automática" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ir a pagar 100.000 COP" })).toBeEnabled();
 
   // Mi cuenta: la suscripción y el pago que acaba de hacer.
   await page.goto("/cuenta");
@@ -161,6 +169,7 @@ test("suscriptor con acceso manual: /planes no le ofrece un pago que se rechazar
     .getByRole("article", { name: "Acceso Mensual" })
     .getByRole("link", { name: "Suscribirme" })
     .click();
+  await page.getByRole("radio", { name: "Pago manual" }).check();
   await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
@@ -207,6 +216,7 @@ test("pago rechazado: no hay acceso y se puede volver a intentar", async ({ page
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await expect(page.getByTestId("total-a-pagar")).toHaveText("150.000 COP");
+  await page.getByRole("radio", { name: "Pago manual" }).check();
   await page.getByRole("button", { name: "Ir a pagar 150.000 COP" }).click();
   await page.getByRole("button", { name: "Rechazar el pago" }).click();
 
@@ -251,4 +261,97 @@ test("el administrador ve los planes sin la opción de suscribirse", async ({ pa
   await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
+});
+
+test("renovación automática: guarda el medio, entra a la mesa, cancela y reanuda", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await confirmEmail(request, email);
+  await loginViaUi(page, email);
+  await page
+    .getByRole("article", { name: "Acceso Mensual" })
+    .getByRole("link", { name: "Suscribirme" })
+    .click();
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+
+  await page.getByRole("radio", { name: "Renovación automática" }).check();
+  await expect(page.getByText(/Antes de cada cobro te avisamos por correo/)).toBeVisible();
+  // Sin aceptar los dos documentos del procesador no se puede guardar el medio.
+  const guardar = page.getByRole("button", { name: "Guardar medio de pago y pagar 100.000 COP" });
+  await expect(guardar).toBeDisabled();
+  await page.getByRole("checkbox", { name: /Acepto los términos de uso de Wompi/ }).check();
+  await expect(guardar).toBeDisabled();
+  await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
+  await expect(page.getByText(/solo la referencia que entrega Wompi/)).toBeVisible();
+  await guardar.click();
+
+  await expect(page).toHaveURL(/\/pago\/[0-9a-f-]+$/);
+  await expect(page.getByText("Pago aprobado")).toBeVisible();
+  await page.getByRole("link", { name: "Ir a la mesa" }).click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expectEmail(email, "Tu suscripción a Sebasanálisis está activa");
+
+  // /planes no le ofrece pagar: se renueva sola.
+  await page.goto("/planes");
+  const mensual = page.getByRole("article", { name: "Acceso Mensual" });
+  await expect(mensual.getByText("Tu plan actual")).toBeVisible();
+  await expect(mensual.getByText(/Se renueva sola/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Suscribirme|Pagar el siguiente/ })).toHaveCount(0);
+
+  // Mi cuenta: el medio guardado (sin el número), el próximo cobro y cancelar.
+  await page.goto("/cuenta");
+  const suscripcion = page.getByTestId("suscripcion");
+  await expect(suscripcion.getByText("Renovación automática", { exact: true })).toBeVisible();
+  await expect(suscripcion.getByText("Visa •••• 4242")).toBeVisible();
+  await expect(suscripcion.getByText(/100\.000 COP, a partir del/)).toBeVisible();
+
+  await suscripcion.getByRole("button", { name: "Cancelar la renovación" }).click();
+  // Pide confirmar, y se puede arrepentir.
+  await suscripcion.getByRole("button", { name: "No, dejarla como está" }).click();
+  await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
+  await suscripcion.getByRole("button", { name: "Cancelar la renovación" }).click();
+  await suscripcion.getByRole("button", { name: "Sí, cancelar la renovación" }).click();
+  await expect(suscripcion.getByText("Renovación cancelada", { exact: true })).toBeVisible();
+  await expect(suscripcion.getByText("Renovación cancelada. No te vamos a hacer más cobros.")).toBeVisible();
+  await expect(suscripcion.getByText("Próximo cobro")).toHaveCount(0);
+  await expectEmail(email, "Cancelaste la renovación de tu suscripción");
+
+  // Conserva el acceso hasta el fin del período.
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await page.goto("/cuenta");
+  await page.getByTestId("suscripcion").getByRole("button", { name: "Reanudar la renovación" }).click();
+  await expect(page.getByTestId("suscripcion").getByText("Vigente", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("suscripcion").getByText("Próximo cobro")).toBeVisible();
+});
+
+test("renovación automática: primer cobro rechazado no da acceso", async ({ page, request }) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await confirmEmail(request, email);
+  await loginViaUi(page, email);
+  await page
+    .getByRole("article", { name: "Acceso Mensual" })
+    .getByRole("link", { name: "Suscribirme" })
+    .click();
+  await page.getByRole("radio", { name: "Renovación automática" }).check();
+  await page.getByRole("checkbox", { name: /Acepto los términos de uso de Wompi/ }).check();
+  await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
+
+  // Un medio que la pasarela no deja guardar: se dice aquí mismo y no pasa nada más.
+  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-rejected");
+  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
+  await expect(page.getByText(/no aceptó ese medio de pago/)).toBeVisible();
+  await expect(page).toHaveURL(/\/planes\/pagar/);
+
+  // Uno que se guarda pero cuyo cobro se rechaza.
+  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-declined");
+  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
+  await expect(page.getByText("El pago no se completó")).toBeVisible();
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/planes/);
 });

@@ -1,0 +1,15 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Tu suscripción al plan {{ plan_name }} venció el {{ period_end | fecha }} y tu cuenta ya no tiene acceso a la mesa.
+{% if automatic %}
+Intentamos cobrar la renovación tres veces y ninguna pasó. No vamos a intentarlo más.
+{% else %}
+Tu plan era de pago manual y no recibimos el pago del siguiente período.
+{% endif %}
+
+Tus mesas y tus datos siguen en tu cuenta. Puedes volver cuando quieras con un pago nuevo.
+
+Ver los planes: {{ url }}
+{% endblock %}

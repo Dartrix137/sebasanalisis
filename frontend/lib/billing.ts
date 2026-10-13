@@ -23,6 +23,18 @@ export const PAYMENT_STATUS_TONE: Record<PaymentStatus, "neutral" | "ok" | "off"
   error: "off",
 };
 
+/** El medio de pago guardado, como se le nombra al cliente. Nunca el número completo. */
+export function sourceLabel(subscription: SubscriptionResponse): string | null {
+  if (subscription.payment_source_type === "NEQUI") return "Nequi";
+  if (subscription.payment_source_type === "CARD") {
+    const brand = subscription.card_brand
+      ? subscription.card_brand.charAt(0) + subscription.card_brand.slice(1).toLowerCase()
+      : "Tarjeta";
+    return subscription.card_last4 ? `${brand} •••• ${subscription.card_last4}` : brand;
+  }
+  return null;
+}
+
 /** Cómo se paga cada período. */
 export const RENEWAL_MODE_LABEL: Record<SubscriptionResponse["renewal_mode"], string> = {
   manual: "Pago manual: no se renueva solo",

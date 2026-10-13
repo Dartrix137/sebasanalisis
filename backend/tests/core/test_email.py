@@ -42,6 +42,10 @@ CONTEXT: dict[str, Any] = {
     "period_start": datetime(2026, 10, 14, 3, 30, tzinfo=UTC),
     "period_end": datetime(2026, 11, 14, 3, 30, tzinfo=UTC),
     "reference": "SA-abc123",
+    "automatic": True,
+    "account_url": "https://sebasanalisis.com/cuenta",
+    "charge_at": datetime(2026, 11, 12, 3, 30, tzinfo=UTC),
+    "source_label": "tu tarjeta Visa terminada en 4242",
 }
 
 # Regla de producto no negociable (CLAUDE.md): ningun correo suena predictivo.

@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.billing import pricing
+from app.core import subscriptions
 from app.core.access import has_access
 from app.core.accounts import is_last_active_admin
 from app.models import Payment, Subscription, User
@@ -30,9 +32,13 @@ def user_response(db: Session, user: User, now: datetime | None = None) -> UserR
     )
 
 
-def subscription_response(subscription: Subscription, now: datetime) -> SubscriptionResponse:
+def subscription_response(
+    db: Session, subscription: Subscription, now: datetime
+) -> SubscriptionResponse:
     """La suscripcion, con `in_force`: si su periodo pagado sigue vigente."""
     period_end = subscription.current_period_end
+    vigente = subscriptions.in_force(subscription, now)
+    continues = vigente and subscription.status != "canceled"
     return SubscriptionResponse(
         id=subscription.id,
         status=subscription.status,  # type: ignore[arg-type]
@@ -43,7 +49,20 @@ def subscription_response(subscription: Subscription, now: datetime) -> Subscrip
         current_period_start=subscription.current_period_start,
         current_period_end=period_end,
         cancel_at_period_end=subscription.cancel_at_period_end,
-        in_force=period_end is not None and period_end > now,
+        in_force=vigente,
+        payment_source_type=subscription.payment_source_type,  # type: ignore[arg-type]
+        card_brand=subscription.card_brand,
+        card_last4=subscription.card_last4,
+        next_charge_at=subscription.next_charge_at if continues else None,
+        next_charge_cents=(
+            pricing.renewal_quote(
+                subscription.price_cents,
+                subscription.currency,
+                subscriptions.renewal_discount(db, subscription),
+            ).total_cents
+            if continues
+            else None
+        ),
     )
 
 

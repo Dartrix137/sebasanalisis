@@ -24,14 +24,20 @@ from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.pricing import CouponRejection
-from app.core import rate_limit, subscriptions
+from app.core import billing_emails, rate_limit, subscriptions
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
-from app.core.subscriptions import COUPON_MESSAGES, Settlement, SubscribeError, coupon_terms
-from app.emails import build_email
+from app.core.subscriptions import (
+    COUPON_MESSAGES,
+    Settlement,
+    SourceInput,
+    SubscribeError,
+    coupon_terms,
+)
 from app.models import Coupon, Payment, Plan, User
 from app.payments.base import PaymentProvider, PaymentProviderError, get_payment_provider
 from app.schemas.billing import (
+    AcceptanceResponse,
     BillingAvailabilityResponse,
     PaymentListResponse,
     PaymentResponse,
@@ -90,8 +96,44 @@ def list_plans(db: DbSession) -> list[Plan]:
 
 @router.get("/billing/availability", response_model=BillingAvailabilityResponse)
 def availability(provider: PaymentProviderDep) -> BillingAvailabilityResponse:
-    """Si se puede pagar. Publico: /planes lo usa para encender el boton."""
-    return BillingAvailabilityResponse(enabled=provider.enabled)
+    """Si se puede pagar, y como se guarda un medio de pago. Publico: /planes
+    lo usa para encender el boton."""
+    tokenizer = provider.tokenizer() if provider.enabled else None
+    return BillingAvailabilityResponse(
+        enabled=provider.enabled,
+        tokenizer=tokenizer.kind if tokenizer else None,  # type: ignore[arg-type]
+        public_key=tokenizer.public_key if tokenizer else None,
+    )
+
+
+@router.get("/billing/acceptance", response_model=AcceptanceResponse)
+def acceptance(user: CurrentUser, provider: PaymentProviderDep) -> AcceptanceResponse:
+    """Los contratos del procesador de pagos que hay que aceptar antes de
+    guardar un medio de pago (§3.4). Se piden al momento: no se guardan."""
+    if not provider.enabled or provider.tokenizer() is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "automatic_unavailable",
+                "message": "La renovación automática todavía no está disponible.",
+            },
+        )
+    try:
+        found = provider.acceptance()
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "provider_unavailable",
+                "message": "No pudimos consultar al procesador de pagos. Intenta de nuevo.",
+            },
+        ) from exc
+    return AcceptanceResponse(
+        acceptance_token=found.acceptance_token,
+        terms_url=found.terms_url,
+        personal_data_token=found.personal_data_token,
+        personal_data_url=found.personal_data_url,
+    )
 
 
 @router.post("/billing/quote", response_model=QuoteResponse)
@@ -152,14 +194,22 @@ def subscribe(
     db: DbSession,
     request: Request,
     provider: PaymentProviderDep,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
 ) -> SubscribeResponse:
-    """Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.
+    """Abre el pago de un periodo.
 
-    No tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del
-    proveedor. Exige correo confirmado y documentos legales aceptados. El total
-    sale de `pricing.quote`; cualquier monto que mande el cliente se ignora.
+    Pago manual (`renewal_mode: manual`): devuelve la pagina del proveedor
+    donde el cliente paga. No se tokeniza nada.
 
-    Responde 202: la suscripcion no queda activa hasta que el proveedor
+    Renovacion automatica (`automatic`): recibe el token que el procesador le
+    dio al navegador, guarda el medio de pago en el proveedor y le hace el
+    primer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la
+    referencia del proveedor, la marca y los ultimos cuatro digitos.
+
+    En los dos casos exige correo confirmado y documentos legales aceptados, y
+    el total sale de `billing/pricing`: cualquier monto que mande el cliente se
+    ignora. Responde 202: la suscripcion no queda activa hasta que el proveedor
     confirme el pago (`GET /billing/payments/:id`).
     """
     if get_settings().rate_limit_enabled and not rate_limit.hit(
@@ -179,15 +229,34 @@ def subscribe(
             coupon_code=payload.coupon_code,
             provider=provider,
             now=datetime.now(UTC),
+            renewal_mode=payload.renewal_mode.value,
+            source=(
+                SourceInput(
+                    type=payload.payment_source_type.value if payload.payment_source_type else "",
+                    token=payload.payment_source_token or "",
+                    acceptance_token=payload.acceptance_token or "",
+                    personal_data_token=payload.personal_data_token or "",
+                )
+                if payload.renewal_mode.value == "automatic"
+                else None
+            ),
         )
     except SubscribeError as exc:
         db.rollback()
-        detail: dict[str, str] = {"code": exc.code, "message": exc.message}
-        if exc.coupon_reason is not None:
-            detail["reason"] = exc.coupon_reason.value
-        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+        raise _http_error(exc) from exc
 
     payment = started.payment
+    if started.settlement is not None:
+        # El cobro al medio guardado ya se envio; puede que ya este resuelto.
+        queue_payment_emails(db, started.settlement, background, sender)
+        return SubscribeResponse(
+            payment_id=payment.id,
+            checkout_url=None,
+            subtotal_cents=started.subtotal_cents,
+            discount_cents=payment.discount_cents,
+            total_cents=payment.amount_cents,
+            currency=payment.currency,
+        )
     checkout_url = provider.checkout_url(
         reference=payment.reference,
         amount_cents=payment.amount_cents,
@@ -207,47 +276,20 @@ def subscribe(
     )
 
 
+def _http_error(exc: SubscribeError) -> HTTPException:
+    detail: dict[str, str] = {"code": exc.code, "message": exc.message}
+    if exc.coupon_reason is not None:
+        detail["reason"] = exc.coupon_reason.value
+    return HTTPException(status_code=exc.status_code, detail=detail)
+
+
 def queue_payment_emails(
     db: DbSession, settlement: Settlement, background: BackgroundTasks, sender: EmailSender
 ) -> None:
-    """Bienvenida al activar y recibo de cada cobro aprobado (§3.8).
-
-    Solo cuando ESTA llamada resolvio el pago: un evento repetido no repite el
-    correo.
-    """
-    payment = settlement.payment
-    if not settlement.changed or payment.status != "approved" or payment.user_id is None:
-        return
-    user = db.get(User, payment.user_id)
-    if user is None:
-        return
-    context = {
-        "display_name": user.display_name,
-        "plan_name": payment.plan.name,
-        "amount_cents": payment.amount_cents,
-        "discount_cents": payment.discount_cents,
-        "currency": payment.currency,
-        "paid_at": payment.resolved_at,
-        "period_start": payment.period_start,
-        "period_end": payment.period_end,
-        "reference": payment.reference,
-    }
-    if settlement.activated:
-        background.add_task(
-            send_safely,
-            sender,
-            build_email(
-                "subscription_welcome",
-                to=user.email,
-                url=_frontend_url("/dashboard"),
-                **context,
-            ),
-        )
-    background.add_task(
-        send_safely,
-        sender,
-        build_email("payment_receipt", to=user.email, url=_frontend_url("/cuenta"), **context),
-    )
+    """Encola los correos de un pago que esta llamada resolvio (§3.8): recibo,
+    bienvenida o aviso de cobro fallido. Los arma `core/billing_emails`."""
+    for message in billing_emails.payment_emails(db, settlement):
+        background.add_task(send_safely, sender, message)
 
 
 @router.get("/billing/payments/{payment_id}", response_model=PaymentResponse)
@@ -328,4 +370,35 @@ def list_payments(
 def get_subscription(user: CurrentUser, db: DbSession) -> SubscriptionResponse | None:
     """La suscripcion de la cuenta, o null si nunca pago una."""
     found = subscriptions.current_subscription(db, user.id)
-    return subscription_response(found, datetime.now(UTC)) if found is not None else None
+    return subscription_response(db, found, datetime.now(UTC)) if found is not None else None
+
+
+@router.post("/billing/subscription/cancel", response_model=SubscriptionResponse)
+def cancel_subscription(
+    user: CurrentUser, db: DbSession, background: BackgroundTasks, sender: EmailSenderDep
+) -> SubscriptionResponse:
+    """Cancela la renovacion automatica (§3.6). La cuenta conserva el acceso
+    hasta que termine el periodo que ya pago, y no se le vuelve a cobrar."""
+    now = datetime.now(UTC)
+    try:
+        subscription = subscriptions.cancel(db, user, now)
+    except SubscribeError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    background.add_task(
+        send_safely, sender, billing_emails.subscription_canceled(user, subscription)
+    )
+    return subscription_response(db, subscription, now)
+
+
+@router.post("/billing/subscription/resume", response_model=SubscriptionResponse)
+def resume_subscription(user: CurrentUser, db: DbSession) -> SubscriptionResponse:
+    """Revierte la cancelacion antes del vencimiento: la suscripcion vuelve a
+    renovarse sola con el medio de pago que tenia guardado."""
+    now = datetime.now(UTC)
+    try:
+        subscription = subscriptions.resume(db, user, now)
+    except SubscribeError as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+    return subscription_response(db, subscription, now)

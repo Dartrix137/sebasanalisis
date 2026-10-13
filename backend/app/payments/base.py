@@ -39,6 +39,38 @@ class PaymentsUnavailable(PaymentProviderError):
     """No hay pasarela configurada."""
 
 
+class PaymentSourceRejected(PaymentProviderError):
+    """El proveedor no acepto el medio de pago (token vencido, sin aprobar...)."""
+
+
+# Medios que se pueden guardar para la renovacion automatica (decidido el
+# 2026-10-13: tarjetas y Nequi).
+PaymentSourceType = Literal["CARD", "NEQUI"]
+PAYMENT_SOURCE_TYPES: tuple[PaymentSourceType, ...] = ("CARD", "NEQUI")
+
+
+@dataclass(frozen=True)
+class Acceptance:
+    """Los dos contratos del proveedor que el cliente acepta antes de guardar
+    un medio de pago: los tokens viajan de vuelta al guardarlo."""
+
+    acceptance_token: str
+    terms_url: str
+    personal_data_token: str
+    personal_data_url: str
+
+
+@dataclass(frozen=True)
+class PaymentSource:
+    """Un medio de pago guardado en el proveedor. Aqui nunca hay datos de
+    tarjeta: solo su referencia y, para mostrar, la marca y los ultimos cuatro."""
+
+    id: str
+    type: PaymentSourceType
+    brand: str | None = None
+    last4: str | None = None
+
+
 @dataclass(frozen=True)
 class ProviderTransaction:
     """Una transaccion tal como la reporta la API del proveedor."""
@@ -51,6 +83,19 @@ class ProviderTransaction:
     # Texto del proveedor sobre el resultado. Queda en la base, no se le muestra
     # tal cual al cliente.
     status_message: str | None = None
+    # Marca de la tarjeta con la que se pago, si fue con tarjeta y el proveedor
+    # la informa. Nunca el numero.
+    card_brand: str | None = None
+
+
+@dataclass(frozen=True)
+class TokenizerInfo:
+    """Lo que el frontend necesita para pedirle al proveedor un token."""
+
+    #: `wompi_widget`: el widget de Wompi. `fake`: selector de la pasarela simulada.
+    kind: Literal["wompi_widget", "fake"]
+    #: Llave PUBLICA del comercio. Nunca la privada.
+    public_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +145,41 @@ class PaymentProvider(Protocol):
         """Reconsulta una transaccion. None si el proveedor no la conoce."""
         ...
 
+    def tokenizer(self) -> TokenizerInfo | None:
+        """Como obtiene el navegador el token de un medio de pago. None si no
+        se pueden guardar medios de pago."""
+        ...
+
+    def acceptance(self) -> Acceptance:
+        """Los contratos del proveedor que el cliente debe aceptar."""
+        ...
+
+    def create_payment_source(
+        self,
+        *,
+        source_type: PaymentSourceType,
+        token: str,
+        customer_email: str,
+        acceptance_token: str,
+        personal_data_token: str,
+    ) -> PaymentSource:
+        """Guarda el medio de pago que el cliente tokenizo en su navegador.
+        Lanza `PaymentSourceRejected` si el proveedor no lo acepta."""
+        ...
+
+    def charge(
+        self,
+        *,
+        reference: str,
+        amount_cents: int,
+        currency: str,
+        customer_email: str,
+        source: PaymentSource,
+    ) -> ProviderTransaction:
+        """Cobra a un medio de pago guardado. Devuelve la transaccion tal como
+        la reporta el proveedor, casi siempre todavia `pending`."""
+        ...
+
 
 def unverified_event(provider: str, body: bytes, payload: dict[str, Any] | None) -> ProviderEvent:
     """Evento que no paso la verificacion: se guarda para auditar, no mueve nada."""
@@ -139,6 +219,34 @@ class UnconfiguredPaymentProvider:
         return unverified_event(self.name, body, None)
 
     def fetch_transaction(self, transaction_id: str) -> ProviderTransaction | None:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def tokenizer(self) -> TokenizerInfo | None:
+        return None
+
+    def acceptance(self) -> Acceptance:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def create_payment_source(
+        self,
+        *,
+        source_type: PaymentSourceType,
+        token: str,
+        customer_email: str,
+        acceptance_token: str,
+        personal_data_token: str,
+    ) -> PaymentSource:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def charge(
+        self,
+        *,
+        reference: str,
+        amount_cents: int,
+        currency: str,
+        customer_email: str,
+        source: PaymentSource,
+    ) -> ProviderTransaction:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 
 

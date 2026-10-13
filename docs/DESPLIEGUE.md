@@ -246,6 +246,14 @@ checkout responde `403` antes de mostrar nada. En produccion no afecta
 `next.config.ts` ya lo admite en `next dev`). La sesion se guarda por origen:
 hay que iniciar sesion en esa direccion, no en `localhost`.
 
+**Guardar un medio de pago (renovacion automatica) es al reves: en local solo
+funciona desde `http://localhost:3000`.** La ventana de Wompi cifra la tarjeta
+en el navegador y eso exige un contexto seguro (https o `localhost`); desde
+`http://localtest.me` responde "Tu tarjeta no pudo ser verificada (error
+desconocido)". Para probar los dos modos en local, `CORS_ORIGINS` lleva los
+dos origenes: el pago manual se prueba por `localtest.me` y la renovacion
+automatica por `localhost`. En produccion, con https, no hay diferencia.
+
 Que pasa al desplegar esta entrega:
 
 - Tres migraciones corren solas: amplian `subscriptions`, crean `payments` y
@@ -296,6 +304,53 @@ Como se confirma un pago (lo que hay que tener presente al mirar un problema):
 - Los reembolsos se hacen en el panel de Wompi. La aplicacion no los registra
   todavia: un pago aprobado que despues se anula o se reembolsa **no quita el
   acceso solo**; hay que retirarlo a mano (pendiente del admin de pagos).
+
+### Job de renovaciones (Fase 4, paso 5, entrega 2)
+
+**Desde que esta entrega se despliega con las llaves de Wompi puestas, la
+pantalla de pago ofrece la renovacion automatica.** Sin el job programado, esas
+suscripciones no se cobran nunca: el cliente pierde el acceso al terminar su
+primer periodo sin que nadie le haya cobrado ni avisado. Hay que programarlo en
+el mismo despliegue.
+
+En Dokploy, en la aplicacion API, pestana "Schedules": una tarea cada hora
+(`0 * * * *`) que corra dentro del contenedor de la API:
+
+```
+cd /app && python scripts/run_renewals.py
+```
+
+Que hace cada corrida: avisa por correo antes de cada cobro automatico (7 dias
+antes del primer intento) y antes de cada vencimiento del pago manual; cobra las
+renovaciones que toquen (48 h, 24 h y 0 h antes del vencimiento); y deja
+vencidas las suscripciones cuyo periodo termino. Usa las mismas variables de
+entorno de la API, incluidas las `SMTP_*`: los correos los envia el job.
+
+Se puede correr a mano en la terminal de la API cuantas veces se quiera: es
+idempotente. Dos corridas a la vez no cobran dos veces (la segunda sale diciendo
+"ya hay otra corrida en curso"). La ultima linea resume lo que hizo:
+
+```
+INFO: app.renewals - Renovaciones: avisos=0 cobros=0 aprobados=0 fallidos=0 vencidas=0 errores=0 correos=0
+```
+
+Sale con codigo 1 si alguna suscripcion fallo (`errores` mayor que cero); el
+detalle queda en el log y en el monitoreo de errores.
+
+**Prueba contra el sandbox (2026-10-13, en local, llaves de prueba):**
+
+- Tarjeta `4242 4242 4242 4242` escrita por el usuario en la ventana de Wompi:
+  medio guardado, primer cobro aprobado, cuenta con acceso, y en la base solo
+  la referencia de la fuente de pago, `VISA` y `4242`.
+- Job con el vencimiento adelantado en la base de la prueba, tres corridas: la
+  primera aviso por correo y no cobro; la segunda cobro a la tarjeta guardada
+  (`cobros=1`); la tercera encontro el cobro aprobado, extendio el periodo un
+  mes desde el vencimiento anterior y envio el recibo (`aprobados=1`).
+- Tarjeta `4111 1111 1111 1111`: el medio se guarda, el cobro queda rechazado
+  y la cuenta no entra.
+
+**Sin probar**: Nequi (`3991111111`), tarjetas con 3D Secure, y todo lo
+anterior en el VPS.
 
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a

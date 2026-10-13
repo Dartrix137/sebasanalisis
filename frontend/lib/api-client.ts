@@ -36,6 +36,7 @@ import type {
   UUID,
 } from "./types/auth";
 import type {
+  AcceptanceResponse,
   AdminCouponListResponse,
   AdminCouponResponse,
   AdminPlanListResponse,
@@ -320,6 +321,20 @@ export const billingApi = {
       }`,
       { token },
     ),
+
+  /**
+   * Los dos contratos del procesador de pagos que se aceptan antes de guardar
+   * un medio de pago, con los tokens que viajan de vuelta al suscribirse.
+   */
+  acceptance: (token: string) => apiFetch<AcceptanceResponse>("/billing/acceptance", { token }),
+
+  /** Detiene la renovación automática. Conserva el acceso hasta el fin del período. */
+  cancelSubscription: (token: string) =>
+    apiFetch<SubscriptionResponse>("/billing/subscription/cancel", { method: "POST", token }),
+
+  /** Revierte la cancelación antes del vencimiento. */
+  resumeSubscription: (token: string) =>
+    apiFetch<SubscriptionResponse>("/billing/subscription/resume", { method: "POST", token }),
 
   /** El historial de pagos de la cuenta, lo más reciente primero. */
   payments: (token: string) => apiFetch<PaymentListResponse>("/billing/payments", { token }),

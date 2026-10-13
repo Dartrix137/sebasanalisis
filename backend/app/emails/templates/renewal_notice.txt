@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Te avisamos con tiempo: el {{ charge_at | fecha }} vamos a cobrar {{ amount_cents | money(currency) }} a {{ source_label }}, por el siguiente período de tu plan {{ plan_name }}.
+
+Si no quieres ese cobro, cancela la renovación antes de esa fecha desde el apartado de suscripción de tu cuenta. Conservas el acceso hasta que termine el período que ya pagaste.
+
+Tu suscripción: {{ url }}
+
+Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. La fecha va en hora de Colombia.
+{% endblock %}

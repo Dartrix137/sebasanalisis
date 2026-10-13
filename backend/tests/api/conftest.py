@@ -107,6 +107,20 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
     engine.dispose()
 
 
+@pytest.fixture
+def wompi(client: TestClient) -> Iterator[object]:
+    """Wompi de mentira detras del `WompiProvider` de verdad (`wompi_double.py`)."""
+    from app.main import app
+    from app.payments.base import get_payment_provider
+    from tests.api.wompi_double import Wompi
+
+    double = Wompi()
+    anterior = app.dependency_overrides.get(get_payment_provider)
+    app.dependency_overrides[get_payment_provider] = lambda: double.provider
+    yield double
+    app.dependency_overrides[get_payment_provider] = anterior
+
+
 def register_with_consents(client: TestClient, database_url: str) -> None:
     """Hace que `client.post("/auth/register", ...)` deje una cuenta lista para
     usar la mesa: con los documentos aceptados y con acceso.

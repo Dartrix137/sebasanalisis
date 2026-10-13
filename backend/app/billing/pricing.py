@@ -129,6 +129,57 @@ def _discount(plan: PlanPrice, coupon: CouponTerms) -> int:
     return coupon.value
 
 
+@dataclass(frozen=True)
+class RenewalDiscount:
+    """El descuento de la suscripcion, tal como quedo al suscribirse."""
+
+    kind: CouponKind
+    value: int
+    #: Solo con monto fijo.
+    currency: str | None
+    #: Periodos que todavia llevan descuento. None = todos (cupon `forever`).
+    periods_remaining: int | None
+
+
+def renewal_quote(price_cents: int, currency: str, discount: RenewalDiscount | None) -> Quote:
+    """Cuanto se cobra por el periodo siguiente de una suscripcion.
+
+    Parte del precio CONGELADO de la suscripcion (§3.7), no del precio de hoy
+    del plan. El cupon no se vuelve a validar: lo que se prometio al
+    suscribirse se cumple aunque despues se desactive o venza. Lo unico que
+    cuenta es si quedan periodos con descuento (§3.5).
+
+    Un descuento que dejaria el total en cero o menos no se aplica: un cobro de
+    cero no se puede procesar.
+    """
+    if price_cents <= 0:
+        raise ValueError("El precio de la suscripcion debe ser mayor que cero")
+    amount = 0
+    if discount is not None and (
+        discount.periods_remaining is None or discount.periods_remaining > 0
+    ):
+        if discount.kind is CouponKind.percent:
+            amount = percent_discount(price_cents, discount.value)
+        elif discount.currency == currency:
+            amount = discount.value
+        if amount >= price_cents:
+            amount = 0
+    return Quote(
+        subtotal_cents=price_cents,
+        discount_cents=amount,
+        total_cents=price_cents - amount,
+        currency=currency,
+        coupon_rejection=None,
+    )
+
+
+def periods_remaining_after_renewal(periods_remaining: int | None) -> int | None:
+    """Los periodos con descuento que quedan despues de una renovacion aprobada."""
+    if periods_remaining is None:
+        return None
+    return max(periods_remaining - 1, 0)
+
+
 def quote(plan: PlanPrice, coupon: CouponTerms | None, now: datetime) -> Quote:
     """Cuanto se cobra por un periodo del plan.
 

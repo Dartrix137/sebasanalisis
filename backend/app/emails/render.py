@@ -28,6 +28,11 @@ SUBJECTS: dict[str, str] = {
     "account_deleted": "Tu cuenta de Sebasanálisis fue eliminada",
     "subscription_welcome": "Tu suscripción a Sebasanálisis está activa",
     "payment_receipt": "Recibo de tu pago en Sebasanálisis",
+    "renewal_notice": "Aviso: próximo cobro de tu suscripción a Sebasanálisis",
+    "period_ending": "Tu acceso a Sebasanálisis está por terminar",
+    "payment_failed": "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis",
+    "subscription_expired": "Tu suscripción a Sebasanálisis venció",
+    "subscription_canceled": "Cancelaste la renovación de tu suscripción a Sebasanálisis",
 }
 
 _MONTHS = (

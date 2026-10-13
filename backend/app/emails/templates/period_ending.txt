@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Tu acceso a Sebasanálisis con el plan {{ plan_name }} va hasta el {{ period_end | fecha }}. Tu plan es de pago manual: no se renueva solo y no te vamos a hacer ningún cobro.
+
+Si quieres seguir, paga el siguiente período ({{ amount_cents | money(currency) }}) antes de esa fecha. El período nuevo empieza cuando termine el actual, así que no pierdes días.
+
+Pagar el siguiente período: {{ url }}
+
+Si no pagas, tu acceso termina ese día. Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.
+{% endblock %}

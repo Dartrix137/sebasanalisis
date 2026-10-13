@@ -165,7 +165,7 @@ def get_user(user_id: UUID, db: DbSession, admin: AdminUser) -> AdminUserDetailR
     return AdminUserDetailResponse(
         user=user_response(db, user, now),
         subscription=(
-            subscription_response(subscription, now) if subscription is not None else None
+            subscription_response(db, subscription, now) if subscription is not None else None
         ),
         payments=[admin_payment_response(p) for p in payments],
         consents=list_consents(db, user.id),

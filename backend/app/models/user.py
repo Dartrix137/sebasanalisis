@@ -151,12 +151,17 @@ class Subscription(Base):
     )
     # Referencia de la fuente de pago en el proveedor. Nunca datos de tarjeta.
     payment_source_id: Mapped[str | None] = mapped_column(String(255))
+    # CARD o NEQUI. Las cuotas solo se mandan al cobrar si es una tarjeta.
+    payment_source_type: Mapped[str | None] = mapped_column(String(16))
     card_brand: Mapped[str | None] = mapped_column(String(50))
     card_last4: Mapped[str | None] = mapped_column(String(4))
     next_charge_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retry_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # El `current_period_end` del periodo cuyo aviso por correo ya se envio:
+    # el aviso sale una vez por periodo aunque el job corra cada hora (§3.8).
+    notice_sent_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

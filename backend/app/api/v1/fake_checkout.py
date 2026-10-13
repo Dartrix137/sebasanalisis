@@ -39,6 +39,17 @@ def _check_redirect(redirect_url: str) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="redirect_url inválida")
 
 
+@router.get("/{documento}", response_class=HTMLResponse)
+def fake_contract(_: FakeProvider, documento: Literal["terminos", "datos"]) -> str:
+    """Hace de contrato del procesador de pagos en la pasarela simulada."""
+    titulo = "Términos de uso" if documento == "terminos" else "Tratamiento de datos personales"
+    return (
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        f"<title>{titulo}</title></head><body><h1>{titulo}</h1>"
+        "<p>Documento de la pasarela simulada. Solo desarrollo y pruebas.</p></body></html>"
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def fake_checkout_page(
     _: FakeProvider,

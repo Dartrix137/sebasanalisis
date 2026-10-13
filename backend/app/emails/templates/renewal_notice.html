@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Te avisamos con tiempo: el <strong>{{ charge_at | fecha }}</strong> vamos a cobrar
+  <strong>{{ amount_cents | money(currency) }}</strong> a {{ source_label }}, por el siguiente
+  período de tu plan <strong>{{ plan_name }}</strong>.
+</p>
+<p style="margin:0 0 12px 0;">
+  Si no quieres ese cobro, cancela la renovación antes de esa fecha desde el apartado de
+  suscripción de tu cuenta. Conservas el acceso hasta que termine el período que ya pagaste.
+</p>
+{{ button(url, "Ver mi suscripción") }}
+<p style="margin:0;">Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. La fecha va en hora de Colombia.</p>
+{% endblock %}

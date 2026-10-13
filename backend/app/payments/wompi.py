@@ -13,6 +13,9 @@ leer la pagina que corresponde; nunca de memoria (CLAUDE.md, "Pagos con Wompi").
 - Eventos (webhooks) y su checksum: https://docs.wompi.co/docs/colombia/eventos/
 - Consulta de una transaccion:
   https://docs.wompi.co/docs/colombia/seguimiento-de-transacciones/
+- Fuentes de pago (tokenizar, guardar el medio y cobrarle):
+  https://docs.wompi.co/docs/colombia/fuentes-de-pago/
+- Tokens de aceptacion: https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
 
 El pago manual usa el Web Checkout: el cliente paga en la pagina de Wompi con
 cualquier medio que el comercio tenga habilitado en su panel. Por aqui no pasa
@@ -31,9 +34,14 @@ import httpx
 
 from app.core.config import Settings
 from app.payments.base import (
+    Acceptance,
     PaymentProviderError,
+    PaymentSource,
+    PaymentSourceRejected,
+    PaymentSourceType,
     ProviderEvent,
     ProviderTransaction,
+    TokenizerInfo,
     TransactionStatus,
     unverified_event,
 )
@@ -287,32 +295,178 @@ class WompiProvider:
     def fetch_transaction(self, transaction_id: str) -> ProviderTransaction | None:
         # GET /v1/transactions/{id} con la llave privada como Bearer: sin ella
         # (o con la publica) Wompi responde 404.
-        try:
-            with httpx.Client(transport=self._transport, timeout=HTTP_TIMEOUT_SECONDS) as client:
-                response = client.get(
-                    f"{self.api_base_url}/transactions/{transaction_id}",
-                    headers={"Authorization": f"Bearer {self._private_key}"},
-                )
-        except httpx.HTTPError as exc:
-            raise PaymentProviderError(f"Wompi no respondio: {type(exc).__name__}") from exc
+        response = self._request("GET", f"/transactions/{transaction_id}", private=True)
         if response.status_code == 404:
             return None
         if response.status_code != 200:
             raise PaymentProviderError(f"Wompi respondio {response.status_code}")
+        return _transaction(response)
+
+    def tokenizer(self) -> TokenizerInfo | None:
+        # El widget de Wompi en modo tokenizacion: el cliente escribe su tarjeta
+        # (o aprueba Nequi) en la ventana de Wompi y el navegador recibe un token.
+        return TokenizerInfo(kind="wompi_widget", public_key=self.public_key)
+
+    def acceptance(self) -> Acceptance:
+        # Documentacion ("Tokens de aceptacion", consultada el 2026-10-13):
+        # GET /merchants/info con la llave publica en la cabecera
+        # `x-merchant-public-key`. La ruta anterior, con la llave en la URL, deja
+        # de existir el 2026-10-31.
+        response = self._request(
+            "GET", "/merchants/info", headers={"x-merchant-public-key": self.public_key}
+        )
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Wompi respondio {response.status_code}")
         try:
             data = response.json()["data"]
-            status = _STATUSES[data["status"]]
-            amount = data["amount_in_cents"]
-            if isinstance(amount, bool) or not isinstance(amount, int):
-                raise TypeError("amount_in_cents no es un entero")
-            message = data.get("status_message")
-            return ProviderTransaction(
-                id=str(data["id"]),
-                reference=str(data["reference"]),
-                status=status,
-                amount_cents=amount,
-                currency=str(data["currency"]),
-                status_message=message if isinstance(message, str) else None,
+            terms = data["presigned_acceptance"]
+            personal = data["presigned_personal_data_auth"]
+            return Acceptance(
+                acceptance_token=str(terms["acceptance_token"]),
+                terms_url=str(terms["permalink"]),
+                personal_data_token=str(personal["acceptance_token"]),
+                personal_data_url=str(personal["permalink"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise PaymentProviderError("Respuesta de Wompi que no se entiende") from exc
+
+    def create_payment_source(
+        self,
+        *,
+        source_type: PaymentSourceType,
+        token: str,
+        customer_email: str,
+        acceptance_token: str,
+        personal_data_token: str,
+    ) -> PaymentSource:
+        # Documentacion ("Fuentes de pago"): POST /payment_sources con la llave
+        # privada. `acceptance_token` es el de la politica de privacidad y
+        # `accept_personal_auth` el de tratamiento de datos personales.
+        response = self._request(
+            "POST",
+            "/payment_sources",
+            private=True,
+            json={
+                "type": source_type,
+                "token": token,
+                "customer_email": customer_email,
+                "acceptance_token": acceptance_token,
+                "accept_personal_auth": personal_data_token,
+            },
+        )
+        if response.status_code in (400, 404, 422):
+            # Token vencido, ya usado, o un Nequi que el cliente no aprobo.
+            raise PaymentSourceRejected("Wompi no acepto el medio de pago")
+        if response.status_code not in (200, 201):
+            raise PaymentProviderError(f"Wompi respondio {response.status_code}")
+        try:
+            data = response.json()["data"]
+            if data.get("status") != "AVAILABLE":
+                raise PaymentSourceRejected("El medio de pago no quedo disponible")
+            public = data.get("public_data")
+            public = public if isinstance(public, dict) else {}
+            return PaymentSource(
+                id=str(data["id"]),
+                type=source_type,
+                # Solo para mostrar "Visa •••• 4242". Si Wompi no los manda, no se muestran.
+                brand=_short(public.get("brand"), 50),
+                last4=_last4(public.get("last_four")),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PaymentProviderError("Respuesta de Wompi que no se entiende") from exc
+
+    def charge(
+        self,
+        *,
+        reference: str,
+        amount_cents: int,
+        currency: str,
+        customer_email: str,
+        source: PaymentSource,
+    ) -> ProviderTransaction:
+        # Documentacion ("Fuentes de pago"): POST /transactions con la llave
+        # privada, `payment_source_id` y la firma de integridad, que es la misma
+        # del Web Checkout. `installments` solo va si la fuente es una tarjeta.
+        # `recurrent: true` es un cobro periodico de monto fijo (COF): Wompi lo
+        # ignora si la franquicia o el procesador no lo admiten.
+        body: dict[str, Any] = {
+            "amount_in_cents": amount_cents,
+            "currency": currency,
+            "signature": integrity_signature(
+                reference, amount_cents, currency, self._integrity_secret
+            ),
+            "customer_email": customer_email,
+            "reference": reference,
+            "payment_source_id": int(source.id) if source.id.isdigit() else source.id,
+            "recurrent": True,
+        }
+        if source.type == "CARD":
+            body["payment_method"] = {"installments": 1}
+        response = self._request("POST", "/transactions", private=True, json=body)
+        if response.status_code not in (200, 201):
+            raise PaymentProviderError(f"Wompi respondio {response.status_code}")
+        return _transaction(response)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        private: bool = False,
+        headers: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        all_headers = dict(headers or {})
+        if private:
+            all_headers["Authorization"] = f"Bearer {self._private_key}"
+        try:
+            with httpx.Client(transport=self._transport, timeout=HTTP_TIMEOUT_SECONDS) as client:
+                return client.request(
+                    method, f"{self.api_base_url}{path}", headers=all_headers, json=json
+                )
+        except httpx.HTTPError as exc:
+            # Sin el mensaje original: puede traer la URL o cabeceras.
+            raise PaymentProviderError(f"Wompi no respondio: {type(exc).__name__}") from exc
+
+
+def _transaction(response: httpx.Response) -> ProviderTransaction:
+    try:
+        data = response.json()["data"]
+        status = _STATUSES[data["status"]]
+        amount = data["amount_in_cents"]
+        if isinstance(amount, bool) or not isinstance(amount, int):
+            raise TypeError("amount_in_cents no es un entero")
+        message = data.get("status_message")
+        return ProviderTransaction(
+            id=str(data["id"]),
+            reference=str(data["reference"]),
+            status=status,
+            amount_cents=amount,
+            currency=str(data["currency"]),
+            status_message=message if isinstance(message, str) else None,
+            card_brand=_card_brand(data),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PaymentProviderError("Respuesta de Wompi que no se entiende") from exc
+
+
+def _card_brand(data: dict[str, Any]) -> str | None:
+    """La marca de la tarjeta de una transaccion.
+
+    La fuente de pago no la trae: en el sandbox, el 2026-10-13, su `public_data`
+    solo tenia `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`.
+    La transaccion si, en `payment_method.extra.brand`.
+    """
+    method = data.get("payment_method")
+    if not isinstance(method, dict) or method.get("type") != "CARD":
+        return None
+    extra = method.get("extra")
+    return _short(extra.get("brand"), 50) if isinstance(extra, dict) else None
+
+
+def _short(value: Any, length: int) -> str | None:
+    return value[:length] if isinstance(value, str) and value else None
+
+
+def _last4(value: Any) -> str | None:
+    return value if isinstance(value, str) and len(value) == 4 and value.isdigit() else None
