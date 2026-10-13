@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Recibimos tu pago y tu suscripción al plan <strong>{{ plan_name }}</strong> quedó activa.
+  Tienes acceso a la plataforma hasta el <strong>{{ period_end | fecha }}</strong>.
+</p>
+{{ button(url, "Ir a la mesa") }}
+<p style="margin:0 0 12px 0;">
+  Este plan no se renueva solo ni guarda tu medio de pago. Si quieres seguir después de esa
+  fecha, paga el siguiente período desde la página de planes antes de que venza: los días que
+  te queden no se pierden.
+</p>
+<p style="margin:0;">
+  La suscripción da acceso a la herramienta. No cambia el resultado de ningún juego.
+</p>
+{% endblock %}

@@ -10,7 +10,7 @@ from app.models.legal import LegalDocument, UserConsent
 from app.models.performance import SessionPerformance
 from app.models.spin import Spin
 from app.models.suggestion import BankrollSuggestion, StatisticalSuggestion
-from app.models.user import PaymentEvent, Subscription, User
+from app.models.user import Payment, PaymentEvent, Subscription, User
 from app.models.user_token import UserToken
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "GameVariant",
     "GameSession",
     "LegalDocument",
+    "Payment",
     "PaymentEvent",
     "Plan",
     "SessionPerformance",

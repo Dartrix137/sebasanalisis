@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi)
+3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12)
 4. [Admin dashboard](#4-admin-dashboard)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -306,7 +306,7 @@ Bienvenida al activar, recibo de cada cobro aprobado, cobro fallido con enlace p
 - Uno por período: el job de renovaciones lo marca como enviado para no repetirlo en cada corrida.
 - No se envía a una suscripción cancelada, porque ya no se le va a cobrar.
 - En el pago manual mes a mes el aviso es el de §3.10: que el período está por vencer y cómo pagar el siguiente.
-- **Por definir en el paso 5**: con cuántos días de anticipación. Propuesta: 7 días antes del cobro.
+- **Definido el 2026-10-13: 7 días antes del cobro.** Se construye en la entrega 2 del paso 5.
 
 ### 3.9 Tests de aceptación
 
@@ -347,7 +347,7 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 - **Manual mes a mes**: el usuario paga un período cada vez, sin tokenizar nada. El pago aprobado fija o extiende `current_period_end`; no hay cobro automático ni reintentos. Antes del vencimiento se le avisa por correo para que pague el siguiente; si no paga, el acceso cae en `current_period_end`, igual que una suscripción vencida.
 - El control de acceso no cambia: `has_access` ya decide por `status` y `current_period_end` (§2.2 n.º 6), sin importar cómo se pagó el período.
 - Las reglas no negociables de §3.1 aplican igual a los dos modos: firma verificada, reconsulta de la transacción, idempotencia, montos en centavos y acceso decidido en el servidor.
-- Por definir en el paso 5: cómo se representa el modo en `subscriptions` (por ejemplo un campo `renewal_mode`), si un pago manual hecho antes del vencimiento extiende desde `current_period_end` o desde la fecha de pago, y cómo se pasa de un modo al otro.
+- **Definido el 2026-10-13 (§3.12)**: el modo es `subscriptions.renewal_mode`, un pago hecho antes del vencimiento extiende desde `current_period_end`, y se pasa de un modo al otro sobre la misma suscripción (entrega 3). Lo que este punto dejaba abierto: cómo se representa el modo en `subscriptions` (por ejemplo un campo `renewal_mode`), si un pago manual hecho antes del vencimiento extiende desde `current_period_end` o desde la fecha de pago, y cómo se pasa de un modo al otro.
 
 **Pasarela**
 
@@ -406,6 +406,85 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 - `tests/billing/`: 59 tests del módulo puro, sin base de datos (redondeo, cada motivo, el orden de los motivos, el total que nunca llega a cero, los códigos).
 - `tests/api/test_billing.py` y `tests/api/test_admin_billing.py`: cada caso de cupón del "hecho cuando" de §9 por el endpoint (vencido, agotado, de otro plan, ya usado por el usuario, de otra moneda, inactivo), el monto enviado por el cliente que se ignora, el límite de intentos, y el admin con su bitácora.
 - Playwright (`e2e/plans.spec.ts`): una cuenta sin acceso ve `/planes` con el precio; la página se ve sin sesión; el administrador crea, edita y desactiva un plan y un cupón, y los cambios aparecen en la bitácora.
+
+### 3.12 Wompi, entrega 1: cómo quedó construido (2026-10-13)
+
+Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook y reconsulta (rama `fase-4-paso-5a-alta-y-webhook`). La tokenización y la renovación automática son de la entrega 2; cancelar, `/cuenta`, el admin de pagos y la prueba en el sandbox, de la 3. **El paso 5 no está cerrado.**
+
+**No se probó contra Wompi.** Al construirlo no había llaves de sandbox ni la confirmación escrita de Wompi sobre la categoría de negocio y las tarjetas internacionales (§3.10). Todo está probado contra el código de Wompi de este repositorio con respuestas simuladas; lo que eso no puede demostrar está al final de esta sección.
+
+**Decisiones del usuario (2026-10-13)**
+
+- **El pago manual usa el Web Checkout de Wompi**: el cliente paga en la página de Wompi con cualquier medio que el comercio tenga habilitado en su panel (cierra §10 n.º 3). Qué medios se ofrecen se enciende o se apaga en Wompi, no en el código, y por la aplicación no pasa ningún dato de tarjeta ni de cuenta.
+- **Un pago hecho antes del vencimiento extiende desde `current_period_end`**; uno hecho después, o el primero, cuenta desde el momento del pago.
+- **`subscriptions.renewal_mode`** (`manual` | `automatic`) representa el modo. En esta entrega toda suscripción nace `manual`. Pasar de un modo al otro será cambiar ese campo sobre la misma suscripción, sin perder el período (entrega 3).
+- **Los dos planes se ofrecen en los dos modos.** El pago manual del bimestral compra dos meses.
+- **Aviso antes del cobro automático: 7 días** (entrega 2).
+- **La nota de la tasa de cambio se repite** en la pantalla de pago y en el recibo, mientras el abogado decide.
+- **Al eliminar una cuenta se conservan los pagos anonimizados**: las filas de `payments` y `payment_events` quedan sin usuario; la suscripción se borra. Las llaves foráneas ya quedaron así; el flujo completo (cancelar la renovación antes de borrar) es de la entrega 3.
+- **`/planes` con sesión**: un administrador o una cuenta con acceso manual (`full`, `invited`) ve los planes sin botón de pago; un suscriptor ve su plan marcado "Tu plan actual", con la fecha hasta la que tiene acceso y el botón de pagar el período siguiente solo en ese plan.
+- De §10 no cambia nada más: no hay facturación electrónica (n.º 4), el precio no se traslada a las suscripciones vigentes (n.º 5) y los reembolsos son manuales en el panel de Wompi (n.º 7).
+
+**Proveedor de pagos (`backend/app/payments/`)**
+
+- `PaymentProvider` (`base.py`) es la interfaz, como `EmailSender`: `checkout_url`, `parse_event`, `fetch_transaction` y `describe`. La aplicación no menciona a Wompi fuera de `payments/wompi.py`, salvo en la ruta del webhook.
+- `WompiProvider` (`wompi.py`) lleva en su encabezado las URL de la documentación oficial y la fecha de consulta (2026-10-13). Siguiendo §3.1, este documento no describe los algoritmos de firma: están en el código, con su fuente, y los fijan los tests de `tests/payments/`.
+- `UnconfiguredPaymentProvider`: `PAYMENT_PROVIDER=wompi` sin llaves. El pago queda apagado y `/planes` se ve como antes de este paso.
+- `FakePaymentProvider` (`fake.py`): pasarela simulada para desarrollo y para Playwright. El botón de pagar lleva a una página de la propia API (`/dev/fake-checkout`, fuera del OpenAPI y `404` con cualquier otro proveedor) con "aprobar" y "rechazar". No se usa con llaves de producción: la API no arranca.
+- **Las llaves se validan al arrancar**: las cuatro presentes, todas del mismo ambiente (por su prefijo) y `WOMPI_API_BASE_URL`, si se pone, la de ese ambiente. Si no, la API no arranca y el error dice qué variable, nunca su valor. El log de arranque dice el ambiente (§12).
+- `httpx` pasó de dependencia de desarrollo a dependencia de la API: es con lo que se reconsulta a Wompi.
+
+**Datos**
+
+- Tres migraciones, como en el paso 3: DDL que no depende de los datos, la de datos, y el DDL que cierra (`NOT NULL`, `CHECK`, índice único parcial, retiro de `plan_code_legacy` y `payment_token_ref`). La de datos se detiene, sin inventar nada, si encuentra una suscripción con un plan que no existe, con un estado que el modelo no admite, o dos suscripciones vivas de una misma cuenta.
+- `subscriptions` queda como en §3.2, más `renewal_mode`. **Índice único parcial `uq_subscriptions_one_live_per_user`**: una cuenta no tiene dos suscripciones `pending`, `active` o `past_due` a la vez.
+- `payments` lleva, además de lo previsto en §3.2, **`plan_id`, `coupon_id` y `provider`**: una cuenta puede abrir el pago de un plan, devolverse y abrir el de otro, y lo que se compró lo dice el pago que se aprueba, no la suscripción pendiente. `period_start` y `period_end` son nulos hasta que el pago se aprueba, porque en el pago manual el período depende de cuándo se paga.
+- `payment_events`: `subscription_id` nullable, `payment_id`, `event_type`, `processed_at` y `created_at`. Las llaves a la suscripción y al pago son `SET NULL`.
+- `coupon_redemptions.user_id` sigue en `CASCADE`: se revisa en la entrega 3, con el borrado de la cuenta.
+
+**Alta (`POST /billing/subscriptions`)**
+
+- Recibe `{plan_id, coupon_code?}` y responde `202` con `payment_id`, `checkout_url` y el desglose. No recibe `card_token` ni `acceptance_token` (§11 los listaba): eso es de la entrega 2. Cualquier otro campo, un monto incluido, se ignora.
+- Requisitos, con el motivo en `detail.code`: cuenta activa (`403 suspended`), correo confirmado (`403 email_not_verified`), documentos aceptados (`403 consent_required`), y que la cuenta no tenga ya acceso por ser administrador o por acceso manual (`409 already_has_access`). Sin pasarela, `503 payments_unavailable`.
+- **Un cupón que no aplica rechaza el pago** (`400 coupon_rejected`, con `reason` y mensaje), a diferencia de la cotización, donde no es un error: cobrar el precio completo a quien escribió un código sería una sorpresa.
+- Con una suscripción pagada y vigente, el pago es del período siguiente: mismo plan (`409 other_plan` si no), **precio congelado** de la suscripción y sin cupón (`400 coupon_only_on_first_payment`). Con el período ya vencido es un alta nueva: cualquier plan, al precio de hoy.
+- Cada intento crea un `payment` con una referencia nueva (`SA-…`): Wompi rechaza una referencia repetida. Una suscripción que nunca se pagó se reutiliza; no se acumulan filas `pending`.
+- Límite: 10 intentos cada 15 minutos por cuenta, más el de códigos de cupón de la cotización.
+- `GET /billing/availability` (pública) dice si hay pasarela; `GET /billing/subscription` devuelve la suscripción de la cuenta con `in_force` (si el período pagado sigue vigente, según el reloj del servidor) o `null`.
+
+**Confirmación del pago**
+
+- **Una sola función mueve un pago y su suscripción**: `core/subscriptions.apply_transaction`, y solo con una transacción que salió de reconsultar a Wompi. La usan el webhook y `GET /billing/payments/:id`.
+- `POST /webhooks/wompi`: (1) guarda todo evento, con firma válida o no; (2) sin firma válida responde `401` y no reconsulta nada; (3) con firma válida reconsulta la transacción por su id y aplica **esa** respuesta, no el cuerpo del evento. La referencia con la que se busca el pago es la de la respuesta de Wompi, no la del evento.
+- **Idempotencia en dos capas.** `payment_events.provider_event_id`: Wompi no manda un id de evento, así que se usa el checksum verificado, que es el mismo en cada reintento. Un evento sin firma válida recibe un id de otro espacio de nombres (`wompi:invalid:…`), para que uno falsificado no pueda ocupar el id de uno auténtico. Y el pago mismo: se resuelve una sola vez, con la fila bloqueada, llegue lo que llegue después.
+- Si Wompi no responde a la reconsulta, el webhook contesta `502`, el evento queda sin procesar y el reintento de Wompi lo retoma.
+- Una transacción aprobada por un monto o una moneda distintos a los del pago no concede nada: el pago queda en `error`.
+- `GET /billing/payments/:id` acepta `?transaction_id=`, que es el `id` que Wompi agrega a la URL de regreso. Viene del navegador: solo sirve para saber qué reconsultar, y la respuesta se aplica solo si su referencia es la de ese pago.
+- El pago aprobado activa la suscripción, fija el período, registra la redención del cupón (una por cuenta) y sube `redemptions_count` en SQL. `discount_periods_remaining` queda listo para las renovaciones: 0 con `once`, `duration_periods − 1` con `repeating`, nulo con `forever`.
+- **`users.access_type` no se toca**: el acceso sale de la suscripción, por `has_access`, que no cambió.
+- Correos: bienvenida al activar y recibo de cada cobro aprobado, solo en la llamada que resolvió el pago. El recibo dice que es una constancia de pago, no una factura.
+
+**Frontend**
+
+- `/planes`: el botón depende de la cuenta (ver "Decisiones"). Una cuenta con documentos por aceptar tampoco ve el botón: no podría pagar, y el aviso de la página la lleva a aceptarlos.
+- `/planes/pagar?plan=…`: resumen, campo de cupón, total del servidor, la nota de la tasa de cambio y el botón que lleva a Wompi. Sin correo confirmado el botón está apagado.
+- `/pago/:id`: a donde vuelve el cliente. Consulta el pago cada 3 segundos, unos dos minutos, y muestra lo que responda el servidor; si sigue pendiente, lo dice y deja de consultar sola.
+
+**Tests**
+
+- `tests/payments/test_wompi.py` y `tests/billing/test_periods.py`: firmas, lectura de eventos, reconsulta, validación de llaves y cálculo de períodos, sin base ni red.
+- `tests/api/test_subscriptions.py`: usa el `WompiProvider` de verdad con un transporte HTTP que responde desde un diccionario, así que pasa por la verificación de firma real sin salir a la red. De §3.9, en verde los que tocan esta entrega: firma inválida, evento duplicado, transacción declinada, suscripción vencida, reconsulta que contradice al evento, referencia desconocida, monto enviado por el cliente y cupón rechazado con motivo. Además: cuenta sin correo confirmado (§5.8) y una sola redención por pago aprobado.
+- Playwright (`e2e/subscribe.spec.ts`): una cuenta sin acceso se suscribe con cupón en la pasarela simulada y entra a la mesa; pago rechazado; sin correo confirmado; el administrador no ve la opción de suscribirse.
+
+**Lo que queda sin probar o sin hacer**
+
+- **Nada se probó contra el sandbox de Wompi.** En particular: que el Web Checkout acepte la firma de integridad tal como se arma, que `redirect-url` vuelva con `?id=`, la forma real del evento y de la respuesta de `GET /transactions/:id`, y qué medios muestra el checkout. Se prueba a mano con llaves de sandbox y se anota en `DESPLIEGUE.md` (entrega 3).
+- La documentación de Wompi no describe una consulta por referencia. Si el cliente no vuelve del checkout y el webhook no llega, el pago queda `pending` hasta que llegue un evento.
+- **Un pago aprobado que después se anula o se reembolsa no quita el acceso**: el pago ya está resuelto y el evento posterior no lo mueve. Hoy se corrige a mano; el admin de pagos es de la entrega 3 y del paso 6.
+- **Una renovación manual no aplica todavía el descuento de un cupón `repeating` o `forever`**: cobra el precio congelado completo. Lo corrige la entrega 2; hasta entonces no conviene crear cupones de esas duraciones.
+- No se usa `expiration-time` en el checkout: un pago abierto se puede completar más tarde, al precio con que se abrió.
+- `past_due` no da acceso en `has_access` (hoy nadie pone ese estado). La entrega 2 decide cómo se lee mientras hay reintentos.
+- La exportación de datos de la cuenta (`GET /auth/me/export`) sigue devolviendo `payments` vacío: entra con el historial de pagos de la entrega 3.
 
 ---
 
@@ -814,7 +893,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 |---|---|---|
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
-| 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. Cuáles se habilitan se decide en el paso 5, con la documentación vigente de Wompi. |
+| 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
@@ -843,6 +922,7 @@ Legal:     GET  /legal/:kind                 (última versión publicada, públi
 
 Billing:   GET  /plans                       (pública)
            POST /billing/quote               {plan_id, coupon_code?}   (con sesión)
+           GET  /billing/availability        (pública: si hay pasarela configurada)
            GET  /billing/acceptance          (acceptance token y enlace de términos de Wompi)
            POST /billing/subscriptions       {plan_id, coupon_code?, card_token, acceptance_token}
            GET  /billing/subscription
@@ -890,7 +970,9 @@ Se agregan a `backend/.env.example` (solo nombres) y a la sección de variables 
 | `WOMPI_PRIVATE_KEY` | Llave privada: crear fuentes de pago, cobrar, reconsultar transacciones. |
 | `WOMPI_EVENTS_SECRET` | Verificación del checksum de los webhooks. |
 | `WOMPI_INTEGRITY_SECRET` | Firma de integridad de las transacciones. |
-| `WOMPI_API_BASE_URL` | Sandbox o producción. |
+| `WOMPI_API_BASE_URL` | Sandbox o producción. Opcional: se deduce de las llaves; si se pone, debe ser la de su ambiente. |
+| `PAYMENT_PROVIDER` | `wompi` (por defecto) \| `fake`, una pasarela simulada solo para desarrollo y tests de punta a punta (§3.12). |
+| `API_PUBLIC_URL` | Solo con `PAYMENT_PROVIDER=fake`: dónde responde la API, para el enlace de la pasarela simulada. |
 | `FORWARDED_ALLOW_IPS` | Direcciones del proxy de Dokploy de las que uvicorn acepta `X-Forwarded-For` (§13.1). |
 | `SENTRY_DSN` | DSN del proyecto de la API en GlitchTip (§13.6). Vacío = desactivado (desarrollo y tests). |
 | `NEXT_PUBLIC_SENTRY_DSN` | DSN del proyecto del frontend en GlitchTip. Va como build argument, igual que `NEXT_PUBLIC_API_BASE_URL`. |

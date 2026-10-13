@@ -1,16 +1,21 @@
-"""Planes y cotizacion (docs/PLATAFORMA_COMPLETA.md §3.3).
+"""Planes, cotizacion, alta y estado del pago (docs/PLATAFORMA_COMPLETA.md §3.3 y §3.4).
 
 El precio lo calcula siempre el servidor, con `app.billing.pricing.quote`. El
 cliente manda el plan y, si tiene, un codigo: nunca un monto.
 
-Aqui no se cobra ni se redime ningun cupon: eso llega con el paso 5. Este
-router NO exige `RequireAccess`: quien cotiza es justo quien todavia no tiene
-acceso.
+Este router NO exige `RequireAccess`: quien cotiza y paga es justo quien todavia
+no tiene acceso. El pago en si ocurre en la pagina del proveedor; aqui se abre
+(`POST /billing/subscriptions`) y se consulta como termino
+(`GET /billing/payments/:id`). Lo que mueve una suscripcion es
+`core/subscriptions.apply_transaction`, la misma funcion que usa el webhook.
 """
 
+import logging
 from datetime import UTC, datetime
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
@@ -18,38 +23,45 @@ from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.pricing import CouponRejection
-from app.core import rate_limit
+from app.core import rate_limit, subscriptions
 from app.core.config import get_settings
-from app.models import Coupon, CouponRedemption, Plan, User
-from app.schemas.billing import PlanResponse, QuoteCoupon, QuoteRequest, QuoteResponse
+from app.core.email import EmailSender, get_email_sender, send_safely
+from app.core.subscriptions import COUPON_MESSAGES, Settlement, SubscribeError, coupon_terms
+from app.emails import build_email
+from app.models import Coupon, Payment, Plan, User
+from app.payments.base import PaymentProvider, PaymentProviderError, get_payment_provider
+from app.schemas.billing import (
+    BillingAvailabilityResponse,
+    PaymentResponse,
+    PlanResponse,
+    QuoteCoupon,
+    QuoteRequest,
+    QuoteResponse,
+    SubscribeRequest,
+    SubscribeResponse,
+    SubscriptionResponse,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["billing"])
+
+EmailSenderDep = Annotated[EmailSender, Depends(get_email_sender)]
+PaymentProviderDep = Annotated[PaymentProvider, Depends(get_payment_provider)]
 
 _MINUTE = 60
 _HOUR = 60 * _MINUTE
 
 _TOO_MANY_CODES = "Demasiados intentos con códigos. Intenta de nuevo más tarde."
-
-# Lo que se le dice al cliente por cada motivo. Ninguno promete nada.
-COUPON_MESSAGES: dict[CouponRejection, str] = {
-    CouponRejection.not_found: "Ese código no existe.",
-    CouponRejection.inactive: "Ese cupón ya no está disponible.",
-    CouponRejection.not_started: "Ese cupón todavía no está vigente.",
-    CouponRejection.expired: "Ese cupón ya venció.",
-    CouponRejection.exhausted: "Ese cupón ya no tiene cupos.",
-    CouponRejection.other_plan: "Ese cupón no aplica a este plan.",
-    CouponRejection.currency_mismatch: "Ese cupón no aplica a la moneda de este plan.",
-    CouponRejection.already_used: "Ya usaste ese cupón.",
-    CouponRejection.covers_total: "Ese cupón no se puede usar con este plan.",
-}
+_TOO_MANY_PAYMENTS = "Demasiados intentos de pago. Intenta de nuevo más tarde."
 
 
 def _limit_coupon_attempts(user: User, request: Request) -> None:
-    """Limite de intentos de la cotizacion CON codigo (§5.7.1).
+    """Limite de intentos con codigo, al cotizar y al pagar (§5.7.1).
 
-    Sin el, la cotizacion serviria para adivinar codigos: responde si existe.
-    Por cuenta y por IP, porque crear cuentas es gratis. Una cotizacion sin
-    codigo no cuenta. En memoria, como el resto de `core/rate_limit`.
+    Sin el, serviria para adivinar codigos: la respuesta dice si existe. Por
+    cuenta y por IP, porque crear cuentas es gratis. Un intento sin codigo no
+    cuenta. En memoria, como el resto de `core/rate_limit`.
     """
     if not get_settings().rate_limit_enabled:
         return
@@ -62,28 +74,8 @@ def _limit_coupon_attempts(user: User, request: Request) -> None:
         )
 
 
-def coupon_terms(db: DbSession, coupon: Coupon, user: User) -> pricing.CouponTerms:
-    """Lo que `pricing.quote` necesita saber de un cupon para esta cuenta."""
-    already_used = (
-        db.scalar(
-            select(CouponRedemption.id).where(
-                CouponRedemption.coupon_id == coupon.id, CouponRedemption.user_id == user.id
-            )
-        )
-        is not None
-    )
-    return pricing.CouponTerms(
-        kind=pricing.CouponKind(coupon.kind),
-        value=coupon.value,
-        currency=coupon.currency,
-        active=coupon.active,
-        valid_from=coupon.valid_from,
-        valid_until=coupon.valid_until,
-        max_redemptions=coupon.max_redemptions,
-        redemptions_count=coupon.redemptions_count,
-        plan_ids=frozenset(str(p.id) for p in coupon.plans),
-        already_used_by_user=already_used,
-    )
+def _frontend_url(path: str) -> str:
+    return f"{get_settings().frontend_base_url.rstrip('/')}{path}"
 
 
 @router.get("/plans", response_model=list[PlanResponse])
@@ -92,6 +84,12 @@ def list_plans(db: DbSession) -> list[Plan]:
     return list(
         db.scalars(select(Plan).where(Plan.active.is_(True)).order_by(Plan.sort_order, Plan.code))
     )
+
+
+@router.get("/billing/availability", response_model=BillingAvailabilityResponse)
+def availability(provider: PaymentProviderDep) -> BillingAvailabilityResponse:
+    """Si se puede pagar. Publico: /planes lo usa para encender el boton."""
+    return BillingAvailabilityResponse(enabled=provider.enabled)
 
 
 @router.post("/billing/quote", response_model=QuoteResponse)
@@ -135,4 +133,202 @@ def quote(
         total_cents=result.total_cents,
         currency=result.currency,
         coupon=quote_coupon,
+    )
+
+
+# ---------- Alta y pago manual de un periodo ----------
+
+
+@router.post(
+    "/billing/subscriptions",
+    response_model=SubscribeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def subscribe(
+    payload: SubscribeRequest,
+    user: CurrentUser,
+    db: DbSession,
+    request: Request,
+    provider: PaymentProviderDep,
+) -> SubscribeResponse:
+    """Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.
+
+    No tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del
+    proveedor. Exige correo confirmado y documentos legales aceptados. El total
+    sale de `pricing.quote`; cualquier monto que mande el cliente se ignora.
+
+    Responde 202: la suscripcion no queda activa hasta que el proveedor
+    confirme el pago (`GET /billing/payments/:id`).
+    """
+    if get_settings().rate_limit_enabled and not rate_limit.hit(
+        f"subscribe:user:{user.id}", limit=10, window=15 * _MINUTE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
+        )
+    if normalize_code(payload.coupon_code or ""):
+        _limit_coupon_attempts(user, request)
+
+    try:
+        started = subscriptions.start_payment(
+            db,
+            user=user,
+            plan_id=payload.plan_id,
+            coupon_code=payload.coupon_code,
+            provider=provider,
+            now=datetime.now(UTC),
+        )
+    except SubscribeError as exc:
+        db.rollback()
+        detail: dict[str, str] = {"code": exc.code, "message": exc.message}
+        if exc.coupon_reason is not None:
+            detail["reason"] = exc.coupon_reason.value
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+
+    payment = started.payment
+    checkout_url = provider.checkout_url(
+        reference=payment.reference,
+        amount_cents=payment.amount_cents,
+        currency=payment.currency,
+        # El proveedor devuelve aqui al cliente y le agrega `?id=` con el id de
+        # su transaccion. Es solo informativo: el resultado se reconsulta.
+        redirect_url=_frontend_url(f"/pago/{payment.id}"),
+        customer_email=user.email,
+    )
+    return SubscribeResponse(
+        payment_id=payment.id,
+        checkout_url=checkout_url,
+        subtotal_cents=started.subtotal_cents,
+        discount_cents=payment.discount_cents,
+        total_cents=payment.amount_cents,
+        currency=payment.currency,
+    )
+
+
+def payment_response(payment: Payment) -> PaymentResponse:
+    return PaymentResponse(
+        id=payment.id,
+        status=payment.status,  # type: ignore[arg-type]
+        kind=payment.kind,  # type: ignore[arg-type]
+        plan_id=payment.plan_id,
+        plan_name=payment.plan.name,
+        amount_cents=payment.amount_cents,
+        discount_cents=payment.discount_cents,
+        currency=payment.currency,
+        period_start=payment.period_start,
+        period_end=payment.period_end,
+        created_at=payment.created_at,
+        resolved_at=payment.resolved_at,
+    )
+
+
+def queue_payment_emails(
+    db: DbSession, settlement: Settlement, background: BackgroundTasks, sender: EmailSender
+) -> None:
+    """Bienvenida al activar y recibo de cada cobro aprobado (§3.8).
+
+    Solo cuando ESTA llamada resolvio el pago: un evento repetido no repite el
+    correo.
+    """
+    payment = settlement.payment
+    if not settlement.changed or payment.status != "approved" or payment.user_id is None:
+        return
+    user = db.get(User, payment.user_id)
+    if user is None:
+        return
+    context = {
+        "display_name": user.display_name,
+        "plan_name": payment.plan.name,
+        "amount_cents": payment.amount_cents,
+        "discount_cents": payment.discount_cents,
+        "currency": payment.currency,
+        "paid_at": payment.resolved_at,
+        "period_start": payment.period_start,
+        "period_end": payment.period_end,
+        "reference": payment.reference,
+    }
+    if settlement.activated:
+        background.add_task(
+            send_safely,
+            sender,
+            build_email(
+                "subscription_welcome",
+                to=user.email,
+                url=_frontend_url("/dashboard"),
+                **context,
+            ),
+        )
+    background.add_task(
+        send_safely,
+        sender,
+        build_email("payment_receipt", to=user.email, url=_frontend_url("/cuenta"), **context),
+    )
+
+
+@router.get("/billing/payments/{payment_id}", response_model=PaymentResponse)
+def get_payment(
+    payment_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+    provider: PaymentProviderDep,
+    transaction_id: Annotated[str | None, Query(max_length=255)] = None,
+) -> PaymentResponse:
+    """Como va un pago de la cuenta. La pantalla que espera el resultado la
+    consulta hasta que salga de `pending`.
+
+    Si sigue pendiente se reconsulta la transaccion al proveedor, por si el
+    webhook se demoro (§3.4). `transaction_id` es el id que el proveedor le
+    agrega a la URL de regreso: viene del navegador, asi que solo sirve para
+    saber que reconsultar. Lo que se aplica es la respuesta del proveedor, y
+    solo si su referencia es la de este pago.
+    """
+    payment = db.get(Payment, payment_id)
+    if payment is None or payment.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
+
+    lookup_id = payment.provider_transaction_id or transaction_id
+    if payment.status == "pending" and provider.enabled and lookup_id and _may_requery(user):
+        reference = payment.reference
+        try:
+            transaction = provider.fetch_transaction(lookup_id)
+        except PaymentProviderError:
+            # El pago sigue pendiente; lo resolvera el webhook o la proxima consulta.
+            logger.warning("No se pudo reconsultar el pago %s", payment_id, exc_info=True)
+            transaction = None
+        if transaction is not None and transaction.reference == reference:
+            settlement = subscriptions.apply_transaction(db, transaction, datetime.now(UTC))
+            if settlement is not None:
+                queue_payment_emails(db, settlement, background, sender)
+                payment = settlement.payment
+    return payment_response(payment)
+
+
+def _may_requery(user: User) -> bool:
+    """Tope de reconsultas al proveedor por cuenta: la pantalla consulta cada
+    pocos segundos y no hace falta trasladarle todas."""
+    if not get_settings().rate_limit_enabled:
+        return True
+    return rate_limit.hit(f"payment-requery:user:{user.id}", limit=30, window=_MINUTE)
+
+
+@router.get("/billing/subscription", response_model=SubscriptionResponse | None)
+def get_subscription(user: CurrentUser, db: DbSession) -> SubscriptionResponse | None:
+    """La suscripcion de la cuenta, o null si nunca pago una."""
+    found = subscriptions.current_subscription(db, user.id)
+    if found is None:
+        return None
+    period_end = found.current_period_end
+    return SubscriptionResponse(
+        id=found.id,
+        status=found.status,  # type: ignore[arg-type]
+        renewal_mode=found.renewal_mode,  # type: ignore[arg-type]
+        plan=PlanResponse.model_validate(found.plan),
+        price_cents=found.price_cents,
+        currency=found.currency,
+        current_period_start=found.current_period_start,
+        current_period_end=period_end,
+        cancel_at_period_end=found.cancel_at_period_end,
+        in_force=period_end is not None and period_end > datetime.now(UTC),
     )

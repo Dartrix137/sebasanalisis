@@ -1,7 +1,7 @@
 """Envio de correo y plantillas (§5.5). Sin red ni base."""
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,15 @@ CONTEXT: dict[str, Any] = {
     "new_email": "nuevo@ejemplo.com",
     "hours": 48,
     "minutes": 60,
+    # Correos de cobro (paso 5).
+    "plan_name": "Acceso Mensual",
+    "amount_cents": 8_000_000,
+    "discount_cents": 2_000_000,
+    "currency": "COP",
+    "paid_at": datetime(2026, 10, 14, 3, 30, tzinfo=UTC),
+    "period_start": datetime(2026, 10, 14, 3, 30, tzinfo=UTC),
+    "period_end": datetime(2026, 11, 14, 3, 30, tzinfo=UTC),
+    "reference": "SA-abc123",
 }
 
 # Regla de producto no negociable (CLAUDE.md): ningun correo suena predictivo.
@@ -96,6 +105,33 @@ def test_el_enlace_viaja_en_los_dos_cuerpos() -> None:
     message = build_email("reset_password", to="ana@ejemplo.com", **CONTEXT)
     assert CONTEXT["url"] in message.text
     assert 'href="https://sebasanalisis.com/verificar-correo?token=abc"' in message.html
+
+
+def test_el_recibo_dice_cuanto_se_cobro_y_en_que_moneda() -> None:
+    message = build_email("payment_receipt", to="ana@ejemplo.com", **CONTEXT)
+    for cuerpo in (message.html, message.text):
+        assert "80.000 COP" in cuerpo  # el total, en centavos enteros y con su moneda
+        assert "20.000 COP" in cuerpo  # el descuento
+        assert "SA-abc123" in cuerpo
+        # 03:30 UTC del 14 son las 22:30 del 13 en Colombia.
+        assert "13 de octubre de 2026" in cuerpo
+        assert "al 13 de noviembre de 2026" in cuerpo
+        assert "tu banco aplica su tasa de cambio" in cuerpo
+        # Un solo precio, en la moneda en que se cobra.
+        assert "USD" not in cuerpo
+
+    sin_descuento = build_email(
+        "payment_receipt", to="ana@ejemplo.com", **{**CONTEXT, "discount_cents": 0}
+    )
+    assert "Descuento" not in sin_descuento.text and "Descuento" not in sin_descuento.html
+
+
+def test_la_bienvenida_dice_hasta_cuando_va_el_acceso() -> None:
+    message = build_email("subscription_welcome", to="ana@ejemplo.com", **CONTEXT)
+    for cuerpo in (message.html, message.text):
+        assert "Acceso Mensual" in cuerpo
+        assert "13 de noviembre de 2026" in cuerpo
+        assert "No cambia el resultado de ningún juego" in cuerpo
 
 
 def test_sin_nombre_el_saludo_no_queda_roto() -> None:

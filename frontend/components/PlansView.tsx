@@ -7,50 +7,94 @@
  * moneda. No hay precio de referencia en otra moneda (descartado el
  * 2026-10-09): mostrar una cifra que no se cobra presta a confusión.
  *
- * El botón no hace nada todavía: el pago llega con el paso 5.
+ * Qué botón lleva cada plan (decidido el 2026-10-13) depende de la cuenta, y
+ * es solo presentación: quien acepta o rechaza el pago es el servidor.
+ *
+ * - Sin sesión: enlace para crear la cuenta.
+ * - Administrador o acceso manual: ninguno. Ya entra a la mesa sin pagar.
+ * - Cuenta suspendida o con documentos legales por aceptar: ninguno. No puede
+ *   pagar hasta resolverlo, y la página le dice por qué.
+ * - Con una suscripción pagada y vigente: su plan va marcado "Tu plan actual",
+ *   con hasta cuándo tiene acceso y el botón de pagar el período siguiente.
+ *   Los demás planes no llevan botón.
+ * - Sin acceso: "Suscribirme".
  */
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ApiError, billingApi } from "@/lib/api-client";
-import { formatMoney, intervalLabel } from "@/lib/money";
-import type { PlanResponse } from "@/lib/types/billing";
+import { formatLegalDate } from "@/lib/legal";
+import { CURRENCY_NOTE, formatMoney, intervalLabel } from "@/lib/money";
+import { useSession } from "@/lib/session";
+import type { PlanResponse, SubscriptionResponse } from "@/lib/types/billing";
 
-import { Button, Card, ErrorBox } from "./ui";
+import { Badge, Card, ErrorBox } from "./ui";
 
-const CURRENCY_NAME: Record<string, string> = {
-  COP: "pesos colombianos (COP)",
-};
+const PAY_LINK =
+  "rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-gold-ink transition-colors hover:bg-gold-soft";
 
 export function PlansView() {
+  const { user, loading, withToken } = useSession();
   const [plans, setPlans] = useState<PlanResponse[] | null>(null);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const userId = user?.id ?? null;
 
   useEffect(() => {
     billingApi
       .plans()
       .then(setPlans)
       .catch((e) => setError(e instanceof ApiError ? e.message : "No se pudieron cargar los planes"));
+    // Si no se sabe, el botón queda apagado: es el estado conservador.
+    billingApi
+      .availability()
+      .then((a) => setPaymentsEnabled(a.enabled))
+      .catch(() => setPaymentsEnabled(false));
   }, []);
 
+  useEffect(() => {
+    if (loading || !userId) return;
+    withToken((token) => billingApi.subscription(token))
+      .then(setSubscription)
+      .catch(() => setSubscription(null));
+  }, [loading, userId, withToken]);
+
   if (error) return <ErrorBox message={error} />;
-  if (!plans) return null;
+  if (!plans || loading) return null;
   if (plans.length === 0) {
     return <p className="text-sm text-muted">Por ahora no hay planes disponibles.</p>;
   }
+
+  // La suscripción con un período pagado que todavía no vence (lo dice el servidor).
+  const current = userId && subscription?.in_force ? subscription : null;
   // Una al lado de la otra; en pantallas angostas, una debajo de la otra.
   return (
     <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
       {plans.map((plan) => (
-        <PlanCard key={plan.id} plan={plan} />
+        <PlanCard
+          key={plan.id}
+          plan={plan}
+          paymentsEnabled={paymentsEnabled}
+          current={current}
+        />
       ))}
     </div>
   );
 }
 
-function PlanCard({ plan }: { plan: PlanResponse }) {
+function PlanCard({
+  plan,
+  paymentsEnabled,
+  current,
+}: {
+  plan: PlanResponse;
+  paymentsEnabled: boolean;
+  current: SubscriptionResponse | null;
+}) {
   const price = formatMoney(plan.price_cents, plan.currency);
-  const currencyName = CURRENCY_NAME[plan.currency] ?? plan.currency;
+  const isCurrent = current?.plan.id === plan.id;
 
   return (
     <Card className="h-full">
@@ -60,9 +104,12 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
         data-testid={`plan-${plan.code}`}
         className="flex h-full flex-col"
       >
-        <h2 className="font-display text-2xl font-semibold leading-tight text-white">
-          {plan.name}
-        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-2xl font-semibold leading-tight text-white">
+            {plan.name}
+          </h2>
+          {isCurrent ? <Badge tone="ok">Tu plan actual</Badge> : null}
+        </div>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">{plan.description}</p>
 
         <p className="mt-5 flex flex-wrap items-baseline gap-x-2">
@@ -74,20 +121,106 @@ function PlanCard({ plan }: { plan: PlanResponse }) {
           </span>
         </p>
 
-        <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
-          Cobro en {currencyName}. Con tarjeta de otro país, tu banco aplica su tasa de cambio y
-          puede cobrar comisiones.
-        </p>
+        <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">{CURRENCY_NOTE}</p>
 
-        <div className="mt-auto flex flex-wrap items-center gap-3 pt-5">
-          <Button disabled aria-describedby={`pago-${plan.id}`}>
-            Suscribirme
-          </Button>
-          <p id={`pago-${plan.id}`} className="text-xs text-muted">
-            El pago estará disponible pronto.
+        {isCurrent && current?.current_period_end ? (
+          <p className="mt-4 text-sm text-white">
+            Tienes acceso hasta el {formatLegalDate(current.current_period_end)}.
+            {current.price_cents !== plan.price_cents
+              ? ` Tu precio es ${formatMoney(current.price_cents, current.currency)}, el que tenía el plan cuando te suscribiste.`
+              : ""}
           </p>
-        </div>
+        ) : null}
+
+        <PlanAction
+          plan={plan}
+          paymentsEnabled={paymentsEnabled}
+          current={current}
+          isCurrent={isCurrent}
+        />
       </article>
     </Card>
+  );
+}
+
+function PlanAction({
+  plan,
+  paymentsEnabled,
+  current,
+  isCurrent,
+}: {
+  plan: PlanResponse;
+  paymentsEnabled: boolean;
+  current: SubscriptionResponse | null;
+  isCurrent: boolean;
+}) {
+  const { user } = useSession();
+  const row = "mt-auto flex flex-wrap items-center gap-3 pt-5";
+  const note = "text-xs text-muted";
+
+  if (!paymentsEnabled) {
+    return (
+      <div className={row}>
+        <button
+          type="button"
+          disabled
+          aria-describedby={`pago-${plan.id}`}
+          className={`${PAY_LINK} cursor-not-allowed opacity-60`}
+        >
+          Suscribirme
+        </button>
+        <p id={`pago-${plan.id}`} className={note}>
+          El pago estará disponible pronto.
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className={row}>
+        <Link href="/register" className={PAY_LINK}>
+          Crear cuenta para suscribirme
+        </Link>
+      </div>
+    );
+  }
+
+  if (current) {
+    if (!isCurrent) {
+      return (
+        <div className={row}>
+          <p className={note}>
+            Para cambiar de plan, espera a que termine el período que ya pagaste.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className={row}>
+        <Link href={`/planes/pagar?plan=${plan.id}`} className={PAY_LINK}>
+          Pagar el siguiente período
+        </Link>
+        <p className={note}>
+          No se renueva solo. El período nuevo empieza cuando termine el actual.
+        </p>
+      </div>
+    );
+  }
+
+  // Administrador o acceso manual: no hay nada que pagar. Cuenta suspendida o
+  // con documentos legales por aceptar: no puede pagar, y el aviso de arriba
+  // de la página ya le dice por qué.
+  const { granted, reason } = user.access;
+  if (granted || reason === "suspended" || reason === "consent_required") {
+    return <div className="mt-auto" />;
+  }
+
+  return (
+    <div className={row}>
+      <Link href={`/planes/pagar?plan=${plan.id}`} className={PAY_LINK}>
+        Suscribirme
+      </Link>
+    </div>
   );
 }

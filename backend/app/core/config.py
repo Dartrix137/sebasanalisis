@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     # Solo con EMAIL_BACKEND=file (tests de punta a punta).
     email_file_dir: str = ""
 
+    # Pagos (docs/PLATAFORMA_COMPLETA.md §3 y §12). `wompi` sin llaves deja el
+    # pago apagado: /planes muestra el precio y no deja suscribirse. `fake` es
+    # una pasarela simulada, solo para desarrollo y tests de punta a punta.
+    payment_provider: Literal["wompi", "fake"] = "wompi"
+    wompi_public_key: str = ""
+    wompi_private_key: str = ""
+    wompi_events_secret: str = ""
+    wompi_integrity_secret: str = ""
+    wompi_api_base_url: str = ""
+    # Solo con PAYMENT_PROVIDER=fake: donde responde esta API, para armar el
+    # enlace de la pasarela simulada.
+    api_public_url: str = "http://localhost:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:

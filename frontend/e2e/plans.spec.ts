@@ -43,11 +43,9 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   const bimestral = page.getByRole("article", { name: "Acceso Bimestral" });
   await expect(bimestral.getByText("150.000 COP", { exact: true })).toBeVisible();
   await expect(bimestral.getByText("/ 2 meses")).toBeVisible();
-  await expect(bimestral.getByRole("button", { name: "Suscribirme" })).toBeDisabled();
-
-  // Todavía no se puede pagar: el botón no hace nada.
-  await expect(plan.getByRole("button", { name: "Suscribirme" })).toBeDisabled();
-  await expect(plan.getByText("El pago estará disponible pronto.")).toBeVisible();
+  // Cada plan lleva su enlace de pago (el flujo completo está en subscribe.spec.ts).
+  await expect(bimestral.getByRole("link", { name: "Suscribirme" })).toBeVisible();
+  await expect(plan.getByRole("link", { name: "Suscribirme" })).toBeVisible();
 
   // La cuenta no queda bloqueada, y volver a la mesa la trae aquí otra vez.
   await page.getByRole("link", { name: "Mi cuenta" }).click();
@@ -61,7 +59,9 @@ test("/planes es pública: se ve sin sesión", async ({ page }) => {
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
   await expect(page.getByText(/USD/)).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Crear cuenta" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Crear cuenta", exact: true })).toBeVisible();
+  // Sin sesión no hay a quién cobrarle: el plan invita a crear la cuenta.
+  await expect(plan.getByRole("link", { name: "Crear cuenta para suscribirme" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Entrar" })).toBeVisible();
   await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toHaveCount(0);
 });
@@ -73,6 +73,11 @@ test("cuenta con acceso: /planes la devuelve a la mesa", async ({ page, request 
   await expect(page).toHaveURL(/\/dashboard/);
   await page.goto("/planes");
   await expect(page.getByText("Tu cuenta ya tiene acceso.")).toBeVisible();
+  // Con acceso manual no hay nada que pagar: los planes se ven sin botón.
+  const plan = page.getByRole("article", { name: "Acceso Mensual" });
+  await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
+  await expect(page.getByText("Tu plan actual")).toHaveCount(0);
   await page.getByRole("link", { name: "Ir a la mesa" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 });

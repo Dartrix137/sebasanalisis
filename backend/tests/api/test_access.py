@@ -45,8 +45,10 @@ def _set(db, user_id: str, **campos) -> None:
 def _suscripcion(db, user_id: str, status: str, period_end: datetime) -> None:
     db.execute(
         text(
-            "INSERT INTO subscriptions (id, user_id, provider, status, current_period_end) "
-            "VALUES (:id, :u, 'wompi', :s, :e)"
+            "INSERT INTO subscriptions "
+            "(id, user_id, plan_id, provider, status, price_cents, currency, current_period_end) "
+            "SELECT :id, :u, p.id, 'wompi', :s, p.price_cents, p.currency, :e "
+            "FROM plans p WHERE p.code = 'mensual'"
         ),
         {"id": str(uuid.uuid4()), "u": user_id, "s": status, "e": period_end},
     )
@@ -144,7 +146,7 @@ def test_suscripcion_da_acceso_solo_mientras_dura_el_periodo(
     _denegado(client, token, "expired")
 
 
-@pytest.mark.parametrize("status", ["pending", "past_due_sin_periodo", "expired"])
+@pytest.mark.parametrize("status", ["pending", "past_due", "expired"])
 def test_suscripcion_en_otro_estado_no_da_acceso(client: TestClient, db, status: str) -> None:
     registro = _sin_acceso(client)
     _suscripcion(db, registro["user"]["id"], status, datetime.now(UTC) + timedelta(days=3))

@@ -5,7 +5,8 @@
  * a donde `AccessGate` manda a la cuenta que no tiene acceso a la mesa.
  *
  * No decide nada: el estado de la cuenta que muestra es la decisión de acceso
- * del servidor (`access`), y el precio viene de `GET /plans`.
+ * del servidor (`access`), y el precio viene de `GET /plans`. Qué botón lleva
+ * cada plan lo explica `PlansView`.
  */
 
 import Link from "next/link";
@@ -107,6 +108,14 @@ function AccountStatus({ user }: { user: UserResponse }) {
   return (
     <p role="status" className="mt-5 text-sm font-bold text-white">
       {text}
+      {reason === "consent_required" ? (
+        <>
+          {" "}
+          <Link href="/dashboard" className={LINK}>
+            Revisar y aceptar
+          </Link>
+        </>
+      ) : null}
     </p>
   );
 }
