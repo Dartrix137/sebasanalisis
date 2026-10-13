@@ -185,9 +185,37 @@ Que pasa al desplegar este paso:
 ### Pagos con Wompi (Fase 4, paso 5, entrega 1)
 
 Construido contra la documentacion oficial de Wompi consultada el 2026-10-13.
-**Todavia no se ha probado contra el sandbox real**: cuando se construyo no
-habia llaves. Esa prueba, hecha a mano, es requisito para cerrar el paso 5 y se
-anota aqui cuando se haga (entrega 3).
+
+**Prueba contra el sandbox, en local (2026-10-13).** Con las llaves de sandbox
+en `backend/.env`, una base aparte y el frontend abierto por `localtest.me`:
+
+- La API arranco como `Wompi, ambiente sandbox`. El comercio figura activo,
+  solo en COP.
+- `POST /billing/subscriptions` abrio el pago del plan mensual (100.000 COP) y
+  el Web Checkout **acepto la firma de integridad**: abrio en "MODO DE
+  PRUEBAS" con tarjeta, Nequi, DaviPlata, QR, Transferencia Bancolombia, PSE,
+  corresponsales y los dos creditos.
+- Pago con la tarjeta de prueba aprobada (`4242 4242 4242 4242`): Wompi
+  devolvio a `/pago/:id?id=<transaccion>&env=test`.
+- La reconsulta con la llave privada trajo la transaccion aprobada por el
+  monto esperado; el pago quedo `approved`, la suscripcion `active` con su
+  periodo de un mes, la cuenta entro a la mesa y salieron la bienvenida y el
+  recibo.
+
+**Falta probar, en el VPS con llaves de sandbox** (requisito para cerrar el
+paso 5): el webhook (Wompi no alcanza un equipo local, asi que no se ha visto
+un evento real ni su firma), el recorrido completo por la interfaz, un pago
+rechazado (`4111 1111 1111 1111`) y un medio que no responde de inmediato (PSE
+o Nequi).
+
+**Wompi rechaza una direccion de regreso con `localhost` o `127.0.0.1`**: el
+checkout responde `403` antes de mostrar nada. En produccion no afecta
+(`FRONTEND_BASE_URL` es el dominio). Para probar pagos en local:
+`FRONTEND_BASE_URL=http://localtest.me:3000`, ese mismo origen en
+`CORS_ORIGINS`, y abrir el frontend por `http://localtest.me:3000`
+(`localtest.me` es un nombre publico que apunta al propio equipo;
+`next.config.ts` ya lo admite en `next dev`). La sesion se guarda por origen:
+hay que iniciar sesion en esa direccion, no en `localhost`.
 
 Que pasa al desplegar esta entrega:
 
