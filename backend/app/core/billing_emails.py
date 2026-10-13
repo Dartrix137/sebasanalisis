@@ -1,0 +1,148 @@
+"""Los correos de cobro (docs/PLATAFORMA_COMPLETA.md §3.8).
+
+Aqui solo se arman: quien los envia es el endpoint (en segundo plano) o el job
+de renovaciones. Ninguno promete resultados: describen el servicio y el cobro.
+"""
+
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.core.email import EmailMessage
+from app.core.subscriptions import Settlement
+from app.emails import build_email
+from app.models import Subscription, User
+
+
+def frontend_url(path: str) -> str:
+    return f"{get_settings().frontend_base_url.rstrip('/')}{path}"
+
+
+def source_label(subscription: Subscription) -> str:
+    """El medio de pago como se le nombra al cliente: `Visa •••• 4242`, `Nequi`."""
+    if subscription.payment_source_type == "NEQUI":
+        return "tu cuenta Nequi"
+    if subscription.card_last4:
+        brand = (subscription.card_brand or "tarjeta").capitalize()
+        return f"tu tarjeta {brand} terminada en {subscription.card_last4}"
+    return "tu medio de pago guardado"
+
+
+def payment_emails(db: Session, settlement: Settlement) -> list[EmailMessage]:
+    """Los correos que corresponden a un pago que ESTA llamada resolvio: un
+    evento repetido no repite el correo.
+
+    Aprobado: recibo, y bienvenida si ademas activo la suscripcion. Cobro
+    automatico de renovacion rechazado: aviso de cobro fallido.
+    """
+    payment = settlement.payment
+    if not settlement.changed or payment.user_id is None:
+        return []
+    user = db.get(User, payment.user_id)
+    if user is None:
+        return []
+    subscription = (
+        db.get(Subscription, payment.subscription_id) if payment.subscription_id else None
+    )
+
+    if settlement.renewal_failed and subscription is not None:
+        return [
+            build_email(
+                "payment_failed",
+                to=user.email,
+                display_name=user.display_name,
+                plan_name=payment.plan.name,
+                amount_cents=payment.amount_cents,
+                currency=payment.currency,
+                source_label=source_label(subscription),
+                period_end=subscription.current_period_end,
+                url=frontend_url("/cuenta"),
+            )
+        ]
+    if payment.status != "approved":
+        return []
+
+    automatic = subscription is not None and subscription.renewal_mode == "automatic"
+    context = {
+        "display_name": user.display_name,
+        "plan_name": payment.plan.name,
+        "amount_cents": payment.amount_cents,
+        "discount_cents": payment.discount_cents,
+        "currency": payment.currency,
+        "paid_at": payment.resolved_at,
+        "period_start": payment.period_start,
+        "period_end": payment.period_end,
+        "reference": payment.reference,
+        "automatic": automatic and subscription is not None and subscription.status == "active",
+    }
+    messages = []
+    if settlement.activated:
+        messages.append(
+            build_email(
+                "subscription_welcome",
+                to=user.email,
+                url=frontend_url("/dashboard"),
+                account_url=frontend_url("/cuenta"),
+                **context,
+            )
+        )
+    messages.append(
+        build_email("payment_receipt", to=user.email, url=frontend_url("/cuenta"), **context)
+    )
+    return messages
+
+
+def renewal_notice(
+    user: User, subscription: Subscription, amount_cents: int, charge_at: datetime
+) -> EmailMessage:
+    """Aviso ANTES de un cobro automatico: que plan, cuanto, en que moneda y que dia."""
+    return build_email(
+        "renewal_notice",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        amount_cents=amount_cents,
+        currency=subscription.currency,
+        charge_at=charge_at,
+        source_label=source_label(subscription),
+        url=frontend_url("/cuenta"),
+    )
+
+
+def period_ending(user: User, subscription: Subscription, amount_cents: int) -> EmailMessage:
+    """Pago manual: el periodo esta por vencer y como pagar el siguiente."""
+    return build_email(
+        "period_ending",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        amount_cents=amount_cents,
+        currency=subscription.currency,
+        period_end=subscription.current_period_end,
+        url=frontend_url(f"/planes/pagar?plan={subscription.plan_id}"),
+    )
+
+
+def subscription_expired(user: User, subscription: Subscription, *, automatic: bool) -> EmailMessage:
+    """La suscripcion vencio: se agotaron los cobros, o no se pago el siguiente periodo."""
+    return build_email(
+        "subscription_expired",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        period_end=subscription.current_period_end,
+        automatic=automatic,
+        url=frontend_url("/planes"),
+    )
+
+
+def subscription_canceled(user: User, subscription: Subscription) -> EmailMessage:
+    return build_email(
+        "subscription_canceled",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        period_end=subscription.current_period_end,
+        url=frontend_url("/cuenta"),
+    )

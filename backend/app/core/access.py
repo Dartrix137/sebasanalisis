@@ -33,7 +33,9 @@ AccessReason = Literal[
 ]
 
 # `canceled` cuenta: la cancelacion es al final del periodo ya pagado (§3.6).
-_SUBSCRIPTION_STATUSES_WITH_ACCESS = ("active", "canceled")
+# `past_due` tambien: mientras se reintenta el cobro, el periodo que ya se pago
+# sigue corriendo; el acceso cae en `current_period_end`, sin gracia (§3.5).
+_SUBSCRIPTION_STATUSES_WITH_ACCESS = ("active", "canceled", "past_due")
 
 
 @dataclass(frozen=True)
@@ -85,7 +87,19 @@ def has_access(db: Session, user: User, now: datetime) -> AccessDecision:
         return AccessDecision(granted=True, reason="subscription", until=period_end)
 
     # 8. Cualquier otro caso. Se distingue "tuvo acceso y vencio" de "nunca
-    #    tuvo" para que la pantalla diga lo que paso.
+    #    tuvo" para que la pantalla diga lo que paso. Una suscripcion que el job
+    #    de renovaciones ya marco como `expired` tambien cuenta como "vencio".
+    if period_end is None:
+        period_end = db.scalar(
+            select(Subscription.current_period_end)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.status == "expired",
+                Subscription.current_period_end.is_not(None),
+            )
+            .order_by(Subscription.current_period_end.desc())
+            .limit(1)
+        )
     vencimientos = [d for d in (invited_expired_at, period_end) if d is not None]
     if vencimientos:
         return AccessDecision(granted=False, reason="expired", until=max(vencimientos))

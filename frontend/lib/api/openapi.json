@@ -21,6 +21,35 @@
         "title": "AcceptLegalRequest",
         "type": "object"
       },
+      "AcceptanceResponse": {
+        "description": "Los dos contratos del procesador de pagos que el cliente acepta antes\nde guardar un medio de pago. Los tokens se devuelven al suscribirse.",
+        "properties": {
+          "acceptance_token": {
+            "title": "Acceptance Token",
+            "type": "string"
+          },
+          "personal_data_token": {
+            "title": "Personal Data Token",
+            "type": "string"
+          },
+          "personal_data_url": {
+            "title": "Personal Data Url",
+            "type": "string"
+          },
+          "terms_url": {
+            "title": "Terms Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptance_token",
+          "terms_url",
+          "personal_data_token",
+          "personal_data_url"
+        ],
+        "title": "AcceptanceResponse",
+        "type": "object"
+      },
       "AccessInfo": {
         "description": "La decision de acceso, para que el cliente sepa que pantalla mostrar.\n\nEs informativa: el servidor vuelve a decidir en cada llamada a un endpoint\nde juego (§2.1 de la Fase 4).",
         "properties": {
@@ -1215,10 +1244,33 @@
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          },
+          "tokenizer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenizerKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "enabled"
+          "enabled",
+          "tokenizer",
+          "public_key"
         ],
         "title": "BillingAvailabilityResponse",
         "type": "object"
@@ -2728,6 +2780,15 @@
         "title": "PaymentResponse",
         "type": "object"
       },
+      "PaymentSourceKind": {
+        "description": "Medios que se pueden guardar para la renovacion automatica.",
+        "enum": [
+          "CARD",
+          "NEQUI"
+        ],
+        "title": "PaymentSourceKind",
+        "type": "string"
+      },
       "PaymentStatus": {
         "enum": [
           "pending",
@@ -3965,6 +4026,18 @@
       "SubscribeRequest": {
         "description": "POST /billing/subscriptions. No lleva montos: un monto que mande el\ncliente se ignora.",
         "properties": {
+          "acceptance_token": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Token"
+          },
           "coupon_code": {
             "anyOf": [
               {
@@ -3977,10 +4050,48 @@
             ],
             "title": "Coupon Code"
           },
+          "payment_source_token": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Source Token"
+          },
+          "payment_source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personal_data_token": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Data Token"
+          },
           "plan_id": {
             "format": "uuid",
             "title": "Plan Id",
             "type": "string"
+          },
+          "renewal_mode": {
+            "$ref": "#/components/schemas/RenewalMode",
+            "default": "manual"
           }
         },
         "required": [
@@ -3990,11 +4101,18 @@
         "type": "object"
       },
       "SubscribeResponse": {
-        "description": "El pago quedo abierto: falta que el cliente pague en la pasarela.",
+        "description": "El pago quedo abierto. En el pago manual falta que el cliente pague en\nla pasarela; con un medio guardado, el cobro ya se envio.",
         "properties": {
           "checkout_url": {
-            "title": "Checkout Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkout Url"
           },
           "currency": {
             "title": "Currency",
@@ -4046,6 +4164,28 @@
             "title": "Cancel At Period End",
             "type": "boolean"
           },
+          "card_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Brand"
+          },
+          "card_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Last4"
+          },
           "currency": {
             "title": "Currency",
             "type": "string"
@@ -4083,6 +4223,39 @@
             "title": "In Force",
             "type": "boolean"
           },
+          "next_charge_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Charge At"
+          },
+          "next_charge_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Charge Cents"
+          },
+          "payment_source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanResponse"
           },
@@ -4107,7 +4280,12 @@
           "current_period_start",
           "current_period_end",
           "cancel_at_period_end",
-          "in_force"
+          "in_force",
+          "payment_source_type",
+          "card_brand",
+          "card_last4",
+          "next_charge_at",
+          "next_charge_cents"
         ],
         "title": "SubscriptionResponse",
         "type": "object"
@@ -4166,6 +4344,14 @@
         ],
         "title": "TokenResponse",
         "type": "object"
+      },
+      "TokenizerKind": {
+        "enum": [
+          "wompi_widget",
+          "fake"
+        ],
+        "title": "TokenizerKind",
+        "type": "string"
       },
       "UpdateCouponRequest": {
         "description": "PATCH /admin/coupons/:id. Solo cambia los campos que se mandan.\n\nCon redenciones, el descuento (`kind`, `value`, `currency`, `duration`,\n`duration_periods`) ya no se puede cambiar.",
@@ -6979,9 +7165,36 @@
         ]
       }
     },
+    "/billing/acceptance": {
+      "get": {
+        "description": "Los contratos del procesador de pagos que hay que aceptar antes de\nguardar un medio de pago (§3.4). Se piden al momento: no se guardan.",
+        "operationId": "acceptance_billing_acceptance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acceptance",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/billing/availability": {
       "get": {
-        "description": "Si se puede pagar. Publico: /planes lo usa para encender el boton.",
+        "description": "Si se puede pagar, y como se guarda un medio de pago. Publico: /planes\nlo usa para encender el boton.",
         "operationId": "availability_billing_availability_get",
         "responses": {
           "200": {
@@ -7211,9 +7424,63 @@
         ]
       }
     },
+    "/billing/subscription/cancel": {
+      "post": {
+        "description": "Cancela la renovacion automatica (§3.6). La cuenta conserva el acceso\nhasta que termine el periodo que ya pago, y no se le vuelve a cobrar.",
+        "operationId": "cancel_subscription_billing_subscription_cancel_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Subscription",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/subscription/resume": {
+      "post": {
+        "description": "Revierte la cancelacion antes del vencimiento: la suscripcion vuelve a\nrenovarse sola con el medio de pago que tenia guardado.",
+        "operationId": "resume_subscription_billing_subscription_resume_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume Subscription",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/billing/subscriptions": {
       "post": {
-        "description": "Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.\n\nNo tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del\nproveedor. Exige correo confirmado y documentos legales aceptados. El total\nsale de `pricing.quote`; cualquier monto que mande el cliente se ignora.\n\nResponde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
+        "description": "Abre el pago de un periodo.\n\nPago manual (`renewal_mode: manual`): devuelve la pagina del proveedor\ndonde el cliente paga. No se tokeniza nada.\n\nRenovacion automatica (`automatic`): recibe el token que el procesador le\ndio al navegador, guarda el medio de pago en el proveedor y le hace el\nprimer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la\nreferencia del proveedor, la marca y los ultimos cuatro digitos.\n\nEn los dos casos exige correo confirmado y documentos legales aceptados, y\nel total sale de `billing/pricing`: cualquier monto que mande el cliente se\nignora. Responde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
         "operationId": "subscribe_billing_subscriptions_post",
         "requestBody": {
           "content": {

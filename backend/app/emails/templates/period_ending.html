@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Tu acceso a Sebasanálisis con el plan <strong>{{ plan_name }}</strong> va hasta el
+  <strong>{{ period_end | fecha }}</strong>. Tu plan es de pago manual: no se renueva solo y no
+  te vamos a hacer ningún cobro.
+</p>
+<p style="margin:0 0 12px 0;">
+  Si quieres seguir, paga el siguiente período ({{ amount_cents | money(currency) }}) antes de
+  esa fecha. El período nuevo empieza cuando termine el actual, así que no pierdes días.
+</p>
+{{ button(url, "Pagar el siguiente período") }}
+<p style="margin:0;">Si no pagas, tu acceso termina ese día. Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.</p>
+{% endblock %}

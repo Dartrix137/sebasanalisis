@@ -6,7 +6,11 @@ Recibimos tu pago y tu suscripción al plan {{ plan_name }} quedó activa. Tiene
 
 Ir a la mesa: {{ url }}
 
+{% if automatic %}
+Tu plan se renueva solo: antes de cada cobro te avisamos por correo con el monto y la fecha. Puedes cancelar la renovación cuando quieras desde tu cuenta ({{ account_url }}), y conservas el acceso hasta que termine el período que ya pagaste.
+{% else %}
 Este plan no se renueva solo ni guarda tu medio de pago. Si quieres seguir después de esa fecha, paga el siguiente período desde la página de planes antes de que venza: los días que te queden no se pierden.
+{% endif %}
 
 La suscripción da acceso a la herramienta. No cambia el resultado de ningún juego.
 {% endblock %}

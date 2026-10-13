@@ -18,6 +18,7 @@
  * - Con una suscripción pagada y vigente: su plan va marcado "Tu plan actual",
  *   con hasta cuándo tiene acceso y el botón de pagar el período siguiente.
  *   Los demás planes no llevan botón.
+ *   Si esa suscripción se renueva sola, no hay botón: se gestiona en la cuenta.
  * - Sin acceso: "Suscribirme".
  */
 
@@ -211,6 +212,21 @@ function PlanAction({
         <div className={row}>
           <p className={note}>
             Para cambiar de plan, espera a que termine el período que ya pagaste.
+          </p>
+        </div>
+      );
+    }
+    if (current.renewal_mode === "automatic") {
+      // Se cobra sola, o está cancelada: en los dos casos se gestiona en la cuenta.
+      return (
+        <div className={row}>
+          <p className={note}>
+            {current.status === "canceled"
+              ? "Cancelaste la renovación: no se hace ningún cobro más."
+              : "Se renueva sola; antes de cada cobro te avisamos por correo."}{" "}
+            <Link href="/cuenta" className="font-bold text-gold hover:text-gold-soft">
+              Ver mi suscripción
+            </Link>
           </p>
         </div>
       );

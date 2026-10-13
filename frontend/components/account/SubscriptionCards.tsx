@@ -3,18 +3,24 @@
 /**
  * Apartado de suscripción y pagos de "Mi cuenta" (§3.6 y §5.4 de la Fase 4).
  *
- * De solo lectura: muestra lo que el servidor dice de la suscripción
- * (`GET /billing/subscription`) y del historial (`GET /billing/payments`).
- * Cancelar, reanudar y cambiar el medio de pago llegan con la entrega 3 del
- * paso 5. Aquí no se calcula ningún precio ni se decide ningún acceso.
+ * Muestra lo que el servidor dice de la suscripción (`GET /billing/subscription`)
+ * y del historial (`GET /billing/payments`), y deja cancelar o reanudar la
+ * renovación automática. Cambiar el medio de pago y pasar de un modo al otro
+ * llegan con la entrega 3 del paso 5. Aquí no se calcula ningún precio ni se
+ * decide ningún acceso.
  */
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Badge, Card, CardHeader, ErrorBox } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, ErrorBox } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
-import { PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE, RENEWAL_MODE_LABEL } from "@/lib/billing";
+import {
+  PAYMENT_STATUS_LABEL,
+  PAYMENT_STATUS_TONE,
+  RENEWAL_MODE_LABEL,
+  sourceLabel,
+} from "@/lib/billing";
 import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
@@ -42,12 +48,38 @@ export function SubscriptionCard() {
     undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  // Cancelar pide confirmar en la misma tarjeta, sin ventanas del navegador.
+  const [confirming, setConfirming] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     withToken((t) => billingApi.subscription(t))
       .then(setSubscription)
       .catch((err) => setError(messageOf(err)));
   }, [withToken]);
+
+  async function change(action: "cancel" | "resume") {
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await withToken((t) =>
+        action === "cancel" ? billingApi.cancelSubscription(t) : billingApi.resumeSubscription(t),
+      );
+      setSubscription(next);
+      setConfirming(false);
+      setNotice(
+        action === "cancel"
+          ? "Renovación cancelada. No te vamos a hacer más cobros."
+          : "Renovación reanudada.",
+      );
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setWorking(false);
+    }
+  }
 
   // El acceso que no sale de una suscripción (administrador o acceso manual).
   const reason = user?.access.reason;
@@ -81,10 +113,14 @@ export function SubscriptionCard() {
         <div data-testid="suscripcion">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-base font-bold text-white">{subscription.plan.name}</p>
-            {subscription.in_force ? (
-              <Badge tone="ok">Vigente</Badge>
-            ) : (
+            {!subscription.in_force ? (
               <Badge tone="off">Vencida</Badge>
+            ) : subscription.status === "canceled" ? (
+              <Badge tone="neutral">Renovación cancelada</Badge>
+            ) : subscription.status === "past_due" ? (
+              <Badge tone="off">Cobro pendiente</Badge>
+            ) : (
+              <Badge tone="ok">Vigente</Badge>
             )}
           </div>
           <dl className="mt-3 divide-y divide-edge text-sm">
@@ -98,23 +134,29 @@ export function SubscriptionCard() {
               {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)}
             </Row>
             <Row label="Forma de pago">{RENEWAL_MODE_LABEL[subscription.renewal_mode]}</Row>
+            {subscription.renewal_mode === "automatic" && sourceLabel(subscription) ? (
+              <Row label="Medio de pago">{sourceLabel(subscription)}</Row>
+            ) : null}
+            {subscription.next_charge_at && subscription.next_charge_cents !== null ? (
+              <Row label="Próximo cobro">
+                {formatMoney(subscription.next_charge_cents, subscription.currency)}, a partir del{" "}
+                {formatLegalDate(subscription.next_charge_at)}
+              </Row>
+            ) : null}
           </dl>
+          {notice ? (
+            <p role="status" className="mt-3 text-sm font-bold text-white">
+              {notice}
+            </p>
+          ) : null}
 
           {withoutPaying ? (
-            // Con acceso manual no se le cobra: el período pagado sigue corriendo.
+            // Con acceso manual no se le cobra a mano; lo ya pagado sigue corriendo.
             <p className="mt-4 text-sm leading-relaxed text-muted">
               {withoutPaying} Mientras lo tenga no necesitas pagar; el período que ya pagaste
               sigue corriendo.
             </p>
-          ) : subscription.in_force ? (
-            <p className="mt-4 text-sm leading-relaxed text-muted">
-              No se hace ningún cobro automático. Si quieres seguir después de esa fecha,{" "}
-              <Link href={`/planes/pagar?plan=${subscription.plan.id}`} className={LINK}>
-                paga el siguiente período
-              </Link>{" "}
-              antes de que venza: empieza cuando termine el actual, así que no pierdes días.
-            </p>
-          ) : (
+          ) : !subscription.in_force ? (
             <p className="mt-4 text-sm leading-relaxed text-muted">
               Tu período terminó y ya no tienes acceso a la mesa. Puedes volver cuando quieras
               desde{" "}
@@ -122,6 +164,61 @@ export function SubscriptionCard() {
                 los planes
               </Link>
               .
+            </p>
+          ) : subscription.status === "canceled" ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm leading-relaxed text-muted">
+                Cancelaste la renovación: no se hace ningún cobro más y conservas el acceso hasta
+                esa fecha. Si cambias de opinión antes, puedes reanudarla.
+              </p>
+              <Button variant="ghost" disabled={working} onClick={() => change("resume")}>
+                {working ? "Reanudando…" : "Reanudar la renovación"}
+              </Button>
+            </div>
+          ) : subscription.renewal_mode === "automatic" ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm leading-relaxed text-muted">
+                {subscription.status === "past_due"
+                  ? "No pudimos hacer el último cobro. Lo vamos a intentar de nuevo antes de que termine tu período; si no pasa, tu suscripción vence ese día. "
+                  : "Se renueva sola. "}
+                Antes de cada cobro te avisamos por correo con el monto y la fecha. Si cancelas,
+                conservas el acceso hasta que termine el período que ya pagaste.
+              </p>
+              {confirming ? (
+                <div
+                  role="group"
+                  aria-label="Confirmar la cancelación"
+                  className="rounded-lg border border-edge p-3.5"
+                >
+                  <p className="text-sm text-white">
+                    ¿Cancelar la renovación? No se te cobra más y tu acceso sigue hasta el{" "}
+                    {subscription.current_period_end
+                      ? formatLegalDate(subscription.current_period_end)
+                      : "fin del período"}
+                    .
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Button variant="danger" disabled={working} onClick={() => change("cancel")}>
+                      {working ? "Cancelando…" : "Sí, cancelar la renovación"}
+                    </Button>
+                    <Button variant="ghost" disabled={working} onClick={() => setConfirming(false)}>
+                      No, dejarla como está
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="ghost" onClick={() => setConfirming(true)}>
+                  Cancelar la renovación
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm leading-relaxed text-muted">
+              No se hace ningún cobro automático. Si quieres seguir después de esa fecha,{" "}
+              <Link href={`/planes/pagar?plan=${subscription.plan.id}`} className={LINK}>
+                paga el siguiente período
+              </Link>{" "}
+              antes de que venza: empieza cuando termine el actual, así que no pierdes días.
             </p>
           )}
         </div>

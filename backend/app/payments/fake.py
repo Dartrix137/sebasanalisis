@@ -16,11 +16,25 @@ from collections.abc import Mapping
 from urllib.parse import urlencode
 
 from app.payments.base import (
+    Acceptance,
+    PaymentSource,
+    PaymentSourceRejected,
+    PaymentSourceType,
     ProviderEvent,
     ProviderTransaction,
+    TokenizerInfo,
     TransactionStatus,
     unverified_event,
 )
+
+# Tokens que "devuelve" el selector simulado del frontend. El nombre dice que
+# pasa despues: `-declined` guarda un medio cuyos cobros se rechazan, y
+# `-rejected` es un medio que la pasarela ni siquiera acepta guardar.
+FAKE_TOKEN_OK = "fake-token-ok"
+FAKE_TOKEN_DECLINED = "fake-token-declined"
+FAKE_TOKEN_REJECTED = "fake-token-rejected"
+FAKE_ACCEPTANCE = "fake-acceptance"
+FAKE_PERSONAL_DATA = "fake-personal-data"
 
 # Cabecera con la que un test marca un webhook simulado como autentico.
 FAKE_SIGNATURE_HEADER = "x-fake-signature"
@@ -104,3 +118,54 @@ class FakePaymentProvider:
     def fetch_transaction(self, transaction_id: str) -> ProviderTransaction | None:
         with self._lock:
             return self.transactions.get(transaction_id)
+
+    def tokenizer(self) -> TokenizerInfo | None:
+        return TokenizerInfo(kind="fake")
+
+    def acceptance(self) -> Acceptance:
+        return Acceptance(
+            acceptance_token=FAKE_ACCEPTANCE,
+            terms_url=f"{self.api_base_url}/dev/fake-checkout/terminos",
+            personal_data_token=FAKE_PERSONAL_DATA,
+            personal_data_url=f"{self.api_base_url}/dev/fake-checkout/datos",
+        )
+
+    def create_payment_source(
+        self,
+        *,
+        source_type: PaymentSourceType,
+        token: str,
+        customer_email: str,
+        acceptance_token: str,
+        personal_data_token: str,
+    ) -> PaymentSource:
+        if (acceptance_token, personal_data_token) != (FAKE_ACCEPTANCE, FAKE_PERSONAL_DATA):
+            raise PaymentSourceRejected("Faltan los contratos aceptados")
+        if token not in (FAKE_TOKEN_OK, FAKE_TOKEN_DECLINED):
+            raise PaymentSourceRejected("La pasarela simulada no acepta ese medio de pago")
+        suffix = "ok" if token == FAKE_TOKEN_OK else "declined"
+        return PaymentSource(
+            id=f"fake-source-{suffix}-{uuid.uuid4().hex[:8]}",
+            type=source_type,
+            brand="VISA" if source_type == "CARD" else None,
+            last4="4242" if source_type == "CARD" else None,
+        )
+
+    def charge(
+        self,
+        *,
+        reference: str,
+        amount_cents: int,
+        currency: str,
+        customer_email: str,
+        source: PaymentSource,
+    ) -> ProviderTransaction:
+        """El cobro se resuelve al instante, segun el medio que se guardo."""
+        approved = source.id.startswith("fake-source-ok-")
+        return self.resolve(
+            reference=reference,
+            amount_cents=amount_cents,
+            currency=currency,
+            status="approved" if approved else "declined",
+            status_message=None if approved else "Rechazado en la pasarela simulada",
+        )

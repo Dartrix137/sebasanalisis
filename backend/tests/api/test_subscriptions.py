@@ -7,7 +7,6 @@ aun asi pasan por la verificacion de firma y la lectura de respuestas reales.
 
 import json
 import uuid
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -27,94 +26,12 @@ from app.models import (
 )
 from app.payments.base import get_payment_provider
 from app.payments.fake import FAKE_SIGNATURE, FAKE_SIGNATURE_HEADER, FakePaymentProvider
-from app.payments.wompi import WompiProvider, event_checksum, integrity_signature
+from app.payments.wompi import integrity_signature
 from tests.api.conftest import auth, register_raw
 from tests.api.test_billing import _cupon, _mensual, _plan
+from tests.api.wompi_double import INTEGRITY_SECRET, Wompi
 
 PRECIO = 10_000_000  # 100.000 COP en centavos
-EVENTS_SECRET = "test_events_solo-para-tests"
-INTEGRITY_SECRET = "test_integrity_solo-para-tests"
-
-
-class Wompi:
-    """Lo que Wompi "sabe" durante un test: sus transacciones, por id."""
-
-    def __init__(self) -> None:
-        self.transactions: dict[str, dict] = {}
-        self.caido = False
-        self.consultas = 0
-        self.provider = WompiProvider(
-            public_key="pub_test_solo-para-tests",
-            private_key="prv_test_solo-para-tests",
-            events_secret=EVENTS_SECRET,
-            integrity_secret=INTEGRITY_SECRET,
-            api_base_url="https://sandbox.wompi.co/v1",
-            environment="sandbox",
-            transport=httpx.MockTransport(self._handle),
-        )
-
-    def _handle(self, request: httpx.Request) -> httpx.Response:
-        self.consultas += 1
-        if self.caido:
-            raise httpx.ConnectError("sin red")
-        data = self.transactions.get(request.url.path.rsplit("/", 1)[-1])
-        if data is None:
-            return httpx.Response(404, json={"error": {"type": "NOT_FOUND_ERROR"}})
-        return httpx.Response(200, json={"data": data})
-
-    def transaccion(self, payment: Payment | None, status: str, **cambios) -> str:
-        """Anota una transaccion para un pago y devuelve su id."""
-        tx_id = f"tx-{uuid.uuid4().hex[:12]}"
-        self.transactions[tx_id] = {
-            "id": tx_id,
-            "reference": payment.reference if payment else f"AJENA-{uuid.uuid4().hex[:8]}",
-            "status": status,
-            "amount_in_cents": payment.amount_cents if payment else 123_400,
-            "currency": payment.currency if payment else "COP",
-            "status_message": None if status == "APPROVED" else "Fondos insuficientes",
-            **cambios,
-        }
-        return tx_id
-
-    def evento(self, tx_id: str, *, status: str | None = None, timestamp: int = 1_760_000_000) -> dict:
-        """Un `transaction.updated` firmado como lo firma Wompi."""
-        tx = self.transactions.get(tx_id, {})
-        evento = {
-            "event": "transaction.updated",
-            "data": {
-                "transaction": {
-                    "id": tx_id,
-                    "status": status or tx.get("status", "APPROVED"),
-                    "amount_in_cents": tx.get("amount_in_cents", 1),
-                    "reference": tx.get("reference", "x"),
-                    "currency": "COP",
-                }
-            },
-            "environment": "test",
-            "signature": {
-                "properties": [
-                    "transaction.id",
-                    "transaction.status",
-                    "transaction.amount_in_cents",
-                ],
-                "checksum": "",
-            },
-            "timestamp": timestamp,
-            "sent_at": "2026-10-13T15:00:00.000Z",
-        }
-        evento["signature"]["checksum"] = event_checksum(evento, EVENTS_SECRET)
-        return evento
-
-
-@pytest.fixture
-def wompi(client: TestClient) -> Iterator[Wompi]:
-    from app.main import app
-
-    fake = Wompi()
-    anterior = app.dependency_overrides.get(get_payment_provider)
-    app.dependency_overrides[get_payment_provider] = lambda: fake.provider
-    yield fake
-    app.dependency_overrides[get_payment_provider] = anterior
 
 
 # ---------- Ayudas ----------
@@ -310,14 +227,14 @@ def test_plan_inexistente_o_desactivado(client, db, wompi) -> None:
 def test_sin_pasarela_configurada_no_se_abre_un_pago(client, db) -> None:
     """Sin llaves (el caso de los tests y de produccion hasta que se pongan)."""
     token, user_id, _ = _cuenta(client, db)
-    assert client.get("/billing/availability").json() == {"enabled": False}
+    assert client.get("/billing/availability").json()["enabled"] is False
     r = _suscribir(client, token, _mensual(db).id)
     assert (r.status_code, r.json()["detail"]["code"]) == (503, "payments_unavailable")
     assert _pagos(db, user_id) == []
 
 
 def test_con_pasarela_el_pago_esta_disponible(client, wompi) -> None:
-    assert client.get("/billing/availability").json() == {"enabled": True}
+    assert client.get("/billing/availability").json()["enabled"] is True
 
 
 def test_limite_de_intentos_de_pago(client, db, wompi) -> None:
@@ -877,7 +794,8 @@ def test_pagar_despues_del_vencimiento_cuenta_desde_el_pago(client, db, wompi) -
 
     antes = datetime.now(UTC)
     _aprobar(client, wompi, _abrir_pago(client, db, token), timestamp=1_760_000_222)
-    [suscripcion] = _suscripciones(db, user_id)
+    # La que vencio queda como historia; la nueva es la que cuenta.
+    [suscripcion] = [s for s in _suscripciones(db, user_id) if s.status != "expired"]
     assert suscripcion.current_period_start >= antes
     assert suscripcion.current_period_end == add_interval(suscripcion.current_period_start, "month", 1)
     assert _tiene_acceso(client, token)
@@ -896,11 +814,13 @@ def test_con_el_periodo_vencido_se_puede_volver_con_otro_plan(client, db, wompi)
 
     pago = _abrir_pago(client, db, token, bimestral)
     assert (pago.kind, pago.amount_cents) == ("initial", 15_000_000)
-    # Hasta que se apruebe, la suscripcion sigue diciendo lo que se pago antes.
-    assert _suscripciones(db, user_id)[0].plan_id == _mensual(db).id
+    # La que vencio queda como historia, vencida; la nueva espera el pago.
+    assert sorted((s.status, s.plan_id) for s in _suscripciones(db, user_id)) == sorted(
+        [("expired", _mensual(db).id), ("pending", bimestral.id)]
+    )
 
     _aprobar(client, wompi, pago, timestamp=1_760_000_333)
-    [suscripcion] = _suscripciones(db, user_id)
+    [suscripcion] = [s for s in _suscripciones(db, user_id) if s.status != "expired"]
     assert (suscripcion.status, suscripcion.plan_id, suscripcion.price_cents) == (
         "active",
         bimestral.id,

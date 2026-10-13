@@ -102,9 +102,34 @@ class PaymentStatus(str, Enum):
     error = "error"
 
 
+class PaymentSourceKind(str, Enum):
+    """Medios que se pueden guardar para la renovacion automatica."""
+    CARD = "CARD"
+    NEQUI = "NEQUI"
+
+
+class TokenizerKind(str, Enum):
+    wompi_widget = "wompi_widget"
+    fake = "fake"
+
+
 class BillingAvailabilityResponse(ApiModel):
     """Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse."""
     enabled: bool
+    # Como pide el navegador el token de un medio de pago. Null = no se ofrece
+    # la renovacion automatica.
+    tokenizer: TokenizerKind | None = None
+    # Llave PUBLICA del comercio, para el widget. Nunca la privada.
+    public_key: str | None = None
+
+
+class AcceptanceResponse(ApiModel):
+    """Los dos contratos del procesador de pagos que el cliente acepta antes
+    de guardar un medio de pago. Los tokens se devuelven al suscribirse."""
+    acceptance_token: str
+    terms_url: str
+    personal_data_token: str
+    personal_data_url: str
 
 
 class SubscribeRequest(ApiModel):
@@ -112,13 +137,23 @@ class SubscribeRequest(ApiModel):
     cliente se ignora."""
     plan_id: UUID
     coupon_code: str | None = Field(default=None, max_length=80)
+    # `automatic` exige los cuatro campos de abajo.
+    renewal_mode: RenewalMode = RenewalMode.manual
+    # El token que el procesador le dio al navegador. No son datos de tarjeta.
+    payment_source_token: str | None = Field(default=None, max_length=500)
+    payment_source_type: PaymentSourceKind | None = None
+    # Los tokens de `GET /billing/acceptance`, tras marcar las dos casillas.
+    acceptance_token: str | None = Field(default=None, max_length=5000)
+    personal_data_token: str | None = Field(default=None, max_length=5000)
 
 
 class SubscribeResponse(ApiModel):
-    """El pago quedo abierto: falta que el cliente pague en la pasarela."""
+    """El pago quedo abierto. En el pago manual falta que el cliente pague en
+    la pasarela; con un medio guardado, el cobro ya se envio."""
     payment_id: UUID
-    # La pagina de la pasarela donde se paga. Alli elige el medio de pago.
-    checkout_url: str
+    # La pagina de la pasarela donde se paga. Null con un medio de pago
+    # guardado: no hay a donde ir, solo esperar el resultado.
+    checkout_url: str | None = None
     subtotal_cents: int
     discount_cents: int
     total_cents: int
@@ -172,6 +207,16 @@ class SubscriptionResponse(ApiModel):
     cancel_at_period_end: bool
     # El periodo pagado todavia no vence. Lo dice el servidor, con su reloj.
     in_force: bool
+    # El medio de pago guardado, solo para mostrarlo. Nunca el numero completo.
+    payment_source_type: PaymentSourceKind | None = None
+    card_brand: str | None = None
+    card_last4: str | None = None
+    # Cuando se intenta el proximo cobro automatico. Null si no hay ninguno previsto.
+    next_charge_at: datetime | None = None
+    # Lo que cuesta el periodo siguiente, con el descuento que todavia lleve la
+    # suscripcion: lo que se cobrara solo, o lo que hay que pagar a mano. Null
+    # si esta cancelada o vencida.
+    next_charge_cents: int | None = None
 
 
 # ---------- Admin: planes ----------

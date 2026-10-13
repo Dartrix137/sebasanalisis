@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+No pudimos cobrar {{ amount_cents | money(currency) }} a {{ source_label }} por la renovación de tu plan {{ plan_name }}.
+
+Vamos a intentarlo de nuevo antes del {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Mientras tanto conservas el acceso. Si para esa fecha el cobro no pasa, tu suscripción vence ese día.
+
+Revisa que tu medio de pago tenga fondos y esté habilitado para compras por internet. Si prefieres no renovar, puedes cancelar la renovación desde tu cuenta.
+
+Tu suscripción: {{ url }}
+{% endblock %}

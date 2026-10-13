@@ -297,6 +297,41 @@ Como se confirma un pago (lo que hay que tener presente al mirar un problema):
   todavia: un pago aprobado que despues se anula o se reembolsa **no quita el
   acceso solo**; hay que retirarlo a mano (pendiente del admin de pagos).
 
+### Job de renovaciones (Fase 4, paso 5, entrega 2)
+
+**Desde que esta entrega se despliega con las llaves de Wompi puestas, la
+pantalla de pago ofrece la renovacion automatica.** Sin el job programado, esas
+suscripciones no se cobran nunca: el cliente pierde el acceso al terminar su
+primer periodo sin que nadie le haya cobrado ni avisado. Hay que programarlo en
+el mismo despliegue.
+
+En Dokploy, en la aplicacion API, pestana "Schedules": una tarea cada hora
+(`0 * * * *`) que corra dentro del contenedor de la API:
+
+```
+cd /app && python scripts/run_renewals.py
+```
+
+Que hace cada corrida: avisa por correo antes de cada cobro automatico (7 dias
+antes del primer intento) y antes de cada vencimiento del pago manual; cobra las
+renovaciones que toquen (48 h, 24 h y 0 h antes del vencimiento); y deja
+vencidas las suscripciones cuyo periodo termino. Usa las mismas variables de
+entorno de la API, incluidas las `SMTP_*`: los correos los envia el job.
+
+Se puede correr a mano en la terminal de la API cuantas veces se quiera: es
+idempotente. Dos corridas a la vez no cobran dos veces (la segunda sale diciendo
+"ya hay otra corrida en curso"). La ultima linea resume lo que hizo:
+
+```
+INFO: app.renewals - Renovaciones: avisos=0 cobros=0 aprobados=0 fallidos=0 vencidas=0 errores=0 correos=0
+```
+
+Sale con codigo 1 si alguna suscripcion fallo (`errores` mayor que cero); el
+detalle queda en el log y en el monitoreo de errores.
+
+**Sin probar todavia contra Wompi**: guardar un medio de pago y cobrarle. Se
+prueba en el sandbox con la tarjeta de prueba y se anota aqui.
+
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a
 punta. **Nunca en produccion**: aprueba pagos sin cobrar. La API se niega a

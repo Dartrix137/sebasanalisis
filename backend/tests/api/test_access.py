@@ -123,11 +123,13 @@ def test_cuenta_suspendida_con_suscripcion_activa_no_tiene_acceso(client: TestCl
     ).status_code == 200
 
 
-@pytest.mark.parametrize("status", ["active", "canceled"])
+@pytest.mark.parametrize("status", ["active", "canceled", "past_due"])
 def test_suscripcion_da_acceso_solo_mientras_dura_el_periodo(
     client: TestClient, db, status: str
 ) -> None:
-    """`canceled` cuenta: la cancelacion es al final del periodo pagado (§3.6)."""
+    """`canceled` cuenta: la cancelacion es al final del periodo pagado (§3.6).
+    `past_due` tambien: mientras se reintenta el cobro, lo ya pagado sigue
+    corriendo, y el acceso cae en `current_period_end`, sin gracia (§3.5)."""
     registro = _sin_acceso(client)
     token, user_id = registro["access_token"], registro["user"]["id"]
 
@@ -146,11 +148,21 @@ def test_suscripcion_da_acceso_solo_mientras_dura_el_periodo(
     _denegado(client, token, "expired")
 
 
-@pytest.mark.parametrize("status", ["pending", "past_due", "expired"])
-def test_suscripcion_en_otro_estado_no_da_acceso(client: TestClient, db, status: str) -> None:
+@pytest.mark.parametrize(
+    ("status", "motivo"),
+    [
+        # Abrio un pago y nunca lo completo: nunca tuvo acceso.
+        ("pending", "no_access"),
+        # El job de renovaciones la dejo vencida: tuvo acceso y vencio.
+        ("expired", "expired"),
+    ],
+)
+def test_suscripcion_en_otro_estado_no_da_acceso(
+    client: TestClient, db, status: str, motivo: str
+) -> None:
     registro = _sin_acceso(client)
-    _suscripcion(db, registro["user"]["id"], status, datetime.now(UTC) + timedelta(days=3))
-    _denegado(client, registro["access_token"], "no_access")
+    _suscripcion(db, registro["user"]["id"], status, datetime.now(UTC) - timedelta(days=3))
+    _denegado(client, registro["access_token"], motivo)
 
 
 def test_admin_siempre_accede_aunque_no_tenga_suscripcion(client: TestClient, db) -> None:

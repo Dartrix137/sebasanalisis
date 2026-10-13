@@ -114,7 +114,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
-| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Faltan la 2 (tokenización y renovación automática) y la 3 (gestión de la suscripción, `/cuenta`, admin y prueba en el sandbox) |
+| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y **sin probar todavía contra Wompi**. Falta la 3 (cambiar el medio de pago y el modo, admin de suscripciones y pagos, borrado de la cuenta, prueba completa en el sandbox y cierre) |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
@@ -215,7 +215,28 @@ Comprobado: de los doce casos de §3.9, los ocho de esta entrega (firma inválid
 
 Quedó para después, a propósito: tokenización, renovación automática, estados `past_due` y `expired`, avisos antes del cobro y el descuento de los cupones `repeating` en las renovaciones (entrega 2); cancelar, cambiar el medio de pago, `/cuenta`, el admin de suscripciones y pagos, eliminar la cuenta con pagos y la prueba en el sandbox (entrega 3).
 
+### Paso 5, entrega 2: qué quedó hecho
+
+Construido el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §3.14. **El paso 5 no está cerrado**: falta la entrega 3.
+
+- **Renovación automática** con una tarjeta o un Nequi guardados. El cliente los escribe en la ventana de Wompi; a la aplicación solo llega un token, y solo se guardan la referencia de Wompi, la marca y los últimos cuatro dígitos.
+- La pantalla de pago deja elegir entre **pago manual** y **renovación automática**, sin ninguno marcado.
+- `backend/app/billing/schedule.py` (puro): intentos de cobro a 48 h, 24 h y 0 h antes del vencimiento, y avisos 7 días antes.
+- `backend/scripts/run_renewals.py`: el job que avisa, cobra, reintenta y deja vencidas las suscripciones. Idempotente por un candado de Postgres y por una referencia por (suscripción, período, intento).
+- Estados `past_due` (conserva el acceso hasta el fin del período) y `expired` (sin período de gracia).
+- Correos: aviso antes de cada cobro, período por vencer en el pago manual, cobro fallido, suscripción vencida y renovación cancelada.
+- El cupón `repeating` descuenta un período en cada renovación aprobada, también en el pago manual del período siguiente.
+- **Cancelar y reanudar** la renovación desde `/cuenta` (adelantado de la entrega 3: no se enciende un cobro que el cliente no pueda detener).
+
+**Al desplegar hay que programar el job** (`DESPLIEGUE.md`, "Job de renovaciones"). Sin él no se cobra ninguna renovación ni salen los avisos.
+
+Comprobado: los doce casos de §3.9 en verde (los cuatro que faltaban: dos corridas sobre el mismo período, cancelación, precio congelado y tres intentos fallidos); renovación automática de punta a punta en Playwright con la pasarela simulada; la migración subida, bajada y vuelta a subir en una base desechable; y el script del job corrido allí, también con el candado tomado.
+
+**Sin probar contra Wompi:** guardar un medio de pago y cobrarle. Exige escribir una tarjeta de prueba en la ventana de Wompi. La lista está al final de §3.14.
+
 ### Decisiones tomadas para la Fase 4
+
+- **Paso 5, entrega 2 (2026-10-13)**: se pueden guardar tarjetas y Nequi; la tarjeta se escribe en el widget de Wompi; cancelar y reanudar entran en esta entrega; y en la pantalla de pago ningún modo entra marcado.
 
 - **Wompi confirmó** que acepta esta categoría de negocio y tarjetas internacionales (lo informó el usuario el 2026-10-13). Las llaves de sandbox ya están en `backend/.env`.
 - **El acceso manual sobre un suscriptor queda como está** (2026-10-13): Invitado o Completo pasan por encima de la suscripción y mientras duren no se le ofrece pagar; Sin acceso manual no le quita la mesa, para eso se suspende la cuenta. El formulario del admin lo explica.

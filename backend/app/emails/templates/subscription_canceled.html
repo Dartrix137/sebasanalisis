@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Cancelaste la renovación automática de tu plan <strong>{{ plan_name }}</strong>. No te vamos
+  a hacer más cobros.
+</p>
+<p style="margin:0 0 12px 0;">
+  Conservas el acceso hasta el <strong>{{ period_end | fecha }}</strong>, que es cuando termina
+  el período que ya pagaste. Si cambias de opinión antes de esa fecha, puedes reanudar la
+  renovación desde tu cuenta.
+</p>
+{{ button(url, "Ver mi suscripción") }}
+<p style="margin:0;">Si no fuiste tú, cambia tu contraseña desde tu cuenta.</p>
+{% endblock %}
