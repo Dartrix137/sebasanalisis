@@ -9,7 +9,11 @@
  * ("Fuentes de pago", consultada el 2026-10-13) sin detallar la forma del
  * resultado; se leyó del propio `widget.js` ese día: al terminar llama al
  * callback con `{ payment_source: { token, type } }`. Si el cliente cierra la
- * ventana, el callback no se llama.
+ * ventana, el callback no se llama. Comprobado contra el sandbox ese mismo día.
+ *
+ * El widget cifra la tarjeta en el navegador y eso exige un contexto seguro:
+ * https o `localhost`. Desde otro origen http responde "Tu tarjeta no pudo ser
+ * verificada (error desconocido)".
  */
 
 import type { PaymentSourceKind } from "./types/billing";

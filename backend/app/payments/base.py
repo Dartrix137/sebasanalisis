@@ -83,6 +83,9 @@ class ProviderTransaction:
     # Texto del proveedor sobre el resultado. Queda en la base, no se le muestra
     # tal cual al cliente.
     status_message: str | None = None
+    # Marca de la tarjeta con la que se pago, si fue con tarjeta y el proveedor
+    # la informa. Nunca el numero.
+    card_brand: str | None = None
 
 
 @dataclass(frozen=True)

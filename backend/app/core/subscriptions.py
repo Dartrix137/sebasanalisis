@@ -533,11 +533,29 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
         payment.status = "approved"
         payment.failure_reason = None
         activated = _grant_period(db, payment, now)
+        _note_card_brand(db, payment, transaction)
     db.commit()
     db.refresh(payment)
     return Settlement(
         payment=payment, changed=True, activated=activated, renewal_failed=renewal_failed
     )
+
+
+def _note_card_brand(db: Session, payment: Payment, transaction: ProviderTransaction) -> None:
+    """Anota la marca de la tarjeta guardada con la del primer cobro aprobado.
+
+    El proveedor no la informa al guardar la tarjeta, solo al cobrarle.
+    """
+    if transaction.card_brand is None or payment.subscription_id is None:
+        return
+    subscription = db.get(Subscription, payment.subscription_id)
+    if (
+        subscription is not None
+        and subscription.payment_source_id is not None
+        and subscription.payment_source_type == "CARD"
+        and subscription.card_brand is None
+    ):
+        subscription.card_brand = transaction.card_brand
 
 
 def _note_failed_renewal(db: Session, payment: Payment) -> bool:

@@ -97,7 +97,9 @@ class Wompi:
                         "type": body["type"],
                         "status": "AVAILABLE",
                         "public_data": (
-                            {"type": "CARD", "brand": "VISA", "last_four": "4242", "bin": "424242"}
+                            # Como respondio el sandbox el 2026-10-13: sin la marca.
+                            {"type": "CARD", "last_four": "4242", "bin": "424242",
+                             "card_holder": "Prueba Prueba"}
                             if tarjeta
                             else {"type": "NEQUI", "phone_number": "3991111111"}
                         ),
@@ -121,6 +123,12 @@ class Wompi:
                 "currency": body["currency"],
                 "status_message": None if status in ("APPROVED", "PENDING") else "Fondos insuficientes",
             }
+            if self.sources.get(str(body["payment_source_id"]), {}).get("type") == "CARD":
+                self.transactions[tx_id]["payment_method"] = {
+                    "type": "CARD",
+                    "extra": {"brand": "VISA", "last_four": "4242", "name": "VISA-4242"},
+                    "installments": 1,
+                }
             return httpx.Response(201, json={"data": self.transactions[tx_id]})
 
         if request.method == "GET" and path.startswith("/transactions/"):

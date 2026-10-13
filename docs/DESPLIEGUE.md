@@ -246,6 +246,14 @@ checkout responde `403` antes de mostrar nada. En produccion no afecta
 `next.config.ts` ya lo admite en `next dev`). La sesion se guarda por origen:
 hay que iniciar sesion en esa direccion, no en `localhost`.
 
+**Guardar un medio de pago (renovacion automatica) es al reves: en local solo
+funciona desde `http://localhost:3000`.** La ventana de Wompi cifra la tarjeta
+en el navegador y eso exige un contexto seguro (https o `localhost`); desde
+`http://localtest.me` responde "Tu tarjeta no pudo ser verificada (error
+desconocido)". Para probar los dos modos en local, `CORS_ORIGINS` lleva los
+dos origenes: el pago manual se prueba por `localtest.me` y la renovacion
+automatica por `localhost`. En produccion, con https, no hay diferencia.
+
 Que pasa al desplegar esta entrega:
 
 - Tres migraciones corren solas: amplian `subscriptions`, crean `payments` y
@@ -329,8 +337,20 @@ INFO: app.renewals - Renovaciones: avisos=0 cobros=0 aprobados=0 fallidos=0 venc
 Sale con codigo 1 si alguna suscripcion fallo (`errores` mayor que cero); el
 detalle queda en el log y en el monitoreo de errores.
 
-**Sin probar todavia contra Wompi**: guardar un medio de pago y cobrarle. Se
-prueba en el sandbox con la tarjeta de prueba y se anota aqui.
+**Prueba contra el sandbox (2026-10-13, en local, llaves de prueba):**
+
+- Tarjeta `4242 4242 4242 4242` escrita por el usuario en la ventana de Wompi:
+  medio guardado, primer cobro aprobado, cuenta con acceso, y en la base solo
+  la referencia de la fuente de pago, `VISA` y `4242`.
+- Job con el vencimiento adelantado en la base de la prueba, tres corridas: la
+  primera aviso por correo y no cobro; la segunda cobro a la tarjeta guardada
+  (`cobros=1`); la tercera encontro el cobro aprobado, extendio el periodo un
+  mes desde el vencimiento anterior y envio el recibo (`aprobados=1`).
+- Tarjeta `4111 1111 1111 1111`: el medio se guarda, el cobro queda rechazado
+  y la cuenta no entra.
+
+**Sin probar**: Nequi (`3991111111`), tarjetas con 3D Secure, y todo lo
+anterior en el VPS.
 
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a

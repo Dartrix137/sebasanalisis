@@ -523,7 +523,7 @@ Adelantada de la entrega 3 por decisión del usuario, antes de la entrega 2 (ram
 
 Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El paso 5 no está cerrado**: falta la entrega 3.
 
-**No se ha probado contra Wompi.** La consulta de los contratos (`GET /merchants/info`) sí respondió bien contra el sandbox. Guardar un medio de pago y cobrarle exige escribir una tarjeta de prueba en la ventana de Wompi, y eso lo hace el usuario: hasta entonces, la forma real de la respuesta de `POST /payment_sources`, el cobro con `payment_source_id` y lo que devuelve el widget están probados solo contra lo que dice la documentación. La lista está al final.
+**Probado contra el sandbox de Wompi el 2026-10-13, en local, con tarjeta.** El usuario escribió la tarjeta de prueba en el widget: guardó el medio, el primer cobro quedó aprobado y la cuenta entró. Después se adelantó el vencimiento de esa suscripción en la base de la prueba y se corrió el job tres veces: avisó, cobró a la fuente guardada y, con el cobro aprobado, extendió el período. También se probó la tarjeta que Wompi rechaza: el pago queda `declined` y no hay acceso. **Nequi y las tarjetas con 3D Secure siguen sin probar**; la lista está al final.
 
 **Decisiones del usuario (2026-10-13)**
 
@@ -597,7 +597,7 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 
 **Lo que queda sin probar o sin hacer**
 
-- **Contra el sandbox**: que el widget entregue el token como se leyó en su código, qué tipos ofrece en modo tokenización (tarjeta y Nequi), la respuesta real de `POST /payment_sources` (de ahí salen la marca y los últimos cuatro; si Wompi los manda con otros nombres, no se muestran pero el cobro funciona), y un cobro con `payment_source_id`.
+- **Lo que la prueba contra el sandbox corrigió o aclaró (2026-10-13)**: el widget entrega el token como se leyó en su código y ofrece tarjeta y Nequi. **La fuente de pago no trae la marca de la tarjeta** (su `public_data` solo tiene `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`); la marca viene en la transacción (`payment_method.extra.brand`), así que `apply_transaction` la anota con el primer cobro aprobado. **El widget solo tokeniza en un contexto seguro** (https o `localhost`): cifra la tarjeta en el navegador, y abierto desde `http://localtest.me` falla con "Tu tarjeta no pudo ser verificada (error desconocido)". En producción no afecta; para probar en local, `DESPLIEGUE.md`. En la ventana de Wompi los botones de tarjeta y Nequi se veían como deshabilitados aunque funcionaban; no se investigó.
 - **Nequi**: el token queda pendiente hasta que el cliente lo aprueba en su app. Se asume que el widget espera esa aprobación antes de devolverlo; si no, Wompi rechaza la fuente y el alta responde `payment_source_rejected`. No se escucha todavía el evento `nequi_token.updated`.
 - **Tarjetas que exigen 3D Secure**: la documentación tiene una guía aparte (3RI) que no se implementó. Si el banco pide autenticación en un cobro sin el cliente presente, ese cobro se rechaza y sigue el camino de los reintentos.
 - **El cron no está programado.** Sin él no hay cobros, ni avisos, ni vencimientos marcados (el acceso sí cae en su fecha, porque lo decide `has_access`). Hay que programarlo al desplegar esta entrega: `DESPLIEGUE.md`.
