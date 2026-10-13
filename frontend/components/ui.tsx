@@ -6,8 +6,11 @@
  * acción primaria.
  */
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+
+import logoMark from "./brand/logo-mark.png";
 
 export function Card({
   children,
@@ -200,34 +203,23 @@ export function ErrorBox({ message, details }: { message: string; details?: stri
   );
 }
 
-export function BrandMark({ size = 56 }: { size?: number }) {
+/**
+ * El logo: el hexágono dorado, sin fondo. `size` es el alto en píxeles.
+ *
+ * Es decorativo: donde aparece, el nombre va escrito al lado o lo dice el
+ * enlace que lo envuelve. La imagen sale de `scripts/make-logo.mjs`.
+ */
+export function BrandMark({ size = 88 }: { size?: number }) {
   return (
-    <div
-      style={{ width: size, height: size }}
-      className="flex items-center justify-center rounded-full bg-gold text-gold-ink shadow-[0_0_40px_-6px_rgba(221,165,32,0.7)]"
-    >
-      <svg viewBox="0 0 24 24" width={size * 0.5} height={size * 0.5} aria-hidden="true">
-        <rect
-          x="3"
-          y="3"
-          width="13"
-          height="13"
-          rx="3"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        />
-        <circle cx="9.5" cy="9.5" r="1.6" fill="currentColor" />
-        <path
-          d="M17 12h3l-2 2 2 2h-3"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+    <Image
+      src={logoMark}
+      alt=""
+      height={size}
+      width={Math.round((size * logoMark.width) / logoMark.height)}
+      // Ya viene en el tamaño que se usa: no hace falta el optimizador.
+      unoptimized
+      priority
+    />
   );
 }
 

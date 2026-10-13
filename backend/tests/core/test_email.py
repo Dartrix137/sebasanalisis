@@ -338,3 +338,11 @@ def test_un_fallo_de_envio_se_registra_y_no_se_propaga(
     assert "No se pudo enviar el correo 'Asunto'" in caplog.text
     # El cuerpo lleva un enlace de un solo uso: no va al log.
     assert "hola" not in caplog.text.replace("No se pudo", "")
+
+
+def test_el_html_lleva_el_logo_desde_el_frontend_y_el_texto_no() -> None:
+    message = build_email("verify_email", to="ana@ejemplo.com", **CONTEXT)
+    assert 'src="http' in message.html and "/logo-email.png" in message.html
+    # Con las imagenes bloqueadas el nombre sigue ahi.
+    assert "análisis" in message.html
+    assert "logo-email" not in message.text

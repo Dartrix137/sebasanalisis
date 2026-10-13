@@ -14,6 +14,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
+from app.core.config import get_settings
 from app.core.email import EmailMessage
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -77,6 +78,11 @@ _env = Environment(
 )
 _env.filters["money"] = format_money
 _env.filters["fecha"] = format_date
+# El logo lo sirve el frontend desde una direccion fija (`frontend/public`).
+# Un cliente de correo que bloquee las imagenes muestra solo el nombre.
+_env.globals["logo_url"] = lambda: (
+    f"{get_settings().frontend_base_url.rstrip('/')}/logo-email.png"
+)
 
 
 def build_email(name: str, *, to: str, **context: Any) -> EmailMessage:

@@ -35,6 +35,9 @@ RUN addgroup --system --gid 1001 nodejs \
 # La salida "standalone" trae su propio server.js con las dependencias minimas.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# `public` tampoco viene en la salida standalone. Ahi esta el logo que cargan
+# los correos (`/logo-email.png`): sin esta linea, los correos salen sin logo.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 EXPOSE 3000
