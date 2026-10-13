@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+{% if activated_renewal %}Activaste la renovación automática de tu plan {{ plan_name }}. Desde ahora se renueva sola con {{ source_label }}.{% else %}Cambiaste el medio de pago de tu plan {{ plan_name }}. Los próximos cobros se hacen a {{ source_label }}.{% endif %}
+
+Hoy no te cobramos nada por este cambio. El próximo cobro es de {{ amount_cents | money(currency) }}{% if charge_at %}, a partir del {{ charge_at | fecha }}{% endif %}, y antes te avisamos por correo. Puedes cambiar el medio de pago, cancelar la renovación o volver al pago manual cuando quieras desde tu cuenta.
+
+Tu suscripción: {{ url }}
+
+Si no fuiste tú, cambia tu contraseña y cancela la renovación desde tu cuenta.
+{% endblock %}

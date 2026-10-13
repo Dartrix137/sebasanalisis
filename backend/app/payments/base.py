@@ -86,6 +86,7 @@ class ProviderTransaction:
     # Marca de la tarjeta con la que se pago, si fue con tarjeta y el proveedor
     # la informa. Nunca el numero.
     card_brand: str | None = None
+    card_last4: str | None = None
 
 
 @dataclass(frozen=True)

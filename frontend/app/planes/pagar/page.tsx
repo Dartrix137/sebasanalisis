@@ -25,12 +25,12 @@ import { Suspense, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
-import { BrandMark, Button, Card, Checkbox, ErrorBox, Field } from "@/components/ui";
+import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
+import { BrandMark, Button, Card, ErrorBox, Field } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import { CURRENCY_NOTE, formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import { openTokenizer } from "@/lib/tokenize";
 import type { TokenizedSource } from "@/lib/tokenize";
 import type {
   AcceptanceResponse,
@@ -42,13 +42,6 @@ import type {
 } from "@/lib/types/billing";
 
 const LINK = "font-bold text-gold hover:text-gold-soft";
-
-/** Los "medios de pago" de la pasarela simulada (solo desarrollo y pruebas). */
-const FAKE_SOURCES: [string, string][] = [
-  ["fake-token-ok", "Tarjeta simulada: cobros aprobados"],
-  ["fake-token-declined", "Tarjeta simulada: cobros rechazados"],
-  ["fake-token-rejected", "Tarjeta simulada: no se puede guardar"],
-];
 
 function messageOf(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
@@ -76,10 +69,6 @@ function Checkout() {
 
   // Ningún modo entra marcado.
   const [mode, setMode] = useState<RenewalMode | null>(null);
-  const [acceptance, setAcceptance] = useState<AcceptanceResponse | null>(null);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [dataAccepted, setDataAccepted] = useState(false);
-  const [fakeToken, setFakeToken] = useState(FAKE_SOURCES[0][0]);
 
   useEffect(() => {
     if (loading) return;
@@ -168,15 +157,10 @@ function Checkout() {
   // La renovación automática solo se ofrece en el alta, y si la pasarela la permite.
   const automaticOffered = !renewing && availability.tokenizer !== null;
   const chosen: RenewalMode | null = automaticOffered ? mode : "manual";
-  const acceptedAll = termsAccepted && dataAccepted;
 
   function chooseMode(next: RenewalMode) {
     setMode(next);
     setError(null);
-    if (next !== "automatic" || acceptance) return;
-    withToken((t) => billingApi.acceptance(t))
-      .then(setAcceptance)
-      .catch((e) => setError(messageOf(e, "No se pudo consultar al procesador de pagos")));
   }
 
   async function applyCoupon(event: FormEvent) {
@@ -237,8 +221,7 @@ function Checkout() {
   }
 
   /** Con el token que devolvió Wompi: guarda el medio y hace el primer cobro. */
-  async function subscribeWith(source: TokenizedSource) {
-    if (!acceptance) return;
+  async function subscribeWith(source: TokenizedSource, acceptance: AcceptanceResponse) {
     setError(null);
     setCouponError(null);
     setPaying(true);
@@ -261,22 +244,6 @@ function Checkout() {
     }
   }
 
-  async function addPaymentSource() {
-    setError(null);
-    if (availability?.tokenizer === "fake") {
-      await subscribeWith({ token: fakeToken, type: "CARD" });
-      return;
-    }
-    if (!availability?.public_key) return;
-    try {
-      await openTokenizer(availability.public_key, subscribeWith, () =>
-        setError("Ese medio de pago no se puede guardar para la renovación automática."),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo abrir el formulario de pago");
-    }
-  }
-
   const blocked = paying || quoting || !user.email_verified;
 
   return (
@@ -292,6 +259,15 @@ function Checkout() {
           <p className="mt-3 text-sm text-white">
             Tu acceso actual va hasta el {formatLegalDate(current.current_period_end)}. El período
             nuevo empieza ese día: no pierdes los días que te quedan.
+          </p>
+        ) : null}
+        {renewing && availability.tokenizer !== null ? (
+          <p className="mt-3 text-sm text-muted">
+            Si prefieres que se renueve sola, sin pagar nada hoy,{" "}
+            <Link href="/cuenta" className={LINK}>
+              activa la renovación automática desde tu cuenta
+            </Link>
+            .
           </p>
         ) : null}
 
@@ -381,65 +357,15 @@ function Checkout() {
           </fieldset>
 
           {mode === "automatic" ? (
-            <div className="mt-5 space-y-3 border-t border-edge pt-4">
-              <p className="text-sm leading-relaxed text-muted">
-                Para guardar tu medio de pago, Wompi (el procesador de pagos) pide que aceptes sus
-                dos documentos:
-              </p>
-              {acceptance ? (
-                <>
-                  <Checkbox
-                    checked={termsAccepted}
-                    onChange={(e) => setTermsAccepted(e.target.checked)}
-                  >
-                    Acepto los{" "}
-                    <a
-                      href={acceptance.terms_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={LINK}
-                    >
-                      términos de uso de Wompi
-                    </a>
-                    .
-                  </Checkbox>
-                  <Checkbox
-                    checked={dataAccepted}
-                    onChange={(e) => setDataAccepted(e.target.checked)}
-                  >
-                    Autorizo a Wompi el{" "}
-                    <a
-                      href={acceptance.personal_data_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={LINK}
-                    >
-                      tratamiento de mis datos personales
-                    </a>
-                    .
-                  </Checkbox>
-                </>
-              ) : error ? null : (
-                <p className="text-sm text-muted">Consultando a Wompi…</p>
-              )}
-              {availability.tokenizer === "fake" ? (
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-bold text-white">
-                    Medio de pago simulado (solo pruebas)
-                  </span>
-                  <select
-                    value={fakeToken}
-                    onChange={(e) => setFakeToken(e.target.value)}
-                    className="w-full rounded-lg border border-edge bg-ink-sunken px-3 py-2.5 text-sm text-white outline-none focus:border-gold/60"
-                  >
-                    {FAKE_SOURCES.map(([value, text]) => (
-                      <option key={value} value={value}>
-                        {text}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
+            <div className="mt-5 border-t border-edge pt-4">
+              <PaymentSourceForm
+                availability={availability}
+                submitLabel={`Guardar medio de pago y pagar ${totalText}`}
+                busyLabel="Enviando el cobro…"
+                busy={paying}
+                disabled={blocked}
+                onSource={subscribeWith}
+              />
             </div>
           ) : null}
         </Card>
@@ -449,11 +375,7 @@ function Checkout() {
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="space-y-3">
-        {chosen === "automatic" ? (
-          <Button onClick={addPaymentSource} disabled={blocked || !acceptance || !acceptedAll}>
-            {paying ? "Enviando el cobro…" : `Guardar medio de pago y pagar ${totalText}`}
-          </Button>
-        ) : (
+        {chosen === "automatic" ? null : (
           <Button onClick={payManually} disabled={blocked || chosen === null}>
             {paying ? "Abriendo el pago…" : `Ir a pagar ${totalText}`}
           </Button>
@@ -466,12 +388,8 @@ function Checkout() {
         ) : null}
         <p className="max-w-prose text-xs leading-relaxed text-muted">
           {chosen === "automatic"
-            ? "Al continuar se abre la ventana de Wompi para guardar tu tarjeta o tu Nequi. "
-            : "Al continuar vas a la página de pagos de Wompi, donde eliges el medio de pago. "}
-          Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta
-          {chosen === "automatic"
-            ? ": solo la referencia que entrega Wompi y, si es una tarjeta, la marca y los últimos cuatro dígitos. "
-            : ". "}
+            ? null
+            : "Al continuar vas a la página de pagos de Wompi, donde eliges el medio de pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
           La suscripción da acceso a la plataforma: no cambia el resultado de ningún juego ni la
           ventaja de la casa. Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>

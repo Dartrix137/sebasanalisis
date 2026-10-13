@@ -143,9 +143,9 @@ class CouponRedemption(Base):
     """Un uso de un cupon. Las escribe el pago aprobado (paso 5); hasta
     entonces la tabla solo se lee.
 
-    `user_id` es CASCADE como el resto de lo que hoy cuelga de la cuenta. El
-    paso 5 revisa ese `ON DELETE` junto con el de `subscriptions` (§5.7.1):
-    con CASCADE, eliminar la cuenta borra tambien el rastro de que uso el cupon.
+    `user_id` es SET NULL (paso 5, entrega 3): al eliminar la cuenta el uso
+    queda, sin nada que la identifique, igual que sus pagos. Asi
+    `coupons.redemptions_count` sigue coincidiendo con las filas.
     """
 
     __tablename__ = "coupon_redemptions"
@@ -159,8 +159,8 @@ class CouponRedemption(Base):
     coupon_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("coupons.id", ondelete="RESTRICT"), index=True, nullable=False
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     subscription_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("subscriptions.id", ondelete="SET NULL")

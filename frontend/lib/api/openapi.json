@@ -531,7 +531,7 @@
         "type": "object"
       },
       "AdminUserDetailResponse": {
-        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y los pagos son de solo lectura: las acciones sobre ellos\nllegan con la entrega 3 del paso 5.",
+        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y los pagos son de solo lectura: las acciones sobre ellos\nllegan con el paso 6 (§4.3).",
         "properties": {
           "audit": {
             "items": {
@@ -1555,13 +1555,27 @@
             "title": "Subscription Id"
           },
           "user_email": {
-            "title": "User Email",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
           },
           "user_id": {
-            "format": "uuid",
-            "title": "User Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "required": [
@@ -2055,10 +2069,7 @@
           },
           "payments": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/PaymentResponse"
             },
             "title": "Payments",
             "type": "array"
@@ -2069,6 +2080,16 @@
             },
             "title": "Sessions",
             "type": "array"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2076,6 +2097,7 @@
           "account",
           "sessions",
           "consents",
+          "subscription",
           "payments"
         ],
         "title": "ExportResponse",
@@ -2685,6 +2707,40 @@
           "offset"
         ],
         "title": "PaymentListResponse",
+        "type": "object"
+      },
+      "PaymentMethodRequest": {
+        "description": "PUT /billing/payment-method: el medio de pago que el cliente tokenizo en\nla ventana del procesador. No son datos de tarjeta.",
+        "properties": {
+          "acceptance_token": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Acceptance Token",
+            "type": "string"
+          },
+          "payment_source_token": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Payment Source Token",
+            "type": "string"
+          },
+          "payment_source_type": {
+            "$ref": "#/components/schemas/PaymentSourceKind"
+          },
+          "personal_data_token": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Personal Data Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_source_token",
+          "payment_source_type",
+          "acceptance_token",
+          "personal_data_token"
+        ],
+        "title": "PaymentMethodRequest",
         "type": "object"
       },
       "PaymentResponse": {
@@ -6699,7 +6755,7 @@
     },
     "/auth/me": {
       "delete": {
-        "description": "Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).\n\nBorra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,\nrecomendaciones y tokens. No queda nada que lo identifique.\n\nPendiente del paso 5: cuando haya pagos, primero se cancela la renovacion y\nlos registros de pago se conservan anonimizados por obligacion contable.",
+        "description": "Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).\n\nBorra el usuario; la base arrastra en cascada sus mesas, numeros, apuestas,\nrecomendaciones, tokens y su suscripcion. No queda nada que lo identifique.\n\nCon la suscripcion se va la referencia del medio de pago: la renovacion\nautomatica queda cancelada porque ya no hay a que cobrarle. Los registros\nde pago se conservan anonimizados por obligacion contable\n(`core/payment_privacy`): sin cuenta, y con sus eventos reducidos a lo que\nexplica el pago.",
         "operationId": "delete_account_auth_me_delete",
         "requestBody": {
           "content": {
@@ -7209,6 +7265,78 @@
           }
         },
         "summary": "Availability",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/payment-method": {
+      "delete": {
+        "description": "Pasa la renovacion automatica a pago manual: deja de guardarse el medio\nde pago y no se cobra mas. La cuenta conserva el acceso hasta que termine\nel periodo que ya pago, y paga el siguiente cuando quiera.",
+        "operationId": "remove_payment_method_billing_payment_method_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Payment Method",
+        "tags": [
+          "billing"
+        ]
+      },
+      "put": {
+        "description": "Guarda un medio de pago en la suscripcion vigente, que queda renovandose\nsola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion\nautomatica, o reanuda una renovacion cancelada con otro medio.\n\nNo cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene\nun cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca\npasan datos de tarjeta: solo el token que el procesador le dio al navegador.",
+        "operationId": "set_payment_method_billing_payment_method_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentMethodRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Payment Method",
         "tags": [
           "billing"
         ]

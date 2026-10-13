@@ -3,7 +3,7 @@
 /**
  * Suscripción y pagos de una cuenta, en el detalle de `/admin/usuarios` (§4.2
  * de la Fase 4). De solo lectura: las acciones sobre una suscripción o un pago
- * llegan con la entrega 3 del paso 5.
+ * llegan con el paso 6 (§4.3).
  */
 
 import { Badge } from "@/components/ui";

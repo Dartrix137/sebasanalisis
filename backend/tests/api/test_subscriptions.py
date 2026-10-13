@@ -922,8 +922,8 @@ def test_la_suscripcion_de_la_cuenta(client, db, wompi) -> None:
 
 
 def test_eliminar_la_cuenta_conserva_el_pago_sin_usuario(client, db, wompi) -> None:
-    """Decidido el 2026-10-13. El flujo completo (cancelar la renovacion antes
-    de borrar) es de la entrega 3; aqui se fija lo que hacen las llaves."""
+    """Decidido el 2026-10-13. Lo que hacen las llaves; el resto del cierre de
+    la cuenta esta en `test_subscription_changes.py`."""
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
     _aprobar(client, wompi, pago)

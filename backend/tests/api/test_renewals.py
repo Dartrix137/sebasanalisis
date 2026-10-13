@@ -322,15 +322,6 @@ def test_con_renovacion_automatica_vigente_no_se_paga_a_mano(client, db, wompi) 
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "renews_automatically")
 
 
-def test_pasar_de_manual_a_automatica_todavia_no_se_puede(client, db, wompi) -> None:
-    """Es de la entrega 3."""
-    token, _, _ = _cuenta(client, db)
-    _aprobar(client, wompi, _abrir_pago(client, db, token))
-    r = _alta_automatica(client, token, _mensual(db).id)
-    assert (r.status_code, r.json()["detail"]["code"]) == (409, "mode_change_not_available")
-    assert wompi.fuentes_pedidas == []
-
-
 # ---------- Job: aviso antes del cobro ----------
 
 

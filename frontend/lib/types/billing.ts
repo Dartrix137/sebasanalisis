@@ -16,6 +16,7 @@ export type QuoteResponse = S["QuoteResponse"];
 export type BillingAvailabilityResponse = S["BillingAvailabilityResponse"];
 export type SubscribeRequest = S["SubscribeRequest"];
 export type SubscribeResponse = S["SubscribeResponse"];
+export type PaymentMethodRequest = S["PaymentMethodRequest"];
 export type PaymentResponse = S["PaymentResponse"];
 export type PaymentStatus = S["PaymentStatus"];
 export type PaymentListResponse = S["PaymentListResponse"];

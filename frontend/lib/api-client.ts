@@ -46,6 +46,7 @@ import type {
   CreateCouponRequest,
   CreatePlanRequest,
   PaymentListResponse,
+  PaymentMethodRequest,
   PaymentResponse,
   PlanResponse,
   QuoteRequest,
@@ -335,6 +336,21 @@ export const billingApi = {
   /** Revierte la cancelación antes del vencimiento. */
   resumeSubscription: (token: string) =>
     apiFetch<SubscriptionResponse>("/billing/subscription/resume", { method: "POST", token }),
+
+  /**
+   * Guarda un medio de pago en la suscripción vigente, que queda renovándose
+   * sola con él. No cobra nada: el período vigente ya está pagado.
+   */
+  setPaymentMethod: (token: string, body: PaymentMethodRequest) =>
+    apiFetch<SubscriptionResponse>("/billing/payment-method", {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Pasa a pago manual: deja de guardarse el medio de pago y no se cobra más. */
+  removePaymentMethod: (token: string) =>
+    apiFetch<SubscriptionResponse>("/billing/payment-method", { method: "DELETE", token }),
 
   /** El historial de pagos de la cuenta, lo más reciente primero. */
   payments: (token: string) => apiFetch<PaymentListResponse>("/billing/payments", { token }),

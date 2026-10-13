@@ -444,14 +444,15 @@ def _transaction(response: httpx.Response) -> ProviderTransaction:
             amount_cents=amount,
             currency=str(data["currency"]),
             status_message=message if isinstance(message, str) else None,
-            card_brand=_card_brand(data),
+            card_brand=_card_extra(data, "brand", 50),
+            card_last4=_card_extra(data, "last_four", 4),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise PaymentProviderError("Respuesta de Wompi que no se entiende") from exc
 
 
-def _card_brand(data: dict[str, Any]) -> str | None:
-    """La marca de la tarjeta de una transaccion.
+def _card_extra(data: dict[str, Any], field: str, length: int) -> str | None:
+    """La marca o los ultimos cuatro digitos de la tarjeta de una transaccion.
 
     La fuente de pago no la trae: en el sandbox, el 2026-10-13, su `public_data`
     solo tenia `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`.
@@ -461,7 +462,7 @@ def _card_brand(data: dict[str, Any]) -> str | None:
     if not isinstance(method, dict) or method.get("type") != "CARD":
         return None
     extra = method.get("extra")
-    return _short(extra.get("brand"), 50) if isinstance(extra, dict) else None
+    return _short(extra.get(field), length) if isinstance(extra, dict) else None
 
 
 def _short(value: Any, length: int) -> str | None:

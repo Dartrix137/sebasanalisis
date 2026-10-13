@@ -13,6 +13,8 @@ Operaciones:
   Es idempotente: un pago se resuelve una sola vez, asi lleguen el mismo evento
   repetido, dos eventos distintos o el webhook y la consulta a la vez.
 - `cancel` y `resume`: detener y reanudar la renovacion automatica.
+- `set_payment_source` y `switch_to_manual`: cambiar el medio de pago guardado
+  y pasar de un modo de pago al otro, sobre la misma suscripcion.
 
 Aqui no se decide el acceso: lo decide `core/access.has_access` a partir de
 `status` y `current_period_end`.
@@ -282,10 +284,13 @@ def start_payment(
                 "Tu suscripción se renueva sola: no hace falta pagar el siguiente período.",
             )
         if automatic:
+            # Con un periodo ya pagado no hay nada que cobrar ahora: el cambio de
+            # modo es `set_payment_source`, sin pago.
             raise SubscribeError(
                 409,
-                "mode_change_not_available",
-                "Todavía no se puede pasar a renovación automática con un período ya pagado.",
+                "mode_change_in_account",
+                "Ya tienes un período pagado. Para que se renueve sola, activa la "
+                "renovación automática desde tu cuenta.",
             )
         if subscription.plan_id != plan_id:
             raise SubscribeError(
@@ -533,7 +538,7 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
         payment.status = "approved"
         payment.failure_reason = None
         activated = _grant_period(db, payment, now)
-        _note_card_brand(db, payment, transaction)
+    _note_card_brand(db, payment, transaction)
     db.commit()
     db.refresh(payment)
     return Settlement(
@@ -542,9 +547,11 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
 
 
 def _note_card_brand(db: Session, payment: Payment, transaction: ProviderTransaction) -> None:
-    """Anota la marca de la tarjeta guardada con la del primer cobro aprobado.
+    """Anota la marca de la tarjeta guardada con la del primer cobro resuelto.
 
-    El proveedor no la informa al guardar la tarjeta, solo al cobrarle.
+    El proveedor no la informa al guardar la tarjeta, solo al cobrarle. Si el
+    cobro fue a otra tarjeta (la que el cliente tenia antes de cambiarla), su
+    marca no es la de la guardada: se comparan los ultimos cuatro digitos.
     """
     if transaction.card_brand is None or payment.subscription_id is None:
         return
@@ -554,6 +561,7 @@ def _note_card_brand(db: Session, payment: Payment, transaction: ProviderTransac
         and subscription.payment_source_id is not None
         and subscription.payment_source_type == "CARD"
         and subscription.card_brand is None
+        and transaction.card_last4 in (None, subscription.card_last4)
     ):
         subscription.card_brand = transaction.card_brand
 
@@ -591,6 +599,17 @@ def _grant_period(db: Session, payment: Payment, now: datetime) -> bool:
         if payment.subscription_id is not None
         else None
     )
+    if subscription is None and payment.user_id is not None:
+        # Su suscripcion pendiente se descarto (al reanudar o cambiar de modo)
+        # con este pago en curso: el periodo va a la que la cuenta tiene viva.
+        subscription = db.scalar(
+            select(Subscription)
+            .where(
+                Subscription.user_id == payment.user_id,
+                Subscription.status.in_(LIVE_SUBSCRIPTION_STATUSES),
+            )
+            .with_for_update()
+        )
     if subscription is None or payment.user_id is None:
         # La cuenta se elimino con el pago en curso. Queda aprobado, sin a quien
         # darle el periodo.
@@ -734,22 +753,148 @@ def resume(db: Session, user: User, now: datetime) -> Subscription:
         raise SubscribeError(
             409, "no_payment_source", "La suscripción no tiene un medio de pago guardado."
         )
-    # Si despues de cancelar abrio otro pago sin completarlo, esa suscripcion
-    # pendiente estorba ("una sola viva") y ya no hace falta.
-    other = live_subscription(db, user.id)
-    if other is not None:
-        if other.status != "pending":
-            raise SubscribeError(
-                409, "other_subscription", "Ya tienes otra suscripción activa."
-            )
-        db.delete(other)
-        db.flush()
+    _make_room(db, user.id)
     subscription.status = "active"
     subscription.cancel_at_period_end = False
     subscription.canceled_at = None
     subscription.retry_count = 0
     assert subscription.current_period_end is not None
     subscription.next_charge_at = first_charge_at(subscription.current_period_end)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
+def _make_room(db: Session, user_id: uuid.UUID) -> None:
+    """Antes de reactivar una suscripcion cancelada: si despues de cancelar la
+    cuenta abrio otro pago sin completarlo, esa suscripcion pendiente estorba
+    ("una sola viva") y ya no hace falta."""
+    other = live_subscription(db, user_id)
+    if other is None:
+        return
+    if other.status != "pending":
+        raise SubscribeError(409, "other_subscription", "Ya tienes otra suscripción activa.")
+    db.delete(other)
+    db.flush()
+
+
+# ---------- Cambiar el medio de pago y pasar de un modo al otro (§3.6 y §3.10) ----------
+
+
+@dataclass(frozen=True)
+class SourceChange:
+    """Lo que paso al guardar un medio de pago en una suscripcion ya pagada."""
+
+    subscription: Subscription
+    #: Con este cambio la suscripcion paso a renovarse sola: venia de pago
+    #: manual o de una renovacion cancelada.
+    activated_renewal: bool
+    #: Tiene un cobro sin aprobar: quien llama lo reintenta ya con el medio nuevo.
+    retry_due: bool
+
+
+def _paid_subscription(db: Session, user: User, now: datetime) -> Subscription:
+    """La suscripcion de la cuenta con un periodo pagado y vigente, bloqueada."""
+    db.execute(select(User.id).where(User.id == user.id).with_for_update())
+    subscription = db.scalar(
+        select(Subscription)
+        .where(
+            Subscription.user_id == user.id,
+            Subscription.status.in_(_STATUSES_WITH_PAID_PERIOD),
+            Subscription.current_period_end > now,
+        )
+        .order_by(Subscription.current_period_end.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if subscription is None:
+        raise SubscribeError(
+            409,
+            "no_subscription",
+            "No tienes una suscripción vigente. Puedes suscribirte desde los planes.",
+        )
+    return subscription
+
+
+def set_payment_source(
+    db: Session, *, user: User, provider: PaymentProvider, source: SourceInput, now: datetime
+) -> SourceChange:
+    """Guarda un medio de pago en la suscripcion vigente. Hace commit.
+
+    Sirve para tres cosas, y en las tres la suscripcion queda renovandose sola
+    con el medio nuevo:
+
+    - cambiar la tarjeta o el Nequi de una renovacion automatica;
+    - pasar de pago manual a renovacion automatica;
+    - reanudar una renovacion cancelada con otro medio de pago.
+
+    No cobra nada: el periodo vigente ya esta pagado. El primer cobro al medio
+    nuevo es el de la renovacion, con su aviso por correo antes. La excepcion
+    es la suscripcion en mora (`retry_due`): quien llama reintenta ese cobro.
+    """
+    if not provider.enabled:
+        raise SubscribeError(503, "payments_unavailable", "El pago todavía no está disponible.")
+    if not user.is_active:
+        raise SubscribeError(403, "suspended", "Tu cuenta está suspendida.")
+    checked = _check_source(provider, source)
+    subscription = _paid_subscription(db, user, now)
+    reactivating = subscription.status == "canceled"
+    if reactivating:
+        _make_room(db, user.id)
+    # Antes de escribir nada: si el proveedor no acepta el medio, todo queda igual.
+    stored = _store_source(provider, checked, user)
+
+    was_manual = subscription.renewal_mode != "automatic"
+    subscription.renewal_mode = "automatic"
+    subscription.payment_source_id = stored.id
+    subscription.payment_source_type = stored.type
+    subscription.card_brand = stored.brand
+    subscription.card_last4 = stored.last4
+    if was_manual or reactivating:
+        subscription.status = "active"
+        subscription.cancel_at_period_end = False
+        subscription.canceled_at = None
+        subscription.retry_count = 0
+    if was_manual:
+        # El aviso de vencimiento del pago manual no cuenta como aviso del
+        # cobro automatico: ese tiene que salir antes de cobrar (§3.8).
+        subscription.notice_sent_for = None
+    assert subscription.current_period_end is not None
+    subscription.next_charge_at = first_charge_at(subscription.current_period_end)
+    db.commit()
+    db.refresh(subscription)
+    return SourceChange(
+        subscription=subscription,
+        activated_renewal=was_manual or reactivating,
+        retry_due=subscription.status == "past_due",
+    )
+
+
+def switch_to_manual(db: Session, user: User, now: datetime) -> Subscription:
+    """Pasa la renovacion automatica a pago manual. Hace commit.
+
+    Deja de guardarse la referencia del medio de pago y no se cobra mas. La
+    cuenta conserva el acceso hasta `current_period_end` y, a diferencia de
+    cancelar, recibe el aviso de vencimiento para pagar el periodo siguiente.
+    """
+    subscription = _paid_subscription(db, user, now)
+    if subscription.renewal_mode != "automatic":
+        raise SubscribeError(409, "not_automatic", "Tu suscripción ya es de pago manual.")
+    if subscription.status == "canceled":
+        _make_room(db, user.id)
+    subscription.renewal_mode = "manual"
+    subscription.payment_source_id = None
+    subscription.payment_source_type = None
+    subscription.card_brand = None
+    subscription.card_last4 = None
+    subscription.next_charge_at = None
+    subscription.retry_count = 0
+    subscription.status = "active"
+    subscription.cancel_at_period_end = False
+    subscription.canceled_at = None
+    # Para que el aviso de vencimiento del pago manual salga aunque el del
+    # cobro automatico de este periodo ya se hubiera enviado.
+    subscription.notice_sent_for = None
     db.commit()
     db.refresh(subscription)
     return subscription

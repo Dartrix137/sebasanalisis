@@ -147,6 +147,16 @@ class SubscribeRequest(ApiModel):
     personal_data_token: str | None = Field(default=None, max_length=5000)
 
 
+class PaymentMethodRequest(ApiModel):
+    """PUT /billing/payment-method: el medio de pago que el cliente tokenizo en
+    la ventana del procesador. No son datos de tarjeta."""
+    payment_source_token: str = Field(min_length=1, max_length=500)
+    payment_source_type: PaymentSourceKind
+    # Los tokens de `GET /billing/acceptance`, tras marcar las dos casillas.
+    acceptance_token: str = Field(min_length=1, max_length=5000)
+    personal_data_token: str = Field(min_length=1, max_length=5000)
+
+
 class SubscribeResponse(ApiModel):
     """El pago quedo abierto. En el pago manual falta que el cliente pague en
     la pasarela; con un medio guardado, el cobro ya se envio."""
@@ -327,8 +337,9 @@ class UpdateCouponRequest(ApiModel):
 
 class CouponRedemptionResponse(ApiModel):
     id: UUID
-    user_id: UUID
-    user_email: str
+    # Null si la cuenta que lo uso se elimino: el uso sigue contando.
+    user_id: UUID | None = None
+    user_email: str | None = None
     subscription_id: UUID | None = None
     created_at: datetime
 

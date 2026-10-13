@@ -85,7 +85,7 @@ class AdminUserDetailResponse(ApiModel):
     """Una cuenta vista por el administrador (§4.2).
 
     La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
-    llegan con la entrega 3 del paso 5.
+    llegan con el paso 6 (§4.3).
     """
     user: UserResponse
     # La que tiene un periodo pagado, vigente o no. Null si nunca pago.

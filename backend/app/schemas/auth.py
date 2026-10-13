@@ -12,6 +12,7 @@ from pydantic_core import PydanticCustomError
 from app.core.password_policy import PasswordPolicyError, validate_password
 from app.schemas.base import ApiModel
 from app.schemas.bets import BetResponse
+from app.schemas.billing import PaymentResponse, SubscriptionResponse
 from app.schemas.legal import ConsentResponse
 from app.schemas.sessions import SessionResponse
 from app.schemas.spins import SpinResponse
@@ -184,7 +185,9 @@ class ExportResponse(ApiModel):
     account: UserResponse
     sessions: list[ExportSession]
     consents: list[ConsentResponse]
-    # Vacio hasta el paso 5: todavia no hay cobros.
-    payments: list[dict[str, str]]
+    # La suscripcion de la cuenta, o null si nunca pago una.
+    subscription: SubscriptionResponse | None = None
+    # Todos sus pagos, tambien los que no se completaron.
+    payments: list[PaymentResponse]
 
 

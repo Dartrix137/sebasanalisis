@@ -33,6 +33,8 @@ SUBJECTS: dict[str, str] = {
     "payment_failed": "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis",
     "subscription_expired": "Tu suscripción a Sebasanálisis venció",
     "subscription_canceled": "Cancelaste la renovación de tu suscripción a Sebasanálisis",
+    "payment_method_updated": "Cambió el medio de pago de tu suscripción a Sebasanálisis",
+    "switched_to_manual": "Tu suscripción a Sebasanálisis pasó a pago manual",
 }
 
 _MONTHS = (
