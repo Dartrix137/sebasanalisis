@@ -87,6 +87,34 @@ export async function registerViaApi(
   return token;
 }
 
+/** Confirma el correo de una cuenta con el enlace que le llegó, sin pasar por la pantalla. */
+export async function confirmEmail(request: APIRequestContext, email: string): Promise<void> {
+  const link = await linkFromEmail(email, "Confirma tu correo");
+  const token = new URL(link).searchParams.get("token");
+  const confirmed = await request.post(`${API_URL}/auth/verify-email`, { data: { token } });
+  expect(confirmed.ok()).toBeTruthy();
+}
+
+/** Crea un cupón de porcentaje como lo hace un administrador y devuelve su código. */
+export async function createPercentCoupon(
+  request: APIRequestContext,
+  percent: number,
+): Promise<string> {
+  const code = `E2E${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+  const created = await request.post(`${API_URL}/admin/coupons`, {
+    headers: await adminAuth(request),
+    data: {
+      code,
+      kind: "percent",
+      value: percent,
+      duration: "once",
+      reason: "Cupón para un test de punta a punta",
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  return code;
+}
+
 /** Marca las casillas de consentimiento del formulario de registro. */
 export async function checkRegisterConsents(page: Page): Promise<void> {
   await page.getByRole("checkbox", { name: /Acepto los Términos y Condiciones/ }).check();

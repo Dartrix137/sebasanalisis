@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">Este es el recibo de tu pago en Sebasanálisis.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px 0;font-size:15px;color:#d7deea;">
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Plan</td><td>{{ plan_name }}</td></tr>
+  {% if discount_cents %}
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Descuento</td><td>{{ discount_cents | money(currency) }}</td></tr>
+  {% endif %}
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Total pagado</td><td><strong>{{ amount_cents | money(currency) }}</strong></td></tr>
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Fecha del pago</td><td>{{ paid_at | fecha }}</td></tr>
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Período</td><td>del {{ period_start | fecha }} al {{ period_end | fecha }}</td></tr>
+  <tr><td style="padding:2px 16px 2px 0;color:#8b98ae;">Referencia</td><td style="word-break:break-all;">{{ reference }}</td></tr>
+</table>
+<p style="margin:0 0 12px 0;">
+  Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y
+  puede cobrar comisiones, así que el valor en tu extracto puede ser distinto.
+</p>
+<p style="margin:0 0 12px 0;">
+  Las fechas van en hora de Colombia. Este correo es una constancia de pago, no una factura.
+</p>
+<p style="margin:0;">
+  Puedes ver tu cuenta en <a href="{{ url }}" style="color:#e0b341;">{{ url }}</a>.
+</p>
+{% endblock %}

@@ -75,6 +75,89 @@ class QuoteResponse(ApiModel):
     coupon: QuoteCoupon | None = None
 
 
+# ---------- Suscripcion y pagos (paso 5) ----------
+
+class SubscriptionStatus(str, Enum):
+    pending = "pending"
+    active = "active"
+    past_due = "past_due"
+    canceled = "canceled"
+    expired = "expired"
+
+
+class RenewalMode(str, Enum):
+    manual = "manual"
+    automatic = "automatic"
+
+
+class PaymentKind(str, Enum):
+    initial = "initial"
+    renewal = "renewal"
+
+
+class PaymentStatus(str, Enum):
+    pending = "pending"
+    approved = "approved"
+    declined = "declined"
+    voided = "voided"
+    error = "error"
+
+
+class BillingAvailabilityResponse(ApiModel):
+    """Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse."""
+    enabled: bool
+
+
+class SubscribeRequest(ApiModel):
+    """POST /billing/subscriptions. No lleva montos: un monto que mande el
+    cliente se ignora."""
+    plan_id: UUID
+    coupon_code: str | None = Field(default=None, max_length=80)
+
+
+class SubscribeResponse(ApiModel):
+    """El pago quedo abierto: falta que el cliente pague en la pasarela."""
+    payment_id: UUID
+    # La pagina de la pasarela donde se paga. Alli elige el medio de pago.
+    checkout_url: str
+    subtotal_cents: int
+    discount_cents: int
+    total_cents: int
+    currency: str
+
+
+class PaymentResponse(ApiModel):
+    id: UUID
+    status: PaymentStatus
+    kind: PaymentKind
+    plan_id: UUID
+    plan_name: str
+    # Lo que se cobra, ya con el descuento.
+    amount_cents: int
+    discount_cents: int
+    currency: str
+    # El periodo que compro. Null mientras el pago no este aprobado.
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None
+
+
+class SubscriptionResponse(ApiModel):
+    id: UUID
+    status: SubscriptionStatus
+    renewal_mode: RenewalMode
+    plan: PlanResponse
+    # Precio congelado al suscribirse: es el que se cobra en cada periodo.
+    price_cents: int
+    currency: str
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    cancel_at_period_end: bool
+    # El periodo pagado todavia no vence. Lo dice el servidor, con su reloj.
+    in_force: bool
+
+
 # ---------- Admin: planes ----------
 
 class AdminPlanResponse(PlanResponse):

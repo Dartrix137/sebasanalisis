@@ -8,6 +8,7 @@ Regla de lenguaje (CLAUDE.md): ningun correo promete resultados ni sugiere que e
 producto anticipa un giro. Revisar cada plantilla nueva contra esa regla.
 """
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,39 @@ SUBJECTS: dict[str, str] = {
     "change_email_confirm": "Confirma tu nuevo correo en Sebasanálisis",
     "change_email_notice": "Se pidió cambiar el correo de tu cuenta de Sebasanálisis",
     "account_deleted": "Tu cuenta de Sebasanálisis fue eliminada",
+    "subscription_welcome": "Tu suscripción a Sebasanálisis está activa",
+    "payment_receipt": "Recibo de tu pago en Sebasanálisis",
 }
+
+_MONTHS = (
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
+# Las fechas de los correos van en hora de Colombia, que no cambia en el año.
+_COLOMBIA = timezone(timedelta(hours=-5))
+
+
+def format_money(cents: int, currency: str) -> str:
+    """`10000000, "COP"` -> `100.000 COP`. Igual que `formatMoney` del frontend."""
+    units, rest = divmod(cents, 100)
+    whole = f"{units:,}".replace(",", ".")
+    return f"{whole},{rest:02d} {currency}" if rest else f"{whole} {currency}"
+
+
+def format_date(moment: datetime) -> str:
+    """`13 de octubre de 2026`, en hora de Colombia."""
+    local = moment.astimezone(_COLOMBIA)
+    return f"{local.day} de {_MONTHS[local.month - 1]} de {local.year}"
 
 _env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
@@ -35,6 +68,8 @@ _env = Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+_env.filters["money"] = format_money
+_env.filters["fecha"] = format_date
 
 
 def build_email(name: str, *, to: str, **context: Any) -> EmailMessage:

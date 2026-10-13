@@ -1067,6 +1067,20 @@
         "title": "BetStatus",
         "type": "string"
       },
+      "BillingAvailabilityResponse": {
+        "description": "Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "BillingAvailabilityResponse",
+        "type": "object"
+      },
       "BulkSpinsRequest": {
         "description": "Carga inicial de los números ya observados en la mesa (§3.5).",
         "properties": {
@@ -2439,6 +2453,118 @@
         "title": "NoBetReason",
         "type": "string"
       },
+      "PaymentKind": {
+        "enum": [
+          "initial",
+          "renewal"
+        ],
+        "title": "PaymentKind",
+        "type": "string"
+      },
+      "PaymentResponse": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_cents": {
+            "title": "Discount Cents",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PaymentKind"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_name": {
+            "title": "Plan Name",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "kind",
+          "plan_id",
+          "plan_name",
+          "amount_cents",
+          "discount_cents",
+          "currency",
+          "period_start",
+          "period_end",
+          "created_at",
+          "resolved_at"
+        ],
+        "title": "PaymentResponse",
+        "type": "object"
+      },
+      "PaymentStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "declined",
+          "voided",
+          "error"
+        ],
+        "title": "PaymentStatus",
+        "type": "string"
+      },
       "PendingConsentResponse": {
         "description": "Lo que la cuenta debe aceptar antes de usar la mesa.",
         "properties": {
@@ -3064,6 +3190,14 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RenewalMode": {
+        "enum": [
+          "manual",
+          "automatic"
+        ],
+        "title": "RenewalMode",
+        "type": "string"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "new_password": {
@@ -3653,6 +3787,156 @@
         ],
         "title": "StreakAlert",
         "type": "object"
+      },
+      "SubscribeRequest": {
+        "description": "POST /billing/subscriptions. No lleva montos: un monto que mande el\ncliente se ignora.",
+        "properties": {
+          "coupon_code": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coupon Code"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id"
+        ],
+        "title": "SubscribeRequest",
+        "type": "object"
+      },
+      "SubscribeResponse": {
+        "description": "El pago quedo abierto: falta que el cliente pague en la pasarela.",
+        "properties": {
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_cents": {
+            "title": "Discount Cents",
+            "type": "integer"
+          },
+          "payment_id": {
+            "format": "uuid",
+            "title": "Payment Id",
+            "type": "string"
+          },
+          "subtotal_cents": {
+            "title": "Subtotal Cents",
+            "type": "integer"
+          },
+          "total_cents": {
+            "title": "Total Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "payment_id",
+          "checkout_url",
+          "subtotal_cents",
+          "discount_cents",
+          "total_cents",
+          "currency"
+        ],
+        "title": "SubscribeResponse",
+        "type": "object"
+      },
+      "SubscriptionResponse": {
+        "properties": {
+          "cancel_at_period_end": {
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "in_force": {
+            "title": "In Force",
+            "type": "boolean"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanResponse"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          },
+          "renewal_mode": {
+            "$ref": "#/components/schemas/RenewalMode"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "renewal_mode",
+          "plan",
+          "price_cents",
+          "currency",
+          "current_period_start",
+          "current_period_end",
+          "cancel_at_period_end",
+          "in_force"
+        ],
+        "title": "SubscriptionResponse",
+        "type": "object"
+      },
+      "SubscriptionStatus": {
+        "enum": [
+          "pending",
+          "active",
+          "past_due",
+          "canceled",
+          "expired"
+        ],
+        "title": "SubscriptionStatus",
+        "type": "string"
       },
       "TokenRequest": {
         "description": "El token de un solo uso que llego en el enlace del correo.",
@@ -6494,6 +6778,94 @@
         ]
       }
     },
+    "/billing/availability": {
+      "get": {
+        "description": "Si se puede pagar. Publico: /planes lo usa para encender el boton.",
+        "operationId": "availability_billing_availability_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingAvailabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Availability",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/payments/{payment_id}": {
+      "get": {
+        "description": "Como va un pago de la cuenta. La pantalla que espera el resultado la\nconsulta hasta que salga de `pending`.\n\nSi sigue pendiente se reconsulta la transaccion al proveedor, por si el\nwebhook se demoro (§3.4). `transaction_id` es el id que el proveedor le\nagrega a la URL de regreso: viene del navegador, asi que solo sirve para\nsaber que reconsultar. Lo que se aplica es la respuesta del proveedor, y\nsolo si su referencia es la de este pago.",
+        "operationId": "get_payment_billing_payments__payment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transaction_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Payment",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/billing/quote": {
       "post": {
         "description": "Cuanto se cobraria por un periodo del plan, con o sin cupon.\n\nUn cupon que no aplica no es un error: la cotizacion sale por el precio\ncompleto y dice por que. No reserva ni redime nada.",
@@ -6536,6 +6908,88 @@
           }
         ],
         "summary": "Quote",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/subscription": {
+      "get": {
+        "description": "La suscripcion de la cuenta, o null si nunca pago una.",
+        "operationId": "get_subscription_billing_subscription_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SubscriptionResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Subscription Billing Subscription Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Subscription",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/subscriptions": {
+      "post": {
+        "description": "Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.\n\nNo tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del\nproveedor. Exige correo confirmado y documentos legales aceptados. El total\nsale de `pricing.quote`; cualquier monto que mande el cliente se ignora.\n\nResponde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
+        "operationId": "subscribe_billing_subscriptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscribeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Subscribe",
         "tags": [
           "billing"
         ]
@@ -8136,6 +8590,32 @@
         "summary": "Session Summary",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/webhooks/wompi": {
+      "post": {
+        "description": "Recibe un evento de Wompi. Responde 200 cuando quedo procesado; cualquier\notra respuesta hace que Wompi lo reintente.",
+        "operationId": "wompi_webhook_webhooks_wompi_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Wompi Webhook Webhooks Wompi Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Wompi Webhook",
+        "tags": [
+          "webhooks"
         ]
       }
     }

@@ -38,3 +38,10 @@ export function intervalLabel(interval: PlanInterval, count: number): string {
   if (interval === "month") return count === 1 ? "mes" : `${count} meses`;
   return count === 1 ? "año" : `${count} años`;
 }
+
+/**
+ * La nota que acompaña al precio en /planes, en la pantalla de pago y en el
+ * recibo (decidido el 2026-10-13). Pendiente de la revisión del abogado.
+ */
+export const CURRENCY_NOTE =
+  "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.";

@@ -39,12 +39,17 @@ import type {
   AdminCouponResponse,
   AdminPlanListResponse,
   AdminPlanResponse,
+  BillingAvailabilityResponse,
   CouponRedemptionListResponse,
   CreateCouponRequest,
   CreatePlanRequest,
+  PaymentResponse,
   PlanResponse,
   QuoteRequest,
   QuoteResponse,
+  SubscribeRequest,
+  SubscribeResponse,
+  SubscriptionResponse,
   UpdateCouponRequest,
   UpdatePlanRequest,
 } from "./types/billing";
@@ -287,6 +292,36 @@ export const billingApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  /** Si hay una pasarela configurada. Público. */
+  availability: () => apiFetch<BillingAvailabilityResponse>("/billing/availability"),
+
+  /**
+   * Abre el pago de un período y devuelve a dónde ir a pagarlo. Solo viajan el
+   * plan y el código: el monto lo calcula el servidor.
+   */
+  subscribe: (token: string, body: SubscribeRequest) =>
+    apiFetch<SubscribeResponse>("/billing/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /**
+   * Cómo va un pago. `transactionId` es el `id` que la pasarela agrega a la URL
+   * de regreso; el servidor lo usa solo para saber qué reconsultar.
+   */
+  payment: (token: string, paymentId: UUID, transactionId?: string) =>
+    apiFetch<PaymentResponse>(
+      `/billing/payments/${paymentId}${
+        transactionId ? `?transaction_id=${encodeURIComponent(transactionId)}` : ""
+      }`,
+      { token },
+    ),
+
+  /** La suscripción de la cuenta, o null si nunca pagó una. */
+  subscription: (token: string) =>
+    apiFetch<SubscriptionResponse | null>("/billing/subscription", { token }),
 };
 
 export const gamesApi = {

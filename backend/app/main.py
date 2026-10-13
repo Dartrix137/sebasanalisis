@@ -14,14 +14,18 @@ from app.api.v1 import (
     bankroll,
     bets,
     billing,
+    fake_checkout,
     games,
     legal,
     recommendations,
     sessions,
     suggestions,
+    webhooks,
 )
 from app.core.config import get_settings
 from app.core.monitoring import init_monitoring
+from app.payments.base import get_payment_provider
+from app.payments.wompi import has_production_keys
 
 settings = get_settings()
 
@@ -34,6 +38,14 @@ if not _app_logger.handlers:
     _handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s - %(message)s"))
     _app_logger.addHandler(_handler)
     _app_logger.setLevel(logging.INFO)
+
+# Falla aqui, al arrancar, si las llaves de la pasarela estan incompletas o
+# mezclan ambientes; y deja dicho contra cual quedo, sin mostrar ninguna llave
+# (docs/PLATAFORMA_COMPLETA.md §12).
+_app_logger.info("Pagos: %s", get_payment_provider().describe())
+# `file` deja cada correo en disco y es solo para los tests de punta a punta.
+if settings.email_backend == "file" and has_production_keys(settings):
+    raise RuntimeError("EMAIL_BACKEND=file no se usa con llaves de produccion de Wompi")
 
 # Antes de crear la app: asi el monitoreo engancha sus rutas y sus errores.
 init_monitoring(settings.sentry_dsn)
@@ -64,6 +76,9 @@ app.include_router(admin_users.router)
 app.include_router(legal.router)
 app.include_router(billing.router)
 app.include_router(admin_billing.router)
+app.include_router(webhooks.router)
+# Solo responde con PAYMENT_PROVIDER=fake; con cualquier otro, 404.
+app.include_router(fake_checkout.router)
 
 
 @app.get("/health")

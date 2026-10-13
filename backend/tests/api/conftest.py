@@ -205,6 +205,10 @@ OPEN_PREFIXES = (
     # Planes y cotizacion: los usa justo quien todavia no tiene acceso.
     "/plans",
     "/billing",
+    # El webhook lo autentica la firma del evento, no una cuenta.
+    "/webhooks",
+    # Pasarela simulada: solo responde con PAYMENT_PROVIDER=fake.
+    "/dev",
     "/health",
     "/docs",
     "/redoc",

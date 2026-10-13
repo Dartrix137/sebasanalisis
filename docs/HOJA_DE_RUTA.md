@@ -114,7 +114,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
-| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3 | Pendiente |
+| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **En curso, en tres entregas.** Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests y un pago de prueba aprobado en el sandbox de Wompi; **el webhook falta probarlo en el VPS** (ver abajo). Faltan la 2 (tokenización y renovación automática) y la 3 (gestión de la suscripción, `/cuenta`, admin y prueba en el sandbox) |
 | 6 | Admin dashboard completo por secciones | §4 | Pendiente |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
@@ -193,7 +193,30 @@ Comprobado: 810 tests de backend, entre ellos cada caso de cupón (vencido, agot
 
 Quedó para después, a propósito: cobrar y redimir un cupón de verdad, el correo de aviso antes de cada cobro, el campo de cupón en la pantalla de pago, y `subscriptions.plan_id` como llave foránea (paso 5); `plan_games` (paso 7). La redacción del precio la revisa el abogado antes del lanzamiento.
 
+### Paso 5, entrega 1: qué quedó hecho
+
+Construido el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §3.12. **El paso 5 no está cerrado**: faltan las entregas 2 y 3.
+
+- Interfaz `PaymentProvider` (`backend/app/payments/`), con la implementación de Wompi, una pasarela simulada para desarrollo y Playwright, y el estado "sin configurar" cuando no hay llaves.
+- `subscriptions` ampliada (plan como llave foránea, precio y moneda congelados, cupón, períodos, `renewal_mode`), tabla `payments`, y `payment_events` con suscripción opcional y `payment_id`. Tres migraciones: DDL, datos y cierre. **Una cuenta no puede tener dos suscripciones `pending`, `active` o `past_due`**: lo impide un índice único de la base.
+- `POST /billing/subscriptions`: abre el pago manual de un período y devuelve el enlace al Web Checkout de Wompi. Exige correo confirmado y documentos aceptados; el total sale de `billing/pricing.quote`.
+- `POST /webhooks/wompi`: verifica la firma, guarda todo evento, reconsulta la transacción contra Wompi y solo con esa respuesta mueve la suscripción. `GET /billing/payments/:id` pasa por la misma función.
+- El pago aprobado activa la suscripción, fija `current_period_end`, registra la redención del cupón y sube su contador. Correos de bienvenida y de recibo.
+- `/planes` con el botón funcionando, `/planes/pagar` con cupón y total del servidor, y `/pago/:id`, que espera el resultado.
+- Variables `WOMPI_*` en `.env.example` y en `DESPLIEGUE.md`. La API registra al arrancar contra qué ambiente de Wompi quedó, y no arranca con llaves incompletas o mezcladas.
+
+**Efecto al desplegar:** ninguno para el usuario mientras no se pongan las llaves de Wompi; `/planes` sigue con el botón apagado. Las tres migraciones corren solas.
+
+Comprobado: de los doce casos de §3.9, los ocho de esta entrega (firma inválida, evento duplicado, transacción declinada, suscripción vencida, reconsulta que contradice al evento, referencia desconocida, monto enviado por el cliente y cupón rechazado con motivo), más "cuenta sin correo confirmado no puede suscribirse" y "un pago aprobado registra una sola redención"; y en Playwright, "una cuenta sin acceso se suscribe con la pasarela simulada y entra a la mesa". Las migraciones se subieron, se bajaron y se volvieron a subir sobre una base desechable, con filas viejas puestas a mano.
+
+**Prueba contra el sandbox (2026-10-13, en local, con las llaves que puso el usuario):** un pago de prueba aprobado de punta a punta. Wompi aceptó la firma de integridad, devolvió al cliente con el id de la transacción, y la reconsulta activó la suscripción y envió los correos. **Falta, en el VPS:** el webhook con un evento real, el recorrido por la interfaz, un pago rechazado y un medio que no responde de inmediato. Detalle en `DESPLIEGUE.md`, "Pagos con Wompi".
+
+Quedó para después, a propósito: tokenización, renovación automática, estados `past_due` y `expired`, avisos antes del cobro y el descuento de los cupones `repeating` en las renovaciones (entrega 2); cancelar, cambiar el medio de pago, `/cuenta`, el admin de suscripciones y pagos, eliminar la cuenta con pagos y la prueba en el sandbox (entrega 3).
+
 ### Decisiones tomadas para la Fase 4
+
+- **Wompi confirmó** que acepta esta categoría de negocio y tarjetas internacionales (lo informó el usuario el 2026-10-13). Las llaves de sandbox ya están en `backend/.env`.
+- **Paso 5 (2026-10-13)**: el pago manual usa el Web Checkout de Wompi, con los medios que el comercio habilite en su panel; un pago hecho antes del vencimiento extiende desde el vencimiento; el modo de pago es `subscriptions.renewal_mode`; los dos planes se ofrecen en los dos modos; el aviso antes del cobro automático va 7 días antes; la nota de la tasa de cambio se repite en la pantalla de pago y en el recibo; al eliminar una cuenta se conservan sus pagos sin usuario; y en `/planes` un administrador o una cuenta con acceso manual no ve el botón de pago, mientras que un suscriptor ve su plan marcado como actual.
 
 - Cobro con renovación automática y fuente de pago tokenizada en Wompi, **y además pago manual mes a mes** para quien no tokeniza (2026-10-08).
 - El público es internacional. Los cupones se mantienen (2026-10-08).
@@ -230,7 +253,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
 | Revisión del abogado del precio en pantalla (100.000 COP): si debe decir que incluye impuestos y si aplica IVA, y qué ley de consumo aplica a clientes de fuera de Colombia (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
-| Cuenta de comercio en Wompi (sandbox y producción); confirmación escrita de Wompi de que acepta esta categoría de negocio y tarjetas internacionales; qué medios se habilitan para el pago manual; facturación electrónica | Paso 5 |
+| Cuenta de comercio en Wompi: llaves de sandbox en Dokploy (en `backend/.env` ya están), y la URL de eventos en su panel (`DESPLIEGUE.md`, "Pagos con Wompi"). Qué medios de pago se habilitan en el panel de Wompi. Facturación electrónica | Cierre del paso 5 (la entrega 1 se construyó sin llaves) |
 
 ---
 

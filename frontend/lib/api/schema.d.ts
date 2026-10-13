@@ -664,6 +664,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Availability
+         * @description Si se puede pagar. Publico: /planes lo usa para encender el boton.
+         */
+        get: operations["availability_billing_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/payments/{payment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Payment
+         * @description Como va un pago de la cuenta. La pantalla que espera el resultado la
+         *     consulta hasta que salga de `pending`.
+         *
+         *     Si sigue pendiente se reconsulta la transaccion al proveedor, por si el
+         *     webhook se demoro (§3.4). `transaction_id` es el id que el proveedor le
+         *     agrega a la URL de regreso: viene del navegador, asi que solo sirve para
+         *     saber que reconsultar. Lo que se aplica es la respuesta del proveedor, y
+         *     solo si su referencia es la de este pago.
+         */
+        get: operations["get_payment_billing_payments__payment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/quote": {
         parameters: {
             query?: never;
@@ -681,6 +728,53 @@ export interface paths {
          *     completo y dice por que. No reserva ni redime nada.
          */
         post: operations["quote_billing_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Subscription
+         * @description La suscripcion de la cuenta, o null si nunca pago una.
+         */
+        get: operations["get_subscription_billing_subscription_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe
+         * @description Abre el pago manual de un periodo y devuelve a donde ir a pagarlo.
+         *
+         *     No tokeniza nada ni recibe datos de pago: el cliente paga en la pagina del
+         *     proveedor. Exige correo confirmado y documentos legales aceptados. El total
+         *     sale de `pricing.quote`; cualquier monto que mande el cliente se ignora.
+         *
+         *     Responde 202: la suscripcion no queda activa hasta que el proveedor
+         *     confirme el pago (`GET /billing/payments/:id`).
+         */
+        post: operations["subscribe_billing_subscriptions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1290,6 +1384,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/wompi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wompi Webhook
+         * @description Recibe un evento de Wompi. Responde 200 cuando quedo procesado; cualquier
+         *     otra respuesta hace que Wompi lo reintente.
+         */
+        post: operations["wompi_webhook_webhooks_wompi_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1732,6 +1847,14 @@ export interface components {
          * @enum {string}
          */
         BetStatus: "pending" | "resolved" | "cancelled";
+        /**
+         * BillingAvailabilityResponse
+         * @description Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.
+         */
+        BillingAvailabilityResponse: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /**
          * BulkSpinsRequest
          * @description Carga inicial de los números ya observados en la mesa (§3.5).
@@ -2364,6 +2487,50 @@ export interface components {
          */
         NoBetReason: "insufficient_data" | "below_threshold";
         /**
+         * PaymentKind
+         * @enum {string}
+         */
+        PaymentKind: "initial" | "renewal";
+        /** PaymentResponse */
+        PaymentResponse: {
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Discount Cents */
+            discount_cents: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["PaymentKind"];
+            /** Period End */
+            period_end: string | null;
+            /** Period Start */
+            period_start: string | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            status: components["schemas"]["PaymentStatus"];
+        };
+        /**
+         * PaymentStatus
+         * @enum {string}
+         */
+        PaymentStatus: "pending" | "approved" | "declined" | "voided" | "error";
+        /**
          * PendingConsentResponse
          * @description Lo que la cuenta debe aceptar antes de usar la mesa.
          */
@@ -2624,6 +2791,11 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * RenewalMode
+         * @enum {string}
+         */
+        RenewalMode: "manual" | "automatic";
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** New Password */
@@ -2894,6 +3066,69 @@ export interface components {
             /** Probability Of Streak */
             probability_of_streak: number;
         };
+        /**
+         * SubscribeRequest
+         * @description POST /billing/subscriptions. No lleva montos: un monto que mande el
+         *     cliente se ignora.
+         */
+        SubscribeRequest: {
+            /** Coupon Code */
+            coupon_code?: string | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+        };
+        /**
+         * SubscribeResponse
+         * @description El pago quedo abierto: falta que el cliente pague en la pasarela.
+         */
+        SubscribeResponse: {
+            /** Checkout Url */
+            checkout_url: string;
+            /** Currency */
+            currency: string;
+            /** Discount Cents */
+            discount_cents: number;
+            /**
+             * Payment Id
+             * Format: uuid
+             */
+            payment_id: string;
+            /** Subtotal Cents */
+            subtotal_cents: number;
+            /** Total Cents */
+            total_cents: number;
+        };
+        /** SubscriptionResponse */
+        SubscriptionResponse: {
+            /** Cancel At Period End */
+            cancel_at_period_end: boolean;
+            /** Currency */
+            currency: string;
+            /** Current Period End */
+            current_period_end: string | null;
+            /** Current Period Start */
+            current_period_start: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** In Force */
+            in_force: boolean;
+            plan: components["schemas"]["PlanResponse"];
+            /** Price Cents */
+            price_cents: number;
+            renewal_mode: components["schemas"]["RenewalMode"];
+            status: components["schemas"]["SubscriptionStatus"];
+        };
+        /**
+         * SubscriptionStatus
+         * @enum {string}
+         */
+        SubscriptionStatus: "pending" | "active" | "past_due" | "canceled" | "expired";
         /**
          * TokenRequest
          * @description El token de un solo uso que llego en el enlace del correo.
@@ -4320,6 +4555,59 @@ export interface operations {
             };
         };
     };
+    availability_billing_availability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingAvailabilityResponse"];
+                };
+            };
+        };
+    };
+    get_payment_billing_payments__payment_id__get: {
+        parameters: {
+            query?: {
+                transaction_id?: string | null;
+            };
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     quote_billing_quote_post: {
         parameters: {
             query?: never;
@@ -4340,6 +4628,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_billing_subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"] | null;
+                };
+            };
+        };
+    };
+    subscribe_billing_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscribeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5321,6 +5662,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wompi_webhook_webhooks_wompi_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

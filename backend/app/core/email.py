@@ -182,8 +182,8 @@ def build_email_sender(settings: Settings) -> EmailSender:
             use_tls=settings.smtp_use_tls,
         )
     elif settings.email_backend == "file":
-        # Pendiente del paso 5 (§5.5): rechazar este backend en el arranque si
-        # hay llaves de produccion de Wompi configuradas.
+        # `app/main.py` rechaza este backend en el arranque si hay llaves de
+        # produccion de Wompi configuradas (§5.5).
         sender = FileEmailSender(settings.email_file_dir)
     else:
         sender = ConsoleEmailSender()

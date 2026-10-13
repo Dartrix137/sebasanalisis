@@ -1,0 +1,21 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Este es el recibo de tu pago en Sebasanálisis.
+
+Plan: {{ plan_name }}
+{% if discount_cents %}
+Descuento: {{ discount_cents | money(currency) }}
+{% endif %}
+Total pagado: {{ amount_cents | money(currency) }}
+Fecha del pago: {{ paid_at | fecha }}
+Período: del {{ period_start | fecha }} al {{ period_end | fecha }}
+Referencia: {{ reference }}
+
+Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones, así que el valor en tu extracto puede ser distinto.
+
+Las fechas van en hora de Colombia. Este correo es una constancia de pago, no una factura.
+
+Tu cuenta: {{ url }}
+{% endblock %}

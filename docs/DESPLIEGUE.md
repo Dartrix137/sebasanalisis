@@ -54,7 +54,16 @@ SMTP_PASSWORD=<API key de Resend>
 SMTP_FROM=Sebasanálisis <no-responder@correo.sebasanalisis.com>
 SMTP_USE_TLS=true
 EMAIL_DAILY_LIMIT=80
+WOMPI_PUBLIC_KEY=<llave publica de Wompi>
+WOMPI_PRIVATE_KEY=<llave privada de Wompi>
+WOMPI_EVENTS_SECRET=<secreto de eventos de Wompi>
+WOMPI_INTEGRITY_SECRET=<secreto de integridad de Wompi>
+WOMPI_API_BASE_URL=<https://sandbox.wompi.co/v1 o https://production.wompi.co/v1>
 ```
+
+Las cinco `WOMPI_*` se dejan sin poner hasta tener la cuenta de comercio: sin
+ellas la API arranca con el pago apagado. El detalle esta en "Pagos con Wompi"
+abajo.
 
 `FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
 (verificar el correo, restablecer la contrasena). Es la direccion **publica del
@@ -172,6 +181,99 @@ Que pasa al desplegar este paso:
   `/admin/usuarios` (buscar la cuenta, "Ver", tipo de acceso "Invitado", motivo,
   "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
 - Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
+
+### Pagos con Wompi (Fase 4, paso 5, entrega 1)
+
+Construido contra la documentacion oficial de Wompi consultada el 2026-10-13.
+
+**Prueba contra el sandbox, en local (2026-10-13).** Con las llaves de sandbox
+en `backend/.env`, una base aparte y el frontend abierto por `localtest.me`:
+
+- La API arranco como `Wompi, ambiente sandbox`. El comercio figura activo,
+  solo en COP.
+- `POST /billing/subscriptions` abrio el pago del plan mensual (100.000 COP) y
+  el Web Checkout **acepto la firma de integridad**: abrio en "MODO DE
+  PRUEBAS" con tarjeta, Nequi, DaviPlata, QR, Transferencia Bancolombia, PSE,
+  corresponsales y los dos creditos.
+- Pago con la tarjeta de prueba aprobada (`4242 4242 4242 4242`): Wompi
+  devolvio a `/pago/:id?id=<transaccion>&env=test`.
+- La reconsulta con la llave privada trajo la transaccion aprobada por el
+  monto esperado; el pago quedo `approved`, la suscripcion `active` con su
+  periodo de un mes, la cuenta entro a la mesa y salieron la bienvenida y el
+  recibo.
+
+**Falta probar, en el VPS con llaves de sandbox** (requisito para cerrar el
+paso 5): el webhook (Wompi no alcanza un equipo local, asi que no se ha visto
+un evento real ni su firma), el recorrido completo por la interfaz, un pago
+rechazado (`4111 1111 1111 1111`) y un medio que no responde de inmediato (PSE
+o Nequi).
+
+**Wompi rechaza una direccion de regreso con `localhost` o `127.0.0.1`**: el
+checkout responde `403` antes de mostrar nada. En produccion no afecta
+(`FRONTEND_BASE_URL` es el dominio). Para probar pagos en local:
+`FRONTEND_BASE_URL=http://localtest.me:3000`, ese mismo origen en
+`CORS_ORIGINS`, y abrir el frontend por `http://localtest.me:3000`
+(`localtest.me` es un nombre publico que apunta al propio equipo;
+`next.config.ts` ya lo admite en `next dev`). La sesion se guarda por origen:
+hay que iniciar sesion en esa direccion, no en `localhost`.
+
+Que pasa al desplegar esta entrega:
+
+- Tres migraciones corren solas: amplian `subscriptions`, crean `payments` y
+  cambian `payment_events`. La de datos se detiene si encuentra una suscripcion
+  puesta a mano con un plan que no existe; en produccion la tabla esta vacia.
+- **Sin las `WOMPI_*`, nada cambia para el usuario**: `/planes` sigue mostrando
+  el boton apagado con "El pago estara disponible pronto", y la unica via de
+  acceso sigue siendo el acceso manual.
+- Con las llaves puestas, el boton "Suscribirme" abre el pago en la pagina de
+  Wompi (Web Checkout). Alli se ofrecen los medios que el comercio tenga
+  habilitados en su panel de Wompi: encender o apagar un medio se hace alli,
+  no en el codigo.
+
+Para encender el pago:
+
+1. En el panel de comercios de Wompi, "Desarrolladores": copiar la llave
+   publica, la privada, el secreto de eventos y el de integridad **del mismo
+   ambiente** a las variables de la API. `WOMPI_API_BASE_URL` puede quedar
+   vacia (se deduce de las llaves); si se pone, debe ser la de ese ambiente.
+2. En el mismo panel, poner la **URL de eventos** de ese ambiente:
+   `https://api.sebasanalisis.com/webhooks/wompi`. Sandbox y produccion tienen
+   cada uno la suya.
+3. Reiniciar la API y mirar su log. Debe decir contra que ambiente quedo, sin
+   mostrar ninguna llave:
+
+   ```
+   INFO:     app - Pagos: Wompi, ambiente sandbox (https://sandbox.wompi.co/v1)
+   ```
+
+**La API no arranca** si falta alguna de las cuatro llaves, si mezclan sandbox
+y produccion, o si `WOMPI_API_BASE_URL` no es la del ambiente de las llaves. Es
+a proposito: un despliegue de produccion nunca debe quedar con llaves de
+sandbox a medias (el mensaje dice cual variable esta mal, sin su valor).
+
+Como se confirma un pago (lo que hay que tener presente al mirar un problema):
+
+- Wompi avisa por el webhook. La API verifica la firma, guarda el evento en
+  `payment_events` (tambien los de firma invalida, con
+  `signature_verified = false`) y **vuelve a preguntarle a Wompi** por la
+  transaccion. Solo esa respuesta activa la suscripcion.
+- Si la API responde algo distinto de `200`, Wompi reintenta a los 30 minutos,
+  a las 3 horas y a las 24 horas. Un `401` en el log del webhook es una firma
+  invalida: o alguien esta probando, o `WOMPI_EVENTS_SECRET` no es el del
+  ambiente que esta enviando.
+- Mientras el cliente espera en la pantalla de resultado, la aplicacion
+  tambien reconsulta la transaccion, asi que un webhook demorado no lo deja
+  esperando.
+- Los reembolsos se hacen en el panel de Wompi. La aplicacion no los registra
+  todavia: un pago aprobado que despues se anula o se reembolsa **no quita el
+  acceso solo**; hay que retirarlo a mano (pendiente del admin de pagos).
+
+`PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
+con "aprobar" y "rechazar") para desarrollo y para los tests de punta a
+punta. **Nunca en produccion**: aprueba pagos sin cobrar. La API se niega a
+arrancar con ella si hay llaves de produccion de Wompi, pero sin llaves no
+tiene como saberlo. En desarrollo va junto con `API_PUBLIC_URL` si la API no
+esta en `http://localhost:8000`.
 
 ## Comprobacion despues del primer despliegue
 
