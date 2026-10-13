@@ -1,6 +1,10 @@
 """Base comun de los schemas de la API."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+# Toda accion de administrador sobre acceso o dinero lleva su motivo: es lo
+# que se lee en la bitacora.
+Reason = Field(min_length=3, max_length=500)
 
 
 class ApiModel(BaseModel):

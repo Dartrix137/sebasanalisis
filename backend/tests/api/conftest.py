@@ -92,11 +92,18 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
         finally:
             db.close()
 
+    from app.payments.base import UnconfiguredPaymentProvider, get_payment_provider
+
     app.dependency_overrides[get_db] = override_get_db
+    # Sin pasarela, tenga lo que tenga el `.env` local: ningun test depende de
+    # las llaves de quien lo corre ni puede llegar a Wompi. El test que necesita
+    # un proveedor lo pone encima (fixture `wompi` de test_subscriptions).
+    app.dependency_overrides[get_payment_provider] = UnconfiguredPaymentProvider
     with TestClient(app) as c:
         register_with_consents(c, test_database)
         yield c
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_payment_provider, None)
     engine.dispose()
 
 

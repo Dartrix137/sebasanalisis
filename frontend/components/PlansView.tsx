@@ -14,6 +14,7 @@
  * - Administrador o acceso manual: ninguno. Ya entra a la mesa sin pagar.
  * - Cuenta suspendida o con documentos legales por aceptar: ninguno. No puede
  *   pagar hasta resolverlo, y la página le dice por qué.
+ *   Si además tiene una suscripción vigente, su plan va marcado igual, sin botón.
  * - Con una suscripción pagada y vigente: su plan va marcado "Tu plan actual",
  *   con hasta cuándo tiene acceso y el botón de pagar el período siguiente.
  *   Los demás planes no llevan botón.
@@ -186,6 +187,24 @@ function PlanAction({
     );
   }
 
+  // Lo que el servidor rechazaría al pagar, tenga o no una suscripción: un
+  // administrador o una cuenta con acceso manual ya entra sin pagar; una
+  // suspendida o con documentos legales por aceptar no puede pagar, y el aviso
+  // de arriba de la página ya le dice por qué.
+  const { granted, reason } = user.access;
+  const manualAccess = granted && reason !== "subscription";
+  if (manualAccess || reason === "suspended" || reason === "consent_required") {
+    return manualAccess && isCurrent ? (
+      <div className={row}>
+        <p className={note}>
+          Tu cuenta tiene acceso sin pagar: mientras lo tenga no necesitas pagar otro período.
+        </p>
+      </div>
+    ) : (
+      <div className="mt-auto" />
+    );
+  }
+
   if (current) {
     if (!isCurrent) {
       return (
@@ -206,14 +225,6 @@ function PlanAction({
         </p>
       </div>
     );
-  }
-
-  // Administrador o acceso manual: no hay nada que pagar. Cuenta suspendida o
-  // con documentos legales por aceptar: no puede pagar, y el aviso de arriba
-  // de la página ya le dice por qué.
-  const { granted, reason } = user.access;
-  if (granted || reason === "suspended" || reason === "consent_required") {
-    return <div className="mt-auto" />;
   }
 
   return (

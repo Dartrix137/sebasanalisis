@@ -4,13 +4,14 @@
  * Mi cuenta: perfil, correo y seguridad (§5.4 de la Fase 4).
  *
  * Desde el paso 2 suma los documentos aceptados y la descarga de los datos
- * (§6.4). La suscripción, el método de pago y el historial de pagos llegan en
- * el paso 5.
+ * (§6.4), y desde el paso 5 la suscripción y el historial de pagos, de solo
+ * lectura. Cancelar y cambiar el medio de pago llegan con la entrega 3.
  */
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { PaymentsCard, SubscriptionCard } from "@/components/account/SubscriptionCards";
 import { AppHeader } from "@/components/AppHeader";
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, PasswordField } from "@/components/ui";
@@ -53,6 +54,8 @@ export default function AccountPage() {
           Mi cuenta
         </h1>
         <ProfileCard />
+        <SubscriptionCard />
+        <PaymentsCard />
         <EmailCard />
         <PasswordCard />
         <DocumentsCard />

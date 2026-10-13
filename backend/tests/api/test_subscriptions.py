@@ -111,9 +111,10 @@ def wompi(client: TestClient) -> Iterator[Wompi]:
     from app.main import app
 
     fake = Wompi()
+    anterior = app.dependency_overrides.get(get_payment_provider)
     app.dependency_overrides[get_payment_provider] = lambda: fake.provider
     yield fake
-    app.dependency_overrides.pop(get_payment_provider, None)
+    app.dependency_overrides[get_payment_provider] = anterior
 
 
 # ---------- Ayudas ----------
@@ -1043,6 +1044,7 @@ def test_flujo_completo_con_la_pasarela_simulada(client, db) -> None:
     from app.main import app
 
     fake = FakePaymentProvider(api_base_url="http://testserver")
+    anterior = app.dependency_overrides.get(get_payment_provider)
     app.dependency_overrides[get_payment_provider] = lambda: fake
     try:
         token, user_id, _ = _cuenta(client, db)
@@ -1084,7 +1086,7 @@ def test_flujo_completo_con_la_pasarela_simulada(client, db) -> None:
         )
         assert r.status_code == 200
     finally:
-        app.dependency_overrides.pop(get_payment_provider, None)
+        app.dependency_overrides[get_payment_provider] = anterior
 
 
 def test_las_transacciones_de_wompi_no_se_mezclan_con_las_de_otro_test() -> None:
@@ -1101,3 +1103,130 @@ def test_coupon_no_se_reutiliza_en_dos_cuentas_mas_alla_del_tope(client, db, wom
     r = _suscribir(client, token_b, _mensual(db).id, cupon.code)
     assert (r.status_code, r.json()["detail"]["reason"]) == (400, "exhausted")
     assert db.get(Coupon, cupon.id).redemptions_count == 1
+
+
+# ---------- Historial de pagos de la cuenta (GET /billing/payments) ----------
+
+
+def test_historial_de_pagos_de_la_cuenta(client, db, wompi) -> None:
+    token, user_id, _ = _cuenta(client, db)
+    assert client.get("/billing/payments").status_code == 401
+    assert client.get("/billing/payments", headers=auth(token)).json() == {
+        "items": [],
+        "total": 0,
+        "limit": 20,
+        "offset": 0,
+    }
+
+    rechazado = _abrir_pago(client, db, token)
+    _webhook(client, wompi.evento(wompi.transaccion(rechazado, "DECLINED")))
+    aprobado = _abrir_pago(client, db, token)
+    _aprobar(client, wompi, aprobado, timestamp=1_760_000_444)
+    # Uno que se abrio y no se completo: no es historia.
+    _abrir_pago(client, db, token)
+
+    data = client.get("/billing/payments", headers=auth(token)).json()
+    assert data["total"] == 2
+    assert [(p["id"], p["status"]) for p in data["items"]] == [
+        (str(aprobado.id), "approved"),
+        (str(rechazado.id), "declined"),
+    ]
+    primero = data["items"][0]
+    assert (primero["plan_name"], primero["amount_cents"], primero["currency"]) == (
+        "Acceso Mensual",
+        PRECIO,
+        "COP",
+    )
+    assert primero["period_end"] is not None
+    # Al cliente no le llega la referencia ni lo que dijo el proveedor.
+    assert "reference" not in primero and "failure_reason" not in data["items"][1]
+
+    # Paginado, y solo lo propio.
+    pagina = client.get("/billing/payments", params={"limit": 1, "offset": 1}, headers=auth(token)).json()
+    assert (pagina["total"], [p["id"] for p in pagina["items"]]) == (2, [str(rechazado.id)])
+    otro_token, _, _ = _cuenta(client, db)
+    assert client.get("/billing/payments", headers=auth(otro_token)).json()["total"] == 0
+
+
+# ---------- Admin: suscripcion y pagos en el detalle, y filtro de la lista ----------
+
+
+def test_admin_ve_la_suscripcion_y_los_pagos_de_una_cuenta(client, db, wompi, admin_token) -> None:
+    token, user_id, _ = _cuenta(client, db)
+    detalle = client.get(f"/admin/users/{user_id}", headers=auth(admin_token)).json()
+    assert (detalle["subscription"], detalle["payments"]) == (None, [])
+
+    rechazado = _abrir_pago(client, db, token)
+    _webhook(client, wompi.evento(wompi.transaccion(rechazado, "DECLINED")))
+    aprobado = _abrir_pago(client, db, token)
+    tx_id = _aprobar(client, wompi, aprobado, timestamp=1_760_000_444)
+    sin_completar = _abrir_pago(client, db, token)
+
+    detalle = client.get(f"/admin/users/{user_id}", headers=auth(admin_token)).json()
+    suscripcion = detalle["subscription"]
+    assert (suscripcion["status"], suscripcion["in_force"], suscripcion["renewal_mode"]) == (
+        "active",
+        True,
+        "manual",
+    )
+    assert (suscripcion["plan"]["code"], suscripcion["price_cents"]) == ("mensual", PRECIO)
+    assert detalle["user"]["access"]["reason"] == "subscription"
+
+    # Todos los intentos, tambien el que no se completo, lo mas reciente primero.
+    assert [(p["id"], p["status"]) for p in detalle["payments"]] == [
+        (str(sin_completar.id), "pending"),
+        (str(aprobado.id), "approved"),
+        (str(rechazado.id), "declined"),
+    ]
+    visto = detalle["payments"][1]
+    assert (visto["reference"], visto["provider_transaction_id"]) == (aprobado.reference, tx_id)
+    assert detalle["payments"][2]["failure_reason"] == "Fondos insuficientes"
+
+    # Solo un administrador.
+    assert client.get(f"/admin/users/{user_id}", headers=auth(token)).status_code == 403
+
+
+def test_admin_filtra_las_cuentas_por_suscripcion(client, db, wompi, admin_token) -> None:
+    def cuenta_y_correo() -> tuple[str, str, str]:
+        return _cuenta(client, db)
+
+    def filtrar(valor: str, correo: str) -> list[str]:
+        r = client.get(
+            "/admin/users",
+            params={"subscription": valor, "query": correo},
+            headers=auth(admin_token),
+        )
+        assert r.status_code == 200, r.text
+        return [u["email"] for u in r.json()["items"]]
+
+    # Vigente.
+    t_vigente, _, vigente = cuenta_y_correo()
+    _aprobar(client, wompi, _abrir_pago(client, db, t_vigente), timestamp=1_760_001_001)
+    # Vencida: pago y el periodo ya paso.
+    t_vencida, id_vencida, vencida = cuenta_y_correo()
+    _aprobar(client, wompi, _abrir_pago(client, db, t_vencida), timestamp=1_760_001_002)
+    db.execute(
+        text("UPDATE subscriptions SET current_period_end = :e WHERE user_id = :u"),
+        {"e": datetime.now(UTC) - timedelta(days=1), "u": id_vencida},
+    )
+    db.commit()
+    # Pago sin completar.
+    t_pendiente, _, pendiente = cuenta_y_correo()
+    _abrir_pago(client, db, t_pendiente)
+    # Nunca abrio un pago.
+    _, _, ninguna = cuenta_y_correo()
+
+    esperado = {"in_force": vigente, "lapsed": vencida, "pending": pendiente, "none": ninguna}
+    for valor, correo in esperado.items():
+        assert filtrar(valor, correo) == [correo], valor
+        for otro in esperado.values():
+            if otro != correo:
+                assert filtrar(valor, otro) == [], (valor, otro)
+
+    # La fila trae la decision de acceso de siempre: el filtro no decide nada.
+    r = client.get(
+        "/admin/users", params={"subscription": "in_force", "query": vigente}, headers=auth(admin_token)
+    )
+    assert r.json()["items"][0]["access"]["reason"] == "subscription"
+    r = client.get("/admin/users", params={"subscription": "otra-cosa"}, headers=auth(admin_token))
+    assert r.status_code == 422

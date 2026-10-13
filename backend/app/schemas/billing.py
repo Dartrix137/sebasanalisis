@@ -12,8 +12,7 @@ from uuid import UUID
 from pydantic import ConfigDict, Field
 
 from app.billing.pricing import CouponKind, CouponRejection
-from app.schemas.admin import Reason
-from app.schemas.base import ApiModel
+from app.schemas.base import ApiModel, Reason
 
 # Tope de un INTEGER de Postgres.
 _MAX_CENTS = 2_147_483_647
@@ -141,6 +140,23 @@ class PaymentResponse(ApiModel):
     period_end: datetime | None = None
     created_at: datetime
     resolved_at: datetime | None = None
+
+
+class PaymentListResponse(ApiModel):
+    """El historial de pagos de la cuenta, lo mas reciente primero."""
+    items: list[PaymentResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminPaymentResponse(PaymentResponse):
+    """Un intento de cobro visto por el administrador."""
+    # Lo que une el pago con la transaccion en el panel del proveedor.
+    reference: str
+    provider_transaction_id: str | None = None
+    # Lo que dijo el proveedor si no se aprobo. No se le muestra al cliente.
+    failure_reason: str | None = None
 
 
 class SubscriptionResponse(ApiModel):

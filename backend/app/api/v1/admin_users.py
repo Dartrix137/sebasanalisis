@@ -14,18 +14,19 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 
 from app.api.deps import AdminUser, DbSession
-from app.api.presenters import user_response
+from app.api.presenters import admin_payment_response, subscription_response, user_response
 from app.api.v1.legal import client_ip, list_consents
-from app.core import audit
-from app.models import AdminAuditLog, GameSession, User
+from app.core import audit, subscriptions
+from app.models import AdminAuditLog, GameSession, Payment, Subscription, User
 from app.schemas.admin import (
     AdminUserDetailResponse,
     AdminUserListResponse,
     AuditLogEntry,
     AuditLogListResponse,
+    SubscriptionFilter,
     UpdateUserAccessRequest,
     UpdateUserRoleRequest,
     UpdateUserStatusRequest,
@@ -41,8 +42,38 @@ ADMIN_ACCESS_MESSAGE = (
     "Un administrador siempre tiene acceso a la mesa por su rol: el acceso manual no le aplica"
 )
 
-# Cuantas filas de bitacora trae el detalle de una cuenta.
+# Cuantas filas de bitacora, y cuantos pagos, trae el detalle de una cuenta.
 _DETAIL_AUDIT_ROWS = 20
+_DETAIL_PAYMENT_ROWS = 20
+
+# Estados en los que la suscripcion tiene un periodo pagado (vigente o no).
+_PAID_STATUSES = ("active", "canceled", "past_due")
+
+
+def _subscription_filter(which: SubscriptionFilter, now: datetime):  # type: ignore[no-untyped-def]
+    """La condicion SQL de cada valor del filtro por suscripcion.
+
+    Es un filtro de lista, no una decision de acceso: esa sigue siendo de
+    `core/access.has_access`, y es la que se muestra en cada fila.
+    """
+    own = Subscription.user_id == User.id
+    paid = exists().where(
+        own,
+        Subscription.status.in_(_PAID_STATUSES),
+        Subscription.current_period_end.is_not(None),
+    )
+    in_force = exists().where(
+        own,
+        Subscription.status.in_(_PAID_STATUSES),
+        Subscription.current_period_end > now,
+    )
+    if which is SubscriptionFilter.in_force:
+        return in_force
+    if which is SubscriptionFilter.lapsed:
+        return paid & ~in_force
+    if which is SubscriptionFilter.pending:
+        return ~paid & exists().where(own, Subscription.status == "pending")
+    return ~exists().where(own)
 
 
 def _get_or_404(db: DbSession, user_id: UUID) -> User:
@@ -65,6 +96,7 @@ def list_users(
     role: UserRole | None = None,
     email_verified: bool | None = None,
     is_active: bool | None = None,
+    subscription: SubscriptionFilter | None = None,
     limit: Limit = 25,
     offset: Offset = 0,
 ) -> AdminUserListResponse:
@@ -89,6 +121,10 @@ def list_users(
     if is_active is not None:
         filters.append(User.is_active.is_(is_active))
 
+    now = datetime.now(UTC)
+    if subscription is not None:
+        filters.append(_subscription_filter(subscription, now))
+
     total = db.scalar(select(func.count()).select_from(User).where(*filters)) or 0
     users = db.scalars(
         select(User)
@@ -97,7 +133,6 @@ def list_users(
         .limit(limit)
         .offset(offset)
     )
-    now = datetime.now(UTC)
     return AdminUserListResponse(
         items=[user_response(db, u, now) for u in users],
         total=total,
@@ -119,8 +154,20 @@ def get_user(user_id: UUID, db: DbSession, admin: AdminUser) -> AdminUserDetailR
         .order_by(AdminAuditLog.created_at.desc())
         .limit(_DETAIL_AUDIT_ROWS)
     )
+    now = datetime.now(UTC)
+    subscription = subscriptions.current_subscription(db, user.id)
+    payments = db.scalars(
+        select(Payment)
+        .where(Payment.user_id == user.id)
+        .order_by(Payment.created_at.desc(), Payment.id)
+        .limit(_DETAIL_PAYMENT_ROWS)
+    )
     return AdminUserDetailResponse(
-        user=user_response(db, user),
+        user=user_response(db, user, now),
+        subscription=(
+            subscription_response(subscription, now) if subscription is not None else None
+        ),
+        payments=[admin_payment_response(p) for p in payments],
         consents=list_consents(db, user.id),
         sessions_count=sessions_count,
         audit=[AuditLogEntry.model_validate(r) for r in rows],

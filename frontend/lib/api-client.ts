@@ -11,6 +11,7 @@ import type {
   AdminUserDetailResponse,
   AdminUserListResponse,
   AuditLogListResponse,
+  SubscriptionFilter,
   UpdateUserAccessRequest,
   UpdateUserRoleRequest,
   UpdateUserStatusRequest,
@@ -43,6 +44,7 @@ import type {
   CouponRedemptionListResponse,
   CreateCouponRequest,
   CreatePlanRequest,
+  PaymentListResponse,
   PaymentResponse,
   PlanResponse,
   QuoteRequest,
@@ -318,6 +320,9 @@ export const billingApi = {
       }`,
       { token },
     ),
+
+  /** El historial de pagos de la cuenta, lo más reciente primero. */
+  payments: (token: string) => apiFetch<PaymentListResponse>("/billing/payments", { token }),
 
   /** La suscripción de la cuenta, o null si nunca pagó una. */
   subscription: (token: string) =>
@@ -622,6 +627,7 @@ export const adminApi = {
       role?: UserRole;
       emailVerified?: boolean;
       isActive?: boolean;
+      subscription?: SubscriptionFilter;
       limit?: number;
       offset?: number;
     } = {},
@@ -634,6 +640,7 @@ export const adminApi = {
       qs.set("email_verified", String(options.emailVerified));
     }
     if (options.isActive !== undefined) qs.set("is_active", String(options.isActive));
+    if (options.subscription !== undefined) qs.set("subscription", options.subscription);
     if (options.limit !== undefined) qs.set("limit", String(options.limit));
     if (options.offset !== undefined) qs.set("offset", String(options.offset));
     const sufijo = qs.toString() ? `?${qs}` : "";

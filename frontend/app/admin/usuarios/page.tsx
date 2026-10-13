@@ -9,11 +9,12 @@
  * queda en la bitácora.
  *
  * Quedan para el paso 6: reenviar la verificación y forzar el restablecimiento
- * de contraseña. La suscripción y los pagos, para el paso 5.
+ * de contraseña. La suscripción y los pagos de cada cuenta se ven aquí, de
+ * solo lectura; las acciones sobre ellos llegan con la entrega 3 del paso 5.
  */
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Pager } from "@/components/admin/Pager";
 import { SuccessBox } from "@/components/AuthShell";
@@ -26,9 +27,14 @@ import {
   describeChange,
   formatDateTime,
 } from "@/lib/admin";
+import { UserBilling } from "@/components/admin/UserBilling";
 import { formatLegalDate } from "@/lib/legal";
 import { useSession } from "@/lib/session";
-import type { AdminUserDetailResponse, AdminUserListResponse } from "@/lib/types/admin";
+import type {
+  AdminUserDetailResponse,
+  AdminUserListResponse,
+  SubscriptionFilter,
+} from "@/lib/types/admin";
 import type { AccessType, UserResponse, UserRole } from "@/lib/types/auth";
 
 const PAGE_SIZE = 25;
@@ -42,9 +48,17 @@ interface Filters {
   role: "" | UserRole;
   emailVerified: "" | "true" | "false";
   isActive: "" | "true" | "false";
+  subscription: "" | SubscriptionFilter;
 }
 
-const NO_FILTERS: Filters = { query: "", accessType: "", role: "", emailVerified: "", isActive: "" };
+const NO_FILTERS: Filters = {
+  query: "",
+  accessType: "",
+  role: "",
+  emailVerified: "",
+  isActive: "",
+  subscription: "",
+};
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -65,20 +79,26 @@ export default function AdminUsersPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Cada búsqueda lleva su número: si una respuesta llega después de que se
+  // pidió otra, se descarta. Sin esto, la lista completa del primer render
+  // podía llegar tarde y pisar el resultado de una búsqueda ya hecha.
+  const lastRequest = useRef(0);
+
   const load = useCallback(async () => {
-    setPage(
-      await withToken((t) =>
-        adminApi.listUsers(t, {
-          query: filters.query.trim() || undefined,
-          accessType: filters.accessType || undefined,
-          role: filters.role || undefined,
-          emailVerified: toBool(filters.emailVerified),
-          isActive: toBool(filters.isActive),
-          limit: PAGE_SIZE,
-          offset,
-        }),
-      ),
+    const request = ++lastRequest.current;
+    const result = await withToken((t) =>
+      adminApi.listUsers(t, {
+        query: filters.query.trim() || undefined,
+        accessType: filters.accessType || undefined,
+        role: filters.role || undefined,
+        emailVerified: toBool(filters.emailVerified),
+        isActive: toBool(filters.isActive),
+        subscription: filters.subscription || undefined,
+        limit: PAGE_SIZE,
+        offset,
+      }),
     );
+    if (request === lastRequest.current) setPage(result);
   }, [withToken, filters, offset]);
 
   useEffect(() => {
@@ -113,7 +133,7 @@ export default function AdminUsersPage() {
 
       <Card>
         <form
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
           onSubmit={(e) => {
             e.preventDefault();
             setError(null);
@@ -122,7 +142,7 @@ export default function AdminUsersPage() {
             setFilters(draft);
           }}
         >
-          <div className="sm:col-span-2 lg:col-span-5">
+          <div className="sm:col-span-2 lg:col-span-3">
             <Field
               label="Buscar por correo o nombre"
               type="search"
@@ -139,6 +159,18 @@ export default function AdminUsersPage() {
               ["none", "Sin acceso manual"],
               ["invited", "Invitado"],
               ["full", "Completo"],
+            ]}
+          />
+          <Select
+            label="Suscripción"
+            value={draft.subscription}
+            onChange={(v) => setDraft({ ...draft, subscription: v as Filters["subscription"] })}
+            options={[
+              ["", "Todas"],
+              ["in_force", "Vigente"],
+              ["lapsed", "Vencida"],
+              ["pending", "Pago sin completar"],
+              ["none", "Nunca abrió un pago"],
             ]}
           />
           <Select
@@ -336,8 +368,9 @@ function UserDetail({
           siempre tiene acceso a la mesa por su rol.
         </p>
       ) : (
-        <AccessForm user={u} onDone={refresh} />
+        <AccessForm user={u} subscribed={detail.subscription?.in_force ?? false} onDone={refresh} />
       )}
+      <UserBilling detail={detail} />
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />
       <RoleForm user={u} isSelf={isSelf} onDone={refresh} />
 
@@ -377,7 +410,16 @@ function Data({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AccessForm({ user, onDone }: { user: UserResponse; onDone: () => Promise<void> }) {
+function AccessForm({
+  user,
+  subscribed,
+  onDone,
+}: {
+  user: UserResponse;
+  /** La cuenta tiene una suscripción con el período pagado vigente. */
+  subscribed: boolean;
+  onDone: () => Promise<void>;
+}) {
   const { withToken } = useSession();
   const [accessType, setAccessType] = useState<AccessType>(user.access_type);
   // Fecha local (AAAA-MM-DD). Vacía = sin vencimiento.
@@ -421,6 +463,19 @@ function AccessForm({ user, onDone }: { user: UserResponse; onDone: () => Promis
         title="Acceso manual"
         subtitle="Invitado puede llevar vencimiento. Completo no vence. Sin acceso manual lo retira."
       />
+      {subscribed ? (
+        // El acceso manual se evalúa antes que la suscripción (`core/access.py`).
+        <p
+          role="note"
+          className="rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-3 text-sm leading-relaxed text-white"
+        >
+          <span className="font-bold">Esta cuenta tiene una suscripción vigente.</span> El acceso
+          manual no la reemplaza ni la cancela. Si le das Invitado o Completo, entra por ese
+          acceso y no se le ofrece pagar mientras lo tenga; el período que ya pagó sigue
+          corriendo. Dejarla en Sin acceso manual no le quita la mesa: sigue entrando por su
+          suscripción. Para sacarla de la mesa, suspende la cuenta.
+        </p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block" htmlFor={id}>
           <span className="mb-1.5 block text-sm font-bold text-white">Tipo de acceso</span>
