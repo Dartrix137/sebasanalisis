@@ -211,11 +211,14 @@ Comprobado: de los doce casos de §3.9, los ocho de esta entrega (firma inválid
 
 **Prueba contra el sandbox (2026-10-13, en local, con las llaves que puso el usuario):** un pago de prueba aprobado de punta a punta. Wompi aceptó la firma de integridad, devolvió al cliente con el id de la transacción, y la reconsulta activó la suscripción y envió los correos. **Prueba en el VPS (2026-10-13, llaves de sandbox):** dos pagos aprobados por la interfaz; el webhook de Wompi llegó y respondió `200` las dos veces, la pantalla mostró "Pago aprobado" y llegaron los correos. **Falta:** un pago rechazado y un medio que no responde de inmediato (PSE o Nequi). Detalle en `DESPLIEGUE.md`, "Pagos con Wompi".
 
+**Entrega corta (2026-10-13, rama `fase-4-paso-5a2-suscripcion-en-cuenta-y-admin`)**, adelantada de la entrega 3 por decisión del usuario; detalle en `PLATAFORMA_COMPLETA.md` §3.13. Todo de solo lectura: `/cuenta` muestra la suscripción y el historial de pagos; `/admin/usuarios` filtra por suscripción (vigente, vencida, pago sin completar, nunca abrió un pago) y muestra la suscripción y los pagos de cada cuenta; el formulario de acceso manual explica qué hace sobre una cuenta que paga; y `/planes` deja de ofrecer un pago que el servidor rechazaría.
+
 Quedó para después, a propósito: tokenización, renovación automática, estados `past_due` y `expired`, avisos antes del cobro y el descuento de los cupones `repeating` en las renovaciones (entrega 2); cancelar, cambiar el medio de pago, `/cuenta`, el admin de suscripciones y pagos, eliminar la cuenta con pagos y la prueba en el sandbox (entrega 3).
 
 ### Decisiones tomadas para la Fase 4
 
 - **Wompi confirmó** que acepta esta categoría de negocio y tarjetas internacionales (lo informó el usuario el 2026-10-13). Las llaves de sandbox ya están en `backend/.env`.
+- **El acceso manual sobre un suscriptor queda como está** (2026-10-13): Invitado o Completo pasan por encima de la suscripción y mientras duren no se le ofrece pagar; Sin acceso manual no le quita la mesa, para eso se suspende la cuenta. El formulario del admin lo explica.
 - **Paso 5 (2026-10-13)**: el pago manual usa el Web Checkout de Wompi, con los medios que el comercio habilite en su panel; un pago hecho antes del vencimiento extiende desde el vencimiento; el modo de pago es `subscriptions.renewal_mode`; los dos planes se ofrecen en los dos modos; el aviso antes del cobro automático va 7 días antes; la nota de la tasa de cambio se repite en la pantalla de pago y en el recibo; al eliminar una cuenta se conservan sus pagos sin usuario; y en `/planes` un administrador o una cuenta con acceso manual no ve el botón de pago, mientras que un suscriptor ve su plan marcado como actual.
 
 - Cobro con renovación automática y fuente de pago tokenizada en Wompi, **y además pago manual mes a mes** para quien no tokeniza (2026-10-08).

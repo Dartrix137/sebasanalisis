@@ -16,9 +16,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
+from app.api.presenters import payment_response, subscription_response
 from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
@@ -32,6 +33,7 @@ from app.models import Coupon, Payment, Plan, User
 from app.payments.base import PaymentProvider, PaymentProviderError, get_payment_provider
 from app.schemas.billing import (
     BillingAvailabilityResponse,
+    PaymentListResponse,
     PaymentResponse,
     PlanResponse,
     QuoteCoupon,
@@ -205,23 +207,6 @@ def subscribe(
     )
 
 
-def payment_response(payment: Payment) -> PaymentResponse:
-    return PaymentResponse(
-        id=payment.id,
-        status=payment.status,  # type: ignore[arg-type]
-        kind=payment.kind,  # type: ignore[arg-type]
-        plan_id=payment.plan_id,
-        plan_name=payment.plan.name,
-        amount_cents=payment.amount_cents,
-        discount_cents=payment.discount_cents,
-        currency=payment.currency,
-        period_start=payment.period_start,
-        period_end=payment.period_end,
-        created_at=payment.created_at,
-        resolved_at=payment.resolved_at,
-    )
-
-
 def queue_payment_emails(
     db: DbSession, settlement: Settlement, background: BackgroundTasks, sender: EmailSender
 ) -> None:
@@ -313,22 +298,34 @@ def _may_requery(user: User) -> bool:
     return rate_limit.hit(f"payment-requery:user:{user.id}", limit=30, window=_MINUTE)
 
 
+@router.get("/billing/payments", response_model=PaymentListResponse)
+def list_payments(
+    user: CurrentUser,
+    db: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PaymentListResponse:
+    """El historial de pagos de la cuenta, lo mas reciente primero.
+
+    No trae los pagos que siguen `pending`: casi todos son intentos que no se
+    completaron, y uno que de verdad esta en proceso tiene su propia pantalla.
+    """
+    filters = (Payment.user_id == user.id, Payment.status != "pending")
+    total = db.scalar(select(func.count()).select_from(Payment).where(*filters)) or 0
+    rows = db.scalars(
+        select(Payment)
+        .where(*filters)
+        .order_by(Payment.created_at.desc(), Payment.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return PaymentListResponse(
+        items=[payment_response(p) for p in rows], total=total, limit=limit, offset=offset
+    )
+
+
 @router.get("/billing/subscription", response_model=SubscriptionResponse | None)
 def get_subscription(user: CurrentUser, db: DbSession) -> SubscriptionResponse | None:
     """La suscripcion de la cuenta, o null si nunca pago una."""
     found = subscriptions.current_subscription(db, user.id)
-    if found is None:
-        return None
-    period_end = found.current_period_end
-    return SubscriptionResponse(
-        id=found.id,
-        status=found.status,  # type: ignore[arg-type]
-        renewal_mode=found.renewal_mode,  # type: ignore[arg-type]
-        plan=PlanResponse.model_validate(found.plan),
-        price_cents=found.price_cents,
-        currency=found.currency,
-        current_period_start=found.current_period_start,
-        current_period_end=period_end,
-        cancel_at_period_end=found.cancel_at_period_end,
-        in_force=period_end is not None and period_end > datetime.now(UTC),
-    )
+    return subscription_response(found, datetime.now(UTC)) if found is not None else None

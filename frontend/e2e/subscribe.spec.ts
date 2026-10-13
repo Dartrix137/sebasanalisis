@@ -6,6 +6,7 @@ import {
   confirmEmail,
   createPercentCoupon,
   expectEmail,
+  grantAccess,
   loginViaUi,
   registerViaApi,
   uniqueEmail,
@@ -21,7 +22,11 @@ import {
  * la transacción.
  */
 
-test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({ page, request }) => {
+test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
+  page,
+  request,
+  browser,
+}) => {
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
   await confirmEmail(request, email);
@@ -102,6 +107,92 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({ pag
   await expect(page.getByText(/El período nuevo empieza ese día/)).toBeVisible();
   await expect(page.getByLabel("Cupón (opcional)")).toHaveCount(0);
   await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+
+  // Mi cuenta: la suscripción y el pago que acaba de hacer.
+  await page.goto("/cuenta");
+  const suscripcion = page.getByTestId("suscripcion");
+  await expect(suscripcion.getByText("Acceso Mensual")).toBeVisible();
+  await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
+  await expect(suscripcion.getByText("Acceso hasta")).toBeVisible();
+  // El precio congelado es el del plan, no el del primer cobro con cupón.
+  await expect(suscripcion.getByText("100.000 COP / mes")).toBeVisible();
+  await expect(suscripcion.getByText("Pago manual: no se renueva solo")).toBeVisible();
+  await expect(suscripcion.getByRole("link", { name: "paga el siguiente período" })).toBeVisible();
+  const historial = page.getByTestId("historial-de-pagos");
+  await expect(historial.getByText("80.000 COP · Acceso Mensual")).toBeVisible();
+  await expect(historial.getByText("Aprobado", { exact: true })).toBeVisible();
+
+  // El administrador la encuentra por su suscripción y ve qué pagó.
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await loginViaUi(admin, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await expect(admin).toHaveURL(/\/dashboard/);
+  await admin.goto("/admin/usuarios");
+  await admin.getByLabel("Buscar por correo o nombre").fill(email);
+  await admin.getByLabel("Suscripción").selectOption("lapsed");
+  await admin.getByRole("button", { name: "Buscar" }).click();
+  await expect(admin.getByText("Ninguna cuenta coincide con la búsqueda.")).toBeVisible();
+  await admin.getByLabel("Suscripción").selectOption("in_force");
+  await admin.getByRole("button", { name: "Buscar" }).click();
+  await expect(admin.getByText(email)).toBeVisible();
+  await admin.getByRole("button", { name: "Ver", exact: true }).click();
+
+  const cobros = admin.getByTestId("suscripcion-y-pagos");
+  await expect(cobros.getByText(/Acceso Mensual · vigente, hasta el/)).toBeVisible();
+  await expect(cobros.getByText(/con descuento de 20\.000 COP/)).toBeVisible();
+  await expect(cobros.getByText("Aprobado", { exact: true })).toBeVisible();
+  await expect(cobros.getByText(/referencia SA-/)).toBeVisible();
+  await expect(cobros.getByText(/transacción fake-/)).toBeVisible();
+  // El formulario de acceso manual explica qué hace sobre una cuenta que paga.
+  await expect(admin.getByText("Esta cuenta tiene una suscripción vigente.")).toBeVisible();
+  await expect(admin.getByText(/Para sacarla de la mesa, suspende la cuenta/)).toBeVisible();
+  await adminContext.close();
+});
+
+test("suscriptor con acceso manual: /planes no le ofrece un pago que se rechazaría", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await confirmEmail(request, email);
+  await loginViaUi(page, email);
+  await page
+    .getByRole("article", { name: "Acceso Mensual" })
+    .getByRole("link", { name: "Suscribirme" })
+    .click();
+  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await page.getByRole("button", { name: "Aprobar el pago" }).click();
+  await expect(page.getByText("Pago aprobado")).toBeVisible();
+
+  // Un administrador le da además acceso manual.
+  await grantAccess(request, email);
+
+  await page.goto("/planes");
+  const mensual = page.getByRole("article", { name: "Acceso Mensual" });
+  await expect(mensual.getByText("Tu plan actual")).toBeVisible();
+  await expect(mensual.getByText(/mientras lo tenga no necesitas pagar otro período/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Suscribirme|Pagar el siguiente/ })).toHaveCount(0);
+
+  await page.goto("/cuenta");
+  const suscripcion = page.getByTestId("suscripcion");
+  await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
+  await expect(suscripcion.getByText(/acceso otorgado por un administrador/)).toBeVisible();
+  await expect(suscripcion.getByRole("link", { name: "paga el siguiente período" })).toHaveCount(0);
+});
+
+test("cuenta que nunca ha pagado: Mi cuenta lo dice y lleva a los planes", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await loginViaUi(page, email);
+  await expect(page).toHaveURL(/\/planes/);
+  await page.goto("/cuenta");
+  await expect(page.getByText("No tienes una suscripción.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ver los planes" })).toBeVisible();
+  await expect(page.getByText("Todavía no hay pagos en tu cuenta.")).toBeVisible();
 });
 
 test("pago rechazado: no hay acceso y se puede volver a intentar", async ({ page, request }) => {

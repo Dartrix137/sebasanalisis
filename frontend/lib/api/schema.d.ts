@@ -684,6 +684,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Payments
+         * @description El historial de pagos de la cuenta, lo mas reciente primero.
+         *
+         *     No trae los pagos que siguen `pending`: casi todos son intentos que no se
+         *     completaron, y uno que de verdad esta en proceso tiene su propia pantalla.
+         */
+        get: operations["list_payments_billing_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/payments/{payment_id}": {
         parameters: {
             query?: never;
@@ -1520,6 +1543,49 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * AdminPaymentResponse
+         * @description Un intento de cobro visto por el administrador.
+         */
+        AdminPaymentResponse: {
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Discount Cents */
+            discount_cents: number;
+            /** Failure Reason */
+            failure_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["PaymentKind"];
+            /** Period End */
+            period_end: string | null;
+            /** Period Start */
+            period_start: string | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Provider Transaction Id */
+            provider_transaction_id: string | null;
+            /** Reference */
+            reference: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            status: components["schemas"]["PaymentStatus"];
+        };
         /** AdminPlanListResponse */
         AdminPlanListResponse: {
             /** Items */
@@ -1570,15 +1636,19 @@ export interface components {
          * AdminUserDetailResponse
          * @description Una cuenta vista por el administrador (§4.2).
          *
-         *     La suscripcion y el historial de pagos se suman en el paso 5.
+         *     La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
+         *     llegan con la entrega 3 del paso 5.
          */
         AdminUserDetailResponse: {
             /** Audit */
             audit: components["schemas"]["AuditLogEntry"][];
             /** Consents */
             consents: components["schemas"]["ConsentResponse"][];
+            /** Payments */
+            payments: components["schemas"]["AdminPaymentResponse"][];
             /** Sessions Count */
             sessions_count: number;
+            subscription: components["schemas"]["SubscriptionResponse"] | null;
             user: components["schemas"]["UserResponse"];
         };
         /** AdminUserListResponse */
@@ -2491,6 +2561,20 @@ export interface components {
          * @enum {string}
          */
         PaymentKind: "initial" | "renewal";
+        /**
+         * PaymentListResponse
+         * @description El historial de pagos de la cuenta, lo mas reciente primero.
+         */
+        PaymentListResponse: {
+            /** Items */
+            items: components["schemas"]["PaymentResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** PaymentResponse */
         PaymentResponse: {
             /** Amount Cents */
@@ -3101,6 +3185,15 @@ export interface components {
             /** Total Cents */
             total_cents: number;
         };
+        /**
+         * SubscriptionFilter
+         * @description Filtro de `GET /admin/users` por la suscripcion de la cuenta.
+         *
+         *     No es `subscriptions.status` tal cual: lo que el administrador necesita
+         *     saber es si el periodo pagado sigue vigente, y eso depende de la fecha.
+         * @enum {string}
+         */
+        SubscriptionFilter: "in_force" | "lapsed" | "pending" | "none";
         /** SubscriptionResponse */
         SubscriptionResponse: {
             /** Cancel At Period End */
@@ -3946,6 +4039,7 @@ export interface operations {
                 role?: components["schemas"]["UserRole"] | null;
                 email_verified?: boolean | null;
                 is_active?: boolean | null;
+                subscription?: components["schemas"]["SubscriptionFilter"] | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4571,6 +4665,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingAvailabilityResponse"];
+                };
+            };
+        };
+    };
+    list_payments_billing_payments_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

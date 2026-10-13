@@ -277,6 +277,129 @@
         "title": "AdminLegalDocumentResponse",
         "type": "object"
       },
+      "AdminPaymentResponse": {
+        "description": "Un intento de cobro visto por el administrador.",
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_cents": {
+            "title": "Discount Cents",
+            "type": "integer"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PaymentKind"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_name": {
+            "title": "Plan Name",
+            "type": "string"
+          },
+          "provider_transaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Transaction Id"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "kind",
+          "plan_id",
+          "plan_name",
+          "amount_cents",
+          "discount_cents",
+          "currency",
+          "period_start",
+          "period_end",
+          "created_at",
+          "resolved_at",
+          "reference",
+          "provider_transaction_id",
+          "failure_reason"
+        ],
+        "title": "AdminPaymentResponse",
+        "type": "object"
+      },
       "AdminPlanListResponse": {
         "properties": {
           "items": {
@@ -379,7 +502,7 @@
         "type": "object"
       },
       "AdminUserDetailResponse": {
-        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y el historial de pagos se suman en el paso 5.",
+        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y los pagos son de solo lectura: las acciones sobre ellos\nllegan con la entrega 3 del paso 5.",
         "properties": {
           "audit": {
             "items": {
@@ -395,9 +518,26 @@
             "title": "Consents",
             "type": "array"
           },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPaymentResponse"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
           "sessions_count": {
             "title": "Sessions Count",
             "type": "integer"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user": {
             "$ref": "#/components/schemas/UserResponse"
@@ -405,6 +545,8 @@
         },
         "required": [
           "user",
+          "subscription",
+          "payments",
           "consents",
           "sessions_count",
           "audit"
@@ -2461,6 +2603,38 @@
         "title": "PaymentKind",
         "type": "string"
       },
+      "PaymentListResponse": {
+        "description": "El historial de pagos de la cuenta, lo mas reciente primero.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "PaymentListResponse",
+        "type": "object"
+      },
       "PaymentResponse": {
         "properties": {
           "amount_cents": {
@@ -3854,6 +4028,17 @@
         ],
         "title": "SubscribeResponse",
         "type": "object"
+      },
+      "SubscriptionFilter": {
+        "description": "Filtro de `GET /admin/users` por la suscripcion de la cuenta.\n\nNo es `subscriptions.status` tal cual: lo que el administrador necesita\nsaber es si el periodo pagado sigue vigente, y eso depende de la fecha.",
+        "enum": [
+          "in_force",
+          "lapsed",
+          "pending",
+          "none"
+        ],
+        "title": "SubscriptionFilter",
+        "type": "string"
       },
       "SubscriptionResponse": {
         "properties": {
@@ -5853,6 +6038,22 @@
           },
           {
             "in": "query",
+            "name": "subscription",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SubscriptionFilter"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscription"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -6795,6 +6996,68 @@
           }
         },
         "summary": "Availability",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/payments": {
+      "get": {
+        "description": "El historial de pagos de la cuenta, lo mas reciente primero.\n\nNo trae los pagos que siguen `pending`: casi todos son intentos que no se\ncompletaron, y uno que de verdad esta en proceso tiene su propia pantalla.",
+        "operationId": "list_payments_billing_payments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Payments",
         "tags": [
           "billing"
         ]

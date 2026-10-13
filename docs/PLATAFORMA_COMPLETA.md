@@ -146,7 +146,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **El motivo es obligatorio** (3 a 500 caracteres) en los cambios de acceso y de estado. Un cambio rechazado no deja fila.
 - **`/admin/usuarios` se adelantó del paso 6** (decisión del usuario): `GET /admin/users` pagina (`limit` hasta 100, `offset`) y filtra en el servidor por texto (correo o nombre), acceso manual, rol, correo confirmado y estado; devuelve `{items, total, limit, offset}`. `GET /admin/users/:id` trae la cuenta, su decisión de acceso, los documentos aceptados, la cantidad de mesas y las últimas 20 acciones sobre ella. `PATCH /admin/users/:id/access` recibe `{access_type, access_expires_at?, reason}`; el vencimiento solo aplica a `invited` y debe ser futuro. `PATCH /admin/users/:id/status` recibe `{is_active, reason}`.
 - **`/admin/auditoria`**: `GET /admin/audit-log` paginado, lo más reciente primero. No hay endpoint para editar ni borrar.
-- **Queda para el paso 6**: `POST …/force-password-reset`, `POST …/resend-verification` y la navegación lateral. **Para el paso 5**: el filtro por estado de suscripción, y la suscripción y los pagos en el detalle de la cuenta.
+- **Queda para el paso 6**: `POST …/force-password-reset`, `POST …/resend-verification` y la navegación lateral. **Para el paso 5**: el filtro por estado de suscripción, y la suscripción y los pagos en el detalle de la cuenta (hechos el 2026-10-13, §3.13).
 - **Tests**: el cliente de los tests de API deja cada cuenta que registra con acceso `invited`, porque casi ningún test trata del acceso; los que sí usan `register_raw`, que registra como un cliente real. En Playwright, `registerViaApi` le pide el acceso al administrador sembrado.
 
 ---
@@ -487,6 +487,37 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - No se usa `expiration-time` en el checkout: un pago abierto se puede completar más tarde, al precio con que se abrió.
 - `past_due` no da acceso en `has_access` (hoy nadie pone ese estado). La entrega 2 decide cómo se lee mientras hay reintentos.
 - La exportación de datos de la cuenta (`GET /auth/me/export`) sigue devolviendo `payments` vacío: entra con el historial de pagos de la entrega 3.
+
+### 3.13 Wompi, entrega corta: la suscripción en `/cuenta` y en el admin (2026-10-13)
+
+Adelantada de la entrega 3 por decisión del usuario, antes de la entrega 2 (rama `fase-4-paso-5a2-suscripcion-en-cuenta-y-admin`). Con la entrega 1 ya desplegada, el administrador veía cuentas con acceso por "Suscripción" sin poder saber qué habían pagado, y el suscriptor no encontraba su suscripción en ninguna parte. **Todo es de solo lectura**: cancelar, reanudar, cambiar el medio de pago y las acciones del admin sobre una suscripción o un pago siguen en la entrega 3.
+
+**Decisión del usuario: el acceso manual sobre un suscriptor queda como está, y se explica.** `has_access` evalúa el acceso manual antes que la suscripción (§2.2), así que:
+
+- Darle **Invitado** o **Completo** a un suscriptor sí tiene efecto: entra por ese acceso, y mientras lo tenga no se le ofrece pagar (`409 already_has_access`). Su período pagado sigue corriendo debajo.
+- Dejarlo en **Sin acceso manual** no le quita la mesa: sigue entrando por su suscripción. Para sacarlo, se suspende la cuenta.
+- El formulario de acceso manual de `/admin/usuarios` lo dice cuando la cuenta tiene una suscripción vigente. La alternativa (que el servidor rechace el acceso manual a quien paga) se descartó.
+
+**API**
+
+- `GET /billing/payments`: el historial de la cuenta, paginado (`limit`, `offset`), lo más reciente primero. **No trae los pagos `pending`**: casi todos son intentos que no se completaron. Al cliente no le llegan la referencia ni lo que dijo el proveedor.
+- `GET /admin/users/:id` suma `subscription` (la que tiene un período pagado, con `in_force`) y `payments`: los últimos 20 intentos, incluidos los que no se completaron, con su referencia, el id de la transacción en Wompi y el motivo del rechazo.
+- `GET /admin/users?subscription=`: `in_force` (período pagado vigente), `lapsed` (pagó y venció), `pending` (abrió un pago y no lo completó) o `none` (nunca abrió uno). **No es `subscriptions.status` tal cual**, como proponía §4.3: hoy nadie pone el estado `expired`, así que una suscripción vencida sigue en `active`, y filtrar por la columna habría mostrado como activas cuentas sin acceso. Es un filtro de lista; la decisión de acceso de cada fila sigue siendo la de `has_access`. Cuando la entrega 2 introduzca `past_due` y `expired` se revisa si hace falta además el estado crudo.
+- `api/presenters.py` arma la suscripción y el pago (`subscription_response`, `payment_response`, `admin_payment_response`) para el usuario y para el admin.
+
+**Frontend**
+
+- `/cuenta`: tarjeta **Suscripción** (plan, vigente o vencida, hasta cuándo, precio congelado, que no se renueva sola y el enlace para pagar el período siguiente) y tarjeta **Historial de pagos**.
+- `/admin/usuarios`: filtro "Suscripción", y en el detalle de la cuenta el bloque de suscripción y pagos y la nota del acceso manual.
+- `/planes` ya no ofrece un pago que el servidor rechazaría: una cuenta con acceso manual, suspendida o con documentos por aceptar no ve el botón aunque tenga una suscripción vigente. Era una inconsistencia de la entrega 1.
+- La lista de `/admin/usuarios` descarta la respuesta de una búsqueda anterior que llegue tarde: la lista completa del primer render podía pisar el resultado de una búsqueda ya hecha.
+
+**Tests**
+
+- Los tests de API ya no dependen de las llaves de `backend/.env`: el cliente de tests arranca siempre sin pasarela, y el test que necesita una la pone encima. Con las llaves de sandbox en el `.env` local, un test habría construido el proveedor real.
+- `tests/api/test_subscriptions.py`: historial de la cuenta, detalle del admin y los cuatro valores del filtro. Playwright: `/cuenta` después de pagar, el admin que encuentra la cuenta por su suscripción, el suscriptor con acceso manual, y la cuenta que nunca ha pagado.
+
+**Sigue pendiente de la entrega 3**: cancelar y reanudar, cambiar el medio de pago y el modo, las acciones del admin (extender, cancelar, reconsultar), los reembolsos en el admin, la sección de pagos de la exportación de datos y el borrado de la cuenta con pagos.
 
 ---
 

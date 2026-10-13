@@ -2,17 +2,32 @@
 Schemas: administracion de usuarios y bitacora (§4.2 y §4.6 de la Fase 4)
 """
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 
 from app.schemas.auth import AccessType, UserResponse, UserRole
-from app.schemas.base import ApiModel
+from app.schemas.base import ApiModel, Reason
+from app.schemas.billing import AdminPaymentResponse, SubscriptionResponse
 from app.schemas.legal import ConsentResponse
 
-# Toda accion de acceso lleva su motivo: es lo que se lee en la bitacora.
-Reason = Field(min_length=3, max_length=500)
+
+class SubscriptionFilter(str, Enum):
+    """Filtro de `GET /admin/users` por la suscripcion de la cuenta.
+
+    No es `subscriptions.status` tal cual: lo que el administrador necesita
+    saber es si el periodo pagado sigue vigente, y eso depende de la fecha.
+    """
+    #: Con un periodo pagado que todavia no vence.
+    in_force = "in_force"
+    #: Pago alguna vez y el periodo ya vencio.
+    lapsed = "lapsed"
+    #: Abrio un pago y nunca lo completo.
+    pending = "pending"
+    #: Nunca abrio un pago.
+    none = "none"
 
 
 class AdminUserListResponse(ApiModel):
@@ -69,9 +84,14 @@ class AuditLogListResponse(ApiModel):
 class AdminUserDetailResponse(ApiModel):
     """Una cuenta vista por el administrador (§4.2).
 
-    La suscripcion y el historial de pagos se suman en el paso 5.
+    La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
+    llegan con la entrega 3 del paso 5.
     """
     user: UserResponse
+    # La que tiene un periodo pagado, vigente o no. Null si nunca pago.
+    subscription: SubscriptionResponse | None = None
+    # Los ultimos intentos de cobro, incluidos los que no se completaron.
+    payments: list[AdminPaymentResponse]
     consents: list[ConsentResponse]
     sessions_count: int
     # Lo que los administradores han hecho sobre esta cuenta, lo mas reciente primero.
