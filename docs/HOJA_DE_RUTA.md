@@ -257,6 +257,7 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Decisiones tomadas para la Fase 4
 
+- **Logo (2026-10-13)**: el hexágono dorado que entregó el usuario reemplaza al círculo amarillo en el login, los encabezados, el icono de la pestaña y los correos. El original (`docs/design/logo-original.webp`) es dorado sobre negro, sin transparencia; `frontend/scripts/make-logo.mjs` le quita el fondo y genera los archivos. El texto del logo dice "Análisis Sebastián" y el producto se llama "Sebasanálisis": se usa solo el hexágono, con el nombre escrito al lado como antes. Los correos cargan el logo desde `<FRONTEND_BASE_URL>/logo-email.png`, así que el `Dockerfile` del frontend ahora copia `public`.
 - **Paso 5, entrega 2 (2026-10-13)**: se pueden guardar tarjetas y Nequi; la tarjeta se escribe en el widget de Wompi; cancelar y reanudar entran en esta entrega; y en la pantalla de pago ningún modo entra marcado.
 
 - **Wompi confirmó** que acepta esta categoría de negocio y tarjetas internacionales (lo informó el usuario el 2026-10-13). Las llaves de sandbox ya están en `backend/.env`.
