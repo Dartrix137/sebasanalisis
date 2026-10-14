@@ -14,8 +14,7 @@ const display = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: "Sebasanálisis",
-  description:
-    "Análisis estadístico descriptivo de juegos de casino. La ruleta no tiene memoria: cada giro es independiente.",
+  description: "Análisis estadístico descriptivo de juegos de casino.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

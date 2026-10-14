@@ -24,11 +24,14 @@ test("iniciar sesión, abrir una mesa, registrar un giro y ver la recomendación
   await expect(page).toHaveURL(/\/dashboard/);
 
   // Abrir una mesa europea con carga inicial, declarando el orden.
+  // Del menú de juegos a la página de la ruleta, y de ahí a la mesa.
+  await page.getByRole("link", { name: "Jugar Ruleta" }).click();
+  await expect(page).toHaveURL(/\/juegos\/ruleta$/);
   await page.getByRole("button", { name: /abrir mesa europea/i }).click();
-  await page.getByPlaceholder("17, 32, 0, 15, 4").fill(NUMEROS_INICIALES);
+  await page.getByRole("textbox", { name: /Números ya observados en la mesa/ }).fill(NUMEROS_INICIALES);
   await page.getByLabel(/Del más antiguo al más reciente/).check();
   await page.getByRole("button", { name: "Empezar sesión" }).click();
-  await expect(page).toHaveURL(/\/games\/roulette\/[0-9a-f-]+/);
+  await expect(page).toHaveURL(/\/juegos\/ruleta\/mesa\/[0-9a-f-]+/);
 
   // La tarjeta de recomendación, con su línea fija obligatoria.
   const lineaFija = page.getByText(

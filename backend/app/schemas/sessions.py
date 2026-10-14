@@ -9,6 +9,7 @@ from pydantic import ConfigDict, Field, computed_field
 
 from app.engine.bankroll import stop_reason as _stop_reason
 from app.schemas.base import ApiModel
+from app.schemas.game_types import GameModule
 
 
 class StopReason(str, Enum):
@@ -97,6 +98,10 @@ class SessionResponse(ApiModel):
     stage_two_sector: int
     started_at: datetime
     closed_at: datetime | None = None
+    # El juego de la mesa: su URL es `/juegos/<game_slug>/mesa/<id>`, y el
+    # módulo decide qué pantalla la juega (§7.3).
+    game_slug: str
+    game_module: GameModule
 
     model_config = ConfigDict(from_attributes=True)
 

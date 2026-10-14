@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, enum_col, uuid_pk
 
 if TYPE_CHECKING:
+    from app.models.game import GameVariant
     from app.models.spin import Spin
 
 SESSION_STATUSES = ("active", "closed", "abandoned")
@@ -78,3 +79,14 @@ class GameSession(Base):
     spins: Mapped[list["Spin"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
+    variant: Mapped["GameVariant"] = relationship()
+
+    # El juego de la mesa, para armar su URL (`/juegos/<slug>/mesa/<id>`) y
+    # elegir la pantalla que la juega (§7.3).
+    @property
+    def game_slug(self) -> str:
+        return self.variant.game.slug
+
+    @property
+    def game_module(self) -> str:
+        return self.variant.game.module

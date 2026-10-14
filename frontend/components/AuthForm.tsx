@@ -193,11 +193,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           Cada cuenta guarda sus propias sesiones de mesa y su historial estadístico.
         </p>
       </Card>
-
-      <p className="mt-6 max-w-md text-center text-xs leading-relaxed text-muted">
-        La ruleta no tiene memoria. Cada giro es independiente. Este análisis es descriptivo,
-        no predictivo.
-      </p>
     </main>
   );
 }

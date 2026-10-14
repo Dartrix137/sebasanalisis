@@ -113,6 +113,15 @@ function PlanCard({
           {isCurrent ? <Badge tone="ok">Tu plan actual</Badge> : null}
         </div>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">{plan.description}</p>
+        {/*
+          Un plan con lista de juegos dice cuáles incluye: quien paga tiene que
+          saberlo antes (§7.4). Sin lista, el plan incluye todos y no se dice nada.
+        */}
+        {!plan.all_games && plan.games.length > 0 ? (
+          <p className="mt-2 text-sm text-white">
+            Incluye: {plan.games.map((g) => g.name).join(", ")}
+          </p>
+        ) : null}
 
         <p className="mt-5 flex flex-wrap items-baseline gap-x-2">
           <span className="font-display text-4xl font-semibold leading-none text-white">

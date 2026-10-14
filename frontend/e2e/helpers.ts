@@ -19,7 +19,7 @@ export const ADMIN_PASSWORD = "clave-del-admin-e2e-789";
 let adminToken: string | null = null;
 
 /** Access token del administrador sembrado. Se pide una vez por worker. */
-async function adminAuth(request: APIRequestContext): Promise<{ Authorization: string }> {
+export async function adminAuth(request: APIRequestContext): Promise<{ Authorization: string }> {
   if (!adminToken) {
     const login = await request.post(`${API_URL}/auth/login`, {
       data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },

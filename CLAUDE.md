@@ -176,7 +176,8 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 
 - Los dados entran solo como **fixture de test** de genericidad (`backend/tests/fixtures/dados_d6.json`, un dado de seis caras: el motor supone resultados equiprobables y las sumas de dos dados no lo son); el juego de dados sigue fuera de alcance.
 - Un juego tiene `slug` (va en la URL y no se edita), `module`, `status` (`active | hidden | coming_soon`) e ícono de un set fijo (§7.7 del documento de la Fase 4). Los routers de cada módulo salen del registro `api/game_modules.py`; `sports` está reservado sin implementación. Un plan sin filas en `plan_games` incluye todos los juegos, y quitarle un juego a un plan con suscripciones vigentes se rechaza.
-- La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee.
+- La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee. El frontend no supone ningún juego: el teclado sale de `possible_outcomes` y su tono de `display` (`lib/outcomes.toneOf`).
+- La mesa vive en `/juegos/<slug>/mesa/<id>` (`/games/roulette/<id>` redirige ahí) y su pantalla la elige `lib/game-modules.ts` según el módulo del juego. Los componentes de la mesa están en `components/mesa/`.
 - Las apuestas deportivas no se construyen en esta fase: solo se reserva su estructura (§8 del documento).
 
 ### Decisiones pendientes

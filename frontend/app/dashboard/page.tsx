@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * Menú principal (paso 4): la mesa abierta para retomar, las variantes para
- * abrir una nueva y el historial de mesas cerradas (§4).
+ * Inicio: la mesa abierta para retomar, el menú de juegos y el historial de
+ * mesas cerradas (§4). Desde el paso 7 de la Fase 4 (§7) cada juego tiene su
+ * página (`/juegos/<slug>`), donde se elige la variante y se abre la mesa, y
+ * cada mesa vive en `/juegos/<slug>/mesa/<id>`.
  *
  * Sin mockup de referencia: hereda el sistema de `docs/design/` (azul noche,
  * dorado para la acción principal, rojo/verde de mesa solo para los números).
@@ -12,22 +14,20 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AccessGate } from "@/components/AccessGate";
-import { Disclaimer } from "@/components/Disclaimer";
-import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
-import { NewSessionForm } from "@/components/roulette/NewSessionForm";
+import { GameMenu } from "@/components/GameMenu";
+import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
+import { NumberChip, variantLabel } from "@/components/mesa/VariantChoice";
 import { Button, ErrorBox } from "@/components/ui";
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
-import { ApiError, gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
-import { TONE_CLASSES, toneOf } from "@/lib/outcomes";
+import { gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import type { GameMenuItem, GameVariantResponse } from "@/lib/types/games";
-import type { CreateSessionRequest, SessionResponse } from "@/lib/types/sessions";
-import type { BulkSpinsRequest } from "@/lib/types/spins";
+import type { SessionResponse } from "@/lib/types/sessions";
 
 const CURRENCY = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -39,17 +39,6 @@ const SIGNED = (n: number) => `${n >= 0 ? "+" : "−"}${CURRENCY.format(Math.abs
 
 /** Cuántas mesas abiertas traen sus números: más allá, la lista es solo texto. */
 const MESAS_CON_NUMEROS = 6;
-
-/** Nombres de las variantes precargadas; cualquier otra usa el suyo tal cual. */
-const VARIANT_LABEL: Record<string, string> = {
-  european: "Europea",
-  american: "Americana",
-};
-
-function variantLabel(v: GameVariantResponse | undefined): string {
-  if (!v) return "Variante";
-  return VARIANT_LABEL[v.name] ?? v.name.charAt(0).toUpperCase() + v.name.slice(1);
-}
 
 export default function DashboardPage() {
   // El menú llama a los endpoints de juego: sin acceso responderían 403, así
@@ -72,38 +61,6 @@ function Dashboard() {
   const [numbers, setNumbers] = useState<Record<string, string[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [starting, setStarting] = useState<GameVariantResponse | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const formRef = useRef<HTMLDivElement>(null);
-
-  async function startSession(body: CreateSessionRequest, initial: BulkSpinsRequest | null) {
-    setPending(true);
-    setFormError(null);
-    try {
-      const sesion = await withToken((t) => sessionsApi.create(t, body));
-      // La carga inicial va después de crear la sesión porque necesita su id.
-      // Si falla, la sesión ya existe: se avisa sin entrar y queda listada en
-      // las mesas abiertas, para no crear una segunda al reintentar.
-      if (initial) {
-        try {
-          await withToken((t) => spinsApi.createBulk(t, sesion.id, initial));
-        } catch (e) {
-          setFormError(
-            (e instanceof ApiError ? e.message : "No se pudieron cargar los números") +
-              " La mesa quedó creada y aparece en tus mesas abiertas.",
-          );
-          setPending(false);
-          await load();
-          return;
-        }
-      }
-      router.push(`/games/roulette/${sesion.id}`);
-    } catch (e) {
-      setFormError(e instanceof ApiError ? e.message : "No se pudo crear la mesa");
-      setPending(false);
-    }
-  }
 
   const load = useCallback(async () => {
     const [g, abiertas, cerradas] = await Promise.all([
@@ -146,20 +103,11 @@ function Dashboard() {
       .finally(() => setReady(true));
   }, [loading, user, router, load]);
 
-  useEffect(() => {
-    if (starting) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [starting]);
-
   if (loading || !user) return null;
 
-  // Mientras llega el menú de juegos (paso 7, entrega 2), aquí solo se abren
-  // mesas de los juegos activos que el plan de la cuenta incluye.
-  const activeGames = games.filter(
-    (g) => g.status === "active" && g.access.granted && g.variants.length > 0,
-  );
   const variants = new Map(games.flatMap((g) => g.variants).map((v) => [v.id, v]));
   const [principal, ...otras] = openSessions;
-  const abrir = (id: string) => router.push(`/games/roulette/${id}`);
+  const abrir = (s: SessionResponse) => router.push(`/juegos/${s.game_slug}/mesa/${s.id}`);
 
   return (
     <div className="flex-1">
@@ -188,7 +136,7 @@ function Dashboard() {
             session={principal}
             variant={variants.get(principal.game_variant_id)}
             numbers={numbers[principal.id] ?? []}
-            onContinue={() => abrir(principal.id)}
+            onContinue={() => abrir(principal)}
           />
         ) : null}
 
@@ -202,74 +150,24 @@ function Dashboard() {
                   session={s}
                   variant={variants.get(s.game_variant_id)}
                   numbers={numbers[s.id]}
-                  onContinue={() => abrir(s.id)}
+                  onContinue={() => abrir(s)}
                 />
               ))}
             </ul>
           </section>
         ) : null}
 
-        <section className="mt-12" aria-labelledby="abrir-mesa">
-          <SectionTitle id="abrir-mesa">Abrir una mesa nueva</SectionTitle>
-
-          {ready && activeGames.length === 0 && !error ? (
+        <section className="mt-12" aria-labelledby="juegos">
+          <SectionTitle id="juegos">Elige un juego</SectionTitle>
+          {ready && games.length === 0 && !error ? (
             <p className="mt-3 text-sm text-muted">
-              No hay juegos activos todavía.
+              No hay juegos disponibles todavía.
               {user.role === "admin"
                 ? " Crea uno desde el panel de administración."
                 : " Vuelve más tarde."}
             </p>
           ) : null}
-
-          {activeGames.map((game) => {
-            const menorVentaja = Math.min(...game.variants.map((v) => v.house_edge));
-            return (
-              <div key={game.id} className="mt-4">
-                {activeGames.length > 1 ? (
-                  <h3 className="mb-2 text-sm font-bold text-muted">{game.name}</h3>
-                ) : null}
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {game.variants.map((v) => (
-                    <VariantChoice
-                      key={v.id}
-                      variant={v}
-                      lowestEdge={game.variants.length > 1 && v.house_edge === menorVentaja}
-                      selected={starting?.id === v.id}
-                      primary={!principal}
-                      onStart={() => {
-                        setStarting(v);
-                        setFormError(null);
-                      }}
-                    />
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-
-          {starting ? (
-            <div
-              ref={formRef}
-              className="mt-4 scroll-mt-6 rounded-card border border-gold/40 bg-ink-raised p-4 sm:p-6"
-            >
-              <h3 className="font-display text-2xl font-semibold leading-tight">
-                Mesa {variantLabel(starting).toLowerCase()}
-              </h3>
-              <p className="mb-5 mt-1 text-sm text-muted">
-                Define tu banca y tu límite antes de empezar, no durante la partida.
-              </p>
-              <NewSessionForm
-                variant={starting}
-                pending={pending}
-                error={formError}
-                onCancel={() => {
-                  setStarting(null);
-                  setFormError(null);
-                }}
-                onSubmit={startSession}
-              />
-            </div>
-          ) : null}
+          <GameMenu games={games} isAdmin={user.role === "admin"} />
         </section>
 
         {closedSessions.length > 0 ? (
@@ -277,7 +175,7 @@ function Dashboard() {
             <SectionTitle id="historial">Mesas cerradas</SectionTitle>
             <ul className="mt-3 divide-y divide-edge border-y border-edge">
               {closedSessions.map((s) => (
-                <ClosedTableRow key={s.id} session={s} onOpen={() => abrir(s.id)} />
+                <ClosedTableRow key={s.id} session={s} onOpen={() => abrir(s)} />
               ))}
             </ul>
             <p className="mt-3 max-w-prose text-xs leading-relaxed text-muted">
@@ -286,10 +184,6 @@ function Dashboard() {
             </p>
           </section>
         ) : null}
-
-        <div className="mt-12">
-          <Disclaimer />
-        </div>
       </main>
     </div>
   );
@@ -300,30 +194,6 @@ function SectionTitle({ id, children }: { id: string; children: ReactNode }) {
     <h2 id={id} className="font-display text-2xl font-semibold leading-tight">
       {children}
     </h2>
-  );
-}
-
-function NumberChip({
-  value,
-  variant,
-  large = false,
-  index = 0,
-}: {
-  value: string;
-  variant: GameVariantResponse | undefined;
-  large?: boolean;
-  index?: number;
-}) {
-  const tone = variant ? toneOf(variant.config, value) : "neutral";
-  return (
-    <li
-      style={large ? { animationDelay: `${index * 45}ms` } : undefined}
-      className={`flex shrink-0 items-center justify-center rounded-full font-display font-semibold tabular-nums ${
-        TONE_CLASSES[tone]
-      } ${large ? "h-10 w-10 text-lg motion-safe:animate-chip-in sm:h-11 sm:w-11" : "h-6 w-6 text-xs"}`}
-    >
-      {value}
-    </li>
   );
 }
 
@@ -456,78 +326,6 @@ function OpenTableRow({
       </p>
       <Button variant="ghost" onClick={onContinue}>
         Continuar
-      </Button>
-    </li>
-  );
-}
-
-/**
- * Cada variante se distingue por lo que de verdad la separa: cuántos ceros
- * tiene el cilindro. El doble cero es exactamente lo que sube la ventaja de la
- * casa de la americana.
- */
-function VariantChoice({
-  variant,
-  lowestEdge,
-  selected,
-  primary,
-  onStart,
-}: {
-  variant: GameVariantResponse;
-  lowestEdge: boolean;
-  selected: boolean;
-  /** Dorado solo si abrir mesa es la acción principal (no hay otra abierta). */
-  primary: boolean;
-  onStart: () => void;
-}) {
-  const ceros = variant.config.possible_outcomes.filter(
-    (o) => toneOf(variant.config, o) === "green",
-  );
-
-  return (
-    <li
-      className={`flex flex-col rounded-card border bg-ink-raised p-5 transition-colors ${
-        selected ? "border-gold/60" : "border-edge"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="font-display text-3xl font-semibold leading-none">
-            {variantLabel(variant)}
-          </h3>
-          <p className="mt-2 text-sm text-muted">
-            {variant.config.possible_outcomes.length} números
-            {ceros.length > 0
-              ? `, ${ceros.length === 1 ? "un cero" : ceros.length === 2 ? "dos ceros" : `${ceros.length} ceros`}`
-              : ""}
-          </p>
-        </div>
-        {ceros.length > 0 ? (
-          <ul className="flex gap-1" aria-hidden="true">
-            {ceros.map((c) => (
-              <NumberChip key={c} value={c} variant={variant} large />
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="mt-5 flex items-baseline gap-2">
-        <span className="font-display text-2xl font-semibold tabular-nums">
-          {(variant.house_edge * 100).toFixed(2).replace(".", ",")} %
-        </span>
-        <span className="text-sm text-muted">de ventaja para la casa</span>
-      </div>
-      <p className="mt-1 min-h-[1.25rem] text-xs text-muted">
-        {lowestEdge ? "La ventaja más baja de las disponibles." : ""}
-      </p>
-
-      <Button
-        className="mt-4"
-        variant={primary ? "primary" : "ghost"}
-        onClick={onStart}
-        disabled={selected}
-      >
-        {selected ? "Configurando abajo" : `Abrir mesa ${variantLabel(variant).toLowerCase()}`}
       </Button>
     </li>
   );

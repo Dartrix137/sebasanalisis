@@ -9,7 +9,7 @@
  */
 
 import { Card, CardHeader } from "@/components/ui";
-import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
+import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
 import type { SessionSummaryResponse } from "@/lib/types/sessions";
 
 const MONEY = (n: number) =>

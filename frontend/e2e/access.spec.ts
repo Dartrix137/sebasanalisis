@@ -13,7 +13,7 @@ import {
  * no ve la mesa, y la ve cuando un administrador se lo otorga.
  */
 
-const MESA = { name: "Abrir una mesa nueva" };
+const MESA = { name: "Elige un juego" };
 
 test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso", async ({
   page,

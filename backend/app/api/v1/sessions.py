@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     CurrentUser,
@@ -150,6 +151,8 @@ def list_sessions(
 ) -> list[GameSession]:
     stmt = (
         select(GameSession)
+        # El slug y el modulo del juego de cada mesa salen de su variante.
+        .options(selectinload(GameSession.variant).selectinload(GameVariant.game))
         .where(GameSession.user_id == user.id)
         .order_by(GameSession.started_at.desc())
     )

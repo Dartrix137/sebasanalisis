@@ -99,11 +99,14 @@ test("onboarding: la primera entrada a la mesa pide leer hasta el final", async 
   await loginViaUi(page, email);
   await expect(page).toHaveURL(/\/dashboard/);
 
+  // Del menú de juegos a la página de la ruleta, y de ahí a la mesa.
+  await page.getByRole("link", { name: "Jugar Ruleta" }).click();
+  await expect(page).toHaveURL(/\/juegos\/ruleta$/);
   await page.getByRole("button", { name: /abrir mesa europea/i }).click();
-  await page.getByPlaceholder("17, 32, 0, 15, 4").fill("17, 32, 0, 15, 4, 21, 2, 25, 17, 34, 6, 27");
+  await page.getByRole("textbox", { name: /Números ya observados en la mesa/ }).fill("17, 32, 0, 15, 4, 21, 2, 25, 17, 34, 6, 27");
   await page.getByLabel(/Del más antiguo al más reciente/).check();
   await page.getByRole("button", { name: "Empezar sesión" }).click();
-  await expect(page).toHaveURL(/\/games\/roulette\/[0-9a-f-]+/);
+  await expect(page).toHaveURL(/\/juegos\/ruleta\/mesa\/[0-9a-f-]+/);
 
   // En lugar de la mesa, la pantalla que explica qué hace y qué no hace.
   await expect(

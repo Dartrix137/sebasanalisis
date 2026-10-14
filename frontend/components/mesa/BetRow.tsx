@@ -17,7 +17,7 @@
 
 import { useState } from "react";
 
-import { STRATEGY_LABEL } from "@/components/roulette/BankrollPanel";
+import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
 import { Button, ErrorBox } from "@/components/ui";
 import type { GameVariantConfig } from "@/lib/types/games";
 import type { BetResponse, CreateBetRequest } from "@/lib/types/bets";

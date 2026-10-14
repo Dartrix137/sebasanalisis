@@ -5145,6 +5145,18 @@
             ],
             "title": "Closed At"
           },
+          "game_module": {
+            "enum": [
+              "discrete_outcome",
+              "sports"
+            ],
+            "title": "Game Module",
+            "type": "string"
+          },
+          "game_slug": {
+            "title": "Game Slug",
+            "type": "string"
+          },
           "game_variant_id": {
             "format": "uuid",
             "title": "Game Variant Id",
@@ -5235,6 +5247,8 @@
           "stage_two_sector",
           "started_at",
           "closed_at",
+          "game_slug",
+          "game_module",
           "stop_reason"
         ],
         "title": "SessionResponse",

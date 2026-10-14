@@ -11,6 +11,7 @@ from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_val
 from app.models.game import SLUG_PATTERN
 from app.schemas.auth import AccessReason
 from app.schemas.base import ApiModel, Reason
+from app.schemas.game_types import GameIcon, GameModule, GameStatus
 
 # ---------- Config genérica (categories_json) ----------
 
@@ -125,10 +126,6 @@ class GameVariantConfig(ApiModel):
 
 
 # ---------- Metadatos del juego (§7.2) ----------
-
-GameModule = Literal["discrete_outcome", "sports"]
-GameStatus = Literal["active", "hidden", "coming_soon"]
-GameIcon = Literal["ruleta", "dados", "cartas", "deportes", "generico"]
 
 _SLUG = Field(min_length=1, max_length=60, pattern=SLUG_PATTERN)
 

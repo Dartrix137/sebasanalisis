@@ -31,7 +31,7 @@ test("versión nueva de los términos: la mesa pide re-aceptar y después deja e
   await registerViaApi(request, email);
   await loginViaUi(page, email);
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole("heading", { name: "Abrir una mesa nueva" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Elige un juego" })).toBeVisible();
 
   // En otra sesión, el administrador publica una versión nueva desde /admin/legal.
   const admin = await browser.newContext();
@@ -76,7 +76,7 @@ test("versión nueva de los términos: la mesa pide re-aceptar y después deja e
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Antes de continuar" })).toBeVisible();
   await expect(page.getByRole("heading", { name: marca })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Abrir una mesa nueva" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Elige un juego" })).toHaveCount(0);
 
   // La cuenta no queda bloqueada: "Mi cuenta" sigue abriendo.
   await page.getByRole("link", { name: "Mi cuenta" }).click();
@@ -89,10 +89,10 @@ test("versión nueva de los términos: la mesa pide re-aceptar y después deja e
   await expect(aceptar).toBeDisabled();
   await page.getByRole("checkbox", { name: /He leído y acepto/ }).check();
   await aceptar.click();
-  await expect(page.getByRole("heading", { name: "Abrir una mesa nueva" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Elige un juego" })).toBeVisible();
 
   // Y no se vuelve a pedir.
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Abrir una mesa nueva" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Elige un juego" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Antes de continuar" })).toHaveCount(0);
 });

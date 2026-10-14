@@ -1296,7 +1296,64 @@ El motor la ignora. El validador rechaza una categoría o un grupo que no existe
   - Con tres juegos, uno de ellos con `type = 'ruleta'` para forzar el choque de slug.
   - Subida, CHECK del slug, bajada de las cinco con una fila en `plan_games` y `active` restaurado, vuelta a subir y `alembic check` sin diferencias.
 
-**Lo que queda para la entrega 2**: la ruta `/juegos/[slug]/mesa/[sessionId]` y la redirección de `/games/roulette/:id`, `components/mesa/*`, el teclado armado desde `possible_outcomes` con la pista `display` (hoy `lib/outcomes.ts` todavía busca la categoría `color`), el menú con "Próximamente" y "Disponible en otro plan", la pantalla de `game_not_in_plan`, los juegos incluidos en `/planes` y el fixture de dados en Playwright.
+**Lo que quedó para la entrega 2** (construida, §7.8): la ruta `/juegos/[slug]/mesa/[sessionId]` y la redirección de `/games/roulette/:id`, `components/mesa/*`, el teclado armado desde `possible_outcomes` con la pista `display` (hoy `lib/outcomes.ts` todavía busca la categoría `color`), el menú con "Próximamente" y "Disponible en otro plan", la pantalla de `game_not_in_plan`, los juegos incluidos en `/planes` y el fixture de dados en Playwright.
+
+### 7.8 Entrega 2, la mesa y el menú: cómo quedó construido (2026-10-14)
+
+Paso 7, entrega 2 (rama `fase-4-paso-7b-mesa-y-menu`). Con ella está construido todo el paso 7. Las decisiones son las de §7.7, que el usuario confirmó el 2026-10-14.
+
+**Rutas**
+
+| Ruta | Qué hace |
+|---|---|
+| `/juegos/[slug]/mesa/[sessionId]` | La mesa. `MesaScreen` pide la sesión, monta la pantalla del módulo de su juego y, si el slug de la URL no es el de su juego, lleva al correcto. Si el servidor responde `403 game_not_in_plan`, dice que el juego no está incluido en el plan, con "Ver planes". |
+| `/juegos/[slug]` | La página del juego (`GamePage`): sus variantes y el formulario de mesa nueva, que antes estaban en el dashboard. Juego oculto o inexistente: "Este juego no está disponible". "Próximamente" (para un cliente): lo dice, sin mesa. Fuera del plan: "Este juego no está incluido en tu plan" con "Ver planes". |
+| `/juegos` | Lleva al inicio, donde vive el menú. |
+| `/games/roulette/:id` | Redirección permanente (308) a `/juegos/ruleta/mesa/:id`, en `next.config.ts`. Todos los enlaces viejos son de ruleta, así que no consulta nada. |
+
+**Registro de módulos del frontend** (`lib/game-modules.ts`): `module → pantalla de la mesa`. `discrete_outcome` la juega `components/mesa/DiscreteOutcomeSession.tsx` (la vista que antes era `RouletteSession`); `sports` no tiene pantalla.
+
+**`components/roulette/*` pasó a `components/mesa/*`** y dejó de suponer ruleta:
+
+- El teclado se arma desde `possible_outcomes`. El tono de cada resultado sale de la pista `display` (`lib/outcomes.toneOf`) y las columnas de `display.columns`; sin pista, todo va en neutro y la grilla se ajusta al ancho. Ya no se busca la categoría `color`.
+- La tarjeta de una variante muestra su descripción (o "N resultados posibles") y, como fichas, los resultados que la pista pinta de verde: los ceros de la ruleta.
+- El ejemplo de la carga inicial sale de los resultados de la variante, y el campo tiene su nombre accesible (la etiqueta también envuelve el botón de ayuda y lo perdía).
+- La tarjeta de recomendación conserva sus dos líneas obligatorias en la ruta nueva; lo comprueban los Playwright de la ruleta y del dado.
+
+**El inicio** (`/dashboard`): las mesas abiertas y cerradas enlazan a `/juegos/<slug>/mesa/<id>`. La sección de mesa nueva pasó a ser **"Elige un juego"** (`components/GameMenu.tsx`), una tarjeta por juego con su ícono y su descripción:
+
+- con acceso, "Jugar <juego>" lleva a su página;
+- "Próximamente" se ve sin enlace (un administrador sí entra, para probarlo);
+- fuera del plan: "Disponible en otro plan." con "Ver planes";
+- oculto: solo le llega a un administrador, marcado "Oculto".
+
+**Íconos** (`components/GameIcon.tsx`): SVG del set fijo (ruleta, dados, cartas, deportes, genérico).
+
+**`/planes`**: un plan con lista de juegos dice "Incluye: …". Un plan que incluye todos no dice nada.
+
+**Backend**
+
+- `SessionResponse` suma `game_slug` y `game_module`, para armar la URL de cada mesa y elegir su pantalla.
+- Los tres `Literal` del juego pasaron a `schemas/game_types.py`, para que la sesión los use sin una importación circular.
+- Migración de datos `f4b0d2e6a571`: la descripción de la ruleta y de sus dos variantes, y el orden de las variantes (europea primero), donde estaban vacíos. El seed las pone al crear la ruleta, pero en el VPS la ruleta ya existía y el seed no corre al desplegar: sin esto, su tarjeta saldría sin descripción. No pisa lo que haya escrito un administrador.
+
+**Tests**
+
+- Backend: `test_multijuego.py` suma el de `game_slug` y `game_module` en la sesión y en la lista.
+- Playwright, `e2e/multijuego.spec.ts`:
+  - la ruta vieja redirige a la nueva, y un slug equivocado lleva al correcto;
+  - un juego de dados creado por la API de admin con el fixture `dados_d6.json` aparece en el menú, abre mesa con carga inicial, el teclado tiene seis botones en seis columnas, se registra un giro, y la tarjeta muestra la recomendación con su línea fija;
+  - un juego "próximamente" se ve sin enlace y su página no abre mesa;
+  - una cuenta suscrita a un plan que solo incluye el dado: `/planes` dice qué incluye, en el menú la ruleta sale "Disponible en otro plan" y su página no ofrece mesa.
+- Los Playwright de la mesa (`smoke.spec.ts` y el onboarding de `legal.spec.ts`) entran por el menú y esperan la ruta nueva.
+- La migración se subió, se bajó y se volvió a subir en una base desechable, con un texto de administrador que no se pisa; `alembic check` sin diferencias.
+- Se revisaron capturas del menú, la página del juego y la mesa del dado en escritorio y a 390 px, sin desplazamiento horizontal.
+
+**Lo que queda señalado**
+
+- El aviso fijo "La ruleta no tiene memoria…" (`components/Disclaimer.tsx`) seguía en el dashboard, aunque `CLAUDE.md` lo da por retirado de todas las pantallas. Se quitó en esta entrega (decisión del usuario del 2026-10-14) y el componente se borró. La misma frase también se quitó del pie del login y del registro (`AuthForm.tsx`) y de la descripción de la página (`app/layout.tsx`). Quedan las explicaciones de contexto que no son el aviso: la nota bajo las mesas cerradas, el onboarding y el resumen de una sesión cerrada.
+- La skill `categories-json-validator` ponía de ejemplo de juego nuevo la suma de dos dados (2-12), que no son resultados equiprobables. Se corrigió: ahora exige resultados equiprobables y explica cómo describir dos dados (36 pares ordenados).
+- Los textos de ayuda de la gestión de banca siguen dando ejemplos de ruleta ("dos docenas o dos columnas"), ahora marcados como tales.
 
 ---
 

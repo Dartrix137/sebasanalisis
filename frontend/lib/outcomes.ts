@@ -28,14 +28,28 @@ export function groupOf(
 export type OutcomeTone = "red" | "black" | "green" | "neutral";
 
 /**
- * Color de mesa de un resultado, leído de la categoría `color` si la variante
- * la define. Un juego sin categoría `color` (dados, por ejemplo) cae en
- * "neutral" sin romperse.
+ * Tono de un resultado en el teclado y en la lista de giros, leído de la pista
+ * de presentación `display` de la variante (§7.3 de la Fase 4): la categoría
+ * que da el tono y el tono de cada uno de sus grupos. Sin pista, o con un
+ * grupo sin tono, el resultado va en neutro.
+ *
+ * Antes se buscaba a mano la categoría `color` y los grupos `red`, `black` y
+ * `green`: era la última suposición de ruleta fuera de los datos.
  */
 export function toneOf(config: GameVariantConfig, outcome: string): OutcomeTone {
-  const group = groupOf(config, "color", outcome);
-  if (group === "red" || group === "black" || group === "green") return group;
-  return "neutral";
+  const category = config.display?.outcome_tone_category;
+  if (!category) return "neutral";
+  const group = groupOf(config, category, outcome);
+  if (!group) return "neutral";
+  return config.display?.tones[group] ?? "neutral";
+}
+
+/**
+ * Columnas fijas de la grilla del teclado, si la pista las trae. Sin ellas, la
+ * grilla se ajusta al ancho de la pantalla.
+ */
+export function keypadColumns(config: GameVariantConfig): number | null {
+  return config.display?.columns ?? null;
 }
 
 export const TONE_CLASSES: Record<OutcomeTone, string> = {
