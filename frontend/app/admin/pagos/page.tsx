@@ -102,14 +102,6 @@ export default function AdminPaymentsPage() {
             función del webhook. Los reembolsos se hacen en el panel de Wompi y aquí se registran.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={() => router.push("/admin/suscripciones")}>
-            Suscripciones
-          </Button>
-          <Button variant="ghost" onClick={() => router.push("/admin")}>
-            Volver al panel
-          </Button>
-        </div>
       </header>
 
       <Card>

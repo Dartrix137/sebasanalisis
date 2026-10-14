@@ -217,6 +217,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Overview */
+        get: operations["get_overview_admin_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/payments": {
         parameters: {
             query?: never;
@@ -480,6 +497,54 @@ export interface paths {
          *     retira (`none`).
          */
         patch: operations["update_user_access_admin_users__user_id__access_patch"];
+        trace?: never;
+    };
+    "/admin/users/{user_id}/force-password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Force Password Reset
+         * @description Cierra todas las sesiones de la cuenta, deja sin efecto su contrasena y
+         *     le envia el enlace para elegir una nueva (§5.3; decidido el 2026-10-14).
+         *
+         *     Sirve cuando la cuenta pudo quedar en manos de otro: por eso la contrasena
+         *     anterior deja de funcionar y no solo las sesiones.
+         */
+        post: operations["force_password_reset_admin_users__user_id__force_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_id}/resend-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Verification
+         * @description Le reenvia a la cuenta el correo para confirmar su direccion: el mismo
+         *     correo y el mismo enlace que pide ella desde su cuenta.
+         *
+         *     No toca acceso ni dinero: no pide motivo, pero deja su fila en la bitacora
+         *     (decidido el 2026-10-14).
+         */
+        post: operations["resend_verification_admin_users__user_id__resend_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/users/{user_id}/role": {
@@ -1797,6 +1862,21 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** AdminOverviewResponse */
+        AdminOverviewResponse: {
+            cancellation_rate: components["schemas"]["RateComparison"];
+            cancellations: components["schemas"]["Comparison"];
+            /** Collected */
+            collected: components["schemas"]["MoneyComparison"][];
+            failed_charges: components["schemas"]["Comparison"];
+            new_subscriptions: components["schemas"]["Comparison"];
+            period: components["schemas"]["OverviewPeriod"];
+            /** Recurring */
+            recurring: components["schemas"]["RecurringRevenue"][];
+            registrations: components["schemas"]["Comparison"];
+            subscriptions: components["schemas"]["SubscriptionCounts"];
+            verified_registrations: components["schemas"]["Comparison"];
+        };
         /** AdminPaymentDetailResponse */
         AdminPaymentDetailResponse: {
             /** Audit */
@@ -2364,6 +2444,16 @@ export interface components {
             new_password: string;
         };
         /**
+         * Comparison
+         * @description Un indicador de flujo en el mes en curso y en el mismo tramo del anterior.
+         */
+        Comparison: {
+            /** Current */
+            current: number;
+            /** Previous */
+            previous: number;
+        };
+        /**
          * ConsentResponse
          * @description Un documento que el usuario acepto, para la pagina de cuenta.
          */
@@ -2641,6 +2731,14 @@ export interface components {
             /** Spins */
             spins: components["schemas"]["SpinResponse"][];
         };
+        /**
+         * ForcePasswordResetRequest
+         * @description POST /admin/users/:id/force-password-reset.
+         */
+        ForcePasswordResetRequest: {
+            /** Reason */
+            reason: string;
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -2884,6 +2982,15 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** MoneyComparison */
+        MoneyComparison: {
+            /** Currency */
+            currency: string;
+            /** Current Cents */
+            current_cents: number;
+            /** Previous Cents */
+            previous_cents: number;
+        };
         /**
          * NextStepResponse
          * @description Dónde queda la progresión si el giro cierra en contra o a favor.
@@ -2912,6 +3019,35 @@ export interface components {
          * @enum {string}
          */
         NoBetReason: "insufficient_data" | "below_threshold";
+        /**
+         * OverviewPeriod
+         * @description Las dos ventanas que se comparan: [start, end). Mes calendario en hora
+         *     de Bogota hasta ahora, y el mismo tramo del mes anterior.
+         */
+        OverviewPeriod: {
+            /**
+             * Current End
+             * Format: date-time
+             */
+            current_end: string;
+            /**
+             * Current Start
+             * Format: date-time
+             */
+            current_start: string;
+            /**
+             * Previous End
+             * Format: date-time
+             */
+            previous_end: string;
+            /**
+             * Previous Start
+             * Format: date-time
+             */
+            previous_start: string;
+            /** Timezone */
+            timezone: string;
+        };
         /**
          * PaymentEventResponse
          * @description Un evento del proveedor de pagos, como llego.
@@ -3174,6 +3310,16 @@ export interface components {
             total_cents: number;
         };
         /**
+         * RateComparison
+         * @description Una tasa en puntos basicos (1 % = 100). Null si no hay base.
+         */
+        RateComparison: {
+            /** Current Bp */
+            current_bp: number | null;
+            /** Previous Bp */
+            previous_bp: number | null;
+        };
+        /**
          * RecommendationDecision
          * @description Qué hacer en el giro siguiente.
          * @enum {string}
@@ -3304,6 +3450,22 @@ export interface components {
              * Format: date-time
              */
             refunded_at: string;
+        };
+        /**
+         * RecurringRevenue
+         * @description Ingreso recurrente mensual de una moneda, hoy.
+         */
+        RecurringRevenue: {
+            /** Automatic Cents */
+            automatic_cents: number;
+            /** Currency */
+            currency: string;
+            /** Manual Cents */
+            manual_cents: number;
+            /** Subscriptions */
+            subscriptions: number;
+            /** Total Cents */
+            total_cents: number;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -3662,6 +3824,24 @@ export interface components {
          * @enum {string}
          */
         SubscriptionAdminAction: "extend" | "cancel_at_period_end" | "cancel_now";
+        /**
+         * SubscriptionCounts
+         * @description Cuantas suscripciones hay hoy en cada estado, tal como estan en la base.
+         */
+        SubscriptionCounts: {
+            /** Active */
+            active: number;
+            /** Canceled */
+            canceled: number;
+            /** Expired */
+            expired: number;
+            /** In Force */
+            in_force: number;
+            /** Past Due */
+            past_due: number;
+            /** Pending */
+            pending: number;
+        };
         /**
          * SubscriptionFilter
          * @description Filtro de `GET /admin/users` por la suscripcion de la cuenta.
@@ -4395,6 +4575,26 @@ export interface operations {
             };
         };
     };
+    get_overview_admin_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOverviewResponse"];
+                };
+            };
+        };
+    };
     list_payments_admin_payments_get: {
         parameters: {
             query?: {
@@ -4866,6 +5066,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    force_password_reset_admin_users__user_id__force_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForcePasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_verification_admin_users__user_id__resend_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Validation Error */

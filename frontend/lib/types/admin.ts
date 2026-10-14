@@ -28,3 +28,7 @@ export type AdminPaymentListResponse = S["AdminPaymentListResponse"];
 export type AdminPaymentDetailResponse = S["AdminPaymentDetailResponse"];
 export type RequeryPaymentRequest = S["RequeryPaymentRequest"];
 export type RecordRefundRequest = S["RecordRefundRequest"];
+export type ForcePasswordResetRequest = S["ForcePasswordResetRequest"];
+export type AdminOverviewResponse = S["AdminOverviewResponse"];
+export type Comparison = S["Comparison"];
+export type MoneyComparison = S["MoneyComparison"];

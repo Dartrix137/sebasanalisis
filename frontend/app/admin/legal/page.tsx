@@ -59,9 +59,6 @@ export default function AdminLegalPage() {
             Una versión publicada no se edita: para cambiar un texto se publica una versión nueva.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/admin")}>
-          Volver al panel
-        </Button>
       </header>
 
       {error ? <ErrorBox message={error} /> : null}

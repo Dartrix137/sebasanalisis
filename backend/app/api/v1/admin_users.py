@@ -1,4 +1,5 @@
-"""Admin: usuarios, acceso manual y bitacora (docs/PLATAFORMA_COMPLETA.md §4.2 y §4.6).
+"""Admin: usuarios, acceso manual, contrasena, verificacion y bitacora
+(docs/PLATAFORMA_COMPLETA.md §4.2 y §4.6).
 
 Dos reglas:
 
@@ -9,29 +10,37 @@ Dos reglas:
   es la de `core/access.has_access`.
 """
 
+import secrets
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status
 from sqlalchemy import String, and_, exists, func, or_, select
 
 from app.api.deps import AdminUser, DbSession
 from app.api.presenters import admin_payment_responses, subscription_response, user_response
+from app.api.v1.billing import EmailSenderDep
 from app.api.v1.legal import client_ip, list_consents
-from app.core import audit, subscriptions
+from app.core import audit, billing_emails, rate_limit, subscriptions
+from app.core.config import get_settings
+from app.core.email import send_safely
+from app.core.security import hash_password
+from app.core.user_tokens import TOKEN_TTL, issue_token
+from app.emails import build_email
 from app.models import AdminAuditLog, GameSession, Payment, Subscription, User
 from app.schemas.admin import (
     AdminUserDetailResponse,
     AdminUserListResponse,
     AuditLogEntry,
     AuditLogListResponse,
+    ForcePasswordResetRequest,
     SubscriptionFilter,
     UpdateUserAccessRequest,
     UpdateUserRoleRequest,
     UpdateUserStatusRequest,
 )
-from app.schemas.auth import AccessType, UserResponse, UserRole
+from app.schemas.auth import AccessType, MessageResponse, UserResponse, UserRole
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -337,6 +346,112 @@ def update_user_role(
     db.commit()
     db.refresh(user)
     return user_response(db, user)
+
+
+@router.post("/users/{user_id}/force-password-reset", response_model=MessageResponse)
+def force_password_reset(
+    user_id: UUID,
+    payload: ForcePasswordResetRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+) -> MessageResponse:
+    """Cierra todas las sesiones de la cuenta, deja sin efecto su contrasena y
+    le envia el enlace para elegir una nueva (§5.3; decidido el 2026-10-14).
+
+    Sirve cuando la cuenta pudo quedar en manos de otro: por eso la contrasena
+    anterior deja de funcionar y no solo las sesiones.
+    """
+    user = _get_or_404(db, user_id)
+    # Cerraria la sesion de quien lo pide; para su propia cuenta esta /cuenta.
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No puedes forzar el restablecimiento de tu propia contraseña: cámbiala desde Mi cuenta",
+        )
+    now = datetime.now(UTC)
+    before = {"token_version": user.token_version}
+    # Un hash de un secreto que nadie conoce: ninguna contrasena coincide con el.
+    user.password_hash = hash_password(secrets.token_urlsafe(32))
+    user.token_version += 1
+    raw_token = issue_token(db, user, "reset_password", now=now)
+    audit.record(
+        db,
+        admin,
+        action="user.password.force_reset",
+        target_type="user",
+        target_id=user.id,
+        before=before,
+        after={"token_version": user.token_version},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    message = build_email(
+        "password_reset_forced",
+        to=user.email,
+        display_name=user.display_name,
+        url=billing_emails.frontend_url(f"/restablecer-contrasena?token={raw_token}"),
+        minutes=int(TOKEN_TTL["reset_password"].total_seconds() // 60),
+        forgot_url=billing_emails.frontend_url("/olvide-contrasena"),
+    )
+    background.add_task(send_safely, sender, message)
+    return MessageResponse(
+        message="Listo: sus sesiones se cerraron y le enviamos el enlace para elegir una contraseña nueva"
+    )
+
+
+@router.post("/users/{user_id}/resend-verification", response_model=MessageResponse)
+def resend_verification(
+    user_id: UUID,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+) -> MessageResponse:
+    """Le reenvia a la cuenta el correo para confirmar su direccion: el mismo
+    correo y el mismo enlace que pide ella desde su cuenta.
+
+    No toca acceso ni dinero: no pide motivo, pero deja su fila en la bitacora
+    (decidido el 2026-10-14).
+    """
+    user = _get_or_404(db, user_id)
+    if user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Esta cuenta ya confirmó su correo"
+        )
+    # Un clic repetido no manda dos correos. Va aparte del limite que tiene la
+    # cuenta para reenviarlo ella misma, para no gastarle sus cupos.
+    if get_settings().rate_limit_enabled and not rate_limit.hit(
+        f"admin-resend-verification:{user.id}", limit=1, window=60
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Ya se envió hace menos de un minuto. Espera un momento.",
+        )
+    raw_token = issue_token(db, user, "verify_email", now=datetime.now(UTC))
+    audit.record(
+        db,
+        admin,
+        action="user.verification.resend",
+        target_type="user",
+        target_id=user.id,
+        after={"email": user.email},
+        ip=client_ip(request),
+    )
+    db.commit()
+    message = build_email(
+        "verify_email",
+        to=user.email,
+        display_name=user.display_name,
+        url=billing_emails.frontend_url(f"/verificar-correo?token={raw_token}"),
+        hours=int(TOKEN_TTL["verify_email"].total_seconds() // 3600),
+    )
+    background.add_task(send_safely, sender, message)
+    return MessageResponse(message=f"Le enviamos el correo de confirmación a {user.email}")
 
 
 @router.get("/audit-log", response_model=AuditLogListResponse)
