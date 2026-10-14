@@ -393,5 +393,5 @@ Construido el 2026-10-14 en la rama `fase-4-paso-7b-mesa-y-menu`. El detalle est
 
 Comprobado: la suite completa del backend (con un test nuevo); cuatro tests nuevos de Playwright (`e2e/multijuego.spec.ts`), entre ellos el fixture de dados de punta a punta y la redirección de la ruta vieja; los Playwright de la mesa en la ruta nueva; la migración en una base desechable; y capturas en escritorio y a 390 px.
 
-Decisiones del usuario (2026-10-14): se quita del dashboard el aviso fijo "La ruleta no tiene memoria…", que `CLAUDE.md` ya daba por retirado; y se corrige el ejemplo de dos dados de la skill `categories-json-validator` (las sumas no son equiprobables).
+Decisiones del usuario (2026-10-14): se quita el aviso fijo "La ruleta no tiene memoria…", que `CLAUDE.md` ya daba por retirado, del dashboard, del pie del login y del registro, y de la descripción de la página; y se corrige el ejemplo de dos dados de la skill `categories-json-validator` (las sumas no son equiprobables).
 

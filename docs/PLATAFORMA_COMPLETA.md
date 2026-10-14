@@ -1351,7 +1351,7 @@ Paso 7, entrega 2 (rama `fase-4-paso-7b-mesa-y-menu`). Con ella está construido
 
 **Lo que queda señalado**
 
-- El aviso fijo "La ruleta no tiene memoria…" (`components/Disclaimer.tsx`) seguía en el dashboard, aunque `CLAUDE.md` lo da por retirado de todas las pantallas. Se quitó en esta entrega (decisión del usuario del 2026-10-14) y el componente se borró. La misma frase sigue al pie del login y del registro (`AuthForm.tsx`) y en la descripción de la página (`app/layout.tsx`).
+- El aviso fijo "La ruleta no tiene memoria…" (`components/Disclaimer.tsx`) seguía en el dashboard, aunque `CLAUDE.md` lo da por retirado de todas las pantallas. Se quitó en esta entrega (decisión del usuario del 2026-10-14) y el componente se borró. La misma frase también se quitó del pie del login y del registro (`AuthForm.tsx`) y de la descripción de la página (`app/layout.tsx`). Quedan las explicaciones de contexto que no son el aviso: la nota bajo las mesas cerradas, el onboarding y el resumen de una sesión cerrada.
 - La skill `categories-json-validator` ponía de ejemplo de juego nuevo la suma de dos dados (2-12), que no son resultados equiprobables. Se corrigió: ahora exige resultados equiprobables y explica cómo describir dos dados (36 pares ordenados).
 - Los textos de ayuda de la gestión de banca siguen dando ejemplos de ruleta ("dos docenas o dos columnas"), ahora marcados como tales.
 
