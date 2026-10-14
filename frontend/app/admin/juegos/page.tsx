@@ -9,6 +9,14 @@
  * Un juego nace oculto: se publica cuando tiene sus variantes. Cambiar el
  * estado pide un motivo y queda en la bitácora; el slug, el tipo y el módulo
  * no cambian después de creado.
+ *
+ * Desde el 2026-10-14 el producto sale solo con la ruleta, y cada juego futuro
+ * tendrá su propio motor, escrito en código (decisión del usuario): crear un
+ * juego desde cero con la configuración a mano no es sencillo de hacer bien.
+ * Por eso el alta de juegos y de variantes está oculta (`ALTA_DE_JUEGOS`), no
+ * borrada, por si una versión futura la vuelve a abrir. Lo que la ruleta
+ * necesita sigue a la vista: editar sus variantes (umbrales de señal) y el
+ * estado, el orden, el ícono y la descripción del juego.
  */
 
 import { useRouter } from "next/navigation";
@@ -32,6 +40,11 @@ import type {
 type FormError = { message: string; details?: string[] } | null;
 
 const PAGE_SIZE = 20;
+
+// Oculta "Nuevo juego" y "+ Variante" (decisión del 2026-10-14: por ahora solo
+// la ruleta). Los endpoints de alta siguen en la API; encenderlo los vuelve a
+// mostrar sin más cambios.
+const ALTA_DE_JUEGOS = false;
 
 const STATUS_OPTIONS = Object.entries(GAME_STATUS_LABEL) as [GameStatus, string][];
 const ICON_OPTIONS = Object.entries(GAME_ICON_LABEL) as [GameIcon, string][];
@@ -119,10 +132,12 @@ export default function AdminGamesPage() {
 
       {error ? <ErrorBox message={error.message} details={error.details} /> : null}
 
-      <NewGameCard
-        pending={pending}
-        onCreate={(body) => run(() => withToken((t) => adminApi.createGame(t, body)))}
-      />
+      {ALTA_DE_JUEGOS ? (
+        <NewGameCard
+          pending={pending}
+          onCreate={(body) => run(() => withToken((t) => adminApi.createGame(t, body)))}
+        />
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-[12rem_1fr] sm:items-end">
         <SelectField<GameStatus | "">
@@ -166,9 +181,11 @@ export default function AdminGamesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={STATUS_TONE[game.status]}>{GAME_STATUS_LABEL[game.status]}</Badge>
-                <Button variant="ghost" onClick={() => setEditing({ gameId: game.id })}>
-                  + Variante
-                </Button>
+                {ALTA_DE_JUEGOS ? (
+                  <Button variant="ghost" onClick={() => setEditing({ gameId: game.id })}>
+                    + Variante
+                  </Button>
+                ) : null}
               </div>
             </div>
 

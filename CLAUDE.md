@@ -6,7 +6,7 @@ Está organizado por tema, no por fecha: cada sección dice la regla **vigente**
 
 ## Qué es este proyecto
 
-Plataforma fullstack por suscripción con un **motor de recomendación estadística** para juegos de casino. El usuario registra a mano los números de una mesa de ruleta europea o americana y, después de cada giro, la pantalla le dice **qué apostar en el siguiente giro** o **NO APOSTAR**, con un Signal Score 0-100, su banda y lo que pide cada gestión de banca. La arquitectura está preparada para agregar más juegos desde el panel de administración sin escribir código nuevo por cada uno.
+Plataforma fullstack por suscripción con un **motor de recomendación estadística** para juegos de casino. El usuario registra a mano los números de una mesa de ruleta europea o americana y, después de cada giro, la pantalla le dice **qué apostar en el siguiente giro** o **NO APOSTAR**, con un Signal Score 0-100, su banda y lo que pide cada gestión de banca. **El producto sale solo con la ruleta** (decisión del 2026-10-14). Cada juego que venga después tendrá su propio motor, escrito en código como el de la ruleta, y entrará como un módulo nuevo del registro de módulos (`api/game_modules.py`, `lib/game-modules.ts`); no se crea desde el panel de administración.
 
 La recomendación sale de reglas estadísticas sobre resultados ya registrados. **No es una predicción** — ver la regla de lenguaje más abajo.
 
@@ -174,6 +174,7 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 
 ### Multijuego y deportivas
 
+- **Por ahora, solo la ruleta** (decisión del 2026-10-14): crear un juego desde cero con la configuración a mano resultó difícil de hacer bien (resultados que tienen que ser equiprobables, pagos y progresiones pensados para la ruleta). Los juegos futuros se escriben en código, cada uno con su motor, como un módulo nuevo. En `/admin/juegos` el alta de juegos y de variantes está oculta (`ALTA_DE_JUEGOS` en `app/admin/juegos/page.tsx`), no borrada; la API la conserva. La edición de las variantes de la ruleta (umbrales) y del estado, el orden y la descripción del juego siguen a la vista.
 - Los dados entran solo como **fixture de test** de genericidad (`backend/tests/fixtures/dados_d6.json`, un dado de seis caras: el motor supone resultados equiprobables y las sumas de dos dados no lo son); el juego de dados sigue fuera de alcance.
 - Un juego tiene `slug` (va en la URL y no se edita), `module`, `status` (`active | hidden | coming_soon`) e ícono de un set fijo (§7.7 del documento de la Fase 4). Los routers de cada módulo salen del registro `api/game_modules.py`; `sports` está reservado sin implementación. Un plan sin filas en `plan_games` incluye todos los juegos, y quitarle un juego a un plan con suscripciones vigentes se rechaza.
 - La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee. El frontend no supone ningún juego: el teclado sale de `possible_outcomes` y su tono de `display` (`lib/outcomes.toneOf`).

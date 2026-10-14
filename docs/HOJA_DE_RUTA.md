@@ -100,6 +100,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Página de Juego Responsable (`/legal/juego-responsable`), exigida por §0 del documento de arquitectura. | Descartada por decisión del usuario: no se construye. Los documentos legales son cuatro (términos, datos, reembolsos, cookies). | 2026-10-08 |
 | `GET /admin/users` devolvía todas las cuentas y el acceso se cambiaba con un desplegable, sin dejar rastro. | `/admin/usuarios` pagina, busca y filtra en el servidor; cada cambio de acceso pide un motivo y queda en la bitácora. | Fase 4, paso 3 |
 | El registro pedía correo y contraseña. | Exige además aceptar los términos y la política de datos vigentes y declarar la mayoría de edad. | Fase 4, paso 2 |
+| Un juego nuevo de resultados discretos se crearía completo desde el admin, sin escribir código (`PLATAFORMA_COMPLETA.md` §7.3). | El producto sale solo con la ruleta. Cada juego futuro tendrá su propio motor, escrito en código, y entrará como un módulo nuevo. El alta de juegos y de variantes del admin queda oculta, no borrada. | 2026-10-14 |
 
 ---
 
@@ -257,6 +258,7 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Decisiones tomadas para la Fase 4
 
+- **Solo la ruleta, y juegos futuros escritos en código (2026-10-14)**: crear un juego desde cero en el admin resultó difícil de hacer bien. La configuración tiene que describir resultados equiprobables (la suma de dos dados no lo es, y Baccarat tampoco), y la martingala y los dos sectores están pensados para los pagos de la ruleta (1:1 y 2:1). El producto se lanza con la ruleta. Cada juego que venga tendrá su motor propio, como un módulo nuevo del registro de módulos. En `/admin/juegos` se ocultan "Nuevo juego" y "+ Variante" (interruptor `ALTA_DE_JUEGOS`) para poder volver a abrirlos en una versión futura; la API de alta se conserva. **La martingala se deja como está**: se sigue ofreciendo también sobre una docena o una columna (2:1), con el monto calculado con el pago real.
 - **Logo (2026-10-13)**: el hexágono dorado que entregó el usuario reemplaza al círculo amarillo en el login, los encabezados, el icono de la pestaña y los correos. El original (`docs/design/logo-original.webp`) es dorado sobre negro, sin transparencia; `frontend/scripts/make-logo.mjs` le quita el fondo y genera los archivos. El texto del logo dice "Análisis Sebastián" y el producto se llama "Sebasanálisis": se usa solo el hexágono, con el nombre escrito al lado como antes. Los correos cargan el logo desde `<FRONTEND_BASE_URL>/logo-email.png`, así que el `Dockerfile` del frontend ahora copia `public`.
 - **Paso 5, entrega 2 (2026-10-13)**: se pueden guardar tarjetas y Nequi; la tarjeta se escribe en el widget de Wompi; cancelar y reanudar entran en esta entrega; y en la pantalla de pago ningún modo entra marcado.
 

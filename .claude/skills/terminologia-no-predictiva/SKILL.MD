@@ -26,10 +26,12 @@ Antes de aceptar cualquier texto (código, copy, commit, doc) que hable de suger
 ## Checklist antes de aprobar un texto o pieza de código
 
 1. ¿Aparece la palabra "predic-" en cualquier forma (predicción, predictivo, predice)? → reescribir.
-2. ¿El texto muestra una probabilidad o frecuencia SIN mostrar también la probabilidad teórica constante al lado? → agregar ambas, nunca una sola (ver regla anti-falacia del jugador en `docs/ARQUITECTURA_Y_ESTADISTICA.md` §2).
-3. ¿Un componente de UI que muestra una sugerencia estadística incluye el disclaimer fijo? El texto exacto es:
-   > "La ruleta no tiene memoria. Cada giro es independiente. Este análisis es descriptivo, no predictivo."
-   Si falta, agrégalo — no es opcional en ninguna pantalla que muestre sugerencias, rachas, o resultados de χ².
+2. ¿El texto muestra una frecuencia observada SIN la probabilidad teórica constante al lado? → agregar ambas, nunca una sola (regla anti-falacia del jugador, `docs/ARQUITECTURA_Y_ESTADISTICA.md` §2). Aplica a la respuesta de la API y a la sección desplegable "¿Por qué recomienda esto?". La vista principal de la mesa no muestra frecuencias: ahí el protagonista es la recomendación (mercado, Signal Score, banda y monto). Donde se muestren, viajan en pareja.
+3. ¿La tarjeta de recomendación conserva sus **dos líneas obligatorias**? Son estas (CLAUDE.md, "Disclaimer"):
+   - bajo el score: _"81/100 es la fuerza del criterio interno, no la probabilidad de acertar."_ (en `frontend/components/mesa/RecommendationCard.tsx`);
+   - al pie, fija, haya o no señal: _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_ (la manda la API, `RECOMMENDATION_DISCLAIMER` en `backend/app/api/v1/recommendations.py`, y la tarjeta la pinta desde `recommendation.disclaimer`).
+
+   Si alguna falta, restáurala. **No agregues el banner fijo de §0** ("La ruleta no tiene memoria. Cada giro es independiente…"): se retiró de todas las pantallas, también del inicio, del login y del registro (decisión del usuario del 2026-10-14). El carácter estadístico y no predictivo del producto lo cubren los términos y condiciones. El hook `.claude/hooks/check_terminologia.py` vigila estas dos líneas.
 4. ¿Un nombre de tabla, campo, función o endpoint usa vocabulario predictivo? Revisa contra la tabla de reemplazos y renómbralo antes de continuar, incluso si ya hay migraciones o código dependiente — es más barato corregirlo temprano.
 5. ¿El copy de marketing/onboarding/landing promete resultados, ganancias, o "ventaja"? Cualquier frase que suene a promesa de resultado debe matizarse explícitamente con que ningún sistema cambia la ventaja matemática de la casa.
 
