@@ -16,14 +16,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import AdminUser, DbSession
 from app.api.v1.admin_users import Limit, Offset
 from app.api.v1.legal import client_ip
 from app.billing.coupon_codes import InvalidCouponCodeError, normalize_code, validate_code
 from app.billing.pricing import MAX_PERCENT
-from app.core import audit, price_changes
-from app.models import Coupon, CouponRedemption, Plan, PriceChange, User
+from app.core import access, audit, price_changes
+from app.models import Coupon, CouponRedemption, Game, Plan, PriceChange, User
 from app.schemas.billing import (
     AdminCouponListResponse,
     AdminCouponResponse,
@@ -38,6 +39,7 @@ from app.schemas.billing import (
     PriceTransferPreview,
     PriceTransferRequest,
     UpdateCouponRequest,
+    UpdatePlanGamesRequest,
     UpdatePlanRequest,
 )
 
@@ -103,7 +105,13 @@ def list_plans(
 ) -> AdminPlanListResponse:
     """Todos los planes, los desactivados tambien."""
     total = db.scalar(select(func.count()).select_from(Plan)) or 0
-    plans = db.scalars(select(Plan).order_by(Plan.sort_order, Plan.code).limit(limit).offset(offset))
+    plans = db.scalars(
+        select(Plan)
+        .options(selectinload(Plan.games))
+        .order_by(Plan.sort_order, Plan.code)
+        .limit(limit)
+        .offset(offset)
+    )
     return AdminPlanListResponse(
         items=[AdminPlanResponse.model_validate(p) for p in plans],
         total=total,
@@ -187,6 +195,72 @@ def update_plan(
         reason=payload.reason.strip(),
         ip=client_ip(request),
     )
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+@router.put("/plans/{plan_id}/games", response_model=AdminPlanResponse)
+def update_plan_games(
+    plan_id: UUID,
+    payload: UpdatePlanGamesRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> Plan:
+    """Elige los juegos que incluye un plan (§4.4 y §7.4).
+
+    Una lista vacia = todos los juegos, tambien los que se creen despues.
+    Agregar siempre se puede. Quitar un juego que el plan incluye hoy se
+    rechaza si el plan tiene suscripciones vigentes: es el mismo principio del
+    precio congelado (§3.7), lo que ya se pago no cambia a mitad del periodo.
+    """
+    plan = _plan_or_404(db, plan_id)
+    unique = list(dict.fromkeys(payload.game_ids))
+    games = list(db.scalars(select(Game).where(Game.id.in_(unique)))) if unique else []
+    if len(games) != len(unique):
+        raise _invalid("Alguno de los juegos elegidos no existe")
+
+    before_ids = set(plan.game_ids)
+    after_ids = {g.id for g in games}
+    if before_ids == after_ids:
+        raise _conflict(_NOTHING_TO_CHANGE)
+
+    # Lo que el plan incluye hoy y lo que incluiria: sin filas, todos los
+    # juegos que existen.
+    all_ids = set(db.scalars(select(Game.id)))
+    included_now = before_ids or all_ids
+    included_after = after_ids or all_ids
+    removed = included_now - included_after
+    if removed:
+        vigentes = access.current_subscriptions_of_plan(db, plan.id, datetime.now(UTC))
+        if vigentes:
+            nombres = ", ".join(
+                sorted(db.scalars(select(Game.name).where(Game.id.in_(removed))))
+            )
+            raise _conflict(
+                f"Este plan tiene {vigentes} suscripción(es) vigente(s): quitarle "
+                f"{nombres} cambiaría lo que ya pagaron. Crea un plan nuevo con los "
+                "juegos que quieras y desactiva este."
+            )
+
+    def _slugs(ids: set[UUID]) -> list[str]:
+        if not ids:
+            return []
+        return sorted(db.scalars(select(Game.slug).where(Game.id.in_(ids))))
+
+    audit.record(
+        db,
+        admin,
+        action="plan.games.update",
+        target_type="plan",
+        target_id=plan.id,
+        before={"all_games": not before_ids, "games": _slugs(before_ids)},
+        after={"all_games": not after_ids, "games": _slugs(after_ids)},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    plan.games = games
     db.commit()
     db.refresh(plan)
     return plan

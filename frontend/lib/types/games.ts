@@ -20,6 +20,13 @@ export type CreateGameVariantRequest = S["CreateGameVariantRequest"];
 export type UpdateGameVariantRequest = S["UpdateGameVariantRequest"];
 export type GameVariantResponse = S["GameVariantResponse"];
 export type GameResponse = S["GameResponse"];
+export type GameMenuItem = S["GameMenuItem"];
+export type GameMenuResponse = S["GameMenuResponse"];
+export type AdminGameListResponse = S["AdminGameListResponse"];
+export type GameStatus = GameResponse["status"];
+export type GameModule = GameResponse["module"];
+export type GameIcon = GameResponse["icon"];
+export type OutcomeDisplay = S["OutcomeDisplay-Output"];
 
 /**
  * FastAPI publica la configuración de una variante (y sus categorías y grupos)

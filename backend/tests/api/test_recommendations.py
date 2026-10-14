@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.engine.recommendation import WEIGHT_DEVIATION, WEIGHT_RECENCY
-from tests.api.conftest import auth
+from tests.api.conftest import auth, game_body
 
 #: Ruleta reducida con dos categorias de pago 1:1 y una de 2:1, mas una
 #: combinacion permitida: lo minimo para ejercitar mercados simples y dobles.
@@ -63,7 +63,7 @@ def sesion(client: TestClient, user_token: str, admin_token: str) -> str:
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Ruleta {sufijo}", "type": f"roulette_{sufijo}", "active": True},
+        json=game_body("Ruleta", "roulette", sufijo),
         headers=auth(admin_token),
     ).json()
     variant = client.post(

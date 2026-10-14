@@ -4,7 +4,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import auth
+from tests.api.conftest import auth, game_body
 
 DADOS_CONFIG = {
     "possible_outcomes": [str(n) for n in range(2, 13)],
@@ -23,8 +23,7 @@ DADOS_CONFIG = {
 
 
 def _game_body() -> dict:
-    sufijo = uuid.uuid4().hex[:8]
-    return {"name": f"Dados {sufijo}", "type": f"dice_{sufijo}", "active": True}
+    return game_body("Dados", "dice", uuid.uuid4().hex[:8])
 
 
 def _crear_juego(client: TestClient, token: str) -> str:
@@ -58,12 +57,12 @@ def test_crear_y_editar_juego(client: TestClient, admin_token: str) -> None:
 
     r = client.patch(
         f"/admin/games/{game['id']}",
-        json={"name": "Renombrado", "active": False},
+        json={"name": "Renombrado", "status": "hidden", "reason": "Se revisa antes"},
         headers=auth(admin_token),
     )
     assert r.status_code == 200
     assert r.json()["name"] == "Renombrado"
-    assert r.json()["active"] is False
+    assert r.json()["status"] == "hidden"
 
 
 def test_tipo_de_juego_duplicado_es_rechazado(client: TestClient, admin_token: str) -> None:
@@ -248,12 +247,6 @@ def test_usuario_normal_solo_ve_juegos_y_variantes_activos(
     assert sorted(v["name"] for v in r.json()) == ["activa", "inactiva"]
 
 
-def test_include_inactive_requiere_admin(client: TestClient, user_token: str) -> None:
-    assert client.get("/games", params={"include_inactive": True},
-                      headers=auth(user_token)).status_code == 403
-    assert client.get("/games", headers=auth(user_token)).status_code == 200
-
-
 def test_ruleta_precargada_aparece_con_sus_dos_variantes(
     client: TestClient, admin_token: str
 ) -> None:
@@ -267,7 +260,7 @@ def test_ruleta_precargada_aparece_con_sus_dos_variantes(
             headers=auth(admin_token),
         )
     r = client.get("/games", headers=auth(admin_token))
-    juego = next(g for g in r.json() if g["id"] == game_id)
+    juego = next(g for g in r.json()["items"] if g["id"] == game_id)
     assert sorted(v["name"] for v in juego["variants"]) == ["american", "european"]
 
 
@@ -282,7 +275,7 @@ def test_un_usuario_normal_puede_leer_la_variante_de_su_sesion(
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Ruleta {sufijo}", "type": f"roulette_{sufijo}", "active": True},
+        json=game_body("Ruleta", "roulette", sufijo),
         headers=auth(admin_token),
     ).json()
     variant = client.post(
@@ -304,7 +297,7 @@ def test_una_variante_desactivada_sigue_siendo_legible(
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Ruleta {sufijo}", "type": f"roulette_{sufijo}", "active": True},
+        json=game_body("Ruleta", "roulette", sufijo),
         headers=auth(admin_token),
     ).json()
     variant = client.post(

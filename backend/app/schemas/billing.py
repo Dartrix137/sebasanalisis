@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 
 from app.billing.pricing import CouponKind, CouponRejection
 from app.schemas.base import ApiModel, Reason
@@ -34,6 +34,16 @@ class CouponDuration(str, Enum):
 
 # ---------- Publico y usuario ----------
 
+class PlanGameRef(ApiModel):
+    """Un juego incluido en un plan, como lo ve quien va a pagar."""
+    id: UUID
+    slug: str
+    name: str
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PlanResponse(ApiModel):
     """Un plan que se ofrece."""
     id: UUID
@@ -45,8 +55,18 @@ class PlanResponse(ApiModel):
     currency: str
     interval: PlanInterval
     interval_count: int
+    # True = el plan incluye todos los juegos, tambien los que se creen despues
+    # (§7.4). Si es False, `games` dice cuales.
+    all_games: bool
+    # Los juegos incluidos que un cliente puede ver: no trae los ocultos.
+    games: list[PlanGameRef]
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("games", mode="after")
+    @classmethod
+    def sin_juegos_ocultos(cls, games: list[PlanGameRef]) -> list[PlanGameRef]:
+        return [g for g in games if g.status != "hidden"]
 
 
 class QuoteRequest(ApiModel):
@@ -255,6 +275,18 @@ class AdminPlanResponse(PlanResponse):
     sort_order: int
     created_at: datetime
     updated_at: datetime
+    # Todos los juegos incluidos, tambien los ocultos. Vacio = todos (§7.4).
+    game_ids: list[UUID]
+
+
+class UpdatePlanGamesRequest(ApiModel):
+    """PUT /admin/plans/:id/games. Reemplaza la seleccion de juegos del plan.
+
+    Una lista vacia = el plan incluye todos los juegos, tambien los que se creen
+    despues. Quitar un juego a un plan con suscripciones vigentes se rechaza.
+    """
+    game_ids: list[UUID] = Field(max_length=200)
+    reason: str = Reason
 
 
 class AdminPlanListResponse(ApiModel):

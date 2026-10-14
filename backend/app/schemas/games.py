@@ -3,11 +3,14 @@ Schemas: Games & Variants
 Modelo genérico: cualquier juego de resultados discretos con probabilidad fija
 (ruleta, dados, y futuros) se describe con el mismo esquema de configuración.
 """
+from typing import Literal
 from uuid import UUID
 
 from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.base import ApiModel
+from app.models.game import SLUG_PATTERN
+from app.schemas.auth import AccessReason
+from app.schemas.base import ApiModel, Reason
 
 # ---------- Config genérica (categories_json) ----------
 
@@ -60,6 +63,24 @@ class AllowedCombination(ApiModel):
     group_ids: list[str] = Field(min_length=2)
 
 
+OutcomeTone = Literal["red", "black", "green", "neutral"]
+
+
+class OutcomeDisplay(ApiModel):
+    """Pista de presentación del teclado de resultados (§7.3).
+
+    Solo dice cómo se ve: el motor la ignora. Sin ella, el teclado sale en una
+    grilla con todos los resultados en tono neutro.
+    """
+    # Categoría cuyos grupos dan el tono de cada resultado, ej. 'color'.
+    outcome_tone_category: str | None = None
+    # Tono de cada grupo de esa categoría. Un grupo sin tono va en neutro.
+    tones: dict[str, OutcomeTone] = {}
+    layout: Literal["grid"] = "grid"
+    # Columnas de la grilla. Sin ellas, el frontend elige según el ancho.
+    columns: int | None = Field(default=None, ge=1, le=12)
+
+
 class GameVariantConfig(ApiModel):
     """El contenido completo de game_variants.categories_json + metadata."""
     possible_outcomes: list[str] = Field(min_length=1)
@@ -75,6 +96,8 @@ class GameVariantConfig(ApiModel):
     # base); por debajo la decisión es NO APOSTAR. Igualarlo al medio apaga la
     # señal débil.
     weak_threshold: float = Field(default=35, ge=0, le=100)
+    # Solo presentación (§7.3); el motor no la lee.
+    display: OutcomeDisplay | None = None
 
     @model_validator(mode="after")
     def weak_not_above_medium(self):
@@ -101,21 +124,51 @@ class GameVariantConfig(ApiModel):
         return categories
 
 
+# ---------- Metadatos del juego (§7.2) ----------
+
+GameModule = Literal["discrete_outcome", "sports"]
+GameStatus = Literal["active", "hidden", "coming_soon"]
+GameIcon = Literal["ruleta", "dados", "cartas", "deportes", "generico"]
+
+_SLUG = Field(min_length=1, max_length=60, pattern=SLUG_PATTERN)
+
+
 # ---------- Requests (admin) ----------
 
 class CreateGameRequest(ApiModel):
-    name: str
-    type: str  # 'roulette' | 'dice' | futuro
-    active: bool = True
+    name: str = Field(min_length=1, max_length=120)
+    # Identificador interno estable, ej. 'roulette'. No se repite.
+    type: str = Field(min_length=1, max_length=60)
+    # Va en la URL (`/juegos/<slug>`) y no cambia después de creado.
+    slug: str = _SLUG
+    module: GameModule
+    description: str = Field(default="", max_length=2000)
+    icon: GameIcon = "generico"
+    sort_order: int = Field(default=0, ge=0, le=10_000)
+    # Un juego nuevo nace oculto: se publica cuando tenga sus variantes.
+    status: GameStatus = "hidden"
+    reason: str = Reason
 
 
 class UpdateGameRequest(ApiModel):
-    name: str | None = None
-    active: bool | None = None
+    """PATCH /admin/games/:id. El tipo, el slug y el módulo no cambian.
+
+    El motivo es obligatorio si cambia el estado: ocultar un juego, o pasarlo a
+    "próximamente", le quita la mesa nueva a los clientes, y eso queda en la
+    bitácora.
+    """
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=2000)
+    icon: GameIcon | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=10_000)
+    status: GameStatus | None = None
+    reason: str | None = Field(default=None, min_length=3, max_length=500)
 
 
 class CreateGameVariantRequest(ApiModel):
-    name: str  # 'american' | 'european' | 'two_d6'
+    name: str  # 'american' | 'european' | 'd6'
+    description: str = Field(default="", max_length=2000)
+    sort_order: int = Field(default=0, ge=0, le=10_000)
     house_edge: float = Field(ge=0, le=1)
     config: GameVariantConfig
     active: bool = True
@@ -123,6 +176,8 @@ class CreateGameVariantRequest(ApiModel):
 
 class UpdateGameVariantRequest(ApiModel):
     name: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int | None = Field(default=None, ge=0, le=10_000)
     house_edge: float | None = Field(default=None, ge=0, le=1)
     config: GameVariantConfig | None = None
     active: bool | None = None
@@ -134,6 +189,8 @@ class GameVariantResponse(ApiModel):
     id: UUID
     game_id: UUID
     name: str
+    description: str
+    sort_order: int
     house_edge: float
     # La columna del modelo se llama `categories_json`; el alias permite poblar
     # este campo tanto desde el ORM como desde un cuerpo JSON con clave `config`.
@@ -149,7 +206,43 @@ class GameResponse(ApiModel):
     id: UUID
     name: str
     type: str
-    active: bool
+    slug: str
+    module: GameModule
+    description: str
+    icon: GameIcon
+    sort_order: int
+    status: GameStatus
     variants: list[GameVariantResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GameAccess(ApiModel):
+    """Si la cuenta puede jugar este juego, y si no, por qué (§7.4).
+
+    Es la decisión de `core/access.has_access` con el juego. El motivo que
+    importa en el menú es `game_not_in_plan`: el juego se muestra como
+    "disponible en otro plan".
+    """
+    granted: bool
+    reason: AccessReason
+
+
+class GameMenuItem(GameResponse):
+    """Un juego del menú. Solo trae las variantes activas."""
+    access: GameAccess
+
+
+class GameMenuResponse(ApiModel):
+    items: list[GameMenuItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminGameListResponse(ApiModel):
+    """Lista del admin: todos los juegos y todas sus variantes."""
+    items: list[GameResponse]
+    total: int
+    limit: int
+    offset: int

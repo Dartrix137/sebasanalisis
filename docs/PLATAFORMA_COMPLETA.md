@@ -127,7 +127,7 @@ La verificación del correo no da ni quita acceso a la mesa por sí sola: es req
 
 Decisiones de implementación que este documento no fijaba, confirmadas por el usuario el 2026-10-08.
 
-- **`core/access.py` ya existía** desde el paso 2, con la regla de consentimiento. Este paso agregó las demás en el orden de §2.2. La firma es `has_access(db, user, now)`; `game` y la regla n.º 7 llegan en el paso 7.
+- **`core/access.py` ya existía** desde el paso 2, con la regla de consentimiento. Este paso agregó las demás en el orden de §2.2. La firma era `has_access(db, user, now)`; `game` y la regla n.º 7 llegaron en el paso 7 (§7.7).
 - **Motivos**: `admin`, `full`, `invited`, `subscription` cuando hay acceso; `suspended`, `consent_required`, `expired`, `no_access` cuando no. `expired` se usa cuando la cuenta tuvo un acceso `invited` o una suscripción y venció; `no_access`, cuando nunca tuvo. `email_not_verified` no es un motivo de acceso a la mesa (§2.2): es requisito para pagar y lo responde `POST /billing/subscriptions` en el paso 5.
 - **`until`**: hasta cuándo vale el acceso si vence, o cuándo venció si el motivo es `expired`. Null en los accesos sin vencimiento.
 - **La suscripción se lee con lo que hay hoy** en la tabla (`status` y `current_period_end`): da acceso con `status` `active` o `canceled` y el período en el futuro. No hay ninguna suscripción todavía; los tests insertan filas a mano. El paso 5 amplía la tabla sin cambiar esta regla.
@@ -1188,6 +1188,116 @@ Una configuración de **dados** como fixture de test (no se publica ni se agrega
 - `/games/roulette/:id` redirige a la ruta nueva.
 - Fixture de dados de punta a punta (§7.5).
 
+### 7.7 Entrega 1, backend y admin: cómo quedó construido (2026-10-14)
+
+Paso 7, entrega 1 (rama `fase-4-paso-7a-multijuego-backend`). La entrega 2 (la mesa en `/juegos/[slug]/mesa/[sessionId]`, `components/mesa/*`, el menú de juegos, la redirección de la ruta vieja y el fixture de dados en Playwright) sigue pendiente.
+
+**Decisiones del usuario (2026-10-14)**
+
+- **Estado**: `games.active = true` pasa a `status = 'active'` y `false` a `'hidden'`.
+- **Slug de la ruleta**: `ruleta`, con la URL en español (`/juegos/ruleta`). El slug no se edita después de creado, igual que el código de un plan.
+- **`coming_soon`**: el cliente lo ve en el menú, pero no puede abrir mesa (`409`).
+- **`hidden`**: no existe para el cliente (`404`). Un administrador lo ve y abre mesas para probarlo.
+- **Mesas ya abiertas**: siguen funcionando aunque su juego pase a oculto o a "próximamente", igual que con una variante desactivada.
+- **Bitácora del estado**: cambiar el estado de un juego pide motivo y deja fila (`game.status.update`). Crear un juego también la deja (`game.create`). Editar el nombre, la descripción, el ícono o el orden no la deja.
+- **Ícono**: un identificador de un set fijo (`ruleta`, `dados`, `cartas`, `deportes`, `generico`) que dibuja el frontend. No hay subida de archivos.
+- **Sesiones abiertas**: no se tocan. Una sesión llega a su juego por la variante, así que las de hoy ya son de ruleta.
+- **`plan_games`**:
+  - Un plan sin filas incluye todos los juegos, también los que se creen después.
+  - El acceso manual (`full`, `invited`) y el administrador incluyen todos.
+  - Agregar un juego a un plan siempre se puede.
+  - **Quitar un juego a un plan con suscripciones vigentes se rechaza (`409`)**, por el mismo principio del precio congelado (§3.7). La salida es crear un plan nuevo y desactivar el viejo.
+  - Pasar de "todos" a una lista que deje fuera un juego existente cuenta como quitarlo.
+- **`/planes` dice qué juegos incluye un plan solo cuando el plan tiene una lista.** La respuesta pública ya lo trae; la pantalla es de la entrega 2.
+- **Ninguna decisión de §10 ni de §8.3 toca este paso.** `sports` queda reservado: está en el enum y en el registro, sin implementación, y el admin rechaza crear un juego con él.
+
+**Datos**: cinco migraciones, una por cambio lógico.
+
+| Migración | Tipo | Qué hace |
+|---|---|---|
+| `a3c1e5f7b902` | DDL | Columnas nuevas de `games` y `game_variants`. Las que dependen de cada juego entran nullables. |
+| `b6d2f4a8c013` | Backfill | `slug`, `module`, `icon` y `status` de cada juego. La ruleta reserva `ruleta`; los demás toman el slug de su `type`, con sufijo si chocan. |
+| `c8e4a6b0d125` | DDL | Columnas obligatorias, slug único con CHECK de formato, CHECK de los enums. Retira `games.active`; el downgrade la recrea desde `status`. |
+| `d0f6b8c2e237` | DDL | `plan_games`. No hay backfill: los dos planes de hoy quedan sin filas e incluyen todo. |
+| `e2a8c0d4f349` | Backfill | Agrega `display` al `categories_json` de las variantes de ruleta. |
+
+**Registro de módulos** (`backend/app/api/game_modules.py`)
+
+- `module → (routers, validador de configuración)`. `discrete_outcome` agrupa los cinco routers de la mesa y usa `validate_game_config`; `sports` figura sin implementación.
+- `main.py` monta los routers desde el registro.
+- Un `assert` exige que el registro y el enum de `games.module` coincidan.
+- Crear un juego con un módulo reservado o desconocido responde `422`.
+
+**Acceso por juego (regla n.º 7 de §2.2)**
+
+- `has_access(db, user, now, game=None)`: con un juego y una suscripción vigente, exige que el plan lo incluya; si no, `game_not_in_plan`. Los demás orígenes de acceso no miran el juego.
+- `RequireAccess` sigue en los routers sin el juego. A su lado, **`RequireGameAccess`**, también a nivel de router en los cinco routers de la mesa, lee el `{session_id}` de la URL y vuelve a preguntar a `has_access` con el juego de esa mesa.
+  - Va como dependencia y no dentro del endpoint porque así corre antes de validar el cuerpo: una mesa de un juego fuera del plan responde `403 game_not_in_plan` en todas sus rutas, también en los `POST`.
+  - Un endpoint nuevo sobre una mesa no puede olvidarlo.
+- Abrir una mesa (`POST /sessions`) pasa por la misma pregunta, después de mirar el estado del juego.
+- `GET /auth/me` sigue decidiendo sin juego: una cuenta con suscripción tiene acceso aunque su plan no incluya todos los juegos.
+- `core/access.current_subscriptions_of_plan` cuenta las suscripciones que dan acceso hoy con los mismos estados de la regla n.º 6. La usa el admin para el `409` de quitar un juego.
+
+**Pista de presentación `display`** (`OutcomeDisplay` en `schemas/games.py`)
+
+- `outcome_tone_category`: la categoría cuyos grupos dan el tono a cada resultado.
+- `tones`: grupo → `red | black | green | neutral`.
+- `layout`: `grid`.
+- `columns`: opcional, de 1 a 12.
+
+El motor la ignora. El validador rechaza una categoría o un grupo que no existe, y tonos sin categoría. Antes de este paso Pydantic descartaba en silencio una clave `display`; ahora se guarda. Las configuraciones de ruleta de `seed_data/` la traen.
+
+**API**
+
+| Endpoint | Qué cambia |
+|---|---|
+| `GET /games` | Es el menú de juegos: paginado, en el orden del menú, con las variantes activas y `access: {granted, reason}` por juego. El cliente ve `active` y `coming_soon`; el administrador ve también `hidden`. Desaparece `include_inactive`. |
+| `GET /admin/games` | Nuevo. Paginado y con filtros por estado, módulo y texto (nombre o slug). Trae todas las variantes. |
+| `POST /admin/games` | Pide `slug`, `module` y `reason`. Acepta `description`, `icon`, `sort_order` y `status` (por defecto `hidden`). |
+| `PATCH /admin/games/:id` | Cambia nombre, descripción, ícono, orden y estado. El estado pide motivo. Un cambio que no cambia nada da `409`. |
+| Variantes | Suman `description` y `sort_order`. La configuración se valida con el validador del módulo del juego. |
+| `PUT /admin/plans/:id/games` | Nuevo: `{game_ids, reason}`. Una lista vacía significa todos los juegos. Deja fila `plan.games.update`. |
+| `PlanResponse` | Suma `all_games` y `games` (sin los ocultos). |
+| `AdminPlanResponse` | Suma `game_ids` (todos, también los ocultos). |
+
+**Frontend del admin**
+
+- `/admin/juegos`:
+  - Lista paginada con filtro por estado y búsqueda.
+  - Alta con nombre, tipo, slug, módulo, ícono, orden, descripción y motivo; el juego nace oculto.
+  - Edición del juego, con el motivo cuando cambia el estado.
+  - `VariantForm` suma descripción, orden y la pista del teclado.
+  - `/admin/juegos` y `/admin/motor` ya no pasan por `AccessGate`: leen `/admin/games`, que no es un endpoint de juego.
+- `/admin/planes`: debajo de cada plan, "Juegos incluidos" (todos, o una lista con motivo), y en la fila "todos los juegos" o cuántos.
+- El dashboard lee el menú nuevo y, hasta la entrega 2, solo ofrece abrir mesa en los juegos activos que la cuenta puede jugar.
+
+**Tests**
+
+- `tests/api/test_multijuego.py`, 28 tests:
+  - El fixture de dados (`tests/fixtures/dados_d6.json`) pasa el validador sin errores ni avisos, y funciona de punta a punta por la API sin tocar `engine/`. Es un dado de seis caras: el motor supone resultados equiprobables y las sumas de dos dados no lo son.
+  - Módulo reservado o desconocido → `422`.
+  - Slug inválido → `422`; slug repetido → `409`; el slug no se edita.
+  - Juego nuevo oculto, con su fila en la bitácora.
+  - El estado pide motivo y deja fila.
+  - Menú y apertura de mesa según el estado, para cliente y administrador.
+  - Mesa abierta de un juego que se oculta.
+  - Paginación y filtros de `/admin/games`.
+  - Cinco pistas mal formadas rechazadas; la pista es opcional; la ruleta sembrada la trae.
+  - Plan sin juegos = todos, también los nuevos.
+  - `403 game_not_in_plan` al abrir mesa, y el menú lo marca.
+  - El acceso manual y el administrador incluyen todo.
+  - **Recorrido de todas las rutas con `{session_id}`** con una mesa de un juego fuera del plan: `403 game_not_in_plan` en cada una (20 operaciones).
+  - Juegos por plan: motivo, `409` al quitar con vigentes, de "todos" a lista; solo administradores; los planes públicos no nombran los juegos ocultos.
+- Los tests que creaban juegos con `{name, type, active}` usan el helper `game_body` de `tests/api/conftest.py`.
+- Playwright:
+  - `e2e/admin-games.spec.ts`: crear un juego oculto y pasarlo a "próximamente" con motivo; elegir los juegos de un plan y verlo en la bitácora.
+  - `admin-panel.spec.ts` ahora recorre también Juegos y Motor.
+- Migraciones probadas en una base desechable:
+  - Con tres juegos, uno de ellos con `type = 'ruleta'` para forzar el choque de slug.
+  - Subida, CHECK del slug, bajada de las cinco con una fila en `plan_games` y `active` restaurado, vuelta a subir y `alembic check` sin diferencias.
+
+**Lo que queda para la entrega 2**: la ruta `/juegos/[slug]/mesa/[sessionId]` y la redirección de `/games/roulette/:id`, `components/mesa/*`, el teclado armado desde `possible_outcomes` con la pista `display` (hoy `lib/outcomes.ts` todavía busca la categoría `color`), el menú con "Próximamente" y "Disponible en otro plan", la pantalla de `game_not_in_plan`, los juegos incluidos en `/planes` y el fixture de dados en Playwright.
+
 ---
 
 ## 8. Base para apuestas deportivas
@@ -1321,13 +1431,16 @@ Admin:     GET  /admin/overview
            POST /admin/payments/:id/refunds  {amount_cents, refunded_at, provider_refund_id?, reason}
            GET|POST /admin/plans             PATCH /admin/plans/:id
            GET|POST /admin/plans/:id/price-transfer   {reason}   (§4.10)
+           PUT  /admin/plans/:id/games       {game_ids, reason}   (§7.7; vacio = todos)
            GET  /admin/price-changes         POST  /admin/price-changes/:id/cancel   {reason}
            GET|POST /admin/coupons           PATCH /admin/coupons/:id
            GET  /admin/coupons/:id/redemptions
            GET|POST /admin/legal-documents   PATCH /admin/legal-documents/:id
            POST /admin/legal-documents/:id/publish
            GET  /admin/audit-log
-           (los de juegos y variantes existentes suman los campos de §7.2)
+           GET  /admin/games?status&module&q&limit&offset   (§7.7)
+           (los de juegos y variantes existentes suman los campos de §7.2;
+            GET /games pasa a ser el menu paginado, con el acceso de cada juego)
 ```
 
 Todos los endpoints de juego existentes (`games`, `sessions`, `suggestions`, `recommendations`, `bankroll`, `bets`) pasan a exigir `RequireAccess` (§2.1).

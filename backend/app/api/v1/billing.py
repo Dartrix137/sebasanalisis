@@ -20,6 +20,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession
 from app.api.presenters import payment_response, subscription_response
@@ -94,7 +95,12 @@ def _frontend_url(path: str) -> str:
 def list_plans(db: DbSession) -> list[Plan]:
     """Los planes que se ofrecen. Publico."""
     return list(
-        db.scalars(select(Plan).where(Plan.active.is_(True)).order_by(Plan.sort_order, Plan.code))
+        db.scalars(
+            select(Plan)
+            .options(selectinload(Plan.games))
+            .where(Plan.active.is_(True))
+            .order_by(Plan.sort_order, Plan.code)
+        )
     )
 
 

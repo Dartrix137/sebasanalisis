@@ -2,7 +2,8 @@
 
 `GameVariantConfig` ya valida la estructura y la regla 3 (outcomes subconjunto de
 possible_outcomes). Faltan las reglas 1, 2, 4 y 6 de la skill
-`categories-json-validator`, mas la coherencia de los pagos.
+`categories-json-validator`, mas la coherencia de los pagos y la pista de
+presentacion `display` (§7.3 de la Fase 4).
 
 Separado de `schemas/` a proposito: los schemas son el contrato de la API y no se
 tocan; esto es la barrera de negocio que corre en el endpoint de admin y en el
@@ -83,7 +84,38 @@ def validate_game_config(config: GameVariantConfig) -> ConfigValidationResult:
 
     _validate_allowed_combinations(config, result)
     _validate_market_flags(config, result)
+    _validate_display(config, result)
     return result
+
+
+def _validate_display(config: GameVariantConfig, result: ConfigValidationResult) -> None:
+    """Pista de presentacion del teclado (§7.3). Es opcional y el motor la
+    ignora, pero si nombra una categoria o un grupo que no existe, el teclado
+    saldria sin tonos sin que nadie supiera por que.
+    """
+    display = config.display
+    if display is None:
+        return
+    if display.outcome_tone_category is None:
+        if display.tones:
+            result.errors.append(
+                "display: hay tonos por grupo pero falta outcome_tone_category, la "
+                "categoria a la que pertenecen esos grupos"
+            )
+        return
+    categoria = next(
+        (c for c in config.categories if c.id == display.outcome_tone_category), None
+    )
+    if categoria is None:
+        result.errors.append(
+            f"display: la categoria '{display.outcome_tone_category}' no existe"
+        )
+        return
+    faltantes = sorted(set(display.tones) - set(categoria.groups))
+    if faltantes:
+        result.errors.append(
+            f"display: los grupos {faltantes} no existen en la categoria '{categoria.id}'"
+        )
 
 
 def _validate_allowed_combinations(

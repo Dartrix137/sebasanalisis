@@ -239,3 +239,19 @@ OPEN_PREFIXES = (
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def game_body(name: str, game_type: str, sufijo: str, **overrides: object) -> dict:
+    """Cuerpo de `POST /admin/games` para un juego de prueba, activo.
+
+    El slug sale del tipo: minusculas y guiones, como pide la URL.
+    """
+    return {
+        "name": f"{name} {sufijo}",
+        "type": f"{game_type}_{sufijo}",
+        "slug": f"{game_type}-{sufijo}".replace("_", "-").lower(),
+        "module": "discrete_outcome",
+        "status": "active",
+        "reason": "Juego de prueba",
+        **overrides,
+    }

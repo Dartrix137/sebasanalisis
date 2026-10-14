@@ -14,11 +14,17 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
-from app.api.deps import CurrentUser, DbSession, RequireAccess
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    RequireAccess,
+    RequireGameAccess,
+    require_game_access,
+)
 from app.engine import bankroll as bk
 from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
 from app.engine.probability import GameConfig
-from app.models import Bet, GameSession, GameVariant, Spin, StatisticalSuggestion
+from app.models import Bet, Game, GameSession, GameVariant, Spin, StatisticalSuggestion, User
 from app.schemas.games import GameVariantConfig
 from app.schemas.sessions import (
     CreateSessionRequest,
@@ -29,7 +35,12 @@ from app.schemas.sessions import (
 )
 from app.schemas.spins import BulkSpinsRequest, BulkSpinsResponse, CreateSpinRequest, SpinResponse
 
-router = APIRouter(prefix="/sessions", tags=["sessions"], dependencies=[RequireAccess])
+router = APIRouter(
+    prefix="/sessions", tags=["sessions"], dependencies=[RequireAccess, RequireGameAccess]
+)
+
+# El modulo que juegan este router y los de la mesa (§7.3).
+MODULE = "discrete_outcome"
 
 
 def get_owned_session(db: DbSession, user_id: UUID, session_id: UUID) -> GameSession:
@@ -37,6 +48,9 @@ def get_owned_session(db: DbSession, user_id: UUID, session_id: UUID) -> GameSes
 
     Devuelve 404 (no 403) cuando la sesion es de otro: confirmar que existe pero
     es ajena filtraria informacion.
+
+    Que el juego de la sesion siga incluido en el plan lo exige antes
+    `RequireGameAccess`, en el router.
     """
     session = db.scalar(
         select(GameSession).where(
@@ -58,6 +72,29 @@ def require_active(session: GameSession) -> GameSession:
     return session
 
 
+def _check_game_open(db: DbSession, user: User, game: Game) -> None:
+    """Si se puede abrir una mesa nueva de este juego (§7.2 y §7.4).
+
+    Un juego oculto no existe para un cliente (404); uno "proximamente" se ve
+    en el menu pero no abre mesa (409). Un administrador abre mesa en los dos,
+    para probarlos antes de publicarlos. Despues va el plan: `403
+    game_not_in_plan` si no lo incluye.
+    """
+    es_admin = user.role == "admin"
+    # Estos routers son los del modulo `discrete_outcome` (`api/game_modules.py`):
+    # un juego de otro modulo no se juega aqui.
+    if game.module != MODULE or (game.status == "hidden" and not es_admin):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Variante de juego no disponible"
+        )
+    if game.status == "coming_soon" and not es_admin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este juego todavía no está disponible",
+        )
+    require_game_access(db, user, game)
+
+
 # ---------- Sesiones ----------
 
 
@@ -77,6 +114,7 @@ def create_session(payload: CreateSessionRequest, db: DbSession, user: CurrentUs
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Variante de juego no disponible"
         )
+    _check_game_open(db, user, variant.game)
 
     session = GameSession(
         user_id=user.id,

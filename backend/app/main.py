@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.game_modules import game_routers
 from app.api.v1 import (
     admin,
     admin_billing,
@@ -13,15 +14,10 @@ from app.api.v1 import (
     admin_payments,
     admin_users,
     auth,
-    bankroll,
-    bets,
     billing,
     fake_checkout,
     games,
     legal,
-    recommendations,
-    sessions,
-    suggestions,
     webhooks,
 )
 from app.core.config import get_settings
@@ -66,12 +62,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+# El menu de juegos es de la plataforma; la mesa la montan los modulos (§7.3).
 app.include_router(games.router)
-app.include_router(sessions.router)
-app.include_router(suggestions.router)
-app.include_router(recommendations.router)
-app.include_router(bankroll.router)
-app.include_router(bets.router)
+for game_router in game_routers():
+    app.include_router(game_router)
 app.include_router(admin.router)
 app.include_router(admin_legal.router)
 app.include_router(admin_users.router)

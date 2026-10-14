@@ -9,7 +9,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import auth
+from tests.api.conftest import auth, game_body
 
 RULETA_MINI = {
     "possible_outcomes": ["0", "1", "2", "3", "4", "5", "6"],
@@ -33,7 +33,7 @@ def variant_id(client: TestClient, admin_token: str) -> str:
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Ruleta {sufijo}", "type": f"roulette_{sufijo}", "active": True},
+        json=game_body("Ruleta", "roulette", sufijo),
         headers=auth(admin_token),
     ).json()
     return client.post(
@@ -114,10 +114,11 @@ def test_variante_inactiva_no_admite_sesiones(
 ) -> None:
     sesion = _crear_sesion(client, user_token, variant_id).json()
     game_id = client.get(f"/sessions/{sesion['id']}", headers=auth(user_token)).json()
-    juegos = client.get("/games", params={"include_inactive": True}, headers=auth(admin_token)).json()
-    juego = next(g for g in juegos if any(v["id"] == variant_id for v in g["variants"]))
+    juego_id = client.get(f"/games/variants/{variant_id}", headers=auth(user_token)).json()[
+        "game_id"
+    ]
     client.patch(
-        f"/admin/games/{juego['id']}/variants/{variant_id}",
+        f"/admin/games/{juego_id}/variants/{variant_id}",
         json={"active": False}, headers=auth(admin_token),
     )
     assert game_id is not None

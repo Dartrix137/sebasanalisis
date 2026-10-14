@@ -71,12 +71,17 @@ import type {
   SubscriptionResponse,
   SubscriptionStatus,
   UpdateCouponRequest,
+  UpdatePlanGamesRequest,
   UpdatePlanRequest,
 } from "./types/billing";
 import type {
+  AdminGameListResponse,
   CreateGameRequest,
   CreateGameVariantRequest,
+  GameMenuResponse,
+  GameModule,
   GameResponse,
+  GameStatus,
   GameVariantResponse,
   UpdateGameRequest,
   UpdateGameVariantRequest,
@@ -377,11 +382,11 @@ export const billingApi = {
 };
 
 export const gamesApi = {
-  list: (token: string, includeInactive = false) =>
-    apiFetch<GameResponse[]>(
-      `/games${includeInactive ? "?include_inactive=true" : ""}`,
-      { token },
-    ),
+  /**
+   * El menú de juegos, en su orden, con las variantes activas y la decisión de
+   * acceso de cada juego. Un administrador ve también los ocultos.
+   */
+  list: (token: string) => apiFetch<GameMenuResponse>("/games?limit=100", { token }),
 
   variants: (token: string, gameId: UUID) =>
     apiFetch<GameVariantResponse[]>(`/games/${gameId}/variants`, { token }),
@@ -607,6 +612,20 @@ export const adminApi = {
     return apiFetch<BacktestReport>(`/admin/recommendations/backtest${sufijo}`, { token });
   },
 
+  /** Todos los juegos, con todas sus variantes. Pagina y filtra en el servidor. */
+  listGames: (
+    token: string,
+    options: { status?: GameStatus; module?: GameModule; q?: string; limit?: number; offset?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.status) qs.set("status", options.status);
+    if (options.module) qs.set("module", options.module);
+    if (options.q) qs.set("q", options.q);
+    qs.set("limit", String(options.limit ?? 100));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    return apiFetch<AdminGameListResponse>(`/admin/games?${qs}`, { token });
+  },
+
   createGame: (token: string, body: CreateGameRequest) =>
     apiFetch<GameResponse>("/admin/games", {
       method: "POST",
@@ -763,6 +782,17 @@ export const adminApi = {
   updatePlan: (token: string, planId: UUID, body: UpdatePlanRequest) =>
     apiFetch<AdminPlanResponse>(`/admin/plans/${planId}`, {
       method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /**
+   * Los juegos que incluye un plan. Lista vacía = todos. Quitar un juego a un
+   * plan con suscripciones vigentes se rechaza (409).
+   */
+  updatePlanGames: (token: string, planId: UUID, body: UpdatePlanGamesRequest) =>
+    apiFetch<AdminPlanResponse>(`/admin/plans/${planId}/games`, {
+      method: "PUT",
       body: JSON.stringify(body),
       token,
     }),

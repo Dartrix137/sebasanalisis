@@ -17,6 +17,7 @@ import type {
   GameCategory,
   GameVariantConfig,
   GameVariantResponse,
+  OutcomeDisplay,
 } from "@/lib/types/games";
 
 import { Button, ErrorBox, Field } from "../ui";
@@ -28,11 +29,22 @@ interface Props {
   onCancel: () => void;
   onSubmit: (body: {
     name: string;
+    description: string;
+    sort_order: number;
     house_edge: number;
     config: GameVariantConfig;
     active: boolean;
   }) => void;
 }
+
+type Tone = OutcomeDisplay["tones"][string];
+
+const TONE_LABEL: Record<Tone, string> = {
+  red: "Rojo",
+  black: "Negro",
+  green: "Verde",
+  neutral: "Neutro",
+};
 
 interface GroupDraft {
   key: string;
@@ -88,6 +100,19 @@ const emptyCategory = (): CategoryDraft => ({
 
 export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
+  // Pista de presentación del teclado (§7.3). Solo cambia cómo se ve: el motor
+  // la ignora.
+  const [toneCategory, setToneCategory] = useState(
+    initial?.config.display?.outcome_tone_category ?? "",
+  );
+  const [tones, setTones] = useState<Record<string, Tone>>(
+    initial?.config.display?.tones ?? {},
+  );
+  const [columns, setColumns] = useState(
+    initial?.config.display?.columns ? String(initial.config.display.columns) : "",
+  );
   const [houseEdge, setHouseEdge] = useState(String(initial?.house_edge ?? "0.027"));
   const [active, setActive] = useState(initial?.active ?? true);
   const [outcomes, setOutcomes] = useState(
@@ -150,8 +175,34 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
       allowed_combinations: combinations,
       recommendation_threshold: Number(threshold),
       weak_threshold: Number(weakThreshold),
+      display: buildDisplay(),
     };
-    onSubmit({ name: name.trim(), house_edge: Number(houseEdge), config, active });
+    onSubmit({
+      name: name.trim(),
+      description: description.trim(),
+      sort_order: Number(sortOrder) || 0,
+      house_edge: Number(houseEdge),
+      config,
+      active,
+    });
+  }
+
+  const toneGroups =
+    categories.find((c) => c.id.trim() && c.id.trim() === toneCategory)?.groups ?? [];
+
+  function buildDisplay(): OutcomeDisplay | null {
+    const cat = toneCategory.trim();
+    const cols = columns.trim() ? Number(columns) : null;
+    if (!cat && cols === null) return null;
+    const groupKeys = new Set(toneGroups.map((g) => g.key.trim()));
+    return {
+      outcome_tone_category: cat || null,
+      tones: cat
+        ? Object.fromEntries(Object.entries(tones).filter(([key]) => groupKeys.has(key)))
+        : {},
+      layout: "grid",
+      columns: cols,
+    };
   }
 
   return (
@@ -174,6 +225,24 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
           hint="Como fracción: 0.027 es 2.70 %"
           value={houseEdge}
           onChange={(e) => setHouseEdge(e.target.value)}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+        <Field
+          label="Descripción"
+          hint="Opcional. La ve el cliente al elegir la variante."
+          placeholder="37 números, con un solo cero."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <Field
+          label="Orden"
+          type="number"
+          step="1"
+          min={0}
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
         />
       </div>
 
@@ -330,6 +399,70 @@ export function VariantForm({ initial, pending, error, onCancel, onSubmit }: Pro
           + Categoría
         </Button>
       </div>
+
+      <fieldset className="rounded-card border border-edge bg-ink p-4">
+        <legend className="px-2 text-xs font-bold uppercase tracking-wide text-muted">
+          Teclado de resultados
+        </legend>
+        <p className="mb-3 text-xs text-muted">
+          Solo presentación: cómo se ven los botones de la mesa. El motor no lo lee.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-white">Color según</span>
+            <select
+              value={toneCategory}
+              onChange={(e) => setToneCategory(e.target.value)}
+              className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none focus:border-gold/60"
+            >
+              <option value="">Sin color (todos neutros)</option>
+              {categories
+                .filter((c) => c.id.trim())
+                .map((c) => (
+                  <option key={c.id} value={c.id.trim()}>
+                    {c.label || c.id}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <Field
+            label="Columnas"
+            type="number"
+            step="1"
+            min={1}
+            max={12}
+            hint="Opcional. Sin valor, se ajusta al ancho de la pantalla."
+            value={columns}
+            onChange={(e) => setColumns(e.target.value)}
+          />
+        </div>
+        {toneGroups.length > 0 ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {toneGroups
+              .filter((g) => g.key.trim())
+              .map((g) => (
+                <label key={g.key} className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-white">
+                    {g.label || g.key}
+                  </span>
+                  <select
+                    value={tones[g.key.trim()] ?? "neutral"}
+                    onChange={(e) =>
+                      setTones((prev) => ({ ...prev, [g.key.trim()]: e.target.value as Tone }))
+                    }
+                    className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none focus:border-gold/60"
+                  >
+                    {(Object.keys(TONE_LABEL) as Tone[]).map((t) => (
+                      <option key={t} value={t}>
+                        {TONE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+          </div>
+        ) : null}
+      </fieldset>
 
       <label className="flex items-center gap-2 text-sm text-white">
         <input

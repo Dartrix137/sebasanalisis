@@ -35,6 +35,9 @@ class AccessReason(str, Enum):
     consent_required = "consent_required"
     expired = "expired"
     no_access = "no_access"
+    # Solo cuando se pregunta por un juego: la suscripcion da acceso, pero su
+    # plan no incluye ese juego (§7.4).
+    game_not_in_plan = "game_not_in_plan"
 
 
 class UserRole(str, Enum):

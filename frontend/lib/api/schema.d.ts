@@ -92,9 +92,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Admin Games
+         * @description Todos los juegos, en el orden del menu, con todas sus variantes.
+         */
+        get: operations["list_admin_games_admin_games_get"];
         put?: never;
-        /** Create Game */
+        /**
+         * Create Game
+         * @description Crea un juego. Su modulo tiene que estar implementado (§7.3).
+         *
+         *     Deja fila en la bitacora: un juego que nace activo ya lo ven los clientes.
+         */
         post: operations["create_game_admin_games_post"];
         delete?: never;
         options?: never;
@@ -115,7 +124,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Game */
+        /**
+         * Update Game
+         * @description Edita un juego. El tipo, el slug y el modulo no cambian.
+         *
+         *     Un cambio de estado pide motivo y deja fila en la bitacora
+         *     (`game.status.update`): ocultar un juego o pasarlo a "proximamente" le quita
+         *     la mesa nueva a los clientes. Los demas campos son de presentacion y no la
+         *     dejan.
+         */
         patch: operations["update_game_admin_games__game_id__patch"];
         trace?: never;
     };
@@ -360,6 +377,31 @@ export interface paths {
          *     (§3.7), salvo que despues se les traslade (`POST .../price-transfer`, §4.10).
          */
         patch: operations["update_plan_admin_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/admin/plans/{plan_id}/games": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Plan Games
+         * @description Elige los juegos que incluye un plan (§4.4 y §7.4).
+         *
+         *     Una lista vacia = todos los juegos, tambien los que se creen despues.
+         *     Agregar siempre se puede. Quitar un juego que el plan incluye hoy se
+         *     rechaza si el plan tiene suscripciones vigentes: es el mismo principio del
+         *     precio congelado (§3.7), lo que ya se pago no cambia a mitad del periodo.
+         */
+        put: operations["update_plan_games_admin_plans__plan_id__games_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/plans/{plan_id}/price-transfer": {
@@ -1183,7 +1225,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Games */
+        /**
+         * List Games
+         * @description El menu de juegos, en su orden, con las variantes activas de cada uno.
+         *
+         *     Cada juego trae la decision de acceso de `has_access` con ese juego: uno que
+         *     el plan de la cuenta no incluye llega con `game_not_in_plan`, para que el
+         *     menu lo muestre como "disponible en otro plan" en vez de esconderlo.
+         */
         get: operations["list_games_games_get"];
         put?: never;
         post?: never;
@@ -1848,7 +1897,7 @@ export interface components {
          * @description Por que una cuenta tiene o no acceso a la mesa (`core/access.has_access`).
          * @enum {string}
          */
-        AccessReason: "admin" | "full" | "invited" | "subscription" | "suspended" | "consent_required" | "expired" | "no_access";
+        AccessReason: "admin" | "full" | "invited" | "subscription" | "suspended" | "consent_required" | "expired" | "no_access" | "game_not_in_plan";
         /**
          * AccessType
          * @enum {string}
@@ -1902,6 +1951,20 @@ export interface components {
             valid_until: string | null;
             /** Value */
             value: number;
+        };
+        /**
+         * AdminGameListResponse
+         * @description Lista del admin: todos los juegos y todas sus variantes.
+         */
+        AdminGameListResponse: {
+            /** Items */
+            items: components["schemas"]["GameResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
         };
         /**
          * AdminLegalDocumentResponse
@@ -2036,6 +2099,8 @@ export interface components {
         AdminPlanResponse: {
             /** Active */
             active: boolean;
+            /** All Games */
+            all_games: boolean;
             /** Code */
             code: string;
             /**
@@ -2047,6 +2112,10 @@ export interface components {
             currency: string;
             /** Description */
             description: string;
+            /** Game Ids */
+            game_ids: string[];
+            /** Games */
+            games: components["schemas"]["PlanGameRef"][];
             /**
              * Id
              * Format: uuid
@@ -2638,12 +2707,38 @@ export interface components {
         /** CreateGameRequest */
         CreateGameRequest: {
             /**
-             * Active
-             * @default true
+             * Description
+             * @default
              */
-            active: boolean;
+            description: string;
+            /**
+             * Icon
+             * @default generico
+             * @enum {string}
+             */
+            icon: "ruleta" | "dados" | "cartas" | "deportes" | "generico";
+            /**
+             * Module
+             * @enum {string}
+             */
+            module: "discrete_outcome" | "sports";
             /** Name */
             name: string;
+            /** Reason */
+            reason: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Status
+             * @default hidden
+             * @enum {string}
+             */
+            status: "active" | "hidden" | "coming_soon";
             /** Type */
             type: string;
         };
@@ -2655,10 +2750,20 @@ export interface components {
              */
             active: boolean;
             config: components["schemas"]["GameVariantConfig-Input"];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
             /** House Edge */
             house_edge: number;
             /** Name */
             name: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
         };
         /** CreateLegalDocumentRequest */
         CreateLegalDocumentRequest: {
@@ -2817,6 +2922,19 @@ export interface components {
             email: string;
         };
         /**
+         * GameAccess
+         * @description Si la cuenta puede jugar este juego, y si no, por qué (§7.4).
+         *
+         *     Es la decisión de `core/access.has_access` con el juego. El motivo que
+         *     importa en el menú es `game_not_in_plan`: el juego se muestra como
+         *     "disponible en otro plan".
+         */
+        GameAccess: {
+            /** Granted */
+            granted: boolean;
+            reason: components["schemas"]["AccessReason"];
+        };
+        /**
          * GameCategory
          * @description Una categoría de agrupación, ej: 'color', 'dozen', 'sum_range'.
          */
@@ -2856,17 +2974,89 @@ export interface components {
              */
             shrinkage_alpha: number;
         };
-        /** GameResponse */
-        GameResponse: {
-            /** Active */
-            active: boolean;
+        /**
+         * GameMenuItem
+         * @description Un juego del menú. Solo trae las variantes activas.
+         */
+        GameMenuItem: {
+            access: components["schemas"]["GameAccess"];
+            /** Description */
+            description: string;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "ruleta" | "dados" | "cartas" | "deportes" | "generico";
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Module
+             * @enum {string}
+             */
+            module: "discrete_outcome" | "sports";
             /** Name */
             name: string;
+            /** Slug */
+            slug: string;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "hidden" | "coming_soon";
+            /** Type */
+            type: string;
+            /**
+             * Variants
+             * @default []
+             */
+            variants: components["schemas"]["GameVariantResponse"][];
+        };
+        /** GameMenuResponse */
+        GameMenuResponse: {
+            /** Items */
+            items: components["schemas"]["GameMenuItem"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** GameResponse */
+        GameResponse: {
+            /** Description */
+            description: string;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "ruleta" | "dados" | "cartas" | "deportes" | "generico";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Module
+             * @enum {string}
+             */
+            module: "discrete_outcome" | "sports";
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "hidden" | "coming_soon";
             /** Type */
             type: string;
             /**
@@ -2887,6 +3077,7 @@ export interface components {
             allowed_combinations: components["schemas"]["AllowedCombination"][];
             /** Categories */
             categories: components["schemas"]["GameCategory-Input"][];
+            display?: components["schemas"]["OutcomeDisplay-Input"] | null;
             /** Possible Outcomes */
             possible_outcomes: string[];
             /**
@@ -2912,6 +3103,7 @@ export interface components {
             allowed_combinations: components["schemas"]["AllowedCombination"][];
             /** Categories */
             categories: components["schemas"]["GameCategory-Output"][];
+            display: components["schemas"]["OutcomeDisplay-Output"] | null;
             /** Possible Outcomes */
             possible_outcomes: string[];
             /**
@@ -2930,6 +3122,8 @@ export interface components {
             /** Active */
             active: boolean;
             config: components["schemas"]["GameVariantConfig-Output"];
+            /** Description */
+            description: string;
             /**
              * Game Id
              * Format: uuid
@@ -2944,6 +3138,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Sort Order */
+            sort_order: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3088,6 +3284,58 @@ export interface components {
          * @enum {string}
          */
         NoBetReason: "insufficient_data" | "below_threshold";
+        /**
+         * OutcomeDisplay
+         * @description Pista de presentación del teclado de resultados (§7.3).
+         *
+         *     Solo dice cómo se ve: el motor la ignora. Sin ella, el teclado sale en una
+         *     grilla con todos los resultados en tono neutro.
+         */
+        "OutcomeDisplay-Input": {
+            /** Columns */
+            columns?: number | null;
+            /**
+             * Layout
+             * @default grid
+             * @constant
+             */
+            layout: "grid";
+            /** Outcome Tone Category */
+            outcome_tone_category?: string | null;
+            /**
+             * Tones
+             * @default {}
+             */
+            tones: {
+                [key: string]: "red" | "black" | "green" | "neutral";
+            };
+        };
+        /**
+         * OutcomeDisplay
+         * @description Pista de presentación del teclado de resultados (§7.3).
+         *
+         *     Solo dice cómo se ve: el motor la ignora. Sin ella, el teclado sale en una
+         *     grilla con todos los resultados en tono neutro.
+         */
+        "OutcomeDisplay-Output": {
+            /** Columns */
+            columns: number | null;
+            /**
+             * Layout
+             * @default grid
+             * @constant
+             */
+            layout: "grid";
+            /** Outcome Tone Category */
+            outcome_tone_category: string | null;
+            /**
+             * Tones
+             * @default {}
+             */
+            tones: {
+                [key: string]: "red" | "black" | "green" | "neutral";
+            };
+        };
         /**
          * OverviewPeriod
          * @description Las dos ventanas que se comparan: [start, end). Mes calendario en hora
@@ -3267,6 +3515,23 @@ export interface components {
             documents: components["schemas"]["LegalDocumentResponse"][];
         };
         /**
+         * PlanGameRef
+         * @description Un juego incluido en un plan, como lo ve quien va a pagar.
+         */
+        PlanGameRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+        };
+        /**
          * PlanInterval
          * @enum {string}
          */
@@ -3276,12 +3541,16 @@ export interface components {
          * @description Un plan que se ofrece.
          */
         PlanResponse: {
+            /** All Games */
+            all_games: boolean;
             /** Code */
             code: string;
             /** Currency */
             currency: string;
             /** Description */
             description: string;
+            /** Games */
+            games: components["schemas"]["PlanGameRef"][];
             /**
              * Id
              * Format: uuid
@@ -4110,22 +4379,41 @@ export interface components {
             /** Value */
             value?: number | null;
         };
-        /** UpdateGameRequest */
+        /**
+         * UpdateGameRequest
+         * @description PATCH /admin/games/:id. El tipo, el slug y el módulo no cambian.
+         *
+         *     El motivo es obligatorio si cambia el estado: ocultar un juego, o pasarlo a
+         *     "próximamente", le quita la mesa nueva a los clientes, y eso queda en la
+         *     bitácora.
+         */
         UpdateGameRequest: {
-            /** Active */
-            active?: boolean | null;
+            /** Description */
+            description?: string | null;
+            /** Icon */
+            icon?: ("ruleta" | "dados" | "cartas" | "deportes" | "generico") | null;
             /** Name */
             name?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Status */
+            status?: ("active" | "hidden" | "coming_soon") | null;
         };
         /** UpdateGameVariantRequest */
         UpdateGameVariantRequest: {
             /** Active */
             active?: boolean | null;
             config?: components["schemas"]["GameVariantConfig-Input"] | null;
+            /** Description */
+            description?: string | null;
             /** House Edge */
             house_edge?: number | null;
             /** Name */
             name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** UpdateLegalDocumentRequest */
         UpdateLegalDocumentRequest: {
@@ -4135,6 +4423,19 @@ export interface components {
             requires_acceptance: boolean;
             /** Title */
             title: string;
+        };
+        /**
+         * UpdatePlanGamesRequest
+         * @description PUT /admin/plans/:id/games. Reemplaza la seleccion de juegos del plan.
+         *
+         *     Una lista vacia = el plan incluye todos los juegos, tambien los que se creen
+         *     despues. Quitar un juego a un plan con suscripciones vigentes se rechaza.
+         */
+        UpdatePlanGamesRequest: {
+            /** Game Ids */
+            game_ids: string[];
+            /** Reason */
+            reason: string;
         };
         /**
          * UpdatePlanRequest
@@ -4460,6 +4761,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CouponRedemptionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_admin_games_admin_games_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: ("active" | "hidden" | "coming_soon") | null;
+                module?: ("discrete_outcome" | "sports") | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGameListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4979,6 +5315,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_plan_games_admin_plans__plan_id__games_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlanGamesRequest"];
             };
         };
         responses: {
@@ -6247,8 +6618,8 @@ export interface operations {
     list_games_games_get: {
         parameters: {
             query?: {
-                /** @description Incluye juegos y variantes desactivados. Solo para administradores. */
-                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -6262,7 +6633,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GameResponse"][];
+                    "application/json": components["schemas"]["GameMenuResponse"];
                 };
             };
             /** @description Validation Error */

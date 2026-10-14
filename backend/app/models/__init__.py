@@ -11,7 +11,7 @@ from app.models.billing import (
     PriceChange,
     SubscriptionPriceChange,
 )
-from app.models.game import Game, GameVariant
+from app.models.game import Game, GameVariant, PlanGame
 from app.models.game_session import GameSession
 from app.models.legal import LegalDocument, UserConsent
 from app.models.performance import SessionPerformance
@@ -35,6 +35,7 @@ __all__ = [
     "PaymentEvent",
     "PaymentRefund",
     "Plan",
+    "PlanGame",
     "PriceChange",
     "SessionPerformance",
     "Spin",

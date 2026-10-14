@@ -140,7 +140,7 @@ No avances a un paso sin que el anterior tenga al menos un test o una verificaci
 
 ### Acceso y cuentas
 
-- **El acceso lo decide una sola función** (`core/access.py`, `has_access`), aplicada con la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado. Desde el paso 3 aplica las reglas de §2.2 (suspendida, consentimiento, administrador, `full`, `invited`, suscripción vigente) y responde `403` con el motivo en `detail.code`. Falta solo la de juego incluido en el plan (paso 7). La cuenta con su decisión de acceso se arma con `api/presenters.user_response`, nunca con `UserResponse.model_validate`.
+- **El acceso lo decide una sola función** (`core/access.py`, `has_access`), aplicada con la dependencia `RequireAccess` en todos los routers de juego. No repitas la lógica de acceso en otro lado. Desde el paso 3 aplica las reglas de §2.2 (suspendida, consentimiento, administrador, `full`, `invited`, suscripción vigente) y responde `403` con el motivo en `detail.code`. Desde el paso 7 aplica también la regla n.º 7 (juego incluido en el plan, `game_not_in_plan`): `has_access` recibe el juego, y `RequireGameAccess` la aplica a nivel de router en todas las rutas de una mesa (`{session_id}`), antes de validar el cuerpo; abrir una mesa la pide con el juego de la variante. Un router nuevo de la mesa lleva las dos dependencias. La cuenta con su decisión de acceso se arma con `api/presenters.user_response`, nunca con `UserResponse.model_validate`.
 - **Legal** (paso 2, §6 y §6.7 del documento de la Fase 4): una versión publicada de un documento legal no se edita, se publica otra. El registro exige aceptar los documentos vigentes y declarar la mayoría de edad; no se crean consentimientos por migración ni por código en nombre de nadie. Los textos publicados son borradores pendientes de abogado: no los presentes como revisados. No hay página de Juego Responsable (descartada el 2026-10-08).
 - Cuenta nueva = **sin acceso hasta pagar** (o acceso manual del admin). `trial` ya no existe; `access_type` es `none | invited | full`. Mientras no haya llaves de Wompi configuradas, la única vía es el acceso manual desde `/admin/usuarios` y `/planes` muestra el botón de suscribirse deshabilitado; con ellas, la cuenta sin acceso se suscribe desde `/planes`.
 - El acceso se decide **siempre en el servidor** a partir de `access_type` y `current_period_end`. Nada que dependa de lo que mande el cliente.
@@ -174,7 +174,9 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 
 ### Multijuego y deportivas
 
-- Los dados entran solo como **fixture de test** de genericidad; el juego de dados sigue fuera de alcance.
+- Los dados entran solo como **fixture de test** de genericidad (`backend/tests/fixtures/dados_d6.json`, un dado de seis caras: el motor supone resultados equiprobables y las sumas de dos dados no lo son); el juego de dados sigue fuera de alcance.
+- Un juego tiene `slug` (va en la URL y no se edita), `module`, `status` (`active | hidden | coming_soon`) e ícono de un set fijo (§7.7 del documento de la Fase 4). Los routers de cada módulo salen del registro `api/game_modules.py`; `sports` está reservado sin implementación. Un plan sin filas en `plan_games` incluye todos los juegos, y quitarle un juego a un plan con suscripciones vigentes se rechaza.
+- La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee.
 - Las apuestas deportivas no se construyen en esta fase: solo se reserva su estructura (§8 del documento).
 
 ### Decisiones pendientes
