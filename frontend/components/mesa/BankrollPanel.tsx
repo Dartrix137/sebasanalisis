@@ -251,7 +251,7 @@ function StrategyDetail({
 
       <p className="mt-2 text-xs leading-relaxed text-muted">
         {suggestion.sectors > 1
-          ? "Montos sobre dos zonas a la vez, como dos docenas o dos columnas."
+          ? "Montos sobre dos zonas a la vez, como dos docenas o dos columnas en la ruleta."
           : "Montos sobre una apuesta de una sola zona. Si la recomendación cubre dos zonas, la tarjeta de recomendación ya los ajusta."}
       </p>
 

@@ -487,13 +487,16 @@ backend/app/
   billing/                       # PURO, como engine/: pricing.py, schedule.py (§3.3, §3.5)
   emails/                        # plantillas HTML + texto (§5.5)
   api/v1/                        # legal.py, billing.py, webhooks.py, y admin por secciones
+  api/game_modules.py            # module → (routers, validador de configuración) (§7.3)
   engine/sports/                 # reservado, sin implementación (§8)
 backend/scripts/
   run_renewals.py                # job de renovación (§3.5)
   export_openapi.py              # entrada del generador de tipos (§13.2)
 
 frontend/
+  app/juegos/[slug]/               # página del juego: variantes y mesa nueva (§7.8)
   app/juegos/[slug]/mesa/[sessionId]/   # reemplaza a games/roulette/[sessionId] (§7.3)
+  lib/game-modules.ts            # module → pantalla de la mesa (§7.3)
   app/legal/  app/planes/  app/cuenta/  app/admin/<sección>/
   components/mesa/               # reemplaza a components/roulette/ (§7.3)
   lib/api/                       # openapi.json y schema.d.ts generados (§13.2)

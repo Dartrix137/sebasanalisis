@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ProgressionPreviewTabs, STRATEGY_ORDER } from "@/components/roulette/BankrollPanel";
+import { ProgressionPreviewTabs, STRATEGY_ORDER } from "@/components/mesa/BankrollPanel";
 import { Button, ErrorBox, Field, InfoTip } from "@/components/ui";
 import { bankrollApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
@@ -269,10 +269,14 @@ export function NewSessionForm({
           <InfoTip label="Números ya observados en la mesa">{AYUDA.numerosObservados}</InfoTip>
         </span>
         <textarea
+          // La etiqueta envuelve también el botón de ayuda, y con él el campo
+          // perdía su nombre accesible: se lo damos explícito.
+          aria-label="Números ya observados en la mesa"
           value={initialRaw}
           onChange={(e) => setInitialRaw(e.target.value)}
           rows={3}
-          placeholder="17, 32, 0, 15, 4"
+          // El ejemplo sale de los resultados de la variante, no de la ruleta.
+          placeholder={variant.config.possible_outcomes.slice(-5).reverse().join(", ")}
           className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
         />
         <span className="mt-1 block text-xs text-muted">

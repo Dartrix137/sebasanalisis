@@ -654,3 +654,20 @@ def test_los_planes_publicos_dicen_que_juegos_incluyen(
     assert publico["all_games"] is False
     # El juego oculto no se nombra a los clientes.
     assert [g["id"] for g in publico["games"]] == [visible["id"]]
+
+
+# ---------- Entrega 2: la mesa sabe de que juego es ----------
+
+
+def test_la_sesion_trae_el_slug_y_el_modulo_de_su_juego(
+    client: TestClient, admin_token: str, user_token: str
+) -> None:
+    """El frontend arma la URL de la mesa (`/juegos/<slug>/mesa/<id>`) y elige
+    su pantalla con estos dos campos."""
+    juego, variante = _juego_con_variante(client, admin_token)
+    sid = _abrir_mesa(client, user_token, variante["id"]).json()["id"]
+
+    sesion = client.get(f"/sessions/{sid}", headers=auth(user_token)).json()
+    assert (sesion["game_slug"], sesion["game_module"]) == (juego["slug"], "discrete_outcome")
+    lista = client.get("/sessions", headers=auth(user_token)).json()
+    assert next(s for s in lista if s["id"] == sid)["game_slug"] == juego["slug"]

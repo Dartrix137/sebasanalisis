@@ -19,7 +19,7 @@ import {
  * La API corre con la pasarela simulada: no se cobra nada ni se sale a la red.
  */
 
-const MESA = { name: "Abrir una mesa nueva" };
+const MESA = { name: "Elige un juego" };
 
 /** Una cuenta nueva que paga un mes a mano en la pasarela simulada. */
 async function subscriber(page: Page, request: Parameters<typeof registerViaApi>[0]) {

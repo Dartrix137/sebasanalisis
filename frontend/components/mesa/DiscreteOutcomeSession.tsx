@@ -1,8 +1,13 @@
 "use client";
 
 /**
- * Vista de sesión de ruleta. Desde la Fase 3 (§2.10) la pieza central es la
- * recomendación: qué apostar en el siguiente giro, o no apostar.
+ * La mesa de un juego de resultados discretos: el componente del módulo
+ * `discrete_outcome` (§7.3 de la Fase 4), que juega la ruleta y todo juego que
+ * se describa con `categories_json`. Nada aquí supone ruleta: el teclado sale
+ * de `possible_outcomes` y su tono y columnas de la pista `display`.
+ *
+ * Desde la Fase 3 (§2.10) la pieza central es la recomendación: qué apostar en
+ * el siguiente giro, o no apostar.
  *
  * Lo que cambió respecto del analizador:
  *
@@ -29,13 +34,13 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
-import { BankrollPanel } from "@/components/roulette/BankrollPanel";
-import { BetHistory, BetRow } from "@/components/roulette/BetRow";
-import { AYUDA } from "@/components/roulette/NewSessionForm";
-import { RecommendationCard } from "@/components/roulette/RecommendationCard";
-import { RoundStatus } from "@/components/roulette/RoundStatus";
-import { StopCard } from "@/components/roulette/StopCard";
-import { SummaryPanel } from "@/components/roulette/SummaryPanel";
+import { BankrollPanel } from "@/components/mesa/BankrollPanel";
+import { BetHistory, BetRow } from "@/components/mesa/BetRow";
+import { AYUDA } from "@/components/mesa/NewSessionForm";
+import { RecommendationCard } from "@/components/mesa/RecommendationCard";
+import { RoundStatus } from "@/components/mesa/RoundStatus";
+import { StopCard } from "@/components/mesa/StopCard";
+import { SummaryPanel } from "@/components/mesa/SummaryPanel";
 import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
 import {
   ApiError,
@@ -45,7 +50,7 @@ import {
   sessionsApi,
   spinsApi,
 } from "@/lib/api-client";
-import { TONE_CLASSES, describeOutcome, toneOf } from "@/lib/outcomes";
+import { TONE_CLASSES, describeOutcome, keypadColumns, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
 import type { GameVariantResponse } from "@/lib/types/games";
 import type {
@@ -63,7 +68,7 @@ const CURRENCY = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
-export function RouletteSession({ sessionId }: { sessionId: string }) {
+export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
   const { user, loading, withToken } = useSession();
   const router = useRouter();
 
@@ -86,8 +91,8 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const load = useCallback(async () => {
     const s = await withToken((t) => sessionsApi.get(t, sessionId));
     const [v, sp, bt, sm, rc, hs] = await Promise.all([
-      // La variante se pide por id, no listando los juegos: listar con
-      // `include_inactive` exige rol admin y daba 403 a un usuario normal.
+      // La variante se pide por id: se lee aunque esté desactivada, porque la
+      // mesa ya estaba abierta.
       withToken((t) => gamesApi.variant(t, s.game_variant_id)),
       withToken((t) => spinsApi.list(t, sessionId)),
       withToken((t) => betsApi.list(t, sessionId)),
@@ -168,6 +173,7 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
   const ultimo = spins.at(-1) ?? null;
   const penultimo = spins.at(-2) ?? null;
   const masRecientePrimero = [...spins].reverse();
+  const columnas = keypadColumns(variant.config);
 
   const pendientes = bets.filter((b) => b.status === "pending");
   const disponible =
@@ -370,7 +376,17 @@ export function RouletteSession({ sessionId }: { sessionId: string }) {
           {abierta ? (
             <div className="mt-4 border-t border-edge pt-4">
               <h3 className="mb-2 text-sm font-bold text-white">Número que salió</h3>
-              <div className="grid grid-cols-7 gap-1 sm:grid-cols-10 sm:gap-1.5">
+              <div
+                data-testid="teclado"
+                className={`grid gap-1 sm:gap-1.5 ${
+                  columnas === null ? "grid-cols-7 sm:grid-cols-10" : ""
+                }`}
+                style={
+                  columnas === null
+                    ? undefined
+                    : { gridTemplateColumns: `repeat(${columnas}, minmax(0, 1fr))` }
+                }
+              >
                 {variant.config.possible_outcomes.map((o) => (
                   <button
                     key={o}

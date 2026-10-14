@@ -4011,6 +4011,13 @@ export interface components {
             /** Closed At */
             closed_at: string | null;
             /**
+             * Game Module
+             * @enum {string}
+             */
+            game_module: "discrete_outcome" | "sports";
+            /** Game Slug */
+            game_slug: string;
+            /**
              * Game Variant Id
              * Format: uuid
              */
