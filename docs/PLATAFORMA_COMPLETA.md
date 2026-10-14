@@ -1383,6 +1383,8 @@ Paso 7, entrega 2 (rama `fase-4-paso-7b-mesa-y-menu`). Con ella está construido
 
 **Tests**: el Playwright del admin comprueba que "Crear juego" y "+ Variante" no aparecen, y que las variantes de la ruleta se siguen editando. El juego de prueba del test de estado se crea por la API.
 
+**Paso 7 cerrado el 2026-10-14**: el usuario lo desplegó y lo probó en el VPS con la ruleta (menú, mesa en la ruta nueva, redirección de la ruta vieja, mesas ya abiertas, `/admin/juegos` y los juegos incluidos de los planes).
+
 ---
 
 ## 8. Base para apuestas deportivas
