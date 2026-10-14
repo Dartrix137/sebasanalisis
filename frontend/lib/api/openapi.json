@@ -306,6 +306,73 @@
         "title": "AdminLegalDocumentResponse",
         "type": "object"
       },
+      "AdminPaymentDetailResponse": {
+        "properties": {
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            },
+            "title": "Audit",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/AdminPaymentResponse"
+          },
+          "refunds": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentRefundResponse"
+            },
+            "title": "Refunds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "payment",
+          "events",
+          "refunds",
+          "audit"
+        ],
+        "title": "AdminPaymentDetailResponse",
+        "type": "object"
+      },
+      "AdminPaymentListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPaymentResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminPaymentListResponse",
+        "type": "object"
+      },
       "AdminPaymentResponse": {
         "description": "Un intento de cobro visto por el administrador.",
         "properties": {
@@ -393,6 +460,10 @@
             "title": "Reference",
             "type": "string"
           },
+          "refunded_cents": {
+            "title": "Refunded Cents",
+            "type": "integer"
+          },
           "resolved_at": {
             "anyOf": [
               {
@@ -405,8 +476,66 @@
             ],
             "title": "Resolved At"
           },
+          "reversal_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Note"
+          },
+          "reversed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversed At"
+          },
           "status": {
             "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "subscription_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Id"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "required": [
@@ -424,7 +553,13 @@
           "resolved_at",
           "reference",
           "provider_transaction_id",
-          "failure_reason"
+          "failure_reason",
+          "subscription_id",
+          "user_id",
+          "user_email",
+          "reversed_at",
+          "reversal_note",
+          "refunded_cents"
         ],
         "title": "AdminPaymentResponse",
         "type": "object"
@@ -530,8 +665,235 @@
         "title": "AdminPlanResponse",
         "type": "object"
       },
+      "AdminSubscriptionDetailResponse": {
+        "properties": {
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            },
+            "title": "Audit",
+            "type": "array"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPaymentResponse"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/AdminSubscriptionResponse"
+          }
+        },
+        "required": [
+          "subscription",
+          "payments",
+          "audit"
+        ],
+        "title": "AdminSubscriptionDetailResponse",
+        "type": "object"
+      },
+      "AdminSubscriptionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSubscriptionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminSubscriptionListResponse",
+        "type": "object"
+      },
+      "AdminSubscriptionResponse": {
+        "description": "Una suscripcion vista por el administrador.",
+        "properties": {
+          "cancel_at_period_end": {
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "canceled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canceled At"
+          },
+          "card_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Brand"
+          },
+          "card_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Last4"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "in_force": {
+            "title": "In Force",
+            "type": "boolean"
+          },
+          "next_charge_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Charge At"
+          },
+          "next_charge_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Charge Cents"
+          },
+          "payment_source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanResponse"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          },
+          "renewal_mode": {
+            "$ref": "#/components/schemas/RenewalMode"
+          },
+          "retry_count": {
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "user_email": {
+            "title": "User Email",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "renewal_mode",
+          "plan",
+          "price_cents",
+          "currency",
+          "current_period_start",
+          "current_period_end",
+          "cancel_at_period_end",
+          "in_force",
+          "payment_source_type",
+          "card_brand",
+          "card_last4",
+          "next_charge_at",
+          "next_charge_cents",
+          "user_id",
+          "user_email",
+          "retry_count",
+          "canceled_at",
+          "created_at"
+        ],
+        "title": "AdminSubscriptionResponse",
+        "type": "object"
+      },
       "AdminUserDetailResponse": {
-        "description": "Una cuenta vista por el administrador (§4.2).\n\nLa suscripcion y los pagos son de solo lectura: las acciones sobre ellos\nllegan con el paso 6 (§4.3).",
+        "description": "Una cuenta vista por el administrador (§4.2).\n\nLas acciones sobre la suscripcion son las de `PATCH /admin/subscriptions/:id`\ny las de un pago, las de `/admin/payments/:id` (§4.3).",
         "properties": {
           "audit": {
             "items": {
@@ -2669,6 +3031,84 @@
         "title": "NoBetReason",
         "type": "string"
       },
+      "PaymentEventResponse": {
+        "description": "Un evento del proveedor de pagos, como llego.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          },
+          "provider_event_id": {
+            "title": "Provider Event Id",
+            "type": "string"
+          },
+          "raw_payload": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Payload"
+          },
+          "signature_verified": {
+            "title": "Signature Verified",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider_event_id",
+          "event_type",
+          "status",
+          "signature_verified",
+          "processed_at",
+          "created_at",
+          "linked",
+          "raw_payload"
+        ],
+        "title": "PaymentEventResponse",
+        "type": "object"
+      },
       "PaymentKind": {
         "enum": [
           "initial",
@@ -2741,6 +3181,65 @@
           "personal_data_token"
         ],
         "title": "PaymentMethodRequest",
+        "type": "object"
+      },
+      "PaymentRefundResponse": {
+        "description": "Un reembolso hecho en el panel del proveedor y registrado aqui.",
+        "properties": {
+          "admin_email": {
+            "title": "Admin Email",
+            "type": "string"
+          },
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "provider_refund_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Refund Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "refunded_at": {
+            "format": "date-time",
+            "title": "Refunded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "amount_cents",
+          "currency",
+          "refunded_at",
+          "provider_refund_id",
+          "reason",
+          "admin_email",
+          "created_at"
+        ],
+        "title": "PaymentRefundResponse",
         "type": "object"
       },
       "PaymentResponse": {
@@ -3423,6 +3922,47 @@
         "title": "RecommendationResponse",
         "type": "object"
       },
+      "RecordRefundRequest": {
+        "description": "POST /admin/payments/:id/refunds. La moneda es la del pago.",
+        "properties": {
+          "amount_cents": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "provider_refund_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Refund Id"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "refunded_at": {
+            "format": "date-time",
+            "title": "Refunded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_cents",
+          "refunded_at",
+          "reason"
+        ],
+        "title": "RecordRefundRequest",
+        "type": "object"
+      },
       "RefreshRequest": {
         "properties": {
           "refresh_token": {
@@ -3488,6 +4028,22 @@
         ],
         "title": "RenewalMode",
         "type": "string"
+      },
+      "RequeryPaymentRequest": {
+        "description": "POST /admin/payments/:id/requery.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RequeryPaymentRequest",
+        "type": "object"
       },
       "ResetPasswordRequest": {
         "properties": {
@@ -4203,6 +4759,15 @@
         "title": "SubscribeResponse",
         "type": "object"
       },
+      "SubscriptionAdminAction": {
+        "enum": [
+          "extend",
+          "cancel_at_period_end",
+          "cancel_now"
+        ],
+        "title": "SubscriptionAdminAction",
+        "type": "string"
+      },
       "SubscriptionFilter": {
         "description": "Filtro de `GET /admin/users` por la suscripcion de la cuenta.\n\nNo es `subscriptions.status` tal cual: lo que el administrador necesita\nsaber es si el periodo pagado sigue vigente, y eso depende de la fecha.",
         "enum": [
@@ -4829,6 +5394,39 @@
           }
         },
         "title": "UpdateSessionRequest",
+        "type": "object"
+      },
+      "UpdateSubscriptionRequest": {
+        "description": "PATCH /admin/subscriptions/:id.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SubscriptionAdminAction"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ],
+        "title": "UpdateSubscriptionRequest",
         "type": "object"
       },
       "UpdateUserAccessRequest": {
@@ -5898,6 +6496,337 @@
         ]
       }
     },
+    "/admin/payments": {
+      "get": {
+        "description": "Cobros por pagina, los mas recientes primero, incluidos los que no se\ncompletaron. `query` busca por correo, referencia o id de la transaccion.",
+        "operationId": "list_payments_admin_payments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PaymentStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PaymentKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reversed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Reversed",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refunded",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refunded",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subscription_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscription Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Payments",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}": {
+      "get": {
+        "operationId": "get_payment_admin_payments__payment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Payment",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}/refunds": {
+      "post": {
+        "description": "Registra un reembolso ya hecho en el panel del proveedor. No mueve el\npago ni el acceso: si ademas hay que quitar el acceso, se cancela la\nsuscripcion de inmediato.",
+        "operationId": "record_refund_admin_payments__payment_id__refunds_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRefundRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Refund",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}/requery": {
+      "post": {
+        "description": "Vuelve a preguntarle al proveedor por la transaccion del pago y aplica su\nrespuesta con `apply_transaction`, la misma funcion del webhook.\n\nUn pago resuelto no se vuelve a resolver: reconsultarlo no da otro periodo.\nLo unico que cambia un pago aprobado es que el proveedor lo reporte anulado.",
+        "operationId": "requery_payment_admin_payments__payment_id__requery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeryPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Requery Payment",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/plans": {
       "get": {
         "description": "Todos los planes, los desactivados tambien.",
@@ -6187,6 +7116,239 @@
           }
         ],
         "summary": "Recommendation Backtest",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/subscriptions": {
+      "get": {
+        "description": "Suscripciones por pagina, las mas recientes primero. Filtra en el servidor.\n\nSin filtro de estado no trae las `pending`: son pagos que se abrieron y no se\ncompletaron, y se ven en Pagos. Con `status=pending` si.\n\nEl estado es la columna tal cual. Lo pone el job de renovaciones cada hora,\nasi que una suscripcion recien vencida puede seguir `active` hasta la\nsiguiente corrida; `in_force` de cada fila dice si el periodo sigue vigente.",
+        "operationId": "list_subscriptions_admin_subscriptions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SubscriptionStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "renewal_mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RenewalMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Renewal Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSubscriptionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Subscriptions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/subscriptions/{subscription_id}": {
+      "get": {
+        "operationId": "get_subscription_admin_subscriptions__subscription_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSubscriptionDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Subscription",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Extiende el periodo (`extend`, con `days`), cancela la renovacion al\nfinal del periodo (`cancel_at_period_end`) o termina la suscripcion ahora\n(`cancel_now`). Pide motivo; al cliente se le avisa por correo.",
+        "operationId": "update_subscription_admin_subscriptions__subscription_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSubscriptionDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Subscription",
         "tags": [
           "admin"
         ]

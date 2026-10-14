@@ -115,7 +115,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
 | 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Cerrado el 2026-10-13**, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
-| 6 | Admin dashboard completo por secciones | §4 | Pendiente |
+| 6 | Admin dashboard completo por secciones | §4, §4.8 | **En curso.** Entrega 1 (suscripciones y pagos en el admin) construida el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos`, con tests (ver abajo). Faltan la entrega 2 (navegación, resumen, forzar el restablecimiento y reenviar la verificación) y la del traslado de precio a las suscripciones vigentes, decidida el 2026-10-14 |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
 | 9 | Lanzamiento comercial | §9, párrafo final | Pendiente |
@@ -314,3 +314,19 @@ No se construye hasta que el usuario lo pida explícitamente:
 - **Cambio de plan en caliente** (mensual ↔ anual) y reembolsos por API.
 - **Exportar CSV**, migración de datos locales, notificaciones.
 - **Cualquier IA, OCR o lectura de imágenes.** Descartado, no pospuesto.
+
+### Paso 6, entrega 1: qué quedó hecho
+
+Construido el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §4.8. **El paso 6 no está cerrado.**
+
+- `/admin/suscripciones`: lista paginada con filtros en el servidor (estado, plan, modo, correo), detalle con pagos y bitácora, y tres acciones con motivo: **extender** el período (sin cobrar; en la renovación automática se corren el cobro y su aviso), **cancelar al final del período** y **cancelar de inmediato** (el acceso cae en el acto, no se devuelve nada). Al cliente le llega un correo en las tres.
+- `/admin/pagos`: todos los cobros con filtros, la cadena de eventos de Wompi de cada uno (también los de firma inválida), **reconsultar en Wompi** (la misma función del webhook) y **registrar un reembolso** hecho en el panel de Wompi.
+- **Un pago aprobado que Wompi anula después pierde su período**: si era el último, el acceso cae en el acto. Si ya hay un período posterior pagado, no se toca nada y queda la nota para revisarlo a mano.
+- Las acciones sobre la suscripción también desde el detalle de la cuenta en `/admin/usuarios`, que muestra además la bitácora de su suscripción y sus pagos.
+- Una migración, solo DDL: `payments.reversed_at`, `payments.reversal_note` y la tabla `payment_refunds`.
+
+Decisiones del usuario (2026-10-14): la anulación quita el acceso sola y el reembolso se registra a mano (cierra §10 n.º 7); cancelar de inmediato quita el acceso sin devolver; extender corre el cobro y el aviso; se avisa por correo en las tres acciones; el resumen de la entrega 2 compara el mes calendario en curso contra el mismo tramo del anterior, en hora de Bogotá; y **el traslado de un precio nuevo a las suscripciones vigentes se construye** (§10 n.º 5), en una entrega propia: aviso 30 días antes, a todas las vigentes del plan, con el cupón descontando sobre el precio nuevo.
+
+Comprobado: 1108 tests de backend (54 nuevos en `tests/api/test_admin_payments.py`: cada acción con su fila y su motivo y rechazada sin motivo, su efecto sobre `has_access` y sobre el job de renovaciones, reconsultar un pago resuelto sin dar otro período, las anulaciones, los reembolsos, `403` para quien no es administrador); 37 tests de Playwright, entre ellos "el administrador encuentra una suscripción, la extiende con motivo y la ve en la bitácora"; la migración subida, bajada con filas puestas y vuelta a subir en una base desechable.
+
+**Sin probar:** una anulación real en el sandbox de Wompi (se probó con el doble) y qué hace Wompi con un reembolso.

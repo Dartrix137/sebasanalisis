@@ -30,6 +30,11 @@ const ACTION_LABEL: Record<string, string> = {
   "plan.update": "Editó un plan",
   "coupon.create": "Creó un cupón",
   "coupon.update": "Editó un cupón",
+  "subscription.extend": "Extendió la suscripción",
+  "subscription.cancel_at_period_end": "Canceló la renovación al final del período",
+  "subscription.cancel_now": "Canceló la suscripción de inmediato",
+  "payment.requery": "Reconsultó un pago en Wompi",
+  "payment.refund.record": "Registró un reembolso",
 };
 
 export function actionLabel(entry: AuditLogEntry): string {

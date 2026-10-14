@@ -10,7 +10,7 @@ from app.models.legal import LegalDocument, UserConsent
 from app.models.performance import SessionPerformance
 from app.models.spin import Spin
 from app.models.suggestion import BankrollSuggestion, StatisticalSuggestion
-from app.models.user import Payment, PaymentEvent, Subscription, User
+from app.models.user import Payment, PaymentEvent, PaymentRefund, Subscription, User
 from app.models.user_token import UserToken
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "LegalDocument",
     "Payment",
     "PaymentEvent",
+    "PaymentRefund",
     "Plan",
     "SessionPerformance",
     "Spin",

@@ -217,6 +217,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Payments
+         * @description Cobros por pagina, los mas recientes primero, incluidos los que no se
+         *     completaron. `query` busca por correo, referencia o id de la transaccion.
+         */
+        get: operations["list_payments_admin_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Payment */
+        get: operations["get_payment_admin_payments__payment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Refund
+         * @description Registra un reembolso ya hecho en el panel del proveedor. No mueve el
+         *     pago ni el acceso: si ademas hay que quitar el acceso, se cancela la
+         *     suscripcion de inmediato.
+         */
+        post: operations["record_refund_admin_payments__payment_id__refunds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/requery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Requery Payment
+         * @description Vuelve a preguntarle al proveedor por la transaccion del pago y aplica su
+         *     respuesta con `apply_transaction`, la misma funcion del webhook.
+         *
+         *     Un pago resuelto no se vuelve a resolver: reconsultarlo no da otro periodo.
+         *     Lo unico que cambia un pago aprobado es que el proveedor lo reporte anulado.
+         */
+        post: operations["requery_payment_admin_payments__payment_id__requery_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/plans": {
         parameters: {
             query?: never;
@@ -288,6 +372,56 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Subscriptions
+         * @description Suscripciones por pagina, las mas recientes primero. Filtra en el servidor.
+         *
+         *     Sin filtro de estado no trae las `pending`: son pagos que se abrieron y no se
+         *     completaron, y se ven en Pagos. Con `status=pending` si.
+         *
+         *     El estado es la columna tal cual. Lo pone el job de renovaciones cada hora,
+         *     asi que una suscripcion recien vencida puede seguir `active` hasta la
+         *     siguiente corrida; `in_force` de cada fila dice si el periodo sigue vigente.
+         */
+        get: operations["list_subscriptions_admin_subscriptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Subscription */
+        get: operations["get_subscription_admin_subscriptions__subscription_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Subscription
+         * @description Extiende el periodo (`extend`, con `days`), cancela la renovacion al
+         *     final del periodo (`cancel_at_period_end`) o termina la suscripcion ahora
+         *     (`cancel_now`). Pide motivo; al cliente se le avisa por correo.
+         */
+        patch: operations["update_subscription_admin_subscriptions__subscription_id__patch"];
         trace?: never;
     };
     "/admin/users": {
@@ -1663,6 +1797,27 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** AdminPaymentDetailResponse */
+        AdminPaymentDetailResponse: {
+            /** Audit */
+            audit: components["schemas"]["AuditLogEntry"][];
+            /** Events */
+            events: components["schemas"]["PaymentEventResponse"][];
+            payment: components["schemas"]["AdminPaymentResponse"];
+            /** Refunds */
+            refunds: components["schemas"]["PaymentRefundResponse"][];
+        };
+        /** AdminPaymentListResponse */
+        AdminPaymentListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminPaymentResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /**
          * AdminPaymentResponse
          * @description Un intento de cobro visto por el administrador.
@@ -1702,9 +1857,21 @@ export interface components {
             provider_transaction_id: string | null;
             /** Reference */
             reference: string;
+            /** Refunded Cents */
+            refunded_cents: number;
             /** Resolved At */
             resolved_at: string | null;
+            /** Reversal Note */
+            reversal_note: string | null;
+            /** Reversed At */
+            reversed_at: string | null;
             status: components["schemas"]["PaymentStatus"];
+            /** Subscription Id */
+            subscription_id: string | null;
+            /** User Email */
+            user_email: string | null;
+            /** User Id */
+            user_id: string | null;
         };
         /** AdminPlanListResponse */
         AdminPlanListResponse: {
@@ -1752,12 +1919,82 @@ export interface components {
              */
             updated_at: string;
         };
+        /** AdminSubscriptionDetailResponse */
+        AdminSubscriptionDetailResponse: {
+            /** Audit */
+            audit: components["schemas"]["AuditLogEntry"][];
+            /** Payments */
+            payments: components["schemas"]["AdminPaymentResponse"][];
+            subscription: components["schemas"]["AdminSubscriptionResponse"];
+        };
+        /** AdminSubscriptionListResponse */
+        AdminSubscriptionListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminSubscriptionResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AdminSubscriptionResponse
+         * @description Una suscripcion vista por el administrador.
+         */
+        AdminSubscriptionResponse: {
+            /** Cancel At Period End */
+            cancel_at_period_end: boolean;
+            /** Canceled At */
+            canceled_at: string | null;
+            /** Card Brand */
+            card_brand: string | null;
+            /** Card Last4 */
+            card_last4: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Current Period End */
+            current_period_end: string | null;
+            /** Current Period Start */
+            current_period_start: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** In Force */
+            in_force: boolean;
+            /** Next Charge At */
+            next_charge_at: string | null;
+            /** Next Charge Cents */
+            next_charge_cents: number | null;
+            payment_source_type: components["schemas"]["PaymentSourceKind"] | null;
+            plan: components["schemas"]["PlanResponse"];
+            /** Price Cents */
+            price_cents: number;
+            renewal_mode: components["schemas"]["RenewalMode"];
+            /** Retry Count */
+            retry_count: number;
+            status: components["schemas"]["SubscriptionStatus"];
+            /** User Email */
+            user_email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /**
          * AdminUserDetailResponse
          * @description Una cuenta vista por el administrador (§4.2).
          *
-         *     La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
-         *     llegan con el paso 6 (§4.3).
+         *     Las acciones sobre la suscripcion son las de `PATCH /admin/subscriptions/:id`
+         *     y las de un pago, las de `/admin/payments/:id` (§4.3).
          */
         AdminUserDetailResponse: {
             /** Audit */
@@ -2676,6 +2913,36 @@ export interface components {
          */
         NoBetReason: "insufficient_data" | "below_threshold";
         /**
+         * PaymentEventResponse
+         * @description Un evento del proveedor de pagos, como llego.
+         */
+        PaymentEventResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Type */
+            event_type: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Linked */
+            linked: boolean;
+            /** Processed At */
+            processed_at: string | null;
+            /** Provider Event Id */
+            provider_event_id: string;
+            /** Raw Payload */
+            raw_payload: Record<string, never> | null;
+            /** Signature Verified */
+            signature_verified: boolean;
+            /** Status */
+            status: string;
+        };
+        /**
          * PaymentKind
          * @enum {string}
          */
@@ -2707,6 +2974,37 @@ export interface components {
             payment_source_type: components["schemas"]["PaymentSourceKind"];
             /** Personal Data Token */
             personal_data_token: string;
+        };
+        /**
+         * PaymentRefundResponse
+         * @description Un reembolso hecho en el panel del proveedor y registrado aqui.
+         */
+        PaymentRefundResponse: {
+            /** Admin Email */
+            admin_email: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Provider Refund Id */
+            provider_refund_id: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Refunded At
+             * Format: date-time
+             */
+            refunded_at: string;
         };
         /** PaymentResponse */
         PaymentResponse: {
@@ -2990,6 +3288,23 @@ export interface components {
             /** Window Size Used */
             window_size_used: number;
         };
+        /**
+         * RecordRefundRequest
+         * @description POST /admin/payments/:id/refunds. La moneda es la del pago.
+         */
+        RecordRefundRequest: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** Provider Refund Id */
+            provider_refund_id?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Refunded At
+             * Format: date-time
+             */
+            refunded_at: string;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
@@ -3019,6 +3334,14 @@ export interface components {
          * @enum {string}
          */
         RenewalMode: "manual" | "automatic";
+        /**
+         * RequeryPaymentRequest
+         * @description POST /admin/payments/:id/requery.
+         */
+        RequeryPaymentRequest: {
+            /** Reason */
+            reason: string;
+        };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** New Password */
@@ -3335,6 +3658,11 @@ export interface components {
             total_cents: number;
         };
         /**
+         * SubscriptionAdminAction
+         * @enum {string}
+         */
+        SubscriptionAdminAction: "extend" | "cancel_at_period_end" | "cancel_now";
+        /**
          * SubscriptionFilter
          * @description Filtro de `GET /admin/users` por la suscripcion de la cuenta.
          *
@@ -3497,6 +3825,17 @@ export interface components {
             table_limit?: number | null;
             /** Window Size */
             window_size?: number | null;
+        };
+        /**
+         * UpdateSubscriptionRequest
+         * @description PATCH /admin/subscriptions/:id.
+         */
+        UpdateSubscriptionRequest: {
+            action: components["schemas"]["SubscriptionAdminAction"];
+            /** Days */
+            days?: number | null;
+            /** Reason */
+            reason: string;
         };
         /**
          * UpdateUserAccessRequest
@@ -4056,6 +4395,146 @@ export interface operations {
             };
         };
     };
+    list_payments_admin_payments_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PaymentStatus"] | null;
+                kind?: components["schemas"]["PaymentKind"] | null;
+                reversed?: boolean;
+                refunded?: boolean;
+                subscription_id?: string | null;
+                user_id?: string | null;
+                query?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_payment_admin_payments__payment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_refund_admin_payments__payment_id__refunds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRefundRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    requery_payment_admin_payments__payment_id__requery_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequeryPaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_plans_admin_plans_get: {
         parameters: {
             query?: {
@@ -4181,6 +4660,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BacktestReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subscriptions_admin_subscriptions_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SubscriptionStatus"] | null;
+                plan_id?: string | null;
+                renewal_mode?: components["schemas"]["RenewalMode"] | null;
+                query?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_admin_subscriptions__subscription_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_subscription_admin_subscriptions__subscription_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionDetailResponse"];
                 };
             };
             /** @description Validation Error */

@@ -93,6 +93,12 @@ function AdminPanel() {
           <Button variant="ghost" onClick={() => router.push("/admin/usuarios")}>
             Usuarios
           </Button>
+          <Button variant="ghost" onClick={() => router.push("/admin/suscripciones")}>
+            Suscripciones
+          </Button>
+          <Button variant="ghost" onClick={() => router.push("/admin/pagos")}>
+            Pagos
+          </Button>
           <Button variant="ghost" onClick={() => router.push("/admin/planes")}>
             Planes
           </Button>

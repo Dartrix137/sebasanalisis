@@ -3,7 +3,12 @@
  * Aquí no se decide nada: los estados vienen del servidor.
  */
 
-import type { PaymentStatus, SubscriptionResponse } from "./types/billing";
+import type {
+  PaymentKind,
+  PaymentStatus,
+  SubscriptionResponse,
+  SubscriptionStatus,
+} from "./types/billing";
 
 /** El estado de un pago, como lo lee quien pagó. */
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -34,6 +39,20 @@ export function sourceLabel(subscription: SubscriptionResponse): string | null {
   }
   return null;
 }
+
+/** El estado de una suscripción tal como está en la base, para el admin. */
+export const SUBSCRIPTION_STATUS_LABEL: Record<SubscriptionStatus, string> = {
+  pending: "Pago sin completar",
+  active: "Activa",
+  past_due: "En mora",
+  canceled: "Renovación cancelada",
+  expired: "Vencida",
+};
+
+export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
+  initial: "Primer pago",
+  renewal: "Renovación",
+};
 
 /** Cómo se paga cada período. */
 export const RENEWAL_MODE_LABEL: Record<SubscriptionResponse["renewal_mode"], string> = {

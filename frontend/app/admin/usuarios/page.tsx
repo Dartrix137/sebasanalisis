@@ -8,9 +8,10 @@
  * (`core/access.py`): aquí no se calcula nada. Toda acción pide un motivo y
  * queda en la bitácora.
  *
- * Quedan para el paso 6: reenviar la verificación y forzar el restablecimiento
- * de contraseña. La suscripción y los pagos de cada cuenta se ven aquí, de
- * solo lectura; las acciones sobre ellos llegan con el paso 6 (§4.3).
+ * Quedan para la entrega 2 del paso 6: reenviar la verificación y forzar el
+ * restablecimiento de contraseña. La suscripción y los pagos de cada cuenta se
+ * ven aquí, con las acciones sobre la suscripción (§4.3); las de un pago están
+ * en `/admin/pagos`.
  */
 
 import { useRouter } from "next/navigation";
@@ -370,7 +371,7 @@ function UserDetail({
       ) : (
         <AccessForm user={u} subscribed={detail.subscription?.in_force ?? false} onDone={refresh} />
       )}
-      <UserBilling detail={detail} />
+      <UserBilling detail={detail} onChanged={refresh} />
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />
       <RoleForm user={u} isSelf={isSelf} onDone={refresh} />
 
@@ -473,7 +474,8 @@ function AccessForm({
           manual no la reemplaza ni la cancela. Si le das Invitado o Completo, entra por ese
           acceso y no se le ofrece pagar mientras lo tenga; el período que ya pagó sigue
           corriendo. Dejarla en Sin acceso manual no le quita la mesa: sigue entrando por su
-          suscripción. Para sacarla de la mesa, suspende la cuenta.
+          suscripción. Para sacarla de la mesa, suspende la cuenta o cancela su suscripción de
+          inmediato.
         </p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">

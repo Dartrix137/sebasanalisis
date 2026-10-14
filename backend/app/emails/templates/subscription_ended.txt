@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Terminamos tu suscripción al plan {{ plan_name }} el {{ period_end | fecha }}. Desde ese momento tu cuenta ya no tiene acceso a la mesa.
+
+{% if had_renewal %}No te vamos a hacer más cobros: dejamos de guardar la referencia de tu medio de pago. {% endif %}Tu cuenta sigue abierta, con tu historial de pagos. Si quieres volver, puedes suscribirte de nuevo desde los planes.
+
+Tu cuenta: {{ url }}
+{% endblock %}

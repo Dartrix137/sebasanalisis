@@ -9,6 +9,7 @@ from app.api.v1 import (
     admin,
     admin_billing,
     admin_legal,
+    admin_payments,
     admin_users,
     auth,
     bankroll,
@@ -76,6 +77,7 @@ app.include_router(admin_users.router)
 app.include_router(legal.router)
 app.include_router(billing.router)
 app.include_router(admin_billing.router)
+app.include_router(admin_payments.router)
 app.include_router(webhooks.router)
 # Solo responde con PAYMENT_PROVIDER=fake; con cualquier otro, 404.
 app.include_router(fake_checkout.router)

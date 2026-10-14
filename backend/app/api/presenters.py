@@ -1,14 +1,17 @@
 """Respuestas que no salen solo de las columnas de un modelo."""
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.billing import pricing
 from app.core import subscriptions
 from app.core.access import has_access
 from app.core.accounts import is_last_active_admin
-from app.models import Payment, Subscription, User
+from app.models import Payment, PaymentRefund, Subscription, User
+from app.schemas.admin import AdminSubscriptionResponse
 from app.schemas.auth import AccessInfo, UserAccount, UserResponse
 from app.schemas.billing import (
     AdminPaymentResponse,
@@ -88,10 +91,47 @@ def payment_response(payment: Payment) -> PaymentResponse:
     return PaymentResponse(**_payment_fields(payment))  # type: ignore[arg-type]
 
 
-def admin_payment_response(payment: Payment) -> AdminPaymentResponse:
-    return AdminPaymentResponse(
-        **_payment_fields(payment),  # type: ignore[arg-type]
-        reference=payment.reference,
-        provider_transaction_id=payment.provider_transaction_id,
-        failure_reason=payment.failure_reason,
+def admin_payment_responses(db: Session, payments: Iterable[Payment]) -> list[AdminPaymentResponse]:
+    """Los pagos como los ve el administrador, con el correo de la cuenta y lo
+    reembolsado. Dos consultas para toda la lista, no dos por pago."""
+    rows = list(payments)
+    ids = [p.id for p in rows]
+    refunded: dict[object, int] = dict(
+        db.execute(  # type: ignore[arg-type]
+            select(PaymentRefund.payment_id, func.sum(PaymentRefund.amount_cents))
+            .where(PaymentRefund.payment_id.in_(ids))
+            .group_by(PaymentRefund.payment_id)
+        ).all()
+    ) if ids else {}
+    user_ids = {p.user_id for p in rows if p.user_id is not None}
+    emails: dict[object, str] = dict(
+        db.execute(select(User.id, User.email).where(User.id.in_(user_ids))).all()  # type: ignore[arg-type]
+    ) if user_ids else {}
+    return [
+        AdminPaymentResponse(
+            **_payment_fields(p),  # type: ignore[arg-type]
+            reference=p.reference,
+            provider_transaction_id=p.provider_transaction_id,
+            failure_reason=p.failure_reason,
+            subscription_id=p.subscription_id,
+            user_id=p.user_id,
+            user_email=emails.get(p.user_id) if p.user_id is not None else None,
+            reversed_at=p.reversed_at,
+            reversal_note=p.reversal_note,
+            refunded_cents=int(refunded.get(p.id, 0)),
+        )
+        for p in rows
+    ]
+
+
+def admin_subscription_response(
+    db: Session, subscription: Subscription, now: datetime
+) -> AdminSubscriptionResponse:
+    return AdminSubscriptionResponse(
+        **subscription_response(db, subscription, now).model_dump(),
+        user_id=subscription.user_id,
+        user_email=subscription.user.email,
+        retry_count=subscription.retry_count,
+        canceled_at=subscription.canceled_at,
+        created_at=subscription.created_at,
     )

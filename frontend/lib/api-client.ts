@@ -8,10 +8,17 @@
  */
 
 import type {
+  AdminPaymentDetailResponse,
+  AdminPaymentListResponse,
+  AdminSubscriptionDetailResponse,
+  AdminSubscriptionListResponse,
   AdminUserDetailResponse,
   AdminUserListResponse,
   AuditLogListResponse,
+  RecordRefundRequest,
+  RequeryPaymentRequest,
   SubscriptionFilter,
+  UpdateSubscriptionRequest,
   UpdateUserAccessRequest,
   UpdateUserRoleRequest,
   UpdateUserStatusRequest,
@@ -47,13 +54,17 @@ import type {
   CreatePlanRequest,
   PaymentListResponse,
   PaymentMethodRequest,
+  PaymentKind,
   PaymentResponse,
+  PaymentStatus,
   PlanResponse,
   QuoteRequest,
   QuoteResponse,
   SubscribeRequest,
   SubscribeResponse,
+  RenewalMode,
   SubscriptionResponse,
+  SubscriptionStatus,
   UpdateCouponRequest,
   UpdatePlanRequest,
 } from "./types/billing";
@@ -777,4 +788,85 @@ export const adminApi = {
       { token },
     );
   },
+
+  /** Suscripciones por página, las más recientes primero. Filtra en el servidor. */
+  listSubscriptions: (
+    token: string,
+    options: {
+      status?: SubscriptionStatus;
+      planId?: UUID;
+      renewalMode?: RenewalMode;
+      query?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.status !== undefined) qs.set("status", options.status);
+    if (options.planId !== undefined) qs.set("plan_id", options.planId);
+    if (options.renewalMode !== undefined) qs.set("renewal_mode", options.renewalMode);
+    if (options.query) qs.set("query", options.query);
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<AdminSubscriptionListResponse>(`/admin/subscriptions${sufijo}`, { token });
+  },
+
+  getSubscription: (token: string, subscriptionId: UUID) =>
+    apiFetch<AdminSubscriptionDetailResponse>(`/admin/subscriptions/${subscriptionId}`, {
+      token,
+    }),
+
+  /** Extender o cancelar. Pide motivo, queda en la bitácora y se le avisa al cliente. */
+  updateSubscription: (token: string, subscriptionId: UUID, body: UpdateSubscriptionRequest) =>
+    apiFetch<AdminSubscriptionDetailResponse>(`/admin/subscriptions/${subscriptionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Cobros por página, los más recientes primero, también los que no se completaron. */
+  listPayments: (
+    token: string,
+    options: {
+      status?: PaymentStatus;
+      kind?: PaymentKind;
+      reversed?: boolean;
+      refunded?: boolean;
+      query?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (options.status !== undefined) qs.set("status", options.status);
+    if (options.kind !== undefined) qs.set("kind", options.kind);
+    if (options.reversed) qs.set("reversed", "true");
+    if (options.refunded) qs.set("refunded", "true");
+    if (options.query) qs.set("query", options.query);
+    if (options.limit !== undefined) qs.set("limit", String(options.limit));
+    if (options.offset !== undefined) qs.set("offset", String(options.offset));
+    const sufijo = qs.toString() ? `?${qs}` : "";
+    return apiFetch<AdminPaymentListResponse>(`/admin/payments${sufijo}`, { token });
+  },
+
+  /** El pago con sus eventos del proveedor, sus reembolsos y su bitácora. */
+  getPayment: (token: string, paymentId: UUID) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}`, { token }),
+
+  /** Vuelve a preguntarle a Wompi. Es la misma función del webhook. */
+  requeryPayment: (token: string, paymentId: UUID, body: RequeryPaymentRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/requery`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Registra un reembolso hecho en el panel de Wompi. No mueve el pago ni el acceso. */
+  recordRefund: (token: string, paymentId: UUID, body: RecordRefundRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/refunds`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
 };

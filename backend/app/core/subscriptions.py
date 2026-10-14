@@ -13,6 +13,8 @@ Operaciones:
   Es idempotente: un pago se resuelve una sola vez, asi lleguen el mismo evento
   repetido, dos eventos distintos o el webhook y la consulta a la vez.
 - `cancel` y `resume`: detener y reanudar la renovacion automatica.
+- Un pago aprobado que el proveedor anula despues pierde su periodo
+  (`_reverse_period`), dentro de `apply_transaction`.
 - `set_payment_source` y `switch_to_manual`: cambiar el medio de pago guardado
   y pasar de un modo de pago al otro, sobre la misma suscripcion.
 
@@ -22,6 +24,7 @@ Aqui no se decide el acceso: lo decide `core/access.has_access` a partir de
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -99,6 +102,8 @@ class Settlement:
     activated: bool = False
     #: Esta llamada dejo un cobro automatico de renovacion sin aprobar.
     renewal_failed: bool = False
+    #: Esta llamada anulo un pago que estaba aprobado y retiro su periodo.
+    reversed: bool = False
 
 
 @dataclass(frozen=True)
@@ -489,12 +494,36 @@ def _resolvable(payment: Payment) -> bool:
     )
 
 
-def apply_transaction(db: Session, transaction: ProviderTransaction, now: datetime) -> Settlement | None:
+def _reversible(payment: Payment, transaction: ProviderTransaction) -> bool:
+    """Un pago aprobado que el proveedor reporta anulado despues (§4.3).
+
+    Es lo unico que mueve un pago ya resuelto, y solo una vez: anulado, deja de
+    ser reversible. Tiene que ser la misma transaccion que lo aprobo.
+    """
+    return (
+        payment.status == "approved"
+        and transaction.status == "voided"
+        and payment.provider_transaction_id == transaction.id
+    )
+
+
+def apply_transaction(
+    db: Session,
+    transaction: ProviderTransaction,
+    now: datetime,
+    *,
+    before_commit: Callable[[Payment], None] | None = None,
+) -> Settlement | None:
     """Aplica al pago lo que el proveedor reporta de su transaccion. Hace commit.
 
     `transaction` debe venir de la API del proveedor (`fetch_transaction` o la
     respuesta de `charge`). Devuelve None si la referencia no es de ningun pago
     nuestro.
+
+    `before_commit` recibe el pago ya con lo que se aplico, justo antes de
+    confirmar: lo usa el admin para que su fila de bitacora quede en la misma
+    transaccion que el cambio. Con el, la llamada confirma aunque no cambie
+    nada (la fila dice que se reconsulto).
     """
     payment = db.scalar(
         select(Payment).where(Payment.reference == transaction.reference).with_for_update()
@@ -502,9 +531,16 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
     if payment is None:
         db.rollback()
         return None
+    if _reversible(payment, transaction):
+        _reverse_period(db, payment, transaction, now)
+        _commit(db, payment, before_commit)
+        return Settlement(payment=payment, changed=True, reversed=True)
     # Idempotencia: un pago resuelto no se vuelve a tocar.
     if not _resolvable(payment):
-        db.rollback()
+        if before_commit is None:
+            db.rollback()
+        else:
+            _commit(db, payment, before_commit)
         return Settlement(payment=payment)
 
     payment.provider_transaction_id = transaction.id
@@ -512,7 +548,7 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
         payment.status = "pending"
         payment.failure_reason = None
         payment.resolved_at = None
-        db.commit()
+        _commit(db, payment, before_commit)
         return Settlement(payment=payment)
 
     payment.resolved_at = now
@@ -539,11 +575,82 @@ def apply_transaction(db: Session, transaction: ProviderTransaction, now: dateti
         payment.failure_reason = None
         activated = _grant_period(db, payment, now)
     _note_card_brand(db, payment, transaction)
-    db.commit()
-    db.refresh(payment)
+    _commit(db, payment, before_commit)
     return Settlement(
         payment=payment, changed=True, activated=activated, renewal_failed=renewal_failed
     )
+
+
+def _commit(db: Session, payment: Payment, before_commit: Callable[[Payment], None] | None) -> None:
+    if before_commit is not None:
+        before_commit(payment)
+    db.commit()
+    db.refresh(payment)
+
+
+def _reverse_period(
+    db: Session, payment: Payment, transaction: ProviderTransaction, now: datetime
+) -> None:
+    """Un pago aprobado quedo anulado: se retira el periodo que habia comprado.
+
+    Decidido el 2026-10-14 (§4.8). Solo se retira solo si ese periodo es el
+    ultimo de la suscripcion: entonces el vencimiento vuelve a donde estaba
+    antes del pago, y si con eso ya paso, la suscripcion vence y el acceso cae
+    en el acto. Si despues ya se pago otro periodo, no se toca nada y queda la
+    nota para que un administrador lo revise.
+
+    Si el periodo anterior todavia corre (un cobro de renovacion anticipado que
+    se anulo), la renovacion automatica se cancela: volver a cobrar a quien le
+    anularon un cobro lo decide una persona, no el job.
+    """
+    payment.status = "voided"
+    payment.reversed_at = now
+    payment.failure_reason = transaction.status_message
+    subscription = (
+        db.scalar(
+            select(Subscription)
+            .where(Subscription.id == payment.subscription_id)
+            .with_for_update()
+        )
+        if payment.subscription_id is not None
+        else None
+    )
+    if subscription is None or payment.period_start is None or payment.period_end is None:
+        payment.reversal_note = (
+            "Anulado después de aprobado. No hay una suscripción a la cual retirarle el período."
+        )
+        logger.error("Pago %s anulado despues de aprobado, sin suscripcion", payment.id)
+        return
+    if subscription.current_period_end != payment.period_end:
+        payment.reversal_note = (
+            "Anulado después de aprobado. La suscripción ya tiene un período posterior, así "
+            "que no se retiró nada: revisarlo a mano."
+        )
+        logger.error("Pago %s anulado despues de aprobado, con un periodo posterior", payment.id)
+        return
+
+    subscription.current_period_end = payment.period_start
+    if (
+        payment.kind == "renewal"
+        and payment.discount_cents > 0
+        and subscription.discount_periods_remaining is not None
+    ):
+        # Esa renovacion habia gastado un periodo con descuento.
+        subscription.discount_periods_remaining += 1
+    if payment.period_start <= now:
+        subscription.status = "expired"
+        subscription.next_charge_at = None
+        payment.reversal_note = "Anulado después de aprobado. Se retiró el período y el acceso terminó."
+    elif subscription.renewal_mode == "automatic" and subscription.status in ("active", "past_due"):
+        stop_renewal(subscription, now)
+        payment.reversal_note = (
+            "Anulado después de aprobado. Se retiró el período; el anterior sigue vigente y la "
+            "renovación automática quedó cancelada."
+        )
+    else:
+        payment.reversal_note = (
+            "Anulado después de aprobado. Se retiró el período; el anterior sigue vigente."
+        )
 
 
 def _note_card_brand(db: Session, payment: Payment, transaction: ProviderTransaction) -> None:
@@ -726,13 +833,19 @@ def cancel(db: Session, user: User, now: datetime) -> Subscription:
             "not_automatic",
             "Tu suscripción es de pago manual: no se renueva sola, así que no hay nada que cancelar.",
         )
+    stop_renewal(subscription, now)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
+def stop_renewal(subscription: Subscription, now: datetime) -> None:
+    """Cancela la renovacion automatica al final del periodo: conserva el
+    acceso hasta `current_period_end` y el job ya no la cobra ni le avisa."""
     subscription.status = "canceled"
     subscription.cancel_at_period_end = True
     subscription.canceled_at = now
     subscription.next_charge_at = None
-    db.commit()
-    db.refresh(subscription)
-    return subscription
 
 
 def resume(db: Session, user: User, now: datetime) -> Subscription:

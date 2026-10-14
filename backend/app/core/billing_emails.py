@@ -8,6 +8,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.billing import pricing
+from app.core import subscriptions
 from app.core.config import get_settings
 from app.core.email import EmailMessage
 from app.core.subscriptions import Settlement
@@ -177,5 +179,51 @@ def switched_to_manual(user: User, subscription: Subscription) -> EmailMessage:
         display_name=user.display_name,
         plan_name=subscription.plan.name,
         period_end=subscription.current_period_end,
+        url=frontend_url("/cuenta"),
+    )
+
+
+def admin_change(
+    db: Session, user: User, subscription: Subscription, action: str, *, had_renewal: bool
+) -> EmailMessage:
+    """Un administrador extendio o cancelo la suscripcion (decidido el
+    2026-10-14: se avisa en las tres acciones). El motivo que escribio el
+    administrador es interno y no va en el correo."""
+    if action == "extend":
+        renews = subscription.renewal_mode == "automatic" and subscription.status == "active"
+        return build_email(
+            "subscription_extended",
+            to=user.email,
+            display_name=user.display_name,
+            plan_name=subscription.plan.name,
+            period_end=subscription.current_period_end,
+            charge_at=subscription.next_charge_at if renews else None,
+            amount_cents=(
+                pricing.renewal_quote(
+                    subscription.price_cents,
+                    subscription.currency,
+                    subscriptions.renewal_discount(db, subscription),
+                ).total_cents
+            ),
+            currency=subscription.currency,
+            source_label=source_label(subscription),
+            url=frontend_url("/cuenta"),
+        )
+    if action == "cancel_at_period_end":
+        return build_email(
+            "subscription_renewal_stopped",
+            to=user.email,
+            display_name=user.display_name,
+            plan_name=subscription.plan.name,
+            period_end=subscription.current_period_end,
+            url=frontend_url("/cuenta"),
+        )
+    return build_email(
+        "subscription_ended",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        period_end=subscription.current_period_end,
+        had_renewal=had_renewal,
         url=frontend_url("/cuenta"),
     )
