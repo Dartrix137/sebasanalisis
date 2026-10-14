@@ -19,7 +19,6 @@ import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AccessGate } from "@/components/AccessGate";
-import { Disclaimer } from "@/components/Disclaimer";
 import { GameMenu } from "@/components/GameMenu";
 import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
 import { NumberChip, variantLabel } from "@/components/mesa/VariantChoice";
@@ -185,10 +184,6 @@ function Dashboard() {
             </p>
           </section>
         ) : null}
-
-        <div className="mt-12">
-          <Disclaimer />
-        </div>
       </main>
     </div>
   );

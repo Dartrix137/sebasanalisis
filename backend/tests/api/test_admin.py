@@ -6,6 +6,10 @@ from fastapi.testclient import TestClient
 
 from tests.api.conftest import auth, game_body
 
+# Solo para el CRUD del admin: el motor no podria usarla bien, porque las
+# sumas de dos dados no son equiprobables (ver la skill
+# `categories-json-validator`). El fixture de dados para el motor es
+# `tests/fixtures/dados_d6.json`.
 DADOS_CONFIG = {
     "possible_outcomes": [str(n) for n in range(2, 13)],
     "categories": [

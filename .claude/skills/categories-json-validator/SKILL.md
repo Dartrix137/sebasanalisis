@@ -59,10 +59,12 @@ Valores de referencia ya validados: `8` para categorías binarias (color, parida
 
 ## Al diseñar un juego nuevo (ej. dados)
 
-Sigue el mismo proceso de validación. Ejemplo mínimo para dos dados (suma 2-12):
+**Primero: los resultados tienen que ser equiprobables.** El motor calcula la probabilidad teórica de un grupo como `len(grupo) / len(possible_outcomes)` (`engine/probability.theoretical_probability`): supone que cada valor de `possible_outcomes` sale con la misma probabilidad. Ningún validador lo puede comprobar, porque el JSON no dice cómo se genera un resultado. Si los resultados no son equiprobables, toda probabilidad teórica, toda desviación y todo Signal Score salen mal sin que nada falle.
 
-- `possible_outcomes`: ["2","3",...,"12"]
-- Cada categoría (ej. `sum_range`, `parity`) debe cubrir explícitamente qué pasa con el 7 u otros valores especiales, igual que el 0 en ruleta — no dejarlo implícito.
+- **Un dado de seis caras sí sirve**: `possible_outcomes` = `["1",…,"6"]`, cada cara con 1/6. Es el fixture de genericidad del proyecto: `backend/tests/fixtures/dados_d6.json` (par/impar, bajo/alto y tercios, con pagos que dan una ventaja de la casa del 5 %).
+- **La suma de dos dados (2-12) NO sirve como `possible_outcomes`**: el 7 sale 6 veces de 36 y el 2 una sola. Con 11 valores el motor le daría 1/11 a cada suma. Para dos dados hay que listar los 36 pares ordenados (`"1-1"`, `"1-2"`, …, `"6-6"`), que sí son equiprobables, y armar las categorías de suma como grupos de pares (la suma 7 es el grupo de los seis pares que suman 7).
+
+Después sigue el mismo proceso de validación. Cada categoría debe cubrir explícitamente qué pasa con los valores especiales (el 7 en dos dados, el 0 en la ruleta): no dejarlo implícito.
 
 ## Antes de guardar cualquier categories_json (admin o seed)
 
