@@ -933,7 +933,7 @@ Paso 6, entrega 3 (rama `fase-4-paso-6c-traslado-de-precio`). Con ella está con
 
 - El plazo de 30 días y el texto de los avisos los revisa el abogado (§3.11, "Para el abogado").
 - El aviso de un traslado y el aviso de 7 días antes del cobro pueden llegar el mismo día si el traslado se registra a menos de una semana de un cobro. No es un problema de fechas (el precio nuevo no corre hasta 30 días después), pero el cliente recibe dos correos seguidos.
-- No se probó con el job programado en el VPS ni con correo real.
+- El job programado en el VPS y el correo real: **probados el 2026-10-14** por el usuario, con un plan de prueba (una subida con su aviso, la cancelación del traslado y una bajada, con los avisos enviados por el job y correo real). Con esto el paso 6 quedó cerrado.
 - El resumen no guarda historia: las fotos del momento no tienen contra qué compararse. Si hace falta, sería una tabla de cortes diarios escrita por un job, y eso no está decidido.
 
 ---
