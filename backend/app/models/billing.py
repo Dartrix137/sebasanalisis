@@ -15,11 +15,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -167,3 +169,94 @@ class CouponRedemption(Base):
     )
     created_at: Mapped[datetime] = created_at_col()
 
+
+
+class PriceChange(Base):
+    """Un traslado del precio actual de un plan a sus suscripciones vigentes
+    (§10 n.º 5; decidido el 2026-10-14, construido en el paso 6).
+
+    El precio congelado de una suscripcion (§3.7) solo cambia por aqui, y cada
+    suscripcion alcanzada lleva su fila en `subscription_price_changes`: su
+    aviso, cuando le aplica y si se aplico. Lo registra un administrador con
+    motivo; los avisos los envia el job de renovaciones.
+    """
+
+    __tablename__ = "price_changes"
+    __table_args__ = (
+        CheckConstraint("new_price_cents > 0", name="ck_price_changes_price_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    # RESTRICT: un plan con historia no se borra.
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("plans.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    # El precio del plan al registrar el traslado: el que pasa a cobrarse.
+    new_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    # SET NULL: si ese administrador elimina su cuenta, el traslado queda.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_by_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    # Cancelado antes de aplicarse a todas: las que faltaban conservan su precio.
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+
+    plan: Mapped[Plan] = relationship()
+
+
+class SubscriptionPriceChange(Base):
+    """Lo que un traslado de precio le hace a una suscripcion.
+
+    - Subida: el precio nuevo aplica 30 dias despues de que su aviso se envio de
+      verdad (`notice_sent_at`), no de cuando se registro el traslado.
+    - Bajada: se aplica al registrar el traslado; el aviso es informativo.
+
+    `applied_at` dice cuando se cambio `subscriptions.price_cents`. Una fila
+    cancelada (`canceled_at`) no se aplica; si su aviso ya habia salido, el
+    cliente recibe otro que dice que el precio no cambia
+    (`cancel_notice_sent_at`).
+    """
+
+    __tablename__ = "subscription_price_changes"
+    __table_args__ = (
+        UniqueConstraint(
+            "price_change_id", "subscription_id", name="uq_subscription_price_changes_pair"
+        ),
+        CheckConstraint("old_price_cents > 0", name="ck_subscription_price_changes_old_positive"),
+        CheckConstraint("new_price_cents > 0", name="ck_subscription_price_changes_new_positive"),
+        CheckConstraint(
+            "old_price_cents <> new_price_cents", name="ck_subscription_price_changes_changes"
+        ),
+        # Una suscripcion no tiene dos traslados abiertos a la vez.
+        Index(
+            "uq_subscription_price_changes_one_open",
+            "subscription_id",
+            unique=True,
+            postgresql_where=text("applied_at IS NULL AND canceled_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    price_change_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("price_changes.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    # CASCADE: la suscripcion se borra con la cuenta (§3.15), y esto con ella.
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    old_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Desde cuando se cobra el precio nuevo. Null mientras no haya salido el
+    # aviso de una subida.
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at_col()
+
+    price_change: Mapped[PriceChange] = relationship()

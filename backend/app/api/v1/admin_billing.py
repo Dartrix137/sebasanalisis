@@ -22,8 +22,8 @@ from app.api.v1.admin_users import Limit, Offset
 from app.api.v1.legal import client_ip
 from app.billing.coupon_codes import InvalidCouponCodeError, normalize_code, validate_code
 from app.billing.pricing import MAX_PERCENT
-from app.core import audit
-from app.models import Coupon, CouponRedemption, Plan, User
+from app.core import audit, price_changes
+from app.models import Coupon, CouponRedemption, Plan, PriceChange, User
 from app.schemas.billing import (
     AdminCouponListResponse,
     AdminCouponResponse,
@@ -33,6 +33,10 @@ from app.schemas.billing import (
     CouponRedemptionResponse,
     CreateCouponRequest,
     CreatePlanRequest,
+    PriceChangeListResponse,
+    PriceChangeResponse,
+    PriceTransferPreview,
+    PriceTransferRequest,
     UpdateCouponRequest,
     UpdatePlanRequest,
 )
@@ -149,7 +153,7 @@ def update_plan(
     """Edita, activa o desactiva un plan. El codigo y la moneda de cobro no cambian.
 
     El precio nuevo aplica a suscripciones nuevas: las vigentes guardan el suyo
-    (§3.7).
+    (§3.7), salvo que despues se les traslade (`POST .../price-transfer`, §4.10).
     """
     plan = _plan_or_404(db, plan_id)
     before = _plan_snapshot(plan)
@@ -444,3 +448,134 @@ def list_redemptions(
         limit=limit,
         offset=offset,
     )
+
+
+# ---------- Traslado del precio a las suscripciones vigentes (§4.10) ----------
+
+
+def _price_change_response(db: DbSession, change: PriceChange) -> PriceChangeResponse:
+    progress = price_changes.progress(db, change)
+    return PriceChangeResponse(
+        id=change.id,
+        plan_id=change.plan_id,
+        plan_name=change.plan.name,
+        new_price_cents=change.new_price_cents,
+        currency=change.currency,
+        reason=change.reason,
+        created_by_email=change.created_by_email,
+        created_at=change.created_at,
+        canceled_at=change.canceled_at,
+        cancel_reason=change.cancel_reason,
+        total=progress.total,
+        applied=progress.applied,
+        notified=progress.notified,
+        waiting_notice=progress.waiting_notice,
+        canceled=progress.canceled,
+    )
+
+
+def _price_change_error(exc: price_changes.PriceChangeError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.message)
+
+
+@router.get("/plans/{plan_id}/price-transfer", response_model=PriceTransferPreview)
+def preview_price_transfer(plan_id: UUID, db: DbSession, admin: AdminUser) -> PriceTransferPreview:
+    """Cuantas suscripciones vigentes del plan tienen un precio congelado
+    distinto al actual, y el traslado en curso si hay uno."""
+    plan = _plan_or_404(db, plan_id)
+    found = price_changes.preview(db, plan, datetime.now(UTC))
+    return PriceTransferPreview(
+        plan_id=plan.id,
+        price_cents=plan.price_cents,
+        currency=plan.currency,
+        increases=found.increases,
+        decreases=found.decreases,
+        open_change=(
+            _price_change_response(db, found.open_change) if found.open_change is not None else None
+        ),
+    )
+
+
+@router.post(
+    "/plans/{plan_id}/price-transfer",
+    response_model=PriceChangeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_price_transfer(
+    plan_id: UUID,
+    payload: PriceTransferRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> PriceChangeResponse:
+    """Traslada el precio actual del plan a sus suscripciones vigentes
+    (decidido el 2026-10-14). Una subida se cobra 30 dias despues del aviso a
+    cada cliente; una bajada aplica ya. Los avisos los envia el job."""
+    plan = _plan_or_404(db, plan_id)
+    try:
+        change = price_changes.create(
+            db,
+            admin=admin,
+            plan=plan,
+            reason=payload.reason.strip(),
+            ip=client_ip(request),
+            now=datetime.now(UTC),
+        )
+    except price_changes.PriceChangeError as exc:
+        db.rollback()
+        raise _price_change_error(exc) from exc
+    return _price_change_response(db, change)
+
+
+@router.get("/price-changes", response_model=PriceChangeListResponse)
+def list_price_changes(
+    db: DbSession,
+    admin: AdminUser,
+    plan_id: UUID | None = None,
+    limit: Limit = 20,
+    offset: Offset = 0,
+) -> PriceChangeListResponse:
+    """Los traslados de precio, lo mas reciente primero."""
+    filters = [PriceChange.plan_id == plan_id] if plan_id is not None else []
+    total = db.scalar(select(func.count()).select_from(PriceChange).where(*filters)) or 0
+    rows = db.scalars(
+        select(PriceChange)
+        .where(*filters)
+        .order_by(PriceChange.created_at.desc(), PriceChange.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return PriceChangeListResponse(
+        items=[_price_change_response(db, c) for c in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/price-changes/{change_id}/cancel", response_model=PriceChangeResponse)
+def cancel_price_transfer(
+    change_id: UUID,
+    payload: PriceTransferRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> PriceChangeResponse:
+    """Cancela lo que falta por aplicar. Quien ya recibio el aviso recibe otro
+    que dice que el precio no cambia (lo envia el job)."""
+    change = db.scalar(select(PriceChange).where(PriceChange.id == change_id).with_for_update())
+    if change is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Traslado no encontrado")
+    try:
+        change = price_changes.cancel(
+            db,
+            admin=admin,
+            change=change,
+            reason=payload.reason.strip(),
+            ip=client_ip(request),
+            now=datetime.now(UTC),
+        )
+    except price_changes.PriceChangeError as exc:
+        db.rollback()
+        raise _price_change_error(exc) from exc
+    return _price_change_response(db, change)

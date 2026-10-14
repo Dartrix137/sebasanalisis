@@ -37,6 +37,8 @@ const ACTION_LABEL: Record<string, string> = {
   "payment.refund.record": "Registró un reembolso",
   "user.password.force_reset": "Forzó el restablecimiento de la contraseña",
   "user.verification.resend": "Reenvió el correo de confirmación",
+  "plan.price.transfer": "Trasladó el precio a las suscripciones vigentes",
+  "plan.price.transfer.cancel": "Canceló un traslado de precio",
 };
 
 export function actionLabel(entry: AuditLogEntry): string {

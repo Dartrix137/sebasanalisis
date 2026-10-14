@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Bajamos el precio de tu plan {{ plan_name }}: pasa de {{ old_price_cents | money(currency) }} a {{ new_price_cents | money(currency) }} {{ period_label }}.
+
+El precio nuevo se aplica desde tu próximo {% if automatic %}cobro{% else %}pago{% endif %}. No tienes que hacer nada.
+
+Tu suscripción: {{ url }}
+{% endblock %}

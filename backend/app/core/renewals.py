@@ -35,7 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.billing import pricing, schedule
-from app.core import billing_emails, subscriptions
+from app.core import billing_emails, price_changes, subscriptions
 from app.core.email import EmailMessage
 from app.models import Payment, Subscription, User
 from app.payments.base import PaymentProvider, PaymentProviderError
@@ -105,6 +105,10 @@ def _reference_prefix(subscription: Subscription, period_end: datetime) -> str:
 def run_renewals(db: Session, provider: PaymentProvider, now: datetime) -> RenewalReport:
     """Una corrida del job. Quien llama debe tener el candado (`advisory_lock`)."""
     report = RenewalReport()
+    # Primero los precios nuevos cuya fecha ya llego: ningun cobro de esta
+    # corrida sale con un precio que ya no corre (§4.10).
+    price_changes.apply_due(db, now)
+    db.commit()
     ids = list(
         db.scalars(
             select(Subscription.id)
@@ -137,6 +141,8 @@ def retry_now(
     con la referencia unica. Agotados los tres no se cobra.
     """
     report = RenewalReport()
+    price_changes.apply_due(db, now, subscription.id)
+    db.commit()
     period_end = subscription.current_period_end
     if (
         period_end is None
@@ -202,7 +208,8 @@ def _process_manual(
         report.emails.append(message)
         return
     if schedule.expiry_notice_due(now, period_end) and subscription.notice_sent_for != period_end:
-        amount = _renewal_quote(db, subscription).total_cents
+        # Lo que costara el periodo siguiente cuando haya que pagarlo.
+        amount = _renewal_quote(db, subscription, at=period_end).total_cents
         message = billing_emails.period_ending(user, subscription, amount)
         subscription.notice_sent_for = period_end
         db.commit()
@@ -239,8 +246,9 @@ def _process_automatic(
     #    para la siguiente.
     if not attempts and subscription.notice_sent_for != period_end:
         if schedule.renewal_notice_due(now, period_end):
-            quote = _renewal_quote(db, subscription)
             charge_at = max(schedule.first_charge_at(period_end), now)
+            # El monto que se cobrara ese dia, con un precio nuevo si ya corre.
+            quote = _renewal_quote(db, subscription, at=charge_at)
             message = billing_emails.renewal_notice(
                 user, subscription, quote.total_cents, charge_at
             )
@@ -279,9 +287,16 @@ def _attempts(db: Session, prefix: str) -> list[Payment]:
     )
 
 
-def _renewal_quote(db: Session, subscription: Subscription) -> pricing.Quote:
+def _renewal_quote(
+    db: Session, subscription: Subscription, at: datetime | None = None
+) -> pricing.Quote:
+    """Lo que cuesta el periodo siguiente. Con `at`, el que correra ese dia
+    (un traslado de precio puede aplicar antes); sin el, el de hoy."""
+    price = (
+        price_changes.price_at(db, subscription, at) if at is not None else subscription.price_cents
+    )
     return pricing.renewal_quote(
-        subscription.price_cents,
+        price,
         subscription.currency,
         subscriptions.renewal_discount(db, subscription),
     )

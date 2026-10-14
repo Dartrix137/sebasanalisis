@@ -213,6 +213,14 @@ export function SubscriptionCard() {
               {formatMoney(subscription.price_cents, subscription.currency)} /{" "}
               {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)}
             </Row>
+            {subscription.price_change ? (
+              // Un cambio de precio que ya se le avisó por correo (§4.10).
+              <Row label="Precio nuevo">
+                {formatMoney(subscription.price_change.new_price_cents, subscription.currency)} /{" "}
+                {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)}, desde
+                el {formatLegalDate(subscription.price_change.effective_at)}
+              </Row>
+            ) : null}
             <Row label="Forma de pago">{RENEWAL_MODE_LABEL[subscription.renewal_mode]}</Row>
             {automatic && sourceLabel(subscription) ? (
               <Row label="Medio de pago">{sourceLabel(subscription)}</Row>

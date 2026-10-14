@@ -42,6 +42,10 @@ SUBJECTS: dict[str, str] = {
     "subscription_ended": "Tu suscripción a Sebasanálisis terminó",
     # Un administrador forzo el restablecimiento de la contrasena (paso 6).
     "password_reset_forced": "Elige una contraseña nueva para tu cuenta de Sebasanálisis",
+    # Traslado del precio de un plan a las suscripciones vigentes (paso 6).
+    "price_increase": "Aviso: cambia el precio de tu suscripción a Sebasanálisis",
+    "price_decrease": "Bajó el precio de tu suscripción a Sebasanálisis",
+    "price_change_canceled": "El precio de tu suscripción a Sebasanálisis no cambia",
 }
 
 _MONTHS = (

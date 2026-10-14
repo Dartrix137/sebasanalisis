@@ -214,6 +214,13 @@ class AdminPaymentResponse(PaymentResponse):
     refunded_cents: int
 
 
+class UpcomingPriceChange(ApiModel):
+    """Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10)."""
+    new_price_cents: int
+    # Desde cuando se cobra.
+    effective_at: datetime
+
+
 class SubscriptionResponse(ApiModel):
     id: UUID
     status: SubscriptionStatus
@@ -237,6 +244,8 @@ class SubscriptionResponse(ApiModel):
     # suscripcion: lo que se cobrara solo, o lo que hay que pagar a mano. Null
     # si esta cancelada o vencida.
     next_charge_cents: int | None = None
+    # Un precio nuevo ya avisado que todavia no corre. Null si no hay ninguno.
+    price_change: UpcomingPriceChange | None = None
 
 
 # ---------- Admin: planes ----------
@@ -360,3 +369,54 @@ class CouponRedemptionListResponse(ApiModel):
     limit: int
     offset: int
 
+
+
+# ---------- Admin: traslado de precio (§4.10, paso 6) ----------
+
+class PriceChangeResponse(ApiModel):
+    """Un traslado del precio de un plan a sus suscripciones vigentes, con su avance."""
+    id: UUID
+    plan_id: UUID
+    plan_name: str
+    new_price_cents: int
+    currency: str
+    reason: str
+    created_by_email: str
+    created_at: datetime
+    canceled_at: datetime | None = None
+    cancel_reason: str | None = None
+    # Suscripciones alcanzadas.
+    total: int
+    # Con el precio nuevo ya aplicado.
+    applied: int
+    # Con el aviso enviado.
+    notified: int
+    # Esperando su aviso (una subida no corre hasta que el aviso sale).
+    waiting_notice: int
+    # Que ya no lo recibiran: traslado cancelado o suscripcion vencida.
+    canceled: int
+
+
+class PriceChangeListResponse(ApiModel):
+    items: list[PriceChangeResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class PriceTransferPreview(ApiModel):
+    """Lo que haria trasladar hoy el precio actual del plan."""
+    plan_id: UUID
+    price_cents: int
+    currency: str
+    # Suscripciones vigentes (activas o en mora) con un precio congelado menor
+    # o mayor que el actual.
+    increases: int
+    decreases: int
+    # El traslado del plan que todavia tiene suscripciones sin aplicar.
+    open_change: PriceChangeResponse | None = None
+
+
+class PriceTransferRequest(ApiModel):
+    """POST /admin/plans/:id/price-transfer y POST /admin/price-changes/:id/cancel."""
+    reason: str = Reason

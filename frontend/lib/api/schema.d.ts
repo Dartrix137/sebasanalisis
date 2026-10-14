@@ -357,9 +357,77 @@ export interface paths {
          * @description Edita, activa o desactiva un plan. El codigo y la moneda de cobro no cambian.
          *
          *     El precio nuevo aplica a suscripciones nuevas: las vigentes guardan el suyo
-         *     (§3.7).
+         *     (§3.7), salvo que despues se les traslade (`POST .../price-transfer`, §4.10).
          */
         patch: operations["update_plan_admin_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/admin/plans/{plan_id}/price-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Price Transfer
+         * @description Cuantas suscripciones vigentes del plan tienen un precio congelado
+         *     distinto al actual, y el traslado en curso si hay uno.
+         */
+        get: operations["preview_price_transfer_admin_plans__plan_id__price_transfer_get"];
+        put?: never;
+        /**
+         * Create Price Transfer
+         * @description Traslada el precio actual del plan a sus suscripciones vigentes
+         *     (decidido el 2026-10-14). Una subida se cobra 30 dias despues del aviso a
+         *     cada cliente; una bajada aplica ya. Los avisos los envia el job.
+         */
+        post: operations["create_price_transfer_admin_plans__plan_id__price_transfer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/price-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Price Changes
+         * @description Los traslados de precio, lo mas reciente primero.
+         */
+        get: operations["list_price_changes_admin_price_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/price-changes/{change_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Price Transfer
+         * @description Cancela lo que falta por aplicar. Quien ya recibio el aviso recibe otro
+         *     que dice que el precio no cambia (lo envia el job).
+         */
+        post: operations["cancel_price_transfer_admin_price_changes__change_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/recommendations/backtest": {
@@ -2057,6 +2125,7 @@ export interface components {
             plan: components["schemas"]["PlanResponse"];
             /** Price Cents */
             price_cents: number;
+            price_change: components["schemas"]["UpcomingPriceChange"] | null;
             renewal_mode: components["schemas"]["RenewalMode"];
             /** Retry Count */
             retry_count: number;
@@ -3226,6 +3295,90 @@ export interface components {
             /** Price Cents */
             price_cents: number;
         };
+        /** PriceChangeListResponse */
+        PriceChangeListResponse: {
+            /** Items */
+            items: components["schemas"]["PriceChangeResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PriceChangeResponse
+         * @description Un traslado del precio de un plan a sus suscripciones vigentes, con su avance.
+         */
+        PriceChangeResponse: {
+            /** Applied */
+            applied: number;
+            /** Cancel Reason */
+            cancel_reason: string | null;
+            /** Canceled */
+            canceled: number;
+            /** Canceled At */
+            canceled_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Email */
+            created_by_email: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** New Price Cents */
+            new_price_cents: number;
+            /** Notified */
+            notified: number;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Reason */
+            reason: string;
+            /** Total */
+            total: number;
+            /** Waiting Notice */
+            waiting_notice: number;
+        };
+        /**
+         * PriceTransferPreview
+         * @description Lo que haria trasladar hoy el precio actual del plan.
+         */
+        PriceTransferPreview: {
+            /** Currency */
+            currency: string;
+            /** Decreases */
+            decreases: number;
+            /** Increases */
+            increases: number;
+            open_change: components["schemas"]["PriceChangeResponse"] | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /** Price Cents */
+            price_cents: number;
+        };
+        /**
+         * PriceTransferRequest
+         * @description POST /admin/plans/:id/price-transfer y POST /admin/price-changes/:id/cancel.
+         */
+        PriceTransferRequest: {
+            /** Reason */
+            reason: string;
+        };
         /**
          * ProgressionRowResponse
          * @description Una fila de la tabla de riesgo, con montos reales del usuario.
@@ -3880,6 +4033,7 @@ export interface components {
             plan: components["schemas"]["PlanResponse"];
             /** Price Cents */
             price_cents: number;
+            price_change: components["schemas"]["UpcomingPriceChange"] | null;
             renewal_mode: components["schemas"]["RenewalMode"];
             status: components["schemas"]["SubscriptionStatus"];
         };
@@ -3914,6 +4068,19 @@ export interface components {
          * @enum {string}
          */
         TokenizerKind: "wompi_widget" | "fake";
+        /**
+         * UpcomingPriceChange
+         * @description Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).
+         */
+        UpcomingPriceChange: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** New Price Cents */
+            new_price_cents: number;
+        };
         /**
          * UpdateCouponRequest
          * @description PATCH /admin/coupons/:id. Solo cambia los campos que se mandan.
@@ -4822,6 +4989,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_price_transfer_admin_plans__plan_id__price_transfer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceTransferPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_price_transfer_admin_plans__plan_id__price_transfer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceChangeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_price_changes_admin_price_changes_get: {
+        parameters: {
+            query?: {
+                plan_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceChangeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_price_transfer_admin_price_changes__change_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceChangeResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Te avisamos con anticipación: el precio de tu plan {{ plan_name }} pasa de {{ old_price_cents | money(currency) }} a {{ new_price_cents | money(currency) }} {{ period_label }}.
+
+El precio nuevo se aplica a {% if automatic %}los cobros{% else %}los pagos{% endif %} desde el {{ effective_at | fecha }}. Hasta esa fecha sigues pagando {{ old_price_cents | money(currency) }}.{% if has_discount %} El descuento que tienes se sigue aplicando, ahora sobre el precio nuevo.{% endif %}
+
+{% if automatic %}Si no quieres seguir con el precio nuevo, puedes cancelar la renovación o pasar a pago manual desde tu cuenta antes de esa fecha.{% else %}Tu suscripción es de pago manual: no se te cobra nada sin que tú pagues. Si decides no pagar el período siguiente, tu acceso termina cuando vence el que ya pagaste.{% endif %}
+
+Tu suscripción: {{ url }}
+{% endblock %}
