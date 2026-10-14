@@ -345,7 +345,9 @@ La tarea vive en la base de datos de Dokploy, no en el contenedor de la API:
 Que hace cada corrida: avisa por correo antes de cada cobro automatico (7 dias
 antes del primer intento) y antes de cada vencimiento del pago manual; cobra las
 renovaciones que toquen (48 h, 24 h y 0 h antes del vencimiento); y deja
-vencidas las suscripciones cuyo periodo termino. Usa las mismas variables de
+vencidas las suscripciones cuyo periodo termino. Desde el paso 6 (entrega 3)
+tambien envia los avisos de un traslado de precio, hasta 40 por corrida, y
+aplica cada precio nuevo cuando llega su fecha. Usa las mismas variables de
 entorno de la API, incluidas las `SMTP_*`: los correos los envia el job.
 
 Se puede correr a mano en la terminal de la API cuantas veces se quiera: es
@@ -354,6 +356,7 @@ idempotente. Dos corridas a la vez no cobran dos veces (la segunda sale diciendo
 
 ```
 INFO: app.renewals - Renovaciones: avisos=0 cobros=0 aprobados=0 fallidos=0 vencidas=0 errores=0 correos=0
+INFO: app.renewals - Traslados de precio: avisos=0 fallidos=0 cerrados=0
 ```
 
 Sale con codigo 1 si alguna suscripcion fallo (`errores` mayor que cero); el

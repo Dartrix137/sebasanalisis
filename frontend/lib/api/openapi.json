@@ -903,6 +903,16 @@
             "title": "Price Cents",
             "type": "integer"
           },
+          "price_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpcomingPriceChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "renewal_mode": {
             "$ref": "#/components/schemas/RenewalMode"
           },
@@ -939,6 +949,7 @@
           "card_last4",
           "next_charge_at",
           "next_charge_cents",
+          "price_change",
           "user_id",
           "user_email",
           "retry_count",
@@ -3586,6 +3597,201 @@
         "title": "PlanResponse",
         "type": "object"
       },
+      "PriceChangeListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceChangeResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "PriceChangeListResponse",
+        "type": "object"
+      },
+      "PriceChangeResponse": {
+        "description": "Un traslado del precio de un plan a sus suscripciones vigentes, con su avance.",
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "integer"
+          },
+          "cancel_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason"
+          },
+          "canceled": {
+            "title": "Canceled",
+            "type": "integer"
+          },
+          "canceled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canceled At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_email": {
+            "title": "Created By Email",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "new_price_cents": {
+            "title": "New Price Cents",
+            "type": "integer"
+          },
+          "notified": {
+            "title": "Notified",
+            "type": "integer"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_name": {
+            "title": "Plan Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "waiting_notice": {
+            "title": "Waiting Notice",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "plan_id",
+          "plan_name",
+          "new_price_cents",
+          "currency",
+          "reason",
+          "created_by_email",
+          "created_at",
+          "canceled_at",
+          "cancel_reason",
+          "total",
+          "applied",
+          "notified",
+          "waiting_notice",
+          "canceled"
+        ],
+        "title": "PriceChangeResponse",
+        "type": "object"
+      },
+      "PriceTransferPreview": {
+        "description": "Lo que haria trasladar hoy el precio actual del plan.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "decreases": {
+            "title": "Decreases",
+            "type": "integer"
+          },
+          "increases": {
+            "title": "Increases",
+            "type": "integer"
+          },
+          "open_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceChangeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan_id",
+          "price_cents",
+          "currency",
+          "increases",
+          "decreases",
+          "open_change"
+        ],
+        "title": "PriceTransferPreview",
+        "type": "object"
+      },
+      "PriceTransferRequest": {
+        "description": "POST /admin/plans/:id/price-transfer y POST /admin/price-changes/:id/cancel.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PriceTransferRequest",
+        "type": "object"
+      },
       "ProgressionRowResponse": {
         "description": "Una fila de la tabla de riesgo, con montos reales del usuario.",
         "properties": {
@@ -5142,6 +5348,16 @@
             "title": "Price Cents",
             "type": "integer"
           },
+          "price_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpcomingPriceChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "renewal_mode": {
             "$ref": "#/components/schemas/RenewalMode"
           },
@@ -5164,7 +5380,8 @@
           "card_brand",
           "card_last4",
           "next_charge_at",
-          "next_charge_cents"
+          "next_charge_cents",
+          "price_change"
         ],
         "title": "SubscriptionResponse",
         "type": "object"
@@ -5231,6 +5448,26 @@
         ],
         "title": "TokenizerKind",
         "type": "string"
+      },
+      "UpcomingPriceChange": {
+        "description": "Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).",
+        "properties": {
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "new_price_cents": {
+            "title": "New Price Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "new_price_cents",
+          "effective_at"
+        ],
+        "title": "UpcomingPriceChange",
+        "type": "object"
       },
       "UpdateCouponRequest": {
         "description": "PATCH /admin/coupons/:id. Solo cambia los campos que se mandan.\n\nCon redenciones, el descuento (`kind`, `value`, `currency`, `duration`,\n`duration_periods`) ya no se puede cambiar.",
@@ -7219,7 +7456,7 @@
     },
     "/admin/plans/{plan_id}": {
       "patch": {
-        "description": "Edita, activa o desactiva un plan. El codigo y la moneda de cobro no cambian.\n\nEl precio nuevo aplica a suscripciones nuevas: las vigentes guardan el suyo\n(§3.7).",
+        "description": "Edita, activa o desactiva un plan. El codigo y la moneda de cobro no cambian.\n\nEl precio nuevo aplica a suscripciones nuevas: las vigentes guardan el suyo\n(§3.7), salvo que despues se les traslade (`POST .../price-transfer`, §4.10).",
         "operationId": "update_plan_admin_plans__plan_id__patch",
         "parameters": [
           {
@@ -7271,6 +7508,250 @@
           }
         ],
         "summary": "Update Plan",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/plans/{plan_id}/price-transfer": {
+      "get": {
+        "description": "Cuantas suscripciones vigentes del plan tienen un precio congelado\ndistinto al actual, y el traslado en curso si hay uno.",
+        "operationId": "preview_price_transfer_admin_plans__plan_id__price_transfer_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceTransferPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preview Price Transfer",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Traslada el precio actual del plan a sus suscripciones vigentes\n(decidido el 2026-10-14). Una subida se cobra 30 dias despues del aviso a\ncada cliente; una bajada aplica ya. Los avisos los envia el job.",
+        "operationId": "create_price_transfer_admin_plans__plan_id__price_transfer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceTransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Price Transfer",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/price-changes": {
+      "get": {
+        "description": "Los traslados de precio, lo mas reciente primero.",
+        "operationId": "list_price_changes_admin_price_changes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceChangeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Price Changes",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/price-changes/{change_id}/cancel": {
+      "post": {
+        "description": "Cancela lo que falta por aplicar. Quien ya recibio el aviso recibe otro\nque dice que el precio no cambia (lo envia el job).",
+        "operationId": "cancel_price_transfer_admin_price_changes__change_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Change Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceTransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Price Transfer",
         "tags": [
           "admin"
         ]

@@ -16,7 +16,7 @@
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
 3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12)
-4. [Admin dashboard](#4-admin-dashboard) (las entregas 1 y 2 del paso 6 están en §4.8 y §4.9)
+4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
 7. [Plataforma multijuego](#7-plataforma-multijuego)
@@ -294,7 +294,7 @@ Usuario                 Frontend                     Backend                    
 
 ### 3.7 Precio congelado
 
-`subscriptions.price_cents` guarda el precio al suscribirse. Un cambio de precio del plan en el admin aplica a **suscripciones nuevas**; las vigentes renuevan con su precio congelado. Si se decide trasladar el precio nuevo a las existentes, es una acción explícita del admin, auditada, con aviso por correo al usuario antes del cobro (decisión pendiente, §10).
+`subscriptions.price_cents` guarda el precio al suscribirse. Un cambio de precio del plan en el admin aplica a **suscripciones nuevas**; las vigentes renuevan con su precio congelado. Si se decide trasladar el precio nuevo a las existentes, es una acción explícita del admin, auditada, con aviso por correo al usuario antes del cobro (decisión pendiente, §10). **Construido el 2026-10-14** (§4.10): una subida se cobra 30 días después del aviso a cada cliente y una bajada aplica ya.
 
 ### 3.8 Correos transaccionales de cobro
 
@@ -863,7 +863,77 @@ Paso 6, entrega 2 (rama `fase-4-paso-6b-navegacion-y-resumen`). **El paso 6 no e
 
 **Lo que queda**
 
-- El traslado de un precio nuevo a las suscripciones vigentes (§10 n.º 5), en su propia entrega. Con ella se cierra el paso 6.
+- El traslado de un precio nuevo a las suscripciones vigentes (§10 n.º 5), en su propia entrega. Con ella se cierra el paso 6. **Hecho** (§4.10).
+
+### 4.10 Traslado de un precio nuevo a las suscripciones vigentes: cómo quedó construido (2026-10-14)
+
+Paso 6, entrega 3 (rama `fase-4-paso-6c-traslado-de-precio`). Con ella está construido todo el paso 6. Cierra §10 n.º 5: hasta aquí el precio de una suscripción quedaba congelado para siempre (§3.7).
+
+**Decisiones del usuario (2026-10-14)**
+
+- **Alcance**: todas las suscripciones vigentes del plan (activas y en mora), en los dos modos de pago, cuyo precio congelado sea distinto del actual del plan. No a las canceladas.
+- **Subida**: se cobra desde **30 días después de que a cada cliente le llegó su aviso**, no desde que se registró el traslado. Los avisos los envía el job por lotes, y la fecha se anota solo si el envío salió bien: un cliente al que no le llegó el correo sigue pagando el precio viejo. El plazo lo debe confirmar el abogado.
+- **Bajada**: aplica al registrar el traslado, desde el próximo cobro o pago. El aviso es informativo.
+- **Cupones**: uno que todavía descuenta sigue descontando, sobre el precio nuevo. Un porcentaje se calcula sobre el nuevo; un monto fijo queda igual.
+- **Cancelar**: se puede mientras no se haya aplicado. Las suscripciones que faltaban conservan su precio, y quien ya había recibido el aviso recibe otro que dice que el precio no cambia. Mientras un plan tenga un traslado en curso, no se registra otro.
+
+**Datos** (migración `e3b7d1f9a462`, solo DDL)
+
+- `price_changes`: el traslado, con el plan, el precio nuevo, la moneda, el motivo, quién lo registró y, si se canceló, cuándo y por qué.
+- `subscription_price_changes`: una fila por suscripción alcanzada, con el precio viejo y el nuevo, cuándo salió su aviso (`notice_sent_at`), desde cuándo corre (`effective_at`), cuándo se aplicó (`applied_at`), si se canceló (`canceled_at`) y cuándo salió el aviso de la cancelación. Un índice único parcial impide dos traslados abiertos en una misma suscripción. Se borra en cascada con la suscripción, es decir, con la cuenta.
+- El precio que se cobra sigue siendo `subscriptions.price_cents`. Un traslado lo cambia cuando llega su fecha (`applied_at`).
+
+**Cálculo** (`billing/price_change.py`, puro, `mypy` estricto): la dirección del cambio, la fecha desde la que corre (`effective_at`) y el precio que corre en un momento dado (`price_at`).
+
+**Lógica** (`core/price_changes.py`)
+
+- `create` y `cancel`: las acciones del admin, cada una con su fila en la bitácora (`plan.price.transfer` y `plan.price.transfer.cancel`) en la misma transacción.
+- `apply_due` pone el precio nuevo en `subscriptions.price_cents` cuando llega su fecha. Lo llaman:
+  - el job, al empezar cada corrida y antes de cobrar;
+  - el pago manual del período siguiente (`start_payment`);
+  - el reintento inmediato de un cobro en mora (`retry_now`).
+
+  Así ningún cobro sale con un precio que ya no corre. No toca ningún pago.
+- `send_notices`: lo corre `scripts/run_renewals.py` después de las renovaciones. Envía hasta 40 avisos por corrida, para no gastar el tope diario de correos (`EMAIL_DAILY_LIMIT`), uno por uno y anotando cada uno solo si el envío no falló.
+  - Una subida de una suscripción cancelada espera: si la reanuda, se le avisa.
+  - Una subida de una suscripción que ya no tiene período vigente sale del traslado sin correo.
+- **Los avisos previos al cobro muestran el precio que correrá ese día**: el de 7 días antes del cobro automático y el de vencimiento del pago manual. El cobro mismo usa `price_cents`, ya al día.
+
+**API**
+
+- `GET /admin/plans/:id/price-transfer`: cuántas vigentes subirían y cuántas bajarían, y el traslado en curso con su avance (avisadas, esperando su aviso, aplicadas, canceladas).
+- `POST /admin/plans/:id/price-transfer {reason}`: traslada el precio actual del plan. Responde `409` si no hay suscripciones con otro precio o si ya hay un traslado en curso.
+- `GET /admin/price-changes` (paginado, filtro por plan) y `POST /admin/price-changes/:id/cancel {reason}`.
+- `SubscriptionResponse.price_change`: el precio nuevo ya avisado y desde cuándo corre. `next_charge_cents` se calcula con el precio que correrá en la fecha del próximo cobro.
+
+**Correos**: aviso de subida (de cuánto a cuánto, desde qué fecha, que el descuento sigue, y cómo cancelar la renovación o pasar a pago manual antes de esa fecha), aviso de bajada, y "el precio no cambia" al cancelar.
+
+**Frontend**
+
+- `/admin/planes`, debajo del formulario de cada plan: cuántas vigentes suben o bajan y qué pasa en cada caso, el botón para trasladar (con motivo y casilla de confirmación), y el traslado en curso con su avance y el botón para cancelarlo.
+- `/cuenta` y el detalle de la suscripción en el admin muestran el precio nuevo ya avisado y desde cuándo corre.
+
+**Tests**
+
+- `tests/billing/test_price_change.py` (5, sin base).
+- `tests/api/test_price_transfer.py` (20):
+  - solo administradores;
+  - alcance (las canceladas y las vencidas no entran), fila con motivo, y sin motivo se rechaza;
+  - el aviso fija la fecha 30 días después;
+  - un aviso que no sale no hace correr el plazo, ni con el tiempo;
+  - el cobro antes de la fecha va con el precio viejo y el siguiente con el nuevo, con el cupón del 20 % descontando del nuevo; el aviso de 7 días ya muestra el monto nuevo;
+  - el pago manual del período siguiente, antes y después de la fecha;
+  - la cancelada que espera y recibe el aviso al reanudar, y la que vence y sale del traslado;
+  - los lotes; la bajada que aplica ya y se cobra;
+  - cancelar, antes y después del aviso; el historial; y que no se mueve ningún pago.
+- Playwright (`e2e/price-transfer.spec.ts`): el administrador sube el precio de un plan, traslada el precio a la suscripción de una cuenta, el cliente sigue viendo su precio mientras no sale el aviso, cancela el traslado y lo ve en la bitácora.
+- La migración se subió, se bajó con filas puestas y se volvió a subir en una base desechable; `alembic check` sin diferencias, y el índice parcial rechaza un segundo traslado abierto. El script del job se corrió en otra base desechable.
+
+**Lo que queda sin probar o sin hacer**
+
+- El plazo de 30 días y el texto de los avisos los revisa el abogado (§3.11, "Para el abogado").
+- El aviso de un traslado y el aviso de 7 días antes del cobro pueden llegar el mismo día si el traslado se registra a menos de una semana de un cobro. No es un problema de fechas (el precio nuevo no corre hasta 30 días después), pero el cliente recibe dos correos seguidos.
+- No se probó con el job programado en el VPS ni con correo real.
 - El resumen no guarda historia: las fotos del momento no tienen contra qué compararse. Si hace falta, sería una tabla de cortes diarios escrita por un job, y eso no está decidido.
 
 ---
@@ -1197,7 +1267,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
-| 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción**, en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
+| 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción** (construida ese día, §4.10), en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |
 | 8 | Textos legales definitivos | Los redacta o revisa un abogado; el equipo entrega la estructura de §6.5. |
@@ -1250,6 +1320,8 @@ Admin:     GET  /admin/overview
            POST /admin/payments/:id/requery  {reason}
            POST /admin/payments/:id/refunds  {amount_cents, refunded_at, provider_refund_id?, reason}
            GET|POST /admin/plans             PATCH /admin/plans/:id
+           GET|POST /admin/plans/:id/price-transfer   {reason}   (§4.10)
+           GET  /admin/price-changes         POST  /admin/price-changes/:id/cancel   {reason}
            GET|POST /admin/coupons           PATCH /admin/coupons/:id
            GET  /admin/coupons/:id/redemptions
            GET|POST /admin/legal-documents   PATCH /admin/legal-documents/:id

@@ -4,7 +4,7 @@
 
 Cobra las suscripciones de renovacion automatica cuyo cobro toca, avisa por
 correo antes de cada cobro y antes de cada vencimiento, y deja vencidas las que
-terminaron. Es idempotente: se puede correr dos veces seguidas, o en paralelo,
+terminaron. Tambien envia los avisos de los traslados de precio. Es idempotente: se puede correr dos veces seguidas, o en paralelo,
 sin cobrar dos veces (ver `app/core/renewals.py`).
 
 Sale con codigo 0 si corrio (o si otra corrida tenia el candado) y con 1 si
@@ -22,6 +22,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.core.config import get_settings  # noqa: E402
 from app.core.email import get_email_sender, send_safely  # noqa: E402
 from app.core.monitoring import init_monitoring  # noqa: E402
+from app.core.price_changes import send_notices as send_price_notices  # noqa: E402
 from app.core.renewals import advisory_lock, run_renewals  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.payments.base import get_payment_provider  # noqa: E402
@@ -39,13 +40,22 @@ def main() -> int:
         if not acquired:
             logger.info("Renovaciones: ya hay otra corrida en curso; esta no hace nada")
             return 0
+        sender = get_email_sender()
         with SessionLocal() as db:
             report = run_renewals(db, provider, datetime.now(UTC))
+            # Los avisos de un traslado de precio se envian aqui, uno por uno:
+            # su plazo de 30 dias corre solo si el correo salio (§4.10).
+            notices = send_price_notices(db, sender, datetime.now(UTC))
 
-    sender = get_email_sender()
     for message in report.emails:
         send_safely(sender, message)
     logger.info("Renovaciones: %s correos=%d", report.summary(), len(report.emails))
+    logger.info(
+        "Traslados de precio: avisos=%d fallidos=%d cerrados=%d",
+        notices.sent,
+        notices.failed,
+        notices.closed,
+    )
     return 1 if report.errors else 0
 
 

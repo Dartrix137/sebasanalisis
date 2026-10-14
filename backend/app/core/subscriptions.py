@@ -36,7 +36,7 @@ from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
 from app.billing.schedule import first_charge_at
-from app.core import legal
+from app.core import legal, price_changes
 from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
 from app.models.user import LIVE_SUBSCRIPTION_STATUSES
@@ -312,6 +312,8 @@ def start_payment(
             )
         plan = subscription.plan
         kind = "renewal"
+        # Un precio nuevo trasladado cuya fecha ya llego (§4.10).
+        price_changes.apply_due(db, now, subscription.id)
         quote = pricing.renewal_quote(
             subscription.price_cents, subscription.currency, renewal_discount(db, subscription)
         )

@@ -14,6 +14,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PriceTransferPanel } from "@/components/admin/PriceTransferPanel";
 import { SelectField } from "@/components/admin/SelectField";
 import { SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
@@ -180,6 +181,8 @@ export default function AdminPlansPage() {
                   {selected === plan.id ? (
                     <div className="mt-4 rounded-lg border border-edge bg-ink p-4">
                       <PlanForm plan={plan} onDone={refresh} />
+                      {/* Se vuelve a pedir cuando cambia el precio del plan. */}
+                      <PriceTransferPanel key={plan.price_cents} plan={plan} />
                     </div>
                   ) : null}
                 </li>
@@ -306,7 +309,7 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
           placeholder="100000"
           hint={
             plan
-              ? "Un precio nuevo aplica solo a suscripciones nuevas: las vigentes conservan el suyo."
+              ? "Un precio nuevo aplica a suscripciones nuevas. Las vigentes conservan el suyo hasta que lo trasladas (abajo)."
               : "En pesos, sin puntos de miles. Es el único monto que se cobra."
           }
           value={draft.price}

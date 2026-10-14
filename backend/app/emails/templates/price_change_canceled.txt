@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Hace poco te avisamos de un cambio en el precio de tu plan {{ plan_name }}. Ese cambio ya no se hará: tu plan sigue costando {{ old_price_cents | money(currency) }} {{ period_label }}.
+
+No tienes que hacer nada.
+
+Tu suscripción: {{ url }}
+{% endblock %}

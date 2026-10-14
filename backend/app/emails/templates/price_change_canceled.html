@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Hace poco te avisamos de un cambio en el precio de tu plan <strong>{{ plan_name }}</strong>.
+  Ese cambio ya no se hará: tu plan sigue costando
+  <strong>{{ old_price_cents | money(currency) }}</strong> {{ period_label }}.
+</p>
+<p style="margin:0 0 12px 0;">No tienes que hacer nada.</p>
+{{ button(url, "Ver mi suscripción") }}
+{% endblock %}

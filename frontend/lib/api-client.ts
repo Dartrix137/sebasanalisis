@@ -60,6 +60,9 @@ import type {
   PaymentResponse,
   PaymentStatus,
   PlanResponse,
+  PriceChangeResponse,
+  PriceTransferPreview,
+  PriceTransferRequest,
   QuoteRequest,
   QuoteResponse,
   SubscribeRequest,
@@ -808,6 +811,26 @@ export const adminApi = {
       { token },
     );
   },
+
+  /** Cuántas vigentes del plan tienen otro precio, y el traslado en curso (§4.10). */
+  priceTransferPreview: (token: string, planId: UUID) =>
+    apiFetch<PriceTransferPreview>(`/admin/plans/${planId}/price-transfer`, { token }),
+
+  /** Traslada el precio actual del plan a sus suscripciones vigentes. Pide motivo. */
+  createPriceTransfer: (token: string, planId: UUID, body: PriceTransferRequest) =>
+    apiFetch<PriceChangeResponse>(`/admin/plans/${planId}/price-transfer`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Cancela lo que falta por aplicar de un traslado. Pide motivo. */
+  cancelPriceTransfer: (token: string, changeId: UUID, body: PriceTransferRequest) =>
+    apiFetch<PriceChangeResponse>(`/admin/price-changes/${changeId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
 
   /** Suscripciones por página, las más recientes primero. Filtra en el servidor. */
   listSubscriptions: (

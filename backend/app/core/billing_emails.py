@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.email import EmailMessage
 from app.core.subscriptions import Settlement
 from app.emails import build_email
-from app.models import Subscription, User
+from app.models import Plan, Subscription, SubscriptionPriceChange, User
 
 
 def frontend_url(path: str) -> str:
@@ -225,5 +225,73 @@ def admin_change(
         plan_name=subscription.plan.name,
         period_end=subscription.current_period_end,
         had_renewal=had_renewal,
+        url=frontend_url("/cuenta"),
+    )
+
+
+# ---------- Traslado de precio (§4.10) ----------
+
+
+def period_label(plan: Plan) -> str:
+    """`al mes`, `cada 2 meses`, `al año`."""
+    if plan.interval == "year":
+        return "al año" if plan.interval_count == 1 else f"cada {plan.interval_count} años"
+    return "al mes" if plan.interval_count == 1 else f"cada {plan.interval_count} meses"
+
+
+def price_increase(
+    user: User,
+    subscription: Subscription,
+    row: SubscriptionPriceChange,
+    effective_at: datetime | None,
+) -> EmailMessage:
+    """Aviso de una subida, 30 dias antes de cobrarla. Dice que plan, de cuanto
+    a cuanto, desde cuando, y como cancelar o pasar a pago manual antes."""
+    return build_email(
+        "price_increase",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        old_price_cents=row.old_price_cents,
+        new_price_cents=row.new_price_cents,
+        currency=subscription.currency,
+        period_label=period_label(subscription.plan),
+        effective_at=effective_at,
+        automatic=subscription.renewal_mode == "automatic",
+        has_discount=subscription.coupon_id is not None
+        and subscription.discount_periods_remaining != 0,
+        url=frontend_url("/cuenta"),
+    )
+
+
+def price_decrease(
+    user: User, subscription: Subscription, row: SubscriptionPriceChange
+) -> EmailMessage:
+    return build_email(
+        "price_decrease",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        old_price_cents=row.old_price_cents,
+        new_price_cents=row.new_price_cents,
+        currency=subscription.currency,
+        period_label=period_label(subscription.plan),
+        automatic=subscription.renewal_mode == "automatic",
+        url=frontend_url("/cuenta"),
+    )
+
+
+def price_change_canceled(
+    user: User, subscription: Subscription, row: SubscriptionPriceChange
+) -> EmailMessage:
+    """El cambio de precio que se le aviso ya no se hara."""
+    return build_email(
+        "price_change_canceled",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        old_price_cents=row.old_price_cents,
+        currency=subscription.currency,
+        period_label=period_label(subscription.plan),
         url=frontend_url("/cuenta"),
     )

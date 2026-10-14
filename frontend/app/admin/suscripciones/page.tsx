@@ -290,6 +290,12 @@ function SubscriptionDetail({
               : "Ninguno previsto"
           }
         />
+        {s.price_change ? (
+          <Data
+            label="Precio nuevo (ya avisado)"
+            value={`${formatMoney(s.price_change.new_price_cents, s.currency)}, desde el ${formatLegalDate(s.price_change.effective_at)}`}
+          />
+        ) : null}
         <Data label="Medio de pago guardado" value={source ?? "Ninguno"} />
         {s.retry_count > 0 ? (
           <Data label="Intentos fallidos del período" value={String(s.retry_count)} />

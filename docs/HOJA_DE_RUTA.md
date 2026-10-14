@@ -115,7 +115,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
 | 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Cerrado el 2026-10-13**, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
-| 6 | Admin dashboard completo por secciones | §4, §4.8, §4.9 | **En curso.** Entrega 1 (suscripciones y pagos en el admin) construida el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos` y mezclada ese día (PR #17). Entrega 2 (navegación lateral, resumen, `/admin/juegos` y `/admin/motor`, forzar el restablecimiento y reenviar la verificación) construida el 2026-10-14 en la rama `fase-4-paso-6b-navegacion-y-resumen`, con tests (ver abajo). Falta la entrega del traslado de precio a las suscripciones vigentes, decidida el 2026-10-14: con ella se cierra el paso |
+| 6 | Admin dashboard completo por secciones | §4, §4.8, §4.9, §4.10 | **En curso.** Entrega 1 (suscripciones y pagos en el admin) construida el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos` y mezclada ese día (PR #17). Entrega 2 (navegación lateral, resumen, `/admin/juegos` y `/admin/motor`, forzar el restablecimiento y reenviar la verificación) construida el 2026-10-14 en la rama `fase-4-paso-6b-navegacion-y-resumen` y mezclada ese día (PR #18). Entrega 3 (traslado de un precio nuevo a las suscripciones vigentes) construida el 2026-10-14 en la rama `fase-4-paso-6c-traslado-de-precio`, con tests (ver abajo). **Con ella está construido todo el paso**; falta que el usuario la despliegue, la pruebe y lo dé por cerrado |
 | 7 | Generalización multijuego, con dados como fixture de test | §7 | Pendiente |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
 | 9 | Lanzamiento comercial | §9, párrafo final | Pendiente |
@@ -344,3 +344,20 @@ Construido el 2026-10-14 en la rama `fase-4-paso-6b-navegacion-y-resumen`. El de
 Decisiones del usuario (2026-10-14): la contraseña anterior deja de servir al forzar el restablecimiento; reenviar la verificación no pide motivo pero deja fila; el recurrente cuenta las vigentes que siguen, de los dos modos; y se agrega lo cobrado en el mes, neto de reembolsos.
 
 Comprobado: 22 tests nuevos de backend (10 sin base, de las ventanas del resumen, y 12 de API) y 4 de Playwright (navegación y resumen, una cuenta que no es administradora, forzar el restablecimiento y reenviar la verificación). Además se revisaron capturas del resumen en escritorio y a 390 px de ancho, sin desplazamiento horizontal.
+
+### Paso 6, entrega 3: qué quedó hecho
+
+Construido el 2026-10-14 en la rama `fase-4-paso-6c-traslado-de-precio`. El detalle y las decisiones están en `PLATAFORMA_COMPLETA.md` §4.10. Cierra §10 n.º 5.
+
+- **Trasladar el precio actual de un plan a sus suscripciones vigentes**, desde `/admin/planes`, con motivo y fila en la bitácora. Alcanza a las activas y en mora de los dos modos de pago; no a las canceladas.
+- **Una subida** se cobra 30 días después de que a cada cliente le llegó el aviso por correo. Si el correo no sale, el plazo no corre.
+- **Una bajada** aplica ya, desde el próximo cobro, con un aviso informativo.
+- **Un cupón que todavía descuenta** sigue descontando sobre el precio nuevo.
+- **Se puede cancelar** mientras no se haya aplicado; quien ya recibió el aviso recibe otro que dice que el precio no cambia.
+- El job de renovaciones envía los avisos (hasta 40 por corrida) y aplica cada precio nuevo cuando llega su fecha, antes de cobrar.
+- `/cuenta` muestra el precio nuevo ya avisado y desde cuándo corre.
+- Una migración, solo DDL: `price_changes` y `subscription_price_changes`.
+
+Comprobado: 25 tests nuevos de backend (5 sin base y 20 de API) y uno de Playwright; la migración subida, bajada con filas y vuelta a subir en una base desechable; y el script del job corrido en otra.
+
+**Al desplegar** no hay que programar nada nuevo: los avisos los envía el mismo job de renovaciones que ya corre cada hora.
