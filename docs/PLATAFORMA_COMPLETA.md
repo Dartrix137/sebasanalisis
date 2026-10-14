@@ -1169,6 +1169,8 @@ La pista es solo de presentación: el motor la ignora y el validador de configur
 
 Resultado esperado: **un juego `discrete_outcome` nuevo se crea completo desde el admin, sin escribir código.**
 
+> **Cambió el 2026-10-14 (decisión del usuario)**: el producto sale solo con la ruleta, y cada juego futuro tendrá su propio motor, escrito en código, como un módulo nuevo. El alta de juegos y de variantes del admin queda oculta, no borrada. El detalle está en §7.9.
+
 ### 7.4 Acceso por juego
 
 - `plan_games` (§3.2) lista los juegos incluidos en un plan; sin filas, el plan incluye todos.
@@ -1354,6 +1356,32 @@ Paso 7, entrega 2 (rama `fase-4-paso-7b-mesa-y-menu`). Con ella está construido
 - El aviso fijo "La ruleta no tiene memoria…" (`components/Disclaimer.tsx`) seguía en el dashboard, aunque `CLAUDE.md` lo da por retirado de todas las pantallas. Se quitó en esta entrega (decisión del usuario del 2026-10-14) y el componente se borró. La misma frase también se quitó del pie del login y del registro (`AuthForm.tsx`) y de la descripción de la página (`app/layout.tsx`). Quedan las explicaciones de contexto que no son el aviso: la nota bajo las mesas cerradas, el onboarding y el resumen de una sesión cerrada.
 - La skill `categories-json-validator` ponía de ejemplo de juego nuevo la suma de dos dados (2-12), que no son resultados equiprobables. Se corrigió: ahora exige resultados equiprobables y explica cómo describir dos dados (36 pares ordenados).
 - Los textos de ayuda de la gestión de banca siguen dando ejemplos de ruleta ("dos docenas o dos columnas"), ahora marcados como tales.
+
+### 7.9 Solo la ruleta por ahora; los juegos futuros, en código (2026-10-14)
+
+**Decisión del usuario.** El producto sale solo con la ruleta. Cada juego que venga después tendrá su propio motor, escrito en código como el de la ruleta. Reemplaza el "resultado esperado" de §7.3: un juego nuevo ya no se crea desde el admin.
+
+**Por qué.** Al revisar si el formulario de variantes servía para otros juegos salieron tres límites que la configuración sola no resuelve bien:
+
+- **Resultados equiprobables.** El motor calcula la probabilidad de un grupo como resultados del grupo ÷ resultados posibles, así que cada resultado tiene que valer lo mismo y cada ronda ser independiente. Ningún validador lo puede comprobar.
+  - Un dado de seis caras cabe. Dos dados caben solo como 36 pares, no como sumas 2-12.
+  - Una carta de una baraja completa y rebarajada cabe. Baccarat y Dragon Tiger no: sus resultados no valen lo mismo, y haría falta un peso por resultado en el motor. Una baraja que se gasta sin rebarajar tampoco cabe.
+- **Las progresiones están pensadas para los pagos de la ruleta.** La martingala recupera la serie con pago 1:1, y la de dos sectores con dos zonas que pagan 2:1. Con otros pagos la mesa muestra montos honestos (calcula con el pago real), pero la serie puede cerrar en pérdida aunque se acierte. Con un pago de 0,9:1, la martingala queda en −600 si se acierta en el escalón 4. Con dos zonas a 1,85:1, la de dos sectores queda en −300 si se acierta en el escalón 1.
+- **El formulario no estaba listo para otro juego.**
+  - El pago solo aceptaba múltiplos de 0,5.
+  - Las combinaciones (dos docenas) no se podían crear.
+  - Los ejemplos eran de ruleta.
+
+**Qué se hizo** (rama `fase-4-solo-ruleta`):
+
+- En `/admin/juegos` se ocultan "Nuevo juego" y "+ Variante", con el interruptor `ALTA_DE_JUEGOS` de `app/admin/juegos/page.tsx`. No se borran: una versión futura puede volver a encenderlo.
+- Siguen a la vista la edición de las variantes de la ruleta (umbrales de señal) y el estado, el orden, el ícono y la descripción del juego.
+- La API de alta (`POST /admin/games` y `POST /admin/games/:id/variants`) se conserva. La usan los tests y el fixture de dados de Playwright.
+- No se tocó nada más. La infraestructura del paso 7 es la base para un juego escrito en código: el menú, los slugs, `plan_games`, el acceso por juego y los registros de módulos del backend y del frontend. Se agrega como un módulo nuevo, con sus rutas, su motor y su pantalla, igual que está previsto para deportes (§8).
+- El fixture de dados se queda como test: vigila que el motor de la ruleta siga sin lógica de ruleta fuera de los datos.
+- **La martingala se deja como está** (decisión del usuario). Se sigue ofreciendo también cuando la recomendación es una sola docena o columna (2:1), con el monto calculado con el pago real, aunque el documento verificado dice que la martingala clásica aplica tal cual solo a pagos 1:1.
+
+**Tests**: el Playwright del admin comprueba que "Crear juego" y "+ Variante" no aparecen, y que las variantes de la ruleta se siguen editando. El juego de prueba del test de estado se crea por la API.
 
 ---
 

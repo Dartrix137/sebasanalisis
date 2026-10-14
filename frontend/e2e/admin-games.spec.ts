@@ -5,8 +5,8 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, API_URL, loginViaUi } from "./helpers";
 
 /**
  * Juegos y planes en el admin (paso 7 de la Fase 4, entrega 1; §7.2 y §7.4):
- * crear un juego con sus metadatos, cambiarle el estado con motivo y elegir
- * los juegos que incluye un plan.
+ * el alta de juegos oculta (por ahora solo la ruleta), cambiar el estado de un
+ * juego con motivo y elegir los juegos que incluye un plan.
  *
  * Cada test crea su propio juego y su propio plan: los planes sembrados los
  * usan los demás tests en paralelo y siguen incluyendo todos los juegos.
@@ -29,26 +29,37 @@ async function adminToken(request: APIRequestContext): Promise<string> {
   return ((await login.json()) as { access_token: string }).access_token;
 }
 
-test("el administrador crea un juego oculto y lo pasa a próximamente con motivo", async ({
+test("el alta de juegos está oculta; el administrador cambia el estado de un juego con motivo", async ({
   browser,
+  request,
 }) => {
-  const { panel, close } = await adminPanel(browser);
+  // Por ahora el producto es solo la ruleta (decisión del 2026-10-14): la
+  // pantalla no ofrece crear juegos ni variantes. El juego de prueba se crea
+  // por la API, que conserva el alta.
   const sufijo = rand();
-  const nombre = `Dados ${sufijo}`;
   const slug = `dados-${sufijo}`;
+  const creado = await request.post(`${API_URL}/admin/games`, {
+    headers: { Authorization: `Bearer ${await adminToken(request)}` },
+    data: {
+      name: `Dados ${sufijo}`,
+      type: `dice_${sufijo}`,
+      slug,
+      module: "discrete_outcome",
+      icon: "dados",
+      reason: "Juego para un test de punta a punta",
+    },
+  });
+  expect(creado.ok()).toBeTruthy();
 
+  const { panel, close } = await adminPanel(browser);
   await panel.goto("/admin/juegos");
   await expect(panel.getByRole("heading", { level: 1, name: "Juegos" })).toBeVisible();
-  // La ruleta sembrada está, con su slug en español.
-  await expect(panel.getByText("/juegos/ruleta")).toBeVisible();
-
-  await panel.getByLabel("Nombre", { exact: true }).first().fill(nombre);
-  await panel.getByLabel("Tipo").fill(`dice_${sufijo}`);
-  await panel.getByLabel("Slug").fill(slug);
-  await panel.getByLabel("Ícono").first().selectOption("dados");
-  await panel.getByLabel("Descripción").first().fill("Un dado de prueba.");
-  await panel.getByLabel("Motivo de la creación").fill("Juego de prueba (e2e)");
-  await panel.getByRole("button", { name: "Crear juego" }).click();
+  // La ruleta sembrada está, con su slug en español, y sus variantes se editan.
+  const ruleta = panel.getByTestId("game-ruleta");
+  await expect(ruleta.getByText("/juegos/ruleta")).toBeVisible();
+  await expect(ruleta.getByRole("button", { name: "Editar", exact: true }).first()).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Crear juego" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "+ Variante" })).toHaveCount(0);
 
   // Nace oculto.
   await panel.getByLabel("Buscar").fill(slug);

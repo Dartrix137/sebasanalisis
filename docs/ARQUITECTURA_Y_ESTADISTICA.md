@@ -518,7 +518,7 @@ Cualquier juego de resultados discretos y probabilidad fija (ruleta, dados, futu
 }
 ```
 
-El motor estadístico (`engine/`) opera solo sobre esta estructura — nunca sabe que "docena" es específico de ruleta. Esto es lo que permite agregar dados u otros juegos desde el admin sin escribir código nuevo (ver conversación previa para el detalle completo).
+El motor estadístico (`engine/`) opera solo sobre esta estructura — nunca sabe que "docena" es específico de ruleta. Esto es lo que permite agregar dados u otros juegos desde el admin sin escribir código nuevo (ver conversación previa para el detalle completo). *Desde el 2026-10-14 el producto sale solo con la ruleta y los juegos futuros se escriben en código, cada uno con su motor (`docs/PLATAFORMA_COMPLETA.md` §7.9); el motor sigue siendo genérico, y el fixture de dados lo vigila.*
 
 ### 3.3 Modelo de datos (consolidado)
 
@@ -683,7 +683,7 @@ Documento que define la fase: `docs/reference/Comparativo_Software_Actual_vs_Sof
 - **Admin dashboard** por secciones: usuarios, suscripciones, pagos, planes, descuentos, juegos, documentos legales, métricas del motor y auditoría.
 - **Auth**: verificación de correo, recuperación y cambio de contraseña con revocación de sesiones, eliminación y exportación de la cuenta.
 - **Términos y políticas** versionados con registro de aceptación, y el onboarding scroll-to-accept de §0, que el MVP no llegó a construir. La página de Juego Responsable se descartó el 2026-10-08.
-- **Base multijuego**: metadatos y módulos de juego para que un juego de resultados discretos nuevo se cree desde el admin sin código, y estructura reservada para apuestas deportivas (que no se construyen en esta fase).
+- **Base multijuego**: metadatos y módulos de juego para que un juego de resultados discretos nuevo se cree desde el admin sin código, y estructura reservada para apuestas deportivas (que no se construyen en esta fase). *Cambió el 2026-10-14: por ahora solo la ruleta; los juegos futuros se escriben en código como módulos nuevos (`docs/PLATAFORMA_COMPLETA.md` §7.9).*
 
 Siguen fuera: las señales avanzadas de §2.9, el builder visual, el juego de dados como producto (entra solo como fixture de test) y el CSV.
 
