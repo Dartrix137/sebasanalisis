@@ -87,11 +87,33 @@ EXEMPTING_CONTEXT = re.compile(
 
 LOOKBEHIND = 70
 
-# Archivos de UI que muestran senales y deberian arrastrar el disclaimer fijo.
-SIGNAL_HINTS = re.compile(
-    r"sugerencia|se[nñ]al|racha|chi.?cuadrado|chi_square|FUERTE|MEDIA|D[EÉ]BIL",
-    re.IGNORECASE,
-)
+# Las dos lineas obligatorias de la tarjeta de recomendacion (CLAUDE.md,
+# "Disclaimer"). El banner fijo de §0 ("La ruleta no tiene memoria...") se
+# retiro de todas las pantallas, y del todo el 2026-10-14: este hook ya no lo
+# pide. Lo que se vigila es que las dos lineas no desaparezcan de donde viven:
+# la del score en la tarjeta, y la del pie en la API (la tarjeta la pinta desde
+# `recommendation.disclaimer`).
+REQUIRED_LINES: dict[str, tuple[tuple[str, str], ...]] = {
+    "frontend/components/mesa/RecommendationCard.tsx": (
+        (
+            "no la probabilidad de acertar",
+            'la linea bajo el score: "NN/100 es la fuerza del criterio interno, '
+            'no la probabilidad de acertar."',
+        ),
+        (
+            "recommendation.disclaimer",
+            "el pie fijo de la tarjeta, que se pinta desde `recommendation.disclaimer`",
+        ),
+    ),
+    "backend/app/api/v1/recommendations.py": (
+        (
+            "Recomendación generada a partir del análisis estadístico de los resultados",
+            'el pie fijo: "Recomendación generada a partir del análisis estadístico '
+            'de los resultados registrados. No es una predicción."',
+        ),
+        ("No es una predicción.", 'el cierre del pie fijo: "No es una predicción."'),
+    ),
+}
 
 
 def candidate_paths(payload: dict) -> list[str]:
@@ -176,18 +198,13 @@ def scan(path: Path, rel: str) -> list[str]:
                 break
         previous = [previous[-1], line]
 
-    if (
-        rel.startswith("frontend/app/")
-        and rel.endswith(".tsx")
-        and SIGNAL_HINTS.search(text)
-        and "DISCLAIMER" not in text.upper()
-    ):
-        findings.append(
-            f"  {rel}  es una pantalla que muestra senales/sugerencias y no "
-            "referencia el Disclaimer. "
-            "El disclaimer fijo es obligatorio en toda pantalla que muestre "
-            "sugerencias, rachas o chi-cuadrado (§0 del doc de arquitectura)."
-        )
+    for needle, description in REQUIRED_LINES.get(rel, ()):
+        if needle not in text:
+            findings.append(
+                f"  {rel}  ya no tiene {description}. Es una de las dos lineas "
+                "obligatorias de la tarjeta de recomendacion (CLAUDE.md, "
+                "\"Disclaimer\"): restaurala."
+            )
     return findings
 
 
