@@ -392,5 +392,11 @@
     }
   ],
   "recommendation_threshold": 50,
-  "weak_threshold": 35
+  "weak_threshold": 35,
+  "display": {
+    "outcome_tone_category": "color",
+    "tones": {"red": "red", "black": "black", "green": "green"},
+    "layout": "grid",
+    "columns": null
+  }
 }

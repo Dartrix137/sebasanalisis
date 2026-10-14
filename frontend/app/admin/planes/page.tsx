@@ -4,8 +4,8 @@
  * Admin: planes (§4.4 de la Fase 4). Crear, editar, activar y desactivar.
  *
  * Un plan no se borra: se desactiva y deja de ofrecerse. Todo cambio pide un
- * motivo y queda en la bitácora. La selección de juegos incluidos llega con el
- * paso 7.
+ * motivo y queda en la bitácora. Debajo de cada plan se eligen sus juegos
+ * (§7.4) y se traslada su precio a las suscripciones vigentes (§4.10).
  *
  * Los montos se escriben en unidades de la moneda (100000) y viajan en
  * centavos.
@@ -14,6 +14,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PlanGamesPanel } from "@/components/admin/PlanGamesPanel";
 import { PriceTransferPanel } from "@/components/admin/PriceTransferPanel";
 import { SelectField } from "@/components/admin/SelectField";
 import { SuccessBox } from "@/components/AuthShell";
@@ -162,7 +163,10 @@ export default function AdminPlansPage() {
                       </p>
                       <p className="text-xs text-muted">
                         Se cobra {formatMoney(plan.price_cents, plan.currency)} /{" "}
-                        {intervalLabel(plan.interval, plan.interval_count)}
+                        {intervalLabel(plan.interval, plan.interval_count)} ·{" "}
+                        {plan.all_games
+                          ? "todos los juegos"
+                          : `${plan.game_ids.length} juego${plan.game_ids.length === 1 ? "" : "s"}`}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -183,6 +187,12 @@ export default function AdminPlansPage() {
                       <PlanForm plan={plan} onDone={refresh} />
                       {/* Se vuelve a pedir cuando cambia el precio del plan. */}
                       <PriceTransferPanel key={plan.price_cents} plan={plan} />
+                      {/* Se rearma cuando cambia la selección guardada. */}
+                      <PlanGamesPanel
+                        key={plan.game_ids.join(",")}
+                        plan={plan}
+                        onDone={refresh}
+                      />
                     </div>
                   ) : null}
                 </li>

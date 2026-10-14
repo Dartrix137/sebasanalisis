@@ -5,19 +5,23 @@ Ningun endpoint repite esta logica: los routers de juego la aplican con la
 dependencia `RequireAccess` (`api/deps.py`), y `GET /auth/me` y el panel de
 administracion muestran la misma decision.
 
-Las reglas van en el orden de §2.2. Falta una, que llega con su paso: exigir
-que el plan de la suscripcion incluya el juego (§7.4, paso 7).
+Las reglas van en el orden de §2.2. Con `game`, la regla n.º 7 exige ademas
+que el plan de la suscripcion incluya ese juego (§7.4). Los routers aplican
+`RequireAccess` (sin juego) y, donde el juego se conoce (al abrir una mesa y en
+cada llamada sobre una mesa), `require_game_access` vuelve a preguntar aqui con
+el juego.
 """
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import legal
-from app.models import Subscription, User
+from app.models import Game, PlanGame, Subscription, User
 
 AccessReason = Literal[
     # Con acceso: de donde sale.
@@ -30,6 +34,8 @@ AccessReason = Literal[
     "consent_required",
     "expired",
     "no_access",
+    # Solo con `game`: la suscripcion da acceso, pero su plan no incluye el juego.
+    "game_not_in_plan",
 ]
 
 # `canceled` cuenta: la cancelacion es al final del periodo ya pagado (§3.6).
@@ -47,7 +53,14 @@ class AccessDecision:
     until: datetime | None = None
 
 
-def has_access(db: Session, user: User, now: datetime) -> AccessDecision:
+def has_access(
+    db: Session, user: User, now: datetime, game: Game | None = None
+) -> AccessDecision:
+    """Decide el acceso a la mesa. Con `game`, el acceso a ese juego.
+
+    Los accesos que no vienen de una suscripcion (administrador, `full`,
+    `invited`) incluyen todos los juegos.
+    """
     # 1. Cuenta suspendida por un administrador: sin acceso, pase lo que pase.
     if not user.is_active:
         return AccessDecision(granted=False, reason="suspended")
@@ -73,8 +86,8 @@ def has_access(db: Session, user: User, now: datetime) -> AccessDecision:
         invited_expired_at = user.access_expires_at
 
     # 6. Suscripcion con el periodo pagado todavia vigente.
-    period_end = db.scalar(
-        select(Subscription.current_period_end)
+    vigente = db.execute(
+        select(Subscription.current_period_end, Subscription.plan_id)
         .where(
             Subscription.user_id == user.id,
             Subscription.status.in_(_SUBSCRIPTION_STATUSES_WITH_ACCESS),
@@ -82,8 +95,13 @@ def has_access(db: Session, user: User, now: datetime) -> AccessDecision:
         )
         .order_by(Subscription.current_period_end.desc())
         .limit(1)
-    )
-    if period_end is not None and period_end > now:
+    ).first()
+    period_end = vigente.current_period_end if vigente is not None else None
+    if vigente is not None and period_end is not None and period_end > now:
+        # 7. Con un juego, su plan tiene que incluirlo. Un plan sin filas en
+        #    `plan_games` incluye todos, tambien los que se creen despues.
+        if game is not None and not plan_includes(db, vigente.plan_id, game.id):
+            return AccessDecision(granted=False, reason="game_not_in_plan")
         return AccessDecision(granted=True, reason="subscription", until=period_end)
 
     # 8. Cualquier otro caso. Se distingue "tuvo acceso y vencio" de "nunca
@@ -104,3 +122,29 @@ def has_access(db: Session, user: User, now: datetime) -> AccessDecision:
     if vencimientos:
         return AccessDecision(granted=False, reason="expired", until=max(vencimientos))
     return AccessDecision(granted=False, reason="no_access")
+
+
+def plan_includes(db: Session, plan_id: uuid.UUID, game_id: uuid.UUID) -> bool:
+    """Si el plan incluye el juego (§7.4). Sin filas, el plan incluye todos."""
+    juegos = set(db.scalars(select(PlanGame.game_id).where(PlanGame.plan_id == plan_id)))
+    return not juegos or game_id in juegos
+
+
+def current_subscriptions_of_plan(db: Session, plan_id: uuid.UUID, now: datetime) -> int:
+    """Cuantas suscripciones de un plan dan acceso hoy (la regla n.º 6).
+
+    Lo usa el admin para no quitarle un juego a un plan mientras haya quien ya
+    pago por el (§7.4). Vive aqui para no repetir que estados dan acceso.
+    """
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(Subscription)
+            .where(
+                Subscription.plan_id == plan_id,
+                Subscription.status.in_(_SUBSCRIPTION_STATUSES_WITH_ACCESS),
+                Subscription.current_period_end > now,
+            )
+        )
+        or 0
+    )

@@ -10,30 +10,19 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { BacktestPanel } from "@/components/admin/BacktestPanel";
-import { AccessGate } from "@/components/AccessGate";
 import { ErrorBox } from "@/components/ui";
-import { gamesApi } from "@/lib/api-client";
+import { adminApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import type { GameResponse } from "@/lib/types/games";
 
 export default function AdminEnginePage() {
-  // Lista las variantes, que es un endpoint de juego: un administrador también
-  // acepta los documentos vigentes (§2.2).
-  return (
-    <AccessGate>
-      <EnginePanel />
-    </AccessGate>
-  );
-}
-
-function EnginePanel() {
   const { user, loading, withToken } = useSession();
   const router = useRouter();
   const [games, setGames] = useState<GameResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setGames(await withToken((t) => gamesApi.list(t, true)));
+    setGames((await withToken((t) => adminApi.listGames(t))).items);
   }, [withToken]);
 
   useEffect(() => {

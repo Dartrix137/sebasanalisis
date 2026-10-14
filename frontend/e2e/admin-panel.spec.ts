@@ -55,16 +55,14 @@ test("el administrador entra al resumen y recorre las secciones por la navegaci�
     ["Suscripciones", "Suscripciones"],
     ["Pagos", "Pagos"],
     ["Planes", "Planes"],
+    ["Juegos", "Juegos"],
+    ["Motor", "Motor"],
     ["Bitácora", "Bitácora"],
   ] as const) {
     await nav.getByRole("link", { name: link }).click();
     await expect(panel.getByRole("heading", { level: 1, name: heading })).toBeVisible();
     await expect(nav.getByRole("link", { name: link })).toHaveAttribute("aria-current", "page");
   }
-  // Juegos y Motor existen en la navegación (los dos piden los documentos
-  // aceptados, como la mesa: el administrador sembrado no los ha aceptado).
-  await expect(nav.getByRole("link", { name: "Juegos" })).toHaveAttribute("href", "/admin/juegos");
-  await expect(nav.getByRole("link", { name: "Motor" })).toHaveAttribute("href", "/admin/motor");
   await close();
 });
 

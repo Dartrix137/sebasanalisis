@@ -10,7 +10,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import auth
+from tests.api.conftest import auth, game_body
 
 RULETA_MINI = {
     "possible_outcomes": ["0", "1", "2", "3", "4", "5", "6"],
@@ -34,7 +34,7 @@ def sesion(client: TestClient, user_token: str, admin_token: str) -> str:
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Ruleta {sufijo}", "type": f"roulette_{sufijo}", "active": True},
+        json=game_body("Ruleta", "roulette", sufijo),
         headers=auth(admin_token),
     ).json()
     variant = client.post(

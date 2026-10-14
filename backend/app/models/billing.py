@@ -9,6 +9,7 @@ apuntan a un plan o a un cupon son RESTRICT.
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -27,6 +28,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
+
+if TYPE_CHECKING:
+    from app.models.game import Game
 
 PLAN_INTERVALS = ("month", "year")
 # Deben coincidir con `CouponKind` de `app.billing.pricing`.
@@ -63,6 +67,19 @@ class Plan(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    # Juegos incluidos (§7.4). Vacio = todos, tambien los que se creen despues.
+    games: Mapped[list["Game"]] = relationship(
+        secondary="plan_games", order_by="Game.sort_order"
+    )
+
+    @property
+    def all_games(self) -> bool:
+        return not self.games
+
+    @property
+    def game_ids(self) -> list[uuid.UUID]:
+        return [g.id for g in self.games]
 
 
 class Coupon(Base):

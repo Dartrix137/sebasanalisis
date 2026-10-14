@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from tests.api.conftest import auth
+from tests.api.conftest import auth, game_body
 
 VARIANT_CONFIG = {
     "possible_outcomes": ["1", "2"],
@@ -25,7 +25,7 @@ def variant_id(client: TestClient, admin_token: str) -> str:
     sufijo = uuid.uuid4().hex[:8]
     game = client.post(
         "/admin/games",
-        json={"name": f"Juego {sufijo}", "type": f"tipo_{sufijo}", "active": True},
+        json=game_body("Juego", "tipo", sufijo),
         headers=auth(admin_token),
     ).json()
     return client.post(

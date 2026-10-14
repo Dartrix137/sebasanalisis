@@ -1,0 +1,45 @@
+{
+  "possible_outcomes": ["1", "2", "3", "4", "5", "6"],
+  "categories": [
+    {
+      "id": "parity",
+      "label": "Par o impar",
+      "shrinkage_alpha": 8,
+      "groups": {
+        "even": {"label": "Par", "outcomes": ["2", "4", "6"], "payout": 0.9},
+        "odd": {"label": "Impar", "outcomes": ["1", "3", "5"], "payout": 0.9}
+      }
+    },
+    {
+      "id": "high_low",
+      "label": "Bajo o alto",
+      "shrinkage_alpha": 8,
+      "groups": {
+        "low": {"label": "Bajo (1-3)", "outcomes": ["1", "2", "3"], "payout": 0.9},
+        "high": {"label": "Alto (4-6)", "outcomes": ["4", "5", "6"], "payout": 0.9}
+      }
+    },
+    {
+      "id": "third",
+      "label": "Tercio",
+      "shrinkage_alpha": 12,
+      "groups": {
+        "t1": {"label": "1-2", "outcomes": ["1", "2"], "payout": 1.85},
+        "t2": {"label": "3-4", "outcomes": ["3", "4"], "payout": 1.85},
+        "t3": {"label": "5-6", "outcomes": ["5", "6"], "payout": 1.85}
+      }
+    }
+  ],
+  "allowed_combinations": [
+    {"id": "t1_t2", "label": "Tercios 1-2 y 3-4", "category_id": "third", "group_ids": ["t1", "t2"]},
+    {"id": "t2_t3", "label": "Tercios 3-4 y 5-6", "category_id": "third", "group_ids": ["t2", "t3"]}
+  ],
+  "recommendation_threshold": 50,
+  "weak_threshold": 35,
+  "display": {
+    "outcome_tone_category": "parity",
+    "tones": {"even": "red", "odd": "black"},
+    "layout": "grid",
+    "columns": 6
+  }
+}

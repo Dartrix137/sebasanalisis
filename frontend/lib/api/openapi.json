@@ -91,7 +91,8 @@
           "suspended",
           "consent_required",
           "expired",
-          "no_access"
+          "no_access",
+          "game_not_in_plan"
         ],
         "title": "AccessReason",
         "type": "string"
@@ -246,6 +247,38 @@
           "created_at"
         ],
         "title": "AdminCouponResponse",
+        "type": "object"
+      },
+      "AdminGameListResponse": {
+        "description": "Lista del admin: todos los juegos y todas sus variantes.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GameResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AdminGameListResponse",
         "type": "object"
       },
       "AdminLegalDocumentResponse": {
@@ -657,6 +690,10 @@
             "title": "Active",
             "type": "boolean"
           },
+          "all_games": {
+            "title": "All Games",
+            "type": "boolean"
+          },
           "code": {
             "title": "Code",
             "type": "string"
@@ -673,6 +710,21 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "game_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Game Ids",
+            "type": "array"
+          },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/PlanGameRef"
+            },
+            "title": "Games",
+            "type": "array"
           },
           "id": {
             "format": "uuid",
@@ -713,10 +765,13 @@
           "currency",
           "interval",
           "interval_count",
+          "all_games",
+          "games",
           "active",
           "sort_order",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "game_ids"
         ],
         "title": "AdminPlanResponse",
         "type": "object"
@@ -2206,23 +2261,81 @@
       },
       "CreateGameRequest": {
         "properties": {
-          "active": {
-            "default": true,
-            "title": "Active",
-            "type": "boolean"
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "icon": {
+            "default": "generico",
+            "enum": [
+              "ruleta",
+              "dados",
+              "cartas",
+              "deportes",
+              "generico"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "module": {
+            "enum": [
+              "discrete_outcome",
+              "sports"
+            ],
+            "title": "Module",
+            "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 60,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "status": {
+            "default": "hidden",
+            "enum": [
+              "active",
+              "hidden",
+              "coming_soon"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
           "type": {
+            "maxLength": 60,
+            "minLength": 1,
             "title": "Type",
             "type": "string"
           }
         },
         "required": [
           "name",
-          "type"
+          "type",
+          "slug",
+          "module",
+          "reason"
         ],
         "title": "CreateGameRequest",
         "type": "object"
@@ -2237,6 +2350,12 @@
           "config": {
             "$ref": "#/components/schemas/GameVariantConfig-Input"
           },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
           "house_edge": {
             "maximum": 1.0,
             "minimum": 0.0,
@@ -2246,6 +2365,13 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
           }
         },
         "required": [
@@ -2610,6 +2736,24 @@
         "title": "ForgotPasswordRequest",
         "type": "object"
       },
+      "GameAccess": {
+        "description": "Si la cuenta puede jugar este juego, y si no, por qué (§7.4).\n\nEs la decisión de `core/access.has_access` con el juego. El motivo que\nimporta en el menú es `game_not_in_plan`: el juego se muestra como\n\"disponible en otro plan\".",
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AccessReason"
+          }
+        },
+        "required": [
+          "granted",
+          "reason"
+        ],
+        "title": "GameAccess",
+        "type": "object"
+      },
       "GameCategory-Input": {
         "description": "Una categoría de agrupación, ej: 'color', 'dozen', 'sum_range'.",
         "properties": {
@@ -2679,19 +2823,59 @@
         "title": "GameCategory",
         "type": "object"
       },
-      "GameResponse": {
+      "GameMenuItem": {
+        "description": "Un juego del menú. Solo trae las variantes activas.",
         "properties": {
-          "active": {
-            "title": "Active",
-            "type": "boolean"
+          "access": {
+            "$ref": "#/components/schemas/GameAccess"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "icon": {
+            "enum": [
+              "ruleta",
+              "dados",
+              "cartas",
+              "deportes",
+              "generico"
+            ],
+            "title": "Icon",
+            "type": "string"
           },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
           },
+          "module": {
+            "enum": [
+              "discrete_outcome",
+              "sports"
+            ],
+            "title": "Module",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "hidden",
+              "coming_soon"
+            ],
+            "title": "Status",
             "type": "string"
           },
           "type": {
@@ -2711,7 +2895,123 @@
           "id",
           "name",
           "type",
-          "active",
+          "slug",
+          "module",
+          "description",
+          "icon",
+          "sort_order",
+          "status",
+          "variants",
+          "access"
+        ],
+        "title": "GameMenuItem",
+        "type": "object"
+      },
+      "GameMenuResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GameMenuItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "GameMenuResponse",
+        "type": "object"
+      },
+      "GameResponse": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "icon": {
+            "enum": [
+              "ruleta",
+              "dados",
+              "cartas",
+              "deportes",
+              "generico"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "module": {
+            "enum": [
+              "discrete_outcome",
+              "sports"
+            ],
+            "title": "Module",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "hidden",
+              "coming_soon"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "variants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GameVariantResponse"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "slug",
+          "module",
+          "description",
+          "icon",
+          "sort_order",
+          "status",
           "variants"
         ],
         "title": "GameResponse",
@@ -2735,6 +3035,16 @@
             "minItems": 1,
             "title": "Categories",
             "type": "array"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDisplay-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "possible_outcomes": {
             "items": {
@@ -2785,6 +3095,16 @@
             "title": "Categories",
             "type": "array"
           },
+          "display": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDisplay-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "possible_outcomes": {
             "items": {
               "type": "string"
@@ -2813,7 +3133,8 @@
           "categories",
           "allowed_combinations",
           "recommendation_threshold",
-          "weak_threshold"
+          "weak_threshold",
+          "display"
         ],
         "title": "GameVariantConfig",
         "type": "object"
@@ -2826,6 +3147,10 @@
           },
           "config": {
             "$ref": "#/components/schemas/GameVariantConfig-Output"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
           },
           "game_id": {
             "format": "uuid",
@@ -2844,12 +3169,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
           }
         },
         "required": [
           "id",
           "game_id",
           "name",
+          "description",
+          "sort_order",
           "house_edge",
           "config",
           "active"
@@ -3155,6 +3486,114 @@
         ],
         "title": "NoBetReason",
         "type": "string"
+      },
+      "OutcomeDisplay-Input": {
+        "description": "Pista de presentación del teclado de resultados (§7.3).\n\nSolo dice cómo se ve: el motor la ignora. Sin ella, el teclado sale en una\ngrilla con todos los resultados en tono neutro.",
+        "properties": {
+          "columns": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Columns"
+          },
+          "layout": {
+            "const": "grid",
+            "default": "grid",
+            "title": "Layout",
+            "type": "string"
+          },
+          "outcome_tone_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Tone Category"
+          },
+          "tones": {
+            "additionalProperties": {
+              "enum": [
+                "red",
+                "black",
+                "green",
+                "neutral"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "title": "Tones",
+            "type": "object"
+          }
+        },
+        "title": "OutcomeDisplay",
+        "type": "object"
+      },
+      "OutcomeDisplay-Output": {
+        "description": "Pista de presentación del teclado de resultados (§7.3).\n\nSolo dice cómo se ve: el motor la ignora. Sin ella, el teclado sale en una\ngrilla con todos los resultados en tono neutro.",
+        "properties": {
+          "columns": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Columns"
+          },
+          "layout": {
+            "const": "grid",
+            "default": "grid",
+            "title": "Layout",
+            "type": "string"
+          },
+          "outcome_tone_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Tone Category"
+          },
+          "tones": {
+            "additionalProperties": {
+              "enum": [
+                "red",
+                "black",
+                "green",
+                "neutral"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "title": "Tones",
+            "type": "object"
+          }
+        },
+        "required": [
+          "outcome_tone_category",
+          "tones",
+          "layout",
+          "columns"
+        ],
+        "title": "OutcomeDisplay",
+        "type": "object"
       },
       "OverviewPeriod": {
         "description": "Las dos ventanas que se comparan: [start, end). Mes calendario en hora\nde Bogota hasta ahora, y el mismo tramo del mes anterior.",
@@ -3540,6 +3979,36 @@
         "title": "PendingConsentResponse",
         "type": "object"
       },
+      "PlanGameRef": {
+        "description": "Un juego incluido en un plan, como lo ve quien va a pagar.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status"
+        ],
+        "title": "PlanGameRef",
+        "type": "object"
+      },
       "PlanInterval": {
         "enum": [
           "month",
@@ -3551,6 +4020,10 @@
       "PlanResponse": {
         "description": "Un plan que se ofrece.",
         "properties": {
+          "all_games": {
+            "title": "All Games",
+            "type": "boolean"
+          },
           "code": {
             "title": "Code",
             "type": "string"
@@ -3562,6 +4035,13 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/PlanGameRef"
+            },
+            "title": "Games",
+            "type": "array"
           },
           "id": {
             "format": "uuid",
@@ -3592,7 +4072,9 @@
           "price_cents",
           "currency",
           "interval",
-          "interval_count"
+          "interval_count",
+          "all_games",
+          "games"
         ],
         "title": "PlanResponse",
         "type": "object"
@@ -5608,21 +6090,43 @@
         "type": "object"
       },
       "UpdateGameRequest": {
+        "description": "PATCH /admin/games/:id. El tipo, el slug y el módulo no cambian.\n\nEl motivo es obligatorio si cambia el estado: ocultar un juego, o pasarlo a\n\"próximamente\", le quita la mesa nueva a los clientes, y eso queda en la\nbitácora.",
         "properties": {
-          "active": {
+          "description": {
             "anyOf": [
               {
-                "type": "boolean"
+                "maxLength": 2000,
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Active"
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ruleta",
+                  "dados",
+                  "cartas",
+                  "deportes",
+                  "generico"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
           },
           "name": {
             "anyOf": [
               {
+                "maxLength": 120,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -5630,6 +6134,48 @@
               }
             ],
             "title": "Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "hidden",
+                  "coming_soon"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           }
         },
         "title": "UpdateGameRequest",
@@ -5658,6 +6204,18 @@
               }
             ]
           },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "house_edge": {
             "anyOf": [
               {
@@ -5681,6 +6239,19 @@
               }
             ],
             "title": "Name"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
           }
         },
         "title": "UpdateGameVariantRequest",
@@ -5711,6 +6282,32 @@
           "requires_acceptance"
         ],
         "title": "UpdateLegalDocumentRequest",
+        "type": "object"
+      },
+      "UpdatePlanGamesRequest": {
+        "description": "PUT /admin/plans/:id/games. Reemplaza la seleccion de juegos del plan.\n\nUna lista vacia = el plan incluye todos los juegos, tambien los que se creen\ndespues. Quitar un juego a un plan con suscripciones vigentes se rechaza.",
+        "properties": {
+          "game_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Game Ids",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "game_ids",
+          "reason"
+        ],
+        "title": "UpdatePlanGamesRequest",
         "type": "object"
       },
       "UpdatePlanRequest": {
@@ -6551,7 +7148,126 @@
       }
     },
     "/admin/games": {
+      "get": {
+        "description": "Todos los juegos, en el orden del menu, con todas sus variantes.",
+        "operationId": "list_admin_games_admin_games_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "hidden",
+                    "coming_soon"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "module",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "discrete_outcome",
+                    "sports"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Module"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGameListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Admin Games",
+        "tags": [
+          "admin"
+        ]
+      },
       "post": {
+        "description": "Crea un juego. Su modulo tiene que estar implementado (§7.3).\n\nDeja fila en la bitacora: un juego que nace activo ya lo ven los clientes.",
         "operationId": "create_game_admin_games_post",
         "requestBody": {
           "content": {
@@ -6598,6 +7314,7 @@
     },
     "/admin/games/{game_id}": {
       "patch": {
+        "description": "Edita un juego. El tipo, el slug y el modulo no cambian.\n\nUn cambio de estado pide motivo y deja fila en la bitacora\n(`game.status.update`): ocultar un juego o pasarlo a \"proximamente\" le quita\nla mesa nueva a los clientes. Los demas campos son de presentacion y no la\ndejan.",
         "operationId": "update_game_admin_games__game_id__patch",
         "parameters": [
           {
@@ -7508,6 +8225,65 @@
           }
         ],
         "summary": "Update Plan",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/plans/{plan_id}/games": {
+      "put": {
+        "description": "Elige los juegos que incluye un plan (§4.4 y §7.4).\n\nUna lista vacia = todos los juegos, tambien los que se creen despues.\nAgregar siempre se puede. Quitar un juego que el plan incluye hoy se\nrechaza si el plan tiene suscripciones vigentes: es el mismo principio del\nprecio congelado (§3.7), lo que ya se pago no cambia a mitad del periodo.",
+        "operationId": "update_plan_games_admin_plans__plan_id__games_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanGamesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Plan Games",
         "tags": [
           "admin"
         ]
@@ -9690,18 +10466,30 @@
     },
     "/games": {
       "get": {
+        "description": "El menu de juegos, en su orden, con las variantes activas de cada uno.\n\nCada juego trae la decision de acceso de `has_access` con ese juego: uno que\nel plan de la cuenta no incluye llega con `game_not_in_plan`, para que el\nmenu lo muestre como \"disponible en otro plan\" en vez de esconderlo.",
         "operationId": "list_games_games_get",
         "parameters": [
           {
-            "description": "Incluye juegos y variantes desactivados. Solo para administradores.",
             "in": "query",
-            "name": "include_inactive",
+            "name": "limit",
             "required": false,
             "schema": {
-              "default": false,
-              "description": "Incluye juegos y variantes desactivados. Solo para administradores.",
-              "title": "Include Inactive",
-              "type": "boolean"
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],
@@ -9710,11 +10498,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/GameResponse"
-                  },
-                  "title": "Response List Games Games Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/GameMenuResponse"
                 }
               }
             },

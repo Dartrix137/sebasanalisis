@@ -25,7 +25,7 @@ import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
 import { ApiError, gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
 import { TONE_CLASSES, toneOf } from "@/lib/outcomes";
 import { useSession } from "@/lib/session";
-import type { GameResponse, GameVariantResponse } from "@/lib/types/games";
+import type { GameMenuItem, GameVariantResponse } from "@/lib/types/games";
 import type { CreateSessionRequest, SessionResponse } from "@/lib/types/sessions";
 import type { BulkSpinsRequest } from "@/lib/types/spins";
 
@@ -65,7 +65,7 @@ function Dashboard() {
   const { user, loading, withToken } = useSession();
   const router = useRouter();
 
-  const [games, setGames] = useState<GameResponse[]>([]);
+  const [games, setGames] = useState<GameMenuItem[]>([]);
   const [openSessions, setOpenSessions] = useState<SessionResponse[]>([]);
   const [closedSessions, setClosedSessions] = useState<SessionResponse[]>([]);
   // Números de cada mesa abierta, en orden cronológico (el más reciente al final).
@@ -116,7 +116,7 @@ function Dashboard() {
         .slice(0, MESAS_CON_NUMEROS)
         .map((s) => withToken((t) => spinsApi.list(t, s.id))),
     );
-    setGames(g);
+    setGames(g.items);
     setOpenSessions(abiertas);
     setNumbers(
       Object.fromEntries(
@@ -152,7 +152,11 @@ function Dashboard() {
 
   if (loading || !user) return null;
 
-  const activeGames = games.filter((g) => g.variants.length > 0);
+  // Mientras llega el menú de juegos (paso 7, entrega 2), aquí solo se abren
+  // mesas de los juegos activos que el plan de la cuenta incluye.
+  const activeGames = games.filter(
+    (g) => g.status === "active" && g.access.granted && g.variants.length > 0,
+  );
   const variants = new Map(games.flatMap((g) => g.variants).map((v) => [v.id, v]));
   const [principal, ...otras] = openSessions;
   const abrir = (id: string) => router.push(`/games/roulette/${id}`);

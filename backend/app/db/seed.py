@@ -29,6 +29,26 @@ ROULETTE_VARIANTS = [
     ("american", "Ruleta americana", 0.05263, "roulette_american.json"),
 ]
 
+# Metadatos de la ruleta en el menu de juegos (§7.2). El slug va en la URL y no
+# cambia: `/juegos/ruleta`.
+ROULETTE_GAME = {
+    "name": "Ruleta",
+    "slug": "ruleta",
+    "module": "discrete_outcome",
+    "icon": "ruleta",
+    "description": (
+        "Registra los números de una mesa de ruleta europea o americana y recibe, "
+        "después de cada giro, una recomendación estadística para el siguiente."
+    ),
+    "sort_order": 0,
+    "status": "active",
+}
+
+ROULETTE_VARIANT_DESCRIPTIONS = {
+    "european": "37 números, con un solo cero.",
+    "american": "38 números, con 0 y 00.",
+}
+
 
 def load_config(filename: str) -> GameVariantConfig:
     """Carga y valida un categories_json antes de persistirlo."""
@@ -76,14 +96,15 @@ def seed_admin(db: Session) -> User:
 def seed_roulette(db: Session) -> Game:
     game = db.scalar(select(Game).where(Game.type == "roulette"))
     if not game:
-        game = Game(name="Ruleta", type="roulette", active=True)
+        game = Game(type="roulette", **ROULETTE_GAME)
         db.add(game)
         db.flush()
         print("  juego creado: Ruleta")
     else:
+        # No se pisan el estado ni el orden que haya puesto un administrador.
         print("  juego ya existe: Ruleta")
 
-    for variant_name, label, house_edge, filename in ROULETTE_VARIANTS:
+    for orden, (variant_name, label, house_edge, filename) in enumerate(ROULETTE_VARIANTS):
         config = load_config(filename)
         variant = db.scalar(
             select(GameVariant).where(
@@ -100,6 +121,8 @@ def seed_roulette(db: Session) -> Game:
                 GameVariant(
                     game_id=game.id,
                     name=variant_name,
+                    description=ROULETTE_VARIANT_DESCRIPTIONS[variant_name],
+                    sort_order=orden,
                     house_edge=house_edge,
                     categories_json=config.model_dump(),
                     active=True,
