@@ -226,8 +226,47 @@ class Payment(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at_col()
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Un pago aprobado que el proveedor anulo despues (paso 6): cuando se supo,
+    # y que se hizo con el periodo que habia comprado. Null si nunca paso.
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reversal_note: Mapped[str | None] = mapped_column(Text)
 
     plan: Mapped["Plan"] = relationship()
+
+
+class PaymentRefund(Base):
+    """Un reembolso hecho en el panel del proveedor y registrado a mano por un
+    administrador (§4.3 y §10 n.º 7: no se integran por API).
+
+    Es un registro, no un movimiento: no cambia `payments.status` ni el acceso.
+    El proveedor no reporta un reembolso como cambio de estado de la
+    transaccion; si ademas hay que quitar el acceso, el administrador cancela la
+    suscripcion de inmediato.
+    """
+
+    __tablename__ = "payment_refunds"
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="ck_payment_refunds_amount_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    # RESTRICT: un pago con reembolsos no se borra (ningun pago se borra).
+    payment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("payments.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    # Cuando se hizo en el panel del proveedor, segun el administrador.
+    refunded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # El identificador del reembolso en el panel del proveedor, si lo tiene.
+    provider_refund_id: Mapped[str | None] = mapped_column(String(255))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    # SET NULL: si ese administrador elimina su cuenta, el registro queda.
+    admin_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    admin_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class PaymentEvent(Base):

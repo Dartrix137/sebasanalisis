@@ -202,6 +202,16 @@ class AdminPaymentResponse(PaymentResponse):
     provider_transaction_id: str | None = None
     # Lo que dijo el proveedor si no se aprobo. No se le muestra al cliente.
     failure_reason: str | None = None
+    subscription_id: UUID | None = None
+    # Null si la cuenta se elimino: el pago se conserva sin ella.
+    user_id: UUID | None = None
+    user_email: str | None = None
+    # Aprobado y anulado despues por el proveedor (§4.3): cuando se supo y que
+    # se hizo con el periodo.
+    reversed_at: datetime | None = None
+    reversal_note: str | None = None
+    # Lo reembolsado en el panel del proveedor y registrado en el admin.
+    refunded_cents: int
 
 
 class SubscriptionResponse(ApiModel):

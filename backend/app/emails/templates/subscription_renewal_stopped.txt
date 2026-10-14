@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Cancelamos la renovación automática de tu plan {{ plan_name }}. No te vamos a hacer más cobros.
+
+Conservas el acceso hasta el {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Si quieres seguir después de esa fecha, puedes reanudar la renovación desde tu cuenta antes de que termine.
+
+Tu suscripción: {{ url }}
+{% endblock %}

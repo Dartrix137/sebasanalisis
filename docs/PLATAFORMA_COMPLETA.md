@@ -16,7 +16,7 @@
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
 3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12)
-4. [Admin dashboard](#4-admin-dashboard)
+4. [Admin dashboard](#4-admin-dashboard) (la entrega 1 del paso 6 está en §4.8)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
 7. [Plataforma multijuego](#7-plataforma-multijuego)
@@ -482,7 +482,7 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - El VPS corre con llaves de sandbox: hasta pasar a las de producción, cualquier cuenta obtiene acceso pagando con la tarjeta de prueba.
 - Wompi rechaza una dirección de regreso con `localhost` o `127.0.0.1` (`403` en el checkout). No afecta a producción; para probar en local se usa `localtest.me` (`DESPLIEGUE.md`).
 - La documentación de Wompi no describe una consulta por referencia. Si el cliente no vuelve del checkout y el webhook no llega, el pago queda `pending` hasta que llegue un evento.
-- **Un pago aprobado que después se anula o se reembolsa no quita el acceso**: el pago ya está resuelto y el evento posterior no lo mueve. Hoy se corrige a mano; el admin de pagos es de la entrega 3 y del paso 6.
+- **Un pago aprobado que después se anula o se reembolsa no quita el acceso**: el pago ya está resuelto y el evento posterior no lo mueve. Hoy se corrige a mano; el admin de pagos es de la entrega 3 y del paso 6. **Desde el paso 6 (§4.8) la anulación sí retira el período**; el reembolso se registra a mano.
 - Una renovación manual no aplicaba el descuento de un cupón `repeating` o `forever`. **Corregido en la entrega 2** (§3.14).
 - No se usa `expiration-time` en el checkout: un pago abierto se puede completar más tarde, al precio con que se abrió.
 - `past_due` no daba acceso en `has_access`. **Desde la entrega 2 sí**, mientras el período pagado esté vigente (§3.14).
@@ -669,7 +669,7 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 - En el sandbox un cobro a una fuente de pago responde `PENDING` y se resuelve segundos después. Con el webhook (VPS) llega solo; en local lo resuelve la siguiente corrida del job. Por eso, tras cambiar la tarjeta en mora, `/cuenta` puede decir que el cobro "todavía no pasó" y el resultado llega por correo.
 - **La fuente de pago no se anula en Wompi** al cambiarla, al pasar a manual ni al eliminar la cuenta: se borra nuestra referencia, que es lo único con lo que se le puede cobrar desde aquí. La documentación solo describe anularla para Daviplata y Bancolombia.
 - Un cobro del job que coincida en el mismo instante con el borrado de la cuenta puede quedar aprobado sin cuenta. Queda en el log como error ("aprobado sin suscripción") y se devuelve a mano desde el panel de Wompi.
-- Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6.
+- Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6. **Hechas en la entrega 1 del paso 6** (§4.8).
 
 ---
 
@@ -707,6 +707,7 @@ Todas las listas del backend se paginan (`limit`, `cursor` u `offset`) y filtran
 - Acciones sobre una suscripción: extender `current_period_end` manualmente (compensación por un problema del servicio), cancelar de inmediato o al final del período.
 - Pagos: lista de cobros con su estado y la cadena de eventos de Wompi asociada (incluidos los rechazados por firma). Acción "reconsultar en Wompi", que pasa por la misma función idempotente del webhook.
 - Los reembolsos se hacen desde el panel de Wompi; aquí solo se registran (decisión pendiente si se integran por API, §10).
+- **Construido el 2026-10-14**: ver §4.8.
 
 ### 4.4 Planes
 
@@ -748,6 +749,69 @@ Indicadores, todos calculados en el servidor y en centavos:
 - Registros nuevos y cuántos verificaron el correo.
 
 Sin gráficos elaborados en la primera versión: tarjetas con número y comparación contra el período anterior.
+
+**Decidido el 2026-10-14** (se construye en la entrega 2 del paso 6): el período es el **mes calendario en hora de Bogotá** (America/Bogota, sin horario de verano), y se compara el mes en curso hasta hoy contra el mismo tramo del mes anterior (del día 1 al mismo día), con cortes a medianoche de Bogotá.
+
+### 4.8 Suscripciones y pagos: cómo quedó construido (2026-10-14)
+
+Paso 6, entrega 1 (rama `fase-4-paso-6a-suscripciones-y-pagos`). La entrega 2 (navegación lateral, `/admin/juegos`, `/admin/motor`, resumen, forzar el restablecimiento y reenviar la verificación) y la del traslado de precio (abajo) no están hechas. **El paso 6 no está cerrado.**
+
+**Decisiones del usuario (2026-10-14)**
+
+- **Anulaciones y reembolsos.** Una anulación la reporta Wompi como cambio de estado de la transacción (`VOIDED`, solo con tarjeta, llega como `transaction.updated`). Por eso **la anulación quita el acceso sola**: cuando la reconsulta (del webhook o de "reconsultar" en el admin) dice que un pago aprobado quedó anulado, `apply_transaction` lo pasa a `voided` y retira el período que había comprado. Un reembolso, en cambio, es un objeto aparte en Wompi y no se vio que cambie el estado de la transacción ni que mande un evento (documentación consultada el 2026-10-14). Por eso **el reembolso se hace en el panel de Wompi y el administrador lo registra a mano**, con monto y motivo. El registro no cambia el pago ni el acceso. Si además hay que quitar el acceso, se cancela la suscripción de inmediato. Cierra §10 n.º 7.
+- **Cancelar de inmediato quita el acceso en el acto y no devuelve nada.** El período termina ahora, la suscripción queda `expired` y se borra la referencia del medio de pago. Si corresponde devolver, se hace en Wompi y se registra.
+- **Extender una renovación automática corre todo**: el próximo cobro y su aviso se calculan sobre el vencimiento nuevo.
+- **Al cliente se le avisa por correo** en las tres acciones (extender, cancelar al final del período, cancelar de inmediato). El motivo del administrador es interno y no va en el correo.
+- **Trasladar un precio nuevo a las suscripciones vigentes (§10 n.º 5): se construye**, en una entrega propia después de esta. Lo decidido: aviso por correo **30 días** antes de cobrar el precio nuevo (plazo a confirmar con el abogado); aplica a **todas las suscripciones vigentes del plan**, en los dos modos, y no a las canceladas; y **un cupón que todavía descuenta sigue descontando sobre el precio nuevo** (el porcentaje sobre el precio nuevo, el monto fijo igual). No está construido.
+
+**Anulación posterior a la aprobación (`core/subscriptions.apply_transaction`)**
+
+- Es lo único que mueve un pago ya resuelto, y solo si la transacción anulada es la misma que lo aprobó. Una vez anulado ya no vuelve a cambiar, así que un evento repetido o una reconsulta más no hacen nada.
+- Si el período que compró es el último de la suscripción, el vencimiento vuelve a donde estaba antes del pago. Si con eso ya pasó, la suscripción vence y el acceso cae en el acto. Si el período anterior todavía corre (un cobro de renovación anticipado, 48 h antes, que se anuló antes de empezar), ese período se respeta y **la renovación automática se cancela**: volver a cobrarle a quien le anularon un cobro lo decide una persona, no el job. Una renovación anulada devuelve el período con descuento que había gastado.
+- Si después ya se pagó otro período, **no se retira nada**: queda la nota "revisarlo a mano" en el pago.
+- `payments.reversed_at` y `payments.reversal_note` guardan cuándo se supo y qué se hizo. No sale correo al cliente: la anulación la hizo el comercio en el panel de Wompi.
+- `apply_transaction` recibe un `before_commit` opcional: el admin lo usa para que la fila de bitácora de "reconsultar" se confirme en la misma transacción que el cambio, también cuando no cambió nada.
+
+**Acciones sobre una suscripción (`core/subscription_admin.py`)**
+
+- `PATCH /admin/subscriptions/:id {action, days?, reason}`, con `action` `extend` (con `days`, de 1 a 90), `cancel_at_period_end` o `cancel_now`. Cada una deja su fila (`subscription.extend`, `subscription.cancel_at_period_end`, `subscription.cancel_now`) con el antes y el después, en la misma transacción. Ninguna toca un pago.
+- Las tres exigen un **período vigente** (`409 not_in_force`): a una cuenta vencida se le da acceso manual. Y ninguna se hace con un **cobro en proceso** (`409 charge_in_progress`), porque si se aprobara después daría un período que el administrador no vio.
+- **Extender** corre `current_period_end`. En mora, la suscripción vuelve a `active` con los intentos en cero: los fallidos eran del cobro del vencimiento anterior. `notice_sent_for` se queda apuntando al vencimiento viejo, así que el aviso vuelve a salir para la fecha nueva.
+- **Cancelar al final del período** es lo mismo que cancela el cliente (`stop_renewal`). Solo aplica a la renovación automática (`409 not_automatic`, porque la de pago manual no se cobra sola) y no dos veces (`409 already_canceled`). El cliente puede reanudarla desde `/cuenta`.
+- **Cancelar de inmediato**: `current_period_end` = ahora, `expired`, sin medio de pago, en modo manual. `has_access` responde `expired` con esa fecha. La cuenta puede volver a suscribirse: es un alta nueva.
+- **Un administrador no se deja sin acceso**: entra por su rol, así que cancelar su propia suscripción no le quita la mesa ni el admin (test).
+- Correos nuevos: "Extendimos tu suscripción", "Cancelamos la renovación de tu suscripción" y "Tu suscripción terminó" (`core/billing_emails.admin_change`).
+
+**Listas, detalle y reembolsos (`api/v1/admin_payments.py`)**
+
+- `GET /admin/subscriptions`: paginada (`limit` hasta 100, `offset`), con filtros en el servidor por `status`, `plan_id`, `renewal_mode` y correo. **Sin filtro de estado no trae las `pending`** (son pagos abiertos y no completados, que se ven en Pagos); con `status=pending` sí. El estado es la columna tal cual, que el job pone cada hora. `in_force` de cada fila dice si el período sigue vigente según el reloj del servidor.
+- `GET /admin/subscriptions/:id`: la suscripción, sus últimos 50 pagos y su bitácora.
+- `GET /admin/payments`: paginada, con filtros por `status`, `kind`, `reversed`, `refunded`, `subscription_id` y `user_id`, y búsqueda por correo, referencia o id de la transacción.
+- `GET /admin/payments/:id`: el pago, sus eventos de Wompi, sus reembolsos y su bitácora. **Los eventos con la firma inválida nunca se asocian al pago** (no se reconsultan), así que el detalle muestra además los eventos sin pago cuyo cuerpo nombra la transacción o la referencia, marcados "no asociado al pago". Ese cuerpo no es confiable: solo se muestra.
+- `POST /admin/payments/:id/requery {reason}`: reconsulta en Wompi y aplica con `apply_transaction`, la misma función del webhook. Un pago resuelto no se vuelve a resolver, así que reconsultarlo no da otro período (test). Sin transacción en Wompi responde `409`: la documentación no describe una consulta por referencia. Sin pasarela, `503`. Si Wompi no responde, `502`.
+- `POST /admin/payments/:id/refunds {amount_cents, refunded_at, provider_refund_id?, reason}`: solo para un pago aprobado. La moneda es la del pago y la fecha no puede ser futura. Lo reembolsado no pasa de lo cobrado. Deja la fila `payment.refund.record`. Tabla nueva `payment_refunds` (migración `d9a4c2e7b815`, solo DDL, junto con las dos columnas de `payments`).
+- `AdminPaymentResponse` suma la cuenta (`user_id`, `user_email`), `subscription_id`, la anulación y `refunded_cents`. El detalle de la cuenta (`GET /admin/users/:id`) muestra también la bitácora de su suscripción y de sus pagos.
+- Todos responden `403` a una cuenta que no es administradora, y a un administrador suspendido.
+
+**Frontend**
+
+- `/admin/suscripciones`: filtros, lista y detalle con las tres acciones (`components/admin/SubscriptionActions.tsx`), sus pagos y su bitácora. "Cancelar de inmediato" pide marcar una casilla además del motivo.
+- `/admin/pagos`: filtros, lista y detalle (`components/admin/PaymentDetail.tsx`) con los eventos (y su cuerpo, desplegable), los reembolsos, "Reconsultar en Wompi" y "Registrar un reembolso". Acepta `?query=`.
+- `/admin/usuarios`: el detalle de la cuenta lleva las mismas acciones sobre su suscripción, y cada referencia de pago enlaza a `/admin/pagos`. `/admin` enlaza a las dos páginas nuevas; la navegación lateral es de la entrega 2.
+
+**Tests**
+
+- `tests/api/test_admin_payments.py` (54): `403` en los siete endpoints para una cuenta que no es administradora; cada acción con su fila y su motivo, y rechazada sin motivo y sin fila; el efecto de extender, cancelar al final y cancelar de inmediato sobre `has_access` y sobre el job de renovaciones (lo que se canceló no se vuelve a cobrar; lo que se extendió se cobra en la fecha nueva, con su aviso); reconsultar un pago ya resuelto no da otro período; las anulaciones (por evento y por reconsulta, con período posterior, de una renovación anticipada, de otra transacción); los reembolsos; y el administrador que cancela su propia suscripción.
+- Playwright (`e2e/admin-billing.spec.ts`): el administrador encuentra una suscripción, la extiende con motivo y lo ve en la bitácora; y desde el detalle de la cuenta la cancela de inmediato (la cuenta pierde la mesa) y registra un reembolso en Pagos.
+- La migración se subió, se bajó con un pago anulado y un reembolso puestos, y se volvió a subir en una base desechable; `alembic check` sin diferencias.
+
+**Lo que queda sin probar o sin hacer**
+
+- **Una anulación real en el sandbox de Wompi**: el camino se probó con el doble de Wompi, no con una transacción anulada de verdad. Falta anular un pago con tarjeta desde el panel de Wompi y ver llegar el evento.
+- **Qué hace Wompi con un reembolso**: si cambia el estado de la transacción o manda un evento. Si lo hiciera, hoy no se interpreta y queda solo el registro manual.
+- Un pago manual abierto antes de una cancelación inmediata, que el cliente complete después en Wompi, le da un período nuevo: pagó por él.
+- El cliente no ve los reembolsos registrados ni en `/cuenta` ni en la exportación de sus datos.
+- `/admin` (el CRUD de juegos) sigue detrás de `AccessGate`; la entrega 2 lo mueve a `/admin/juegos`.
 
 ---
 
@@ -1080,9 +1144,9 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
 | 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
-| 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | No se traslada: precio congelado (§3.7). |
+| 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción**, en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
-| 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | Manuales en Wompi y registrados en el admin. |
+| 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |
 | 8 | Textos legales definitivos | Los redacta o revisa un abogado; el equipo entrega la estructura de §6.5. |
 | 9 | Proveedor SMTP concreto | **Resuelta (2026-10-05): Resend**, enviando desde un subdominio propio. Resend confirmó que su política de uso admite el producto y el correo quedó encendido el 2026-10-07. Ver §13.6 y `DESPLIEGUE.md`. |
 | 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente: el usuario decidió el 2026-10-08 no ponerlo todavía, y los borradores publicados lo llevan como `[PENDIENTE]`. Bloquea el lanzamiento. |
@@ -1126,9 +1190,11 @@ Admin:     GET  /admin/overview
            PATCH /admin/users/:id/access     PATCH /admin/users/:id/role
            PATCH /admin/users/:id/status     POST  /admin/users/:id/force-password-reset
            POST /admin/users/:id/resend-verification
-           GET  /admin/subscriptions         PATCH /admin/subscriptions/:id
+           GET  /admin/subscriptions         GET   /admin/subscriptions/:id
+           PATCH /admin/subscriptions/:id    {action: extend|cancel_at_period_end|cancel_now, days?, reason}
            GET  /admin/payments              GET   /admin/payments/:id
-           POST /admin/payments/:id/requery
+           POST /admin/payments/:id/requery  {reason}
+           POST /admin/payments/:id/refunds  {amount_cents, refunded_at, provider_refund_id?, reason}
            GET|POST /admin/plans             PATCH /admin/plans/:id
            GET|POST /admin/coupons           PATCH /admin/coupons/:id
            GET  /admin/coupons/:id/redemptions

@@ -146,7 +146,7 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await admin.getByRole("button", { name: "Ver", exact: true }).click();
 
   const cobros = admin.getByTestId("suscripcion-y-pagos");
-  await expect(cobros.getByText(/Acceso Mensual · vigente, hasta el/)).toBeVisible();
+  await expect(cobros.getByText(/Acceso Mensual · activa · vigente, hasta el/)).toBeVisible();
   await expect(cobros.getByText(/con descuento de 20\.000 COP/)).toBeVisible();
   await expect(cobros.getByText("Aprobado", { exact: true })).toBeVisible();
   await expect(cobros.getByText(/referencia SA-/)).toBeVisible();

@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Extendimos el período de tu plan {{ plan_name }}, sin costo para ti. Ahora tienes acceso hasta el {{ period_end | fecha }}.
+{% if charge_at %}
+
+Tu renovación automática sigue activa y se corrió con la fecha nueva: el próximo cobro, de {{ amount_cents | money(currency) }}, se hará a {{ source_label }} a partir del {{ charge_at | fecha }}, y antes te avisamos por correo.
+{% endif %}
+
+Tu suscripción: {{ url }}
+{% endblock %}

@@ -1,12 +1,13 @@
 """
-Schemas: administracion de usuarios y bitacora (§4.2 y §4.6 de la Fase 4)
+Schemas: administracion de usuarios, suscripciones, pagos y bitacora (§4.2, §4.3 y §4.6
+de la Fase 4)
 """
 from datetime import datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from app.schemas.auth import AccessType, UserResponse, UserRole
 from app.schemas.base import ApiModel, Reason
@@ -84,8 +85,8 @@ class AuditLogListResponse(ApiModel):
 class AdminUserDetailResponse(ApiModel):
     """Una cuenta vista por el administrador (§4.2).
 
-    La suscripcion y los pagos son de solo lectura: las acciones sobre ellos
-    llegan con el paso 6 (§4.3).
+    Las acciones sobre la suscripcion son las de `PATCH /admin/subscriptions/:id`
+    y las de un pago, las de `/admin/payments/:id` (§4.3).
     """
     user: UserResponse
     # La que tiene un periodo pagado, vigente o no. Null si nunca pago.
@@ -96,3 +97,105 @@ class AdminUserDetailResponse(ApiModel):
     sessions_count: int
     # Lo que los administradores han hecho sobre esta cuenta, lo mas reciente primero.
     audit: list[AuditLogEntry]
+
+
+# ---------- Suscripciones y pagos (§4.3, paso 6) ----------
+
+class AdminSubscriptionResponse(SubscriptionResponse):
+    """Una suscripcion vista por el administrador."""
+    user_id: UUID
+    user_email: str
+    # Intentos de cobro fallidos del periodo en curso (renovacion automatica).
+    retry_count: int
+    canceled_at: datetime | None = None
+    created_at: datetime
+
+
+class AdminSubscriptionListResponse(ApiModel):
+    items: list[AdminSubscriptionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminSubscriptionDetailResponse(ApiModel):
+    subscription: AdminSubscriptionResponse
+    # Los pagos de esta suscripcion, lo mas reciente primero.
+    payments: list[AdminPaymentResponse]
+    # Lo que los administradores han hecho sobre ella, lo mas reciente primero.
+    audit: list[AuditLogEntry]
+
+
+class SubscriptionAdminAction(str, Enum):
+    #: Corre `current_period_end` unos dias, sin cobrar (compensacion).
+    extend = "extend"
+    #: Detiene la renovacion automatica; el acceso sigue hasta el vencimiento.
+    cancel_at_period_end = "cancel_at_period_end"
+    #: Termina el periodo ahora: el acceso cae en el acto. No devuelve nada.
+    cancel_now = "cancel_now"
+
+
+class UpdateSubscriptionRequest(ApiModel):
+    """PATCH /admin/subscriptions/:id."""
+    action: SubscriptionAdminAction
+    # Solo con `extend`.
+    days: int | None = Field(default=None, ge=1, le=90)
+    reason: str = Reason
+
+
+class PaymentEventResponse(ApiModel):
+    """Un evento del proveedor de pagos, como llego."""
+    id: UUID
+    provider_event_id: str
+    event_type: str | None = None
+    status: str
+    signature_verified: bool
+    processed_at: datetime | None = None
+    created_at: datetime
+    # False: no quedo asociado al pago (por ejemplo, firma invalida) y se
+    # muestra porque su cuerpo nombra la transaccion o la referencia del pago.
+    linked: bool
+    raw_payload: dict[str, Any] | None = None
+
+
+class PaymentRefundResponse(ApiModel):
+    """Un reembolso hecho en el panel del proveedor y registrado aqui."""
+    id: UUID
+    amount_cents: int
+    currency: str
+    refunded_at: datetime
+    provider_refund_id: str | None = None
+    reason: str
+    admin_email: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminPaymentListResponse(ApiModel):
+    items: list[AdminPaymentResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminPaymentDetailResponse(ApiModel):
+    payment: AdminPaymentResponse
+    # Lo que llego del proveedor sobre este pago, en orden de llegada.
+    events: list[PaymentEventResponse]
+    refunds: list[PaymentRefundResponse]
+    audit: list[AuditLogEntry]
+
+
+class RequeryPaymentRequest(ApiModel):
+    """POST /admin/payments/:id/requery."""
+    reason: str = Reason
+
+
+class RecordRefundRequest(ApiModel):
+    """POST /admin/payments/:id/refunds. La moneda es la del pago."""
+    amount_cents: int = Field(gt=0, le=2_147_483_647)
+    # Cuando se hizo en el panel del proveedor.
+    refunded_at: datetime
+    provider_refund_id: str | None = Field(default=None, max_length=255)
+    reason: str = Reason

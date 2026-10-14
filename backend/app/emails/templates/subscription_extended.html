@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Extendimos el período de tu plan <strong>{{ plan_name }}</strong>, sin costo para ti. Ahora
+  tienes acceso hasta el <strong>{{ period_end | fecha }}</strong>.
+</p>
+{% if charge_at %}
+<p style="margin:0 0 12px 0;">
+  Tu renovación automática sigue activa y se corrió con la fecha nueva: el próximo cobro, de
+  <strong>{{ amount_cents | money(currency) }}</strong>, se hará a {{ source_label }} a partir del
+  <strong>{{ charge_at | fecha }}</strong>, y antes te avisamos por correo.
+</p>
+{% endif %}
+{{ button(url, "Ver mi suscripción") }}
+{% endblock %}

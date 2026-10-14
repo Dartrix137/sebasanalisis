@@ -14,10 +14,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import String, and_, exists, func, or_, select
 
 from app.api.deps import AdminUser, DbSession
-from app.api.presenters import admin_payment_response, subscription_response, user_response
+from app.api.presenters import admin_payment_responses, subscription_response, user_response
 from app.api.v1.legal import client_ip, list_consents
 from app.core import audit, subscriptions
 from app.models import AdminAuditLog, GameSession, Payment, Subscription, User
@@ -148,9 +148,26 @@ def get_user(user_id: UUID, db: DbSession, admin: AdminUser) -> AdminUserDetailR
         db.scalar(select(func.count()).select_from(GameSession).where(GameSession.user_id == user.id))
         or 0
     )
+    # Las acciones sobre la cuenta y sobre su suscripcion y sus pagos (§4.3).
+    own_subscriptions = select(func.cast(Subscription.id, String)).where(
+        Subscription.user_id == user.id
+    )
+    own_payments = select(func.cast(Payment.id, String)).where(Payment.user_id == user.id)
     rows = db.scalars(
         select(AdminAuditLog)
-        .where(AdminAuditLog.target_type == "user", AdminAuditLog.target_id == str(user.id))
+        .where(
+            or_(
+                and_(AdminAuditLog.target_type == "user", AdminAuditLog.target_id == str(user.id)),
+                and_(
+                    AdminAuditLog.target_type == "subscription",
+                    AdminAuditLog.target_id.in_(own_subscriptions),
+                ),
+                and_(
+                    AdminAuditLog.target_type == "payment",
+                    AdminAuditLog.target_id.in_(own_payments),
+                ),
+            )
+        )
         .order_by(AdminAuditLog.created_at.desc())
         .limit(_DETAIL_AUDIT_ROWS)
     )
@@ -167,7 +184,7 @@ def get_user(user_id: UUID, db: DbSession, admin: AdminUser) -> AdminUserDetailR
         subscription=(
             subscription_response(db, subscription, now) if subscription is not None else None
         ),
-        payments=[admin_payment_response(p) for p in payments],
+        payments=admin_payment_responses(db, payments),
         consents=list_consents(db, user.id),
         sessions_count=sessions_count,
         audit=[AuditLogEntry.model_validate(r) for r in rows],
