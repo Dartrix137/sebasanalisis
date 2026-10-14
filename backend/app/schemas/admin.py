@@ -199,3 +199,73 @@ class RecordRefundRequest(ApiModel):
     refunded_at: datetime
     provider_refund_id: str | None = Field(default=None, max_length=255)
     reason: str = Reason
+
+
+class ForcePasswordResetRequest(ApiModel):
+    """POST /admin/users/:id/force-password-reset."""
+    reason: str = Reason
+
+
+# ---------- Resumen (§4.7, paso 6) ----------
+
+class OverviewPeriod(ApiModel):
+    """Las dos ventanas que se comparan: [start, end). Mes calendario en hora
+    de Bogota hasta ahora, y el mismo tramo del mes anterior."""
+    current_start: datetime
+    current_end: datetime
+    previous_start: datetime
+    previous_end: datetime
+    timezone: str
+
+
+class Comparison(ApiModel):
+    """Un indicador de flujo en el mes en curso y en el mismo tramo del anterior."""
+    current: int
+    previous: int
+
+
+class MoneyComparison(ApiModel):
+    currency: str
+    current_cents: int
+    previous_cents: int
+
+
+class RateComparison(ApiModel):
+    """Una tasa en puntos basicos (1 % = 100). Null si no hay base."""
+    current_bp: int | None = None
+    previous_bp: int | None = None
+
+
+class SubscriptionCounts(ApiModel):
+    """Cuantas suscripciones hay hoy en cada estado, tal como estan en la base."""
+    pending: int
+    active: int
+    past_due: int
+    canceled: int
+    expired: int
+    # Con el periodo pagado vigente (activas, canceladas y en mora).
+    in_force: int
+
+
+class RecurringRevenue(ApiModel):
+    """Ingreso recurrente mensual de una moneda, hoy."""
+    currency: str
+    total_cents: int
+    automatic_cents: int
+    manual_cents: int
+    subscriptions: int
+
+
+class AdminOverviewResponse(ApiModel):
+    period: OverviewPeriod
+    # Fotos del momento: no se comparan.
+    subscriptions: SubscriptionCounts
+    recurring: list[RecurringRevenue]
+    # Flujos del periodo.
+    new_subscriptions: Comparison
+    cancellations: Comparison
+    cancellation_rate: RateComparison
+    failed_charges: Comparison
+    registrations: Comparison
+    verified_registrations: Comparison
+    collected: list[MoneyComparison]

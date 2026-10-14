@@ -133,9 +133,6 @@ export default function AdminPlansPage() {
             cambio pide un motivo y queda en la bitácora.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/admin")}>
-          Volver al panel
-        </Button>
       </header>
 
       {error ? <ErrorBox message={error} /> : null}

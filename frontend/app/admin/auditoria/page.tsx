@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Pager } from "@/components/admin/Pager";
-import { Button, Card, ErrorBox } from "@/components/ui";
+import { Card, ErrorBox } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { actionLabel, describeChange, formatDateTime } from "@/lib/admin";
 import { useSession } from "@/lib/session";
@@ -51,9 +51,6 @@ export default function AdminAuditPage() {
             documentos legales. No se puede editar ni borrar.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/admin")}>
-          Volver al panel
-        </Button>
       </header>
 
       {error ? <ErrorBox message={error} /> : null}

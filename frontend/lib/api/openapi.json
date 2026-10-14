@@ -306,6 +306,62 @@
         "title": "AdminLegalDocumentResponse",
         "type": "object"
       },
+      "AdminOverviewResponse": {
+        "properties": {
+          "cancellation_rate": {
+            "$ref": "#/components/schemas/RateComparison"
+          },
+          "cancellations": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "collected": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyComparison"
+            },
+            "title": "Collected",
+            "type": "array"
+          },
+          "failed_charges": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "new_subscriptions": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "period": {
+            "$ref": "#/components/schemas/OverviewPeriod"
+          },
+          "recurring": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringRevenue"
+            },
+            "title": "Recurring",
+            "type": "array"
+          },
+          "registrations": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "subscriptions": {
+            "$ref": "#/components/schemas/SubscriptionCounts"
+          },
+          "verified_registrations": {
+            "$ref": "#/components/schemas/Comparison"
+          }
+        },
+        "required": [
+          "period",
+          "subscriptions",
+          "recurring",
+          "new_subscriptions",
+          "cancellations",
+          "cancellation_rate",
+          "failed_charges",
+          "registrations",
+          "verified_registrations",
+          "collected"
+        ],
+        "title": "AdminOverviewResponse",
+        "type": "object"
+      },
       "AdminPaymentDetailResponse": {
         "properties": {
           "audit": {
@@ -1803,6 +1859,25 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "Comparison": {
+        "description": "Un indicador de flujo en el mes en curso y en el mismo tramo del anterior.",
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "integer"
+          },
+          "previous": {
+            "title": "Previous",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current",
+          "previous"
+        ],
+        "title": "Comparison",
+        "type": "object"
+      },
       "ConsentResponse": {
         "description": "Un documento que el usuario acepto, para la pagina de cuenta.",
         "properties": {
@@ -2494,6 +2569,22 @@
         "title": "ExportSession",
         "type": "object"
       },
+      "ForcePasswordResetRequest": {
+        "description": "POST /admin/users/:id/force-password-reset.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ForcePasswordResetRequest",
+        "type": "object"
+      },
       "ForgotPasswordRequest": {
         "properties": {
           "email": {
@@ -2978,6 +3069,29 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "MoneyComparison": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "current_cents": {
+            "title": "Current Cents",
+            "type": "integer"
+          },
+          "previous_cents": {
+            "title": "Previous Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "current_cents",
+          "previous_cents"
+        ],
+        "title": "MoneyComparison",
+        "type": "object"
+      },
       "NextStepResponse": {
         "description": "Dónde queda la progresión si el giro cierra en contra o a favor.\n\nEs condicional: describe los dos casos, nunca cuál va a ocurrir.",
         "properties": {
@@ -3030,6 +3144,44 @@
         ],
         "title": "NoBetReason",
         "type": "string"
+      },
+      "OverviewPeriod": {
+        "description": "Las dos ventanas que se comparan: [start, end). Mes calendario en hora\nde Bogota hasta ahora, y el mismo tramo del mes anterior.",
+        "properties": {
+          "current_end": {
+            "format": "date-time",
+            "title": "Current End",
+            "type": "string"
+          },
+          "current_start": {
+            "format": "date-time",
+            "title": "Current Start",
+            "type": "string"
+          },
+          "previous_end": {
+            "format": "date-time",
+            "title": "Previous End",
+            "type": "string"
+          },
+          "previous_start": {
+            "format": "date-time",
+            "title": "Previous Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_start",
+          "current_end",
+          "previous_start",
+          "previous_end",
+          "timezone"
+        ],
+        "title": "OverviewPeriod",
+        "type": "object"
       },
       "PaymentEventResponse": {
         "description": "Un evento del proveedor de pagos, como llego.",
@@ -3640,6 +3792,39 @@
         "title": "QuoteResponse",
         "type": "object"
       },
+      "RateComparison": {
+        "description": "Una tasa en puntos basicos (1 % = 100). Null si no hay base.",
+        "properties": {
+          "current_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Bp"
+          },
+          "previous_bp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Bp"
+          }
+        },
+        "required": [
+          "current_bp",
+          "previous_bp"
+        ],
+        "title": "RateComparison",
+        "type": "object"
+      },
       "RecommendationDecision": {
         "description": "Qué hacer en el giro siguiente.",
         "enum": [
@@ -3961,6 +4146,40 @@
           "reason"
         ],
         "title": "RecordRefundRequest",
+        "type": "object"
+      },
+      "RecurringRevenue": {
+        "description": "Ingreso recurrente mensual de una moneda, hoy.",
+        "properties": {
+          "automatic_cents": {
+            "title": "Automatic Cents",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "manual_cents": {
+            "title": "Manual Cents",
+            "type": "integer"
+          },
+          "subscriptions": {
+            "title": "Subscriptions",
+            "type": "integer"
+          },
+          "total_cents": {
+            "title": "Total Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "total_cents",
+          "automatic_cents",
+          "manual_cents",
+          "subscriptions"
+        ],
+        "title": "RecurringRevenue",
         "type": "object"
       },
       "RefreshRequest": {
@@ -4767,6 +4986,45 @@
         ],
         "title": "SubscriptionAdminAction",
         "type": "string"
+      },
+      "SubscriptionCounts": {
+        "description": "Cuantas suscripciones hay hoy en cada estado, tal como estan en la base.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "canceled": {
+            "title": "Canceled",
+            "type": "integer"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "integer"
+          },
+          "in_force": {
+            "title": "In Force",
+            "type": "integer"
+          },
+          "past_due": {
+            "title": "Past Due",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending",
+          "active",
+          "past_due",
+          "canceled",
+          "expired",
+          "in_force"
+        ],
+        "title": "SubscriptionCounts",
+        "type": "object"
       },
       "SubscriptionFilter": {
         "description": "Filtro de `GET /admin/users` por la suscripcion de la cuenta.\n\nNo es `subscriptions.status` tal cual: lo que el administrador necesita\nsaber es si el periodo pagado sigue vigente, y eso depende de la fecha.",
@@ -6496,6 +6754,32 @@
         ]
       }
     },
+    "/admin/overview": {
+      "get": {
+        "operationId": "get_overview_admin_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Overview",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/payments": {
       "get": {
         "description": "Cobros por pagina, los mas recientes primero, incluidos los que no se\ncompletaron. `query` busca por correo, referencia o id de la transaccion.",
@@ -7615,6 +7899,114 @@
           }
         ],
         "summary": "Update User Access",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/force-password-reset": {
+      "post": {
+        "description": "Cierra todas las sesiones de la cuenta, deja sin efecto su contrasena y\nle envia el enlace para elegir una nueva (§5.3; decidido el 2026-10-14).\n\nSirve cuando la cuenta pudo quedar en manos de otro: por eso la contrasena\nanterior deja de funcionar y no solo las sesiones.",
+        "operationId": "force_password_reset_admin_users__user_id__force_password_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForcePasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Force Password Reset",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}/resend-verification": {
+      "post": {
+        "description": "Le reenvia a la cuenta el correo para confirmar su direccion: el mismo\ncorreo y el mismo enlace que pide ella desde su cuenta.\n\nNo toca acceso ni dinero: no pide motivo, pero deja su fila en la bitacora\n(decidido el 2026-10-14).",
+        "operationId": "resend_verification_admin_users__user_id__resend_verification_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resend Verification",
         "tags": [
           "admin"
         ]

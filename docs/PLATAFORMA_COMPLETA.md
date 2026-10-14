@@ -16,7 +16,7 @@
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
 3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12)
-4. [Admin dashboard](#4-admin-dashboard) (la entrega 1 del paso 6 está en §4.8)
+4. [Admin dashboard](#4-admin-dashboard) (las entregas 1 y 2 del paso 6 están en §4.8 y §4.9)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
 7. [Plataforma multijuego](#7-plataforma-multijuego)
@@ -146,7 +146,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **El motivo es obligatorio** (3 a 500 caracteres) en los cambios de acceso y de estado. Un cambio rechazado no deja fila.
 - **`/admin/usuarios` se adelantó del paso 6** (decisión del usuario): `GET /admin/users` pagina (`limit` hasta 100, `offset`) y filtra en el servidor por texto (correo o nombre), acceso manual, rol, correo confirmado y estado; devuelve `{items, total, limit, offset}`. `GET /admin/users/:id` trae la cuenta, su decisión de acceso, los documentos aceptados, la cantidad de mesas y las últimas 20 acciones sobre ella. `PATCH /admin/users/:id/access` recibe `{access_type, access_expires_at?, reason}`; el vencimiento solo aplica a `invited` y debe ser futuro. `PATCH /admin/users/:id/status` recibe `{is_active, reason}`.
 - **`/admin/auditoria`**: `GET /admin/audit-log` paginado, lo más reciente primero. No hay endpoint para editar ni borrar.
-- **Queda para el paso 6**: `POST …/force-password-reset`, `POST …/resend-verification` y la navegación lateral. **Para el paso 5**: el filtro por estado de suscripción, y la suscripción y los pagos en el detalle de la cuenta (hechos el 2026-10-13, §3.13).
+- **Queda para el paso 6**: `POST …/force-password-reset`, `POST …/resend-verification` y la navegación lateral (**hechos en la entrega 2 del paso 6**, §4.9). **Para el paso 5**: el filtro por estado de suscripción, y la suscripción y los pagos en el detalle de la cuenta (hechos el 2026-10-13, §3.13).
 - **Tests**: el cliente de los tests de API deja cada cuenta que registra con acceso `invited`, porque casi ningún test trata del acceso; los que sí usan `register_raw`, que registra como un cliente real. En Playwright, `registerViaApi` le pide el acceso al administrador sembrado.
 
 ---
@@ -750,7 +750,7 @@ Indicadores, todos calculados en el servidor y en centavos:
 
 Sin gráficos elaborados en la primera versión: tarjetas con número y comparación contra el período anterior.
 
-**Decidido el 2026-10-14** (se construye en la entrega 2 del paso 6): el período es el **mes calendario en hora de Bogotá** (America/Bogota, sin horario de verano), y se compara el mes en curso hasta hoy contra el mismo tramo del mes anterior (del día 1 al mismo día), con cortes a medianoche de Bogotá.
+**Decidido el 2026-10-14** (construido en la entrega 2 del paso 6, §4.9): el período es el **mes calendario en hora de Bogotá** (America/Bogota, sin horario de verano), y se compara el mes en curso hasta hoy contra el mismo tramo del mes anterior (del día 1 al mismo día), con cortes a medianoche de Bogotá.
 
 ### 4.8 Suscripciones y pagos: cómo quedó construido (2026-10-14)
 
@@ -811,7 +811,60 @@ Paso 6, entrega 1 (rama `fase-4-paso-6a-suscripciones-y-pagos`). La entrega 2 (n
 - **Qué hace Wompi con un reembolso**: si cambia el estado de la transacción o manda un evento. Si lo hiciera, hoy no se interpreta y queda solo el registro manual.
 - Un pago manual abierto antes de una cancelación inmediata, que el cliente complete después en Wompi, le da un período nuevo: pagó por él.
 - El cliente no ve los reembolsos registrados ni en `/cuenta` ni en la exportación de sus datos.
-- `/admin` (el CRUD de juegos) sigue detrás de `AccessGate`; la entrega 2 lo mueve a `/admin/juegos`.
+- `/admin` (el CRUD de juegos) sigue detrás de `AccessGate`; la entrega 2 lo mueve a `/admin/juegos`. **Hecho** (§4.9).
+
+### 4.9 Navegación, resumen y acciones sobre la cuenta: cómo quedó construido (2026-10-14)
+
+Paso 6, entrega 2 (rama `fase-4-paso-6b-navegacion-y-resumen`). **El paso 6 no está cerrado**: falta la entrega del traslado de un precio nuevo a las suscripciones vigentes (§4.8, §10 n.º 5).
+
+**Decisiones del usuario (2026-10-14)**
+
+- **Forzar el restablecimiento deja sin efecto la contraseña actual**, además de cerrar las sesiones. La cuenta solo vuelve a entrar con una contraseña nueva, elegida con el enlace del correo. Si el enlace vence (1 h), pide otro desde "Olvidé mi contraseña". Motivo obligatorio.
+- **Reenviar la verificación deja fila en la bitácora, sin motivo**: no toca acceso ni dinero.
+- **El ingreso recurrente mensual** cuenta las suscripciones vigentes que siguen (activas y en mora, de los dos modos, sin las canceladas). Cada una suma lo que costará su próximo período, con el descuento que todavía lleve, llevado a un mes. Se muestra el total y su reparto entre renovación automática y pago manual.
+- **Se agrega "Cobrado, neto de reembolsos"**, que §4.7 no pedía: pagos aprobados en el mes menos los reembolsos registrados en el mes.
+- Del resumen se había decidido antes el período: mes calendario en hora de Bogotá, hasta ahora, contra el mismo tramo del mes anterior (§4.7).
+
+**Navegación (`frontend/app/admin/layout.tsx`)**
+
+- Las secciones de §4.1 en una columna lateral (una fila que se desplaza en el celular), con el encabezado de la aplicación arriba y la sección actual marcada (`aria-current`). Solo se dibuja para un administrador; cada página sigue redirigiendo a quien no lo es y el servidor responde `403`.
+- `/admin` es el **Resumen**. El CRUD de juegos pasó a **`/admin/juegos`** y el backtest a **`/admin/motor`**. Los dos siguen detrás de `AccessGate`, porque listan juegos con un endpoint de juego: un administrador también acepta los documentos vigentes. El resumen y las demás secciones no lo exigen.
+- Las páginas perdieron su botón "Volver al panel": la navegación lo reemplaza.
+
+**Resumen (`GET /admin/overview`, `core/overview.py`)**
+
+- Todo se calcula en el servidor, en centavos y con la moneda. `core/overview.periods` arma las dos ventanas `[inicio, fin)` en hora de Bogotá y se prueba sin base. Un mes anterior más corto (31 de marzo frente a febrero) termina al final de ese mes; enero se compara con diciembre.
+- **Fotos del momento, sin comparación** (la base no guarda cómo estaban en una fecha pasada): suscripciones por estado (la columna tal cual), cuántas tienen el período vigente, e ingreso recurrente mensual por moneda.
+- **Flujos, con comparación**:
+  - **altas**: suscripciones cuyo primer pago se aprobó en el período; volver después de vencida también es un alta, y un pago anulado no cuenta;
+  - **cancelaciones**: `canceled_at` en el período, sea del cliente o del administrador; una suscripción reanudada deja de contar;
+  - **tasa de cancelación**: cancelaciones sobre las suscripciones con un período pagado al empezar el mes, según sus pagos aprobados, en puntos básicos; es aproximada, porque una extensión hecha a mano no tiene pago que la respalde;
+  - **cobros fallidos**: rechazados o con error resueltos en el período;
+  - **registros nuevos** y cuántos de ellos ya confirmaron el correo; una cuenta eliminada deja de contar;
+  - **cobrado**: neto de reembolsos.
+- La pantalla muestra tarjetas sin gráficos, con la variación con signo y flecha (no solo color) frente al mes anterior. El ingreso recurrente es el número grande.
+
+**Acciones sobre la cuenta (`api/v1/admin_users.py`)**
+
+- `POST /admin/users/:id/force-password-reset {reason}`:
+  - sube `token_version`, lo que cierra todas las sesiones y anula los refresh tokens;
+  - reemplaza el hash de la contraseña por el de un secreto aleatorio que nadie conoce;
+  - emite un token `reset_password` y envía el correo "Elige una contraseña nueva" (sin el motivo);
+  - deja la fila `user.password.force_reset` con la versión antes y después, sin nada de la contraseña;
+  - no aplica sobre uno mismo (`409`): la propia contraseña se cambia desde `/cuenta`.
+- `POST /admin/users/:id/resend-verification`: el mismo correo y el mismo enlace que pide la cuenta desde `/cuenta`. Con el correo ya confirmado responde `409`. Un segundo envío dentro del minuto responde `429`; ese límite va aparte de los cupos de la propia cuenta, para no gastárselos. Deja la fila `user.verification.resend`.
+- En `/admin/usuarios`, el detalle de la cuenta muestra "Reenviar el correo de confirmación" si no lo ha confirmado, y "Forzar el restablecimiento de la contraseña", que pide el motivo y marcar una casilla.
+
+**Tests**
+
+- `tests/core/test_overview_periods.py` (10, sin base): ventanas, fronteras de Bogotá, meses cortos y bisiesto, enero, el primer instante del mes, y las cuentas de mes y de tasa.
+- `tests/api/test_admin_overview.py` (12): el resumen solo para administradores; suscripciones por estado, recurrente (el bimestral cuenta la mitad), altas, cobros fallidos y cobrado, antes y después de un reembolso y de una cancelación; la comparación con el tramo anterior y la tasa; registros. Forzar el restablecimiento: sesiones y refresh cerrados, la contraseña anterior ya no entra, fila con motivo y sin él se rechaza, no sobre uno mismo, `403` y `404`; con el enlace se elige otra y se entra. Reenviar: correo, fila sin motivo, `429` al repetir, `409` con el correo confirmado y `403`.
+- Playwright (`e2e/admin-panel.spec.ts`): el resumen y la navegación por las secciones; una cuenta que no es administradora no ve el admin; forzar el restablecimiento (la sesión se cierra, la contraseña anterior no entra y la nueva sí); reenviar el correo de confirmación.
+
+**Lo que queda**
+
+- El traslado de un precio nuevo a las suscripciones vigentes (§10 n.º 5), en su propia entrega. Con ella se cierra el paso 6.
+- El resumen no guarda historia: las fotos del momento no tienen contra qué compararse. Si hace falta, sería una tabla de cortes diarios escrita por un job, y eso no está decidido.
 
 ---
 
@@ -1190,6 +1243,7 @@ Admin:     GET  /admin/overview
            PATCH /admin/users/:id/access     PATCH /admin/users/:id/role
            PATCH /admin/users/:id/status     POST  /admin/users/:id/force-password-reset
            POST /admin/users/:id/resend-verification
+           (force-password-reset lleva {reason}; ver §4.9)
            GET  /admin/subscriptions         GET   /admin/subscriptions/:id
            PATCH /admin/subscriptions/:id    {action: extend|cancel_at_period_end|cancel_now, days?, reason}
            GET  /admin/payments              GET   /admin/payments/:id

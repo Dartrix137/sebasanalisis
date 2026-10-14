@@ -35,6 +35,8 @@ const ACTION_LABEL: Record<string, string> = {
   "subscription.cancel_now": "Canceló la suscripción de inmediato",
   "payment.requery": "Reconsultó un pago en Wompi",
   "payment.refund.record": "Registró un reembolso",
+  "user.password.force_reset": "Forzó el restablecimiento de la contraseña",
+  "user.verification.resend": "Reenvió el correo de confirmación",
 };
 
 export function actionLabel(entry: AuditLogEntry): string {

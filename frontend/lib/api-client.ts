@@ -8,6 +8,7 @@
  */
 
 import type {
+  AdminOverviewResponse,
   AdminPaymentDetailResponse,
   AdminPaymentListResponse,
   AdminSubscriptionDetailResponse,
@@ -15,6 +16,7 @@ import type {
   AdminUserDetailResponse,
   AdminUserListResponse,
   AuditLogListResponse,
+  ForcePasswordResetRequest,
   RecordRefundRequest,
   RequeryPaymentRequest,
   SubscriptionFilter,
@@ -715,6 +717,24 @@ export const adminApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  /** Cierra sus sesiones, anula su contraseña y le envía el enlace. Pide motivo. */
+  forcePasswordReset: (token: string, userId: UUID, body: ForcePasswordResetRequest) =>
+    apiFetch<MessageResponse>(`/admin/users/${userId}/force-password-reset`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Le reenvía el correo para confirmar su dirección. Queda en la bitácora. */
+  resendVerification: (token: string, userId: UUID) =>
+    apiFetch<MessageResponse>(`/admin/users/${userId}/resend-verification`, {
+      method: "POST",
+      token,
+    }),
+
+  /** Indicadores del negocio, calculados en el servidor (§4.7). */
+  overview: (token: string) => apiFetch<AdminOverviewResponse>("/admin/overview", { token }),
 
   /** La bitácora de acciones de administradores, lo más reciente primero. */
   auditLog: (token: string, options: { limit?: number; offset?: number } = {}) => {

@@ -8,10 +8,10 @@
  * (`core/access.py`): aquí no se calcula nada. Toda acción pide un motivo y
  * queda en la bitácora.
  *
- * Quedan para la entrega 2 del paso 6: reenviar la verificación y forzar el
- * restablecimiento de contraseña. La suscripción y los pagos de cada cuenta se
- * ven aquí, con las acciones sobre la suscripción (§4.3); las de un pago están
- * en `/admin/pagos`.
+ * También: reenviar el correo de confirmación y forzar el restablecimiento de
+ * la contraseña (paso 6, entrega 2). La suscripción y los pagos de cada cuenta
+ * se ven aquí, con las acciones sobre la suscripción (§4.3); las de un pago
+ * están en `/admin/pagos`.
  */
 
 import { useRouter } from "next/navigation";
@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Pager } from "@/components/admin/Pager";
 import { SuccessBox } from "@/components/AuthShell";
-import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import {
   ACCESS_REASON_LABEL,
@@ -127,9 +127,6 @@ export default function AdminUsersPage() {
             motivo y queda en la bitácora.
           </p>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/admin")}>
-          Volver al panel
-        </Button>
       </header>
 
       <Card>
@@ -372,6 +369,8 @@ function UserDetail({
         <AccessForm user={u} subscribed={detail.subscription?.in_force ?? false} onDone={refresh} />
       )}
       <UserBilling detail={detail} onChanged={refresh} />
+      {u.email_verified ? null : <ResendVerification user={u} onDone={refresh} />}
+      <ForcePasswordResetForm user={u} isSelf={isSelf} onDone={refresh} />
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />
       <RoleForm user={u} isSelf={isSelf} onDone={refresh} />
 
@@ -516,6 +515,120 @@ function AccessForm({
       {saved ? <SuccessBox message="Acceso actualizado" /> : null}
       <Button type="submit" disabled={pending}>
         {pending ? "Guardando…" : "Guardar acceso"}
+      </Button>
+    </form>
+  );
+}
+
+/** Reenviar el correo de confirmación. No pide motivo: no toca acceso ni dinero. */
+function ResendVerification({
+  user,
+  onDone,
+}: {
+  user: UserResponse;
+  onDone: () => Promise<void>;
+}) {
+  const { withToken } = useSession();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+
+  async function send() {
+    setPending(true);
+    setError(null);
+    setSent(null);
+    try {
+      const r = await withToken((t) => adminApi.resendVerification(t, user.id));
+      setSent(r.message);
+      await onDone();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-edge p-3.5">
+      <CardHeader
+        title="Correo sin confirmar"
+        subtitle="Sin el correo confirmado la cuenta no puede pagar. Le enviamos el mismo correo que pide ella desde su cuenta; queda en la bitácora."
+      />
+      {error ? <ErrorBox message={error} /> : null}
+      {sent ? <SuccessBox message={sent} /> : null}
+      <Button variant="ghost" disabled={pending} onClick={send}>
+        {pending ? "Enviando…" : "Reenviar el correo de confirmación"}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Forzar el restablecimiento de la contraseña: cierra sus sesiones, su
+ * contraseña deja de servir y le llega el enlace para elegir una nueva.
+ */
+function ForcePasswordResetForm({
+  user,
+  isSelf,
+  onDone,
+}: {
+  user: UserResponse;
+  isSelf: boolean;
+  onDone: () => Promise<void>;
+}) {
+  const { withToken } = useSession();
+  const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  // La propia contraseña se cambia desde Mi cuenta; el servidor también lo rechaza.
+  if (isSelf) return null;
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setDone(null);
+    try {
+      const r = await withToken((t) => adminApi.forcePasswordReset(t, user.id, { reason }));
+      setReason("");
+      setConfirmed(false);
+      setDone(r.message);
+      await onDone();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-lg border border-edge p-3.5"
+      aria-label="Forzar el restablecimiento de la contraseña"
+    >
+      <CardHeader
+        title="Forzar el restablecimiento de la contraseña"
+        subtitle="Para una cuenta que pudo quedar en manos de otra persona. Se cierran todas sus sesiones, su contraseña deja de servir y le llega un correo para elegir una nueva."
+      />
+      <Field
+        label="Motivo del restablecimiento"
+        required
+        minLength={3}
+        maxLength={500}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <Checkbox checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}>
+        Entiendo que no podrá entrar hasta que elija una contraseña nueva.
+      </Checkbox>
+      {error ? <ErrorBox message={error} /> : null}
+      {done ? <SuccessBox message={done} /> : null}
+      <Button type="submit" variant="danger" disabled={pending || !confirmed}>
+        {pending ? "Un momento…" : "Forzar el restablecimiento"}
       </Button>
     </form>
   );
