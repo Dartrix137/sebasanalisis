@@ -929,6 +929,14 @@ Paso 6, entrega 3 (rama `fase-4-paso-6c-traslado-de-precio`). Con ella está con
 - Playwright (`e2e/price-transfer.spec.ts`): el administrador sube el precio de un plan, traslada el precio a la suscripción de una cuenta, el cliente sigue viendo su precio mientras no sale el aviso, cancela el traslado y lo ve en la bitácora.
 - La migración se subió, se bajó con filas puestas y se volvió a subir en una base desechable; `alembic check` sin diferencias, y el índice parcial rechaza un segundo traslado abierto. El script del job se corrió en otra base desechable.
 
+**Ajuste del 2026-10-15: un período, un precio**
+
+Salió de un caso real en el VPS: una bajada a 99.000 y la vuelta a 100.000. La subida corría desde el 13 de noviembre, el período vencía el 14 y su primer intento de cobro era el 12. `/cuenta` decía "Precio nuevo 100.000, desde el 13 de noviembre" junto a "Próximo cobro 99.000, a partir del 12 de noviembre", y parecía un error. Además, cada intento tomaba el precio de su hora: si el del 12 fallaba, el reintento del 13 salía por 100.000, distinto de lo que había dicho el aviso de 7 días. Decidido por el usuario:
+
+- **Los tres intentos del cobro automático de un período van con el precio que corre en el primero** (`schedule.first_charge_at`), el mismo que dice el aviso de 7 días. Una subida que empieza a correr entre un intento y otro no cambia el monto de los reintentos; una bajada sí los alcanza, porque solo favorece al cliente. Lo calcula `billing/price_change.charge_price` (puro); lo usan `core/renewals` en el aviso y en cada intento, y el presentador para "Próximo cobro".
+- **La pantalla y el correo de una subida dicen desde qué cobro se paga el precio nuevo** en la renovación automática (`UpcomingPriceChange.first_charge_at`, de `billing/price_change.first_charge_with_new_price`): "desde el cobro del 12 de diciembre de 2026". En el pago manual sigue la fecha desde la que corre, que aplica a los pagos hechos desde entonces.
+- Tests: `tests/billing/test_price_change.py` (el caso, la subida que corre antes del primer intento, la bajada entre intentos, el primer cobro con el precio nuevo) y, en `tests/api/test_price_transfer.py`, el período con el primer intento rechazado y los reintentos después de la fecha, y la bajada entre dos intentos.
+
 **Lo que queda sin probar o sin hacer**
 
 - El plazo de 30 días y el texto de los avisos los revisa el abogado (§3.11, "Para el abogado").

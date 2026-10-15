@@ -293,7 +293,11 @@ function SubscriptionDetail({
         {s.price_change ? (
           <Data
             label="Precio nuevo (ya avisado)"
-            value={`${formatMoney(s.price_change.new_price_cents, s.currency)}, desde el ${formatLegalDate(s.price_change.effective_at)}`}
+            value={`${formatMoney(s.price_change.new_price_cents, s.currency)}, corre desde el ${formatLegalDate(s.price_change.effective_at)}${
+              s.price_change.first_charge_at
+                ? `; primer cobro con él: ${formatLegalDate(s.price_change.first_charge_at)}`
+                : ""
+            }`}
           />
         ) : null}
         <Data label="Medio de pago guardado" value={source ?? "Ninguno"} />

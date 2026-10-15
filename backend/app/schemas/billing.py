@@ -237,8 +237,12 @@ class AdminPaymentResponse(PaymentResponse):
 class UpcomingPriceChange(ApiModel):
     """Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10)."""
     new_price_cents: int
-    # Desde cuando se cobra.
+    # Desde cuando corre.
     effective_at: datetime
+    # El primer cobro automatico que sale con el precio nuevo: el periodo cuyo
+    # primer intento es anterior a `effective_at` todavia se cobra con el viejo.
+    # None en el pago manual, donde aplica a los pagos desde `effective_at`.
+    first_charge_at: datetime | None = None
 
 
 class SubscriptionResponse(ApiModel):

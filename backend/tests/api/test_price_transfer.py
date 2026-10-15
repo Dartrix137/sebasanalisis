@@ -16,6 +16,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select, text
 
+from app.billing.periods import add_interval
+from app.billing.price_change import first_charge_with_new_price
 from app.core.email import EmailMessage, FakeEmailSender
 from app.core.price_changes import apply_due, send_notices
 from app.models import AdminAuditLog, Payment, Plan, SubscriptionPriceChange
@@ -204,13 +206,16 @@ def test_el_aviso_de_una_subida_fija_la_fecha_treinta_dias_despues(
     # Una segunda corrida no lo repite.
     assert _avisar(db, ahora + H)[0].sent == 0
 
-    # El cliente lo ve en su cuenta.
+    # El cliente lo ve en su cuenta, con el primer cobro que sale con el nuevo.
     r = client.get("/billing/subscription", headers=auth(token))
-    assert r.json()["price_change"] == {
-        "new_price_cents": NUEVO,
-        "effective_at": r.json()["price_change"]["effective_at"],
-    }
-    assert datetime.fromisoformat(r.json()["price_change"]["effective_at"]) == ahora + 30 * DIA
+    cambio = r.json()["price_change"]
+    assert set(cambio) == {"new_price_cents", "effective_at", "first_charge_at"}
+    assert cambio["new_price_cents"] == NUEVO
+    assert datetime.fromisoformat(cambio["effective_at"]) == ahora + 30 * DIA
+    assert datetime.fromisoformat(cambio["first_charge_at"]) == first_charge_with_new_price(
+        ahora + 30 * DIA, suscripcion.current_period_end, "month", 1
+    )
+    assert "el primer cobro con el precio nuevo es el del" in aviso.text
 
 
 def test_si_el_aviso_no_sale_no_corre_el_plazo_ni_cambia_el_precio(
@@ -266,6 +271,78 @@ def test_la_subida_se_cobra_desde_su_fecha_y_el_cupon_sigue_descontando(
         assert wompi.cobros[-1]["amount_in_cents"] == NUEVO * 80 // 100
     assert _suscripcion(db, suscripcion.id).price_cents == NUEVO
     assert _filas(db)[0].applied_at is not None
+
+
+def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
+    client, db, wompi, admin_token: str
+) -> None:
+    """El caso del 2026-10-15: la subida corria desde el 13 de noviembre, el
+    primer intento era el 12 y el periodo vencia el 14. Si el primer intento
+    fallaba, el reintento salia con el precio nuevo, distinto del que dijo el
+    aviso de 7 dias. Los tres intentos van con el precio del primero."""
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    vence = suscripcion.current_period_end
+    plan = _precio_del_plan(db, NUEVO)
+    assert _trasladar(client, admin_token, plan.id).status_code == 201
+    # El aviso del traslado sale de modo que la subida corra 36 h antes del
+    # vencimiento: despues del primer intento (48 h) y antes del segundo (24 h).
+    _avisar(db, vence - 36 * H - 30 * DIA)
+    [fila] = _filas(db)
+    assert fila.effective_at == vence - 36 * H
+
+    # La cuenta ve que el cobro de este periodo sigue con el precio de hoy y
+    # desde que cobro va el nuevo: el del periodo siguiente.
+    siguiente = add_interval(vence, "month", 1)
+    data = client.get("/billing/subscription", headers=auth(token)).json()
+    assert data["next_charge_cents"] == PRECIO
+    assert datetime.fromisoformat(data["price_change"]["first_charge_at"]) == siguiente - 48 * H
+
+    # El aviso de 7 dias dice el precio de hoy.
+    reporte = _correr(db, wompi, vence - 9 * DIA)
+    [aviso_cobro] = [m for m in reporte.emails if m.to == correo]
+    assert "100.000 COP" in aviso_cobro.text
+
+    # Primer intento, rechazado, con el precio de hoy.
+    wompi.estado_del_cobro = "DECLINED"
+    assert _correr(db, wompi, vence - 48 * H).charges == 1
+    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+
+    # Segundo intento: el job ya aplico la subida, pero el reintento sigue con
+    # el precio del periodo, y la cuenta lo ve asi.
+    assert _correr(db, wompi, vence - 24 * H).charges == 1
+    assert _suscripcion(db, suscripcion.id).price_cents == NUEVO
+    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+    data = client.get("/billing/subscription", headers=auth(token)).json()
+    assert (data["status"], data["next_charge_cents"]) == ("past_due", PRECIO)
+
+    # Tercer intento, aprobado: tambien con el precio del periodo.
+    wompi.estado_del_cobro = "APPROVED"
+    assert _correr(db, wompi, vence).approved == 1
+    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+
+    # El periodo siguiente ya va con el nuevo, en su aviso y en su cobro.
+    data = client.get("/billing/subscription", headers=auth(token)).json()
+    assert data["price_change"] is None and data["next_charge_cents"] == NUEVO
+    reporte = _correr(db, wompi, siguiente - 9 * DIA)
+    [aviso_cobro] = [m for m in reporte.emails if m.to == correo]
+    assert "120.000 COP" in aviso_cobro.text
+    assert _correr(db, wompi, siguiente - 48 * H).charges == 1
+    assert wompi.cobros[-1]["amount_in_cents"] == NUEVO
+
+
+def test_una_bajada_entre_dos_intentos_si_alcanza_al_reintento(
+    client, db, wompi, admin_token: str
+) -> None:
+    _, _, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+    vence = _avisada(db, wompi, suscripcion)
+    wompi.estado_del_cobro = "DECLINED"
+    assert _correr(db, wompi, vence - 48 * H).charges == 1
+    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+
+    plan = _precio_del_plan(db, MENOR)
+    assert _trasladar(client, admin_token, plan.id).status_code == 201
+    assert _correr(db, wompi, vence - 24 * H).charges == 1
+    assert wompi.cobros[-1]["amount_in_cents"] == MENOR
 
 
 def test_en_pago_manual_el_precio_nuevo_corre_para_el_pago_siguiente(

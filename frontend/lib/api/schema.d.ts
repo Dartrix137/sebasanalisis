@@ -4354,6 +4354,8 @@ export interface components {
              * Format: date-time
              */
             effective_at: string;
+            /** First Charge At */
+            first_charge_at: string | null;
             /** New Price Cents */
             new_price_cents: number;
         };

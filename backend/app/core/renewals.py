@@ -209,7 +209,8 @@ def _process_manual(
         return
     if schedule.expiry_notice_due(now, period_end) and subscription.notice_sent_for != period_end:
         # Lo que costara el periodo siguiente cuando haya que pagarlo.
-        amount = _renewal_quote(db, subscription, at=period_end).total_cents
+        price = price_changes.price_at(db, subscription, period_end)
+        amount = _renewal_quote(db, subscription, price).total_cents
         message = billing_emails.period_ending(user, subscription, amount)
         subscription.notice_sent_for = period_end
         db.commit()
@@ -247,8 +248,9 @@ def _process_automatic(
     if not attempts and subscription.notice_sent_for != period_end:
         if schedule.renewal_notice_due(now, period_end):
             charge_at = max(schedule.first_charge_at(period_end), now)
-            # El monto que se cobrara ese dia, con un precio nuevo si ya corre.
-            quote = _renewal_quote(db, subscription, at=charge_at)
+            # El monto de los tres intentos del periodo, con un precio nuevo
+            # si ya corre en el primero.
+            quote = _renewal_quote(db, subscription, _period_price(db, subscription, period_end))
             message = billing_emails.renewal_notice(
                 user, subscription, quote.total_cents, charge_at
             )
@@ -287,14 +289,16 @@ def _attempts(db: Session, prefix: str) -> list[Payment]:
     )
 
 
-def _renewal_quote(
-    db: Session, subscription: Subscription, at: datetime | None = None
-) -> pricing.Quote:
-    """Lo que cuesta el periodo siguiente. Con `at`, el que correra ese dia
-    (un traslado de precio puede aplicar antes); sin el, el de hoy."""
-    price = (
-        price_changes.price_at(db, subscription, at) if at is not None else subscription.price_cents
-    )
+def _period_price(db: Session, subscription: Subscription, period_end: datetime) -> int:
+    """El precio del cobro automatico del periodo que sigue a `period_end`: el
+    que corre en su primer intento, igual para los tres (2026-10-15). Antes
+    cada intento tomaba el de su hora, y un reintento podia salir por un monto
+    distinto del que dijo el aviso."""
+    return price_changes.charge_price(db, subscription, schedule.first_charge_at(period_end))
+
+
+def _renewal_quote(db: Session, subscription: Subscription, price: int) -> pricing.Quote:
+    """Lo que cuesta el periodo siguiente al precio `price`, con el descuento."""
     return pricing.renewal_quote(
         price,
         subscription.currency,
@@ -337,7 +341,7 @@ def _charge(
     if source is None:
         logger.error("Renovaciones: la suscripcion %s no tiene medio de pago", subscription.id)
         return
-    quote = _renewal_quote(db, subscription)
+    quote = _renewal_quote(db, subscription, _period_price(db, subscription, period_end))
     payment = Payment(
         subscription_id=subscription.id,
         user_id=user.id,

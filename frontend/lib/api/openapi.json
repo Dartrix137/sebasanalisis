@@ -5953,6 +5953,18 @@
             "title": "Effective At",
             "type": "string"
           },
+          "first_charge_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Charge At"
+          },
           "new_price_cents": {
             "title": "New Price Cents",
             "type": "integer"
@@ -5960,7 +5972,8 @@
         },
         "required": [
           "new_price_cents",
-          "effective_at"
+          "effective_at",
+          "first_charge_at"
         ],
         "title": "UpcomingPriceChange",
         "type": "object"

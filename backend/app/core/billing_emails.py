@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.billing import pricing
-from app.core import subscriptions
+from app.core import price_changes, subscriptions
 from app.core.config import get_settings
 from app.core.email import EmailMessage
 from app.core.subscriptions import Settlement
@@ -257,6 +257,7 @@ def price_increase(
         currency=subscription.currency,
         period_label=period_label(subscription.plan),
         effective_at=effective_at,
+        first_charge_at=price_changes.first_charge_with_new_price(subscription, effective_at),
         automatic=subscription.renewal_mode == "automatic",
         has_discount=subscription.coupon_id is not None
         and subscription.discount_periods_remaining != 0,

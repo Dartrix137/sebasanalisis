@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-08.
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15.
 
 ---
 
@@ -258,6 +258,7 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Decisiones tomadas para la Fase 4
 
+- **Un período se cobra con un solo precio (2026-10-15)**: los tres intentos del cobro automático de un período van con el precio que corre en el primero, el mismo que dice el aviso de 7 días; una subida que empieza a correr entre intentos queda para el período siguiente, y una bajada sí alcanza al reintento. `/cuenta`, el admin y el correo de la subida dicen desde qué cobro se paga el precio nuevo. Salió de una prueba en el VPS (bajada a 99.000 y vuelta a 100.000). Detalle en `PLATAFORMA_COMPLETA.md` §4.10.
 - **Solo la ruleta, y juegos futuros escritos en código (2026-10-14)**: crear un juego desde cero en el admin resultó difícil de hacer bien. La configuración tiene que describir resultados equiprobables (la suma de dos dados no lo es, y Baccarat tampoco), y la martingala y los dos sectores están pensados para los pagos de la ruleta (1:1 y 2:1). El producto se lanza con la ruleta. Cada juego que venga tendrá su motor propio, como un módulo nuevo del registro de módulos. En `/admin/juegos` se ocultan "Nuevo juego" y "+ Variante" (interruptor `ALTA_DE_JUEGOS`) para poder volver a abrirlos en una versión futura; la API de alta se conserva. **La martingala se deja como está**: se sigue ofreciendo también sobre una docena o una columna (2:1), con el monto calculado con el pago real.
 - **Logo (2026-10-13)**: el hexágono dorado que entregó el usuario reemplaza al círculo amarillo en el login, los encabezados, el icono de la pestaña y los correos. El original (`docs/design/logo-original.webp`) es dorado sobre negro, sin transparencia; `frontend/scripts/make-logo.mjs` le quita el fondo y genera los archivos. El texto del logo dice "Análisis Sebastián" y el producto se llama "Sebasanálisis": se usa solo el hexágono, con el nombre escrito al lado como antes. Los correos cargan el logo desde `<FRONTEND_BASE_URL>/logo-email.png`, así que el `Dockerfile` del frontend ahora copia `public`.
 - **Paso 5, entrega 2 (2026-10-13)**: se pueden guardar tarjetas y Nequi; la tarjeta se escribe en el widget de Wompi; cancelar y reanudar entran en esta entrega; y en la pantalla de pago ningún modo entra marcado.
