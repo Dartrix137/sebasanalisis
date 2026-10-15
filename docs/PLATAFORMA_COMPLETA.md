@@ -1474,7 +1474,7 @@ Como en `CLAUDE.md`: no se avanza a un paso sin que el anterior tenga tests o un
 | 5 | **Wompi**: alta, webhook, reconsulta, renovación, reintentos, cancelación, cambio de tarjeta, `/cuenta` (§3) | Es el núcleo del negocio y depende de 1-4. | Los 12 casos de §3.9 en verde + flujo completo probado a mano en el sandbox. |
 | 6 | **Admin dashboard completo**: secciones, auditoría, resumen (§4) | Con dinero real circulando, operarlo y auditarlo es obligatorio. | Toda acción de acceso o dinero deja fila en `admin_audit_log`. |
 | 7 | **Generalización multijuego** + fixture de dados (§7) | No bloquea vender ruleta; sí bloquea agregar juegos. | Tests de §7.6 en verde; la ruleta funciona igual en la ruta nueva. |
-| 8 | **Base de deportivas** (§8) | Solo estructura y respuestas a §8.3. | Preguntas de §8.3 respondidas por el usuario y documentadas. **Documentadas el 2026-10-15 en §8.4**, con la n.º 1 y la n.º 6 como pendientes (§10 n.º 13 y 14). |
+| 8 | **Base de deportivas** (§8) | Solo estructura y respuestas a §8.3. | Preguntas de §8.3 respondidas por el usuario y documentadas. **Documentadas el 2026-10-15 en §8.4**, con la n.º 1 y la n.º 6 como pendientes (§10 n.º 13 y 14). Paso cerrado ese día (PR #26). |
 | 9 | **Lanzamiento comercial** | Con todo construido, lo que falta es operativo y no de código. | La lista "Antes del lanzamiento comercial" de abajo, completa. |
 
 Dos precisiones sobre el orden (2026-10-05):
