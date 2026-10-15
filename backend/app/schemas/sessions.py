@@ -127,8 +127,19 @@ class SessionSummaryResponse(ApiModel):
     bankroll_start: float
     bankroll_final: float
     net_change: float
+    #: Peor caida desde un pico previo, medida giro a giro.
     max_drawdown: float
     followed_suggestion_rate: float
+    # Por giro, no por apuesta (2026-10-15, `engine/session_stats.py`): dos
+    # docenas son dos apuestas pero un solo giro.
+    rounds_bet: int
+    #: Giros apostados que cerraron con neto positivo.
+    rounds_won: int
+    #: Proporcion de giros con ganancia que cabia esperar por azar con esas
+    #: mismas apuestas. Viaja siempre junto a `rounds_won` (regla de §2).
+    rounds_won_expected_rate: float
+    #: Lo mas que la banca llego a estar por encima de la inicial.
+    best_moment: float
 
 
 class SessionPerformanceResponse(ApiModel):

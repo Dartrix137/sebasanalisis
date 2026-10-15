@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15 (paso 8).
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15 (ajustes de la mesa y del admin).
 
 ---
 
@@ -101,6 +101,9 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | `GET /admin/users` devolvía todas las cuentas y el acceso se cambiaba con un desplegable, sin dejar rastro. | `/admin/usuarios` pagina, busca y filtra en el servidor; cada cambio de acceso pide un motivo y queda en la bitácora. | Fase 4, paso 3 |
 | El registro pedía correo y contraseña. | Exige además aceptar los términos y la política de datos vigentes y declarar la mayoría de edad. | Fase 4, paso 2 |
 | Un juego nuevo de resultados discretos se crearía completo desde el admin, sin escribir código (`PLATAFORMA_COMPLETA.md` §7.3). | El producto sale solo con la ruleta. Cada juego futuro tendrá su propio motor, escrito en código, y entrará como un módulo nuevo. El alta de juegos y de variantes del admin queda oculta, no borrada. | 2026-10-14 |
+| La primera recomendación salía con 10 números registrados (la ventana más corta). | Sale con 11, y el formulario de mesa nueva lo avisa antes de abrir. | 2026-10-15 |
+| Las apuestas de la sesión se contaban por casilla, y el porcentaje de ganadas solo se veía al cerrar. | Se cuentan por giro, con lo esperable por azar al lado, el resultado neto, el mejor momento y la peor caída, también con la mesa abierta. | 2026-10-15 |
+| La ficha de un usuario en el admin repetía las acciones sobre su suscripción. | Las acciones viven solo en `/admin/suscripciones`; la ficha resume y enlaza. | 2026-10-15 |
 
 ---
 
@@ -258,6 +261,11 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Decisiones tomadas para la Fase 4
 
+- **Ajustes de la mesa y del admin (2026-10-15)**, pedidos por el usuario tras la revisión de lanzamiento:
+  - **11 números para la primera recomendación** (`MIN_SPINS_FOR_SIGNAL`, antes 10). El formulario de mesa nueva lo avisa: tomarlos del historial de la mesa y, si la mesa obliga a apostar para ver un giro, apostar solo el mínimo que acepte la casa. Detalle en `ARQUITECTURA_Y_ESTADISTICA.md` §2.10. A revisar con el abogado: la frase le pide al cliente apostar dinero real antes de usar la herramienta.
+  - **"Apuestas de esta sesión" cuenta por giro**, con lo esperable por azar con esas mismas apuestas al lado (regla de §2): "Giros con ganancia 29 de 66 · 43.9 %" va junto a, por ejemplo, "Lo esperable por azar 45.1 %". Suma el resultado neto, el mejor momento y la peor caída, y el resumen al cerrar usa las mismas cifras. No se llama "efectividad": describe lo que pasó, no una capacidad del motor (`engine/session_stats.py`).
+  - **Usuarios y Suscripciones siguen siendo dos secciones del admin**: una responde quién es la persona y la otra filtra por estado, plan y modo. Lo repetido eran las acciones: la ficha del usuario ya no las tiene y enlaza a `/admin/suscripciones?query=<correo>`, que abre con el detalle desplegado.
+  - **Al llegar al límite de pérdida** (pregunta, sin cambio): la mesa deja de aceptar apuestas, pero se pueden seguir anotando números y deshacer el último. El límite no se sube con la sesión abierta; para volver a apostar hay que abrir otra mesa.
 - **Un período se cobra con un solo precio (2026-10-15)**: los tres intentos del cobro automático de un período van con el precio que corre en el primero, el mismo que dice el aviso de 7 días; una subida que empieza a correr entre intentos queda para el período siguiente, y una bajada sí alcanza al reintento. `/cuenta`, el admin y el correo de la subida dicen desde qué cobro se paga el precio nuevo. Salió de una prueba en el VPS (bajada a 99.000 y vuelta a 100.000). Detalle en `PLATAFORMA_COMPLETA.md` §4.10.
 - **Solo la ruleta, y juegos futuros escritos en código (2026-10-14)**: crear un juego desde cero en el admin resultó difícil de hacer bien. La configuración tiene que describir resultados equiprobables (la suma de dos dados no lo es, y Baccarat tampoco), y la martingala y los dos sectores están pensados para los pagos de la ruleta (1:1 y 2:1). El producto se lanza con la ruleta. Cada juego que venga tendrá su motor propio, como un módulo nuevo del registro de módulos. En `/admin/juegos` se ocultan "Nuevo juego" y "+ Variante" (interruptor `ALTA_DE_JUEGOS`) para poder volver a abrirlos en una versión futura; la API de alta se conserva. **La martingala se deja como está**: se sigue ofreciendo también sobre una docena o una columna (2:1), con el monto calculado con el pago real.
 - **Logo (2026-10-13)**: el hexágono dorado que entregó el usuario reemplaza al círculo amarillo en el login, los encabezados, el icono de la pestaña y los correos. El original (`docs/design/logo-original.webp`) es dorado sobre negro, sin transparencia; `frontend/scripts/make-logo.mjs` le quita el fondo y genera los archivos. El texto del logo dice "Análisis Sebastián" y el producto se llama "Sebasanálisis": se usa solo el hexágono, con el nombre escrito al lado como antes. Los correos cargan el logo desde `<FRONTEND_BASE_URL>/logo-email.png`, así que el `Dockerfile` del frontend ahora copia `public`.

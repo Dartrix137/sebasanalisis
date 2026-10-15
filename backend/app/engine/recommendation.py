@@ -97,11 +97,13 @@ STRONG_THRESHOLD = 80.0
 
 
 #: Por debajo de estos giros no hay recomendacion, llegue o no el score al
-#: umbral, y el NO_BET se explica como falta de informacion: es la ventana mas
-#: corta, y sin ella completa ni siquiera hay dos tramos para medir la
-#: consistencia. Hasta el 2026-09-24 solo cambiaba la explicacion; con el umbral
-#: en 50, cinco rojos seguidos ya daban 51 puntos y una recomendacion.
-MIN_SPINS_FOR_SIGNAL = WINDOWS[0]
+#: umbral, y el NO_BET se explica como falta de informacion. Hasta el 2026-09-24
+#: solo cambiaba la explicacion; con el umbral en 50, cinco rojos seguidos ya
+#: daban 51 puntos y una recomendacion. Hasta el 2026-10-15 era la ventana mas
+#: corta (10 giros); ese dia el usuario lo subio a 11, la cifra que se le pide
+#: al abrir la mesa: con 11 numeros registrados sale la primera recomendacion,
+#: para el giro 12. Ya no esta atado a `WINDOWS[0]`.
+MIN_SPINS_FOR_SIGNAL = 11
 
 
 class Decision(str, Enum):

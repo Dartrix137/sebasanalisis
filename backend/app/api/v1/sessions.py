@@ -25,6 +25,7 @@ from app.api.deps import (
 from app.engine import bankroll as bk
 from app.engine.bulk_entry import EntryOrder, prepare_bulk_entry
 from app.engine.probability import GameConfig
+from app.engine.session_stats import BetRound, PlacedBet, session_bet_stats
 from app.models import Bet, Game, GameSession, GameVariant, Spin, StatisticalSuggestion, User
 from app.schemas.games import GameVariantConfig
 from app.schemas.sessions import (
@@ -238,6 +239,11 @@ def session_summary(
     Solo describe lo que ya paso. `win_rate` es la proporcion de apuestas
     resueltas que se ganaron en esta sesion — no es una tasa de acierto del
     motor ni dice nada sobre las proximas.
+
+    Desde el 2026-10-15 trae tambien las cifras por giro de
+    `engine/session_stats.py`, que son las que muestra la mesa: los giros con
+    ganancia van con lo esperable por azar con esas mismas apuestas, y el mejor
+    momento y la peor caida se miden giro a giro.
     """
     session = get_owned_session(db, user.id, session_id)
 
@@ -257,14 +263,10 @@ def session_summary(
     inicial = float(session.bankroll_start)
     actual = float(session.bankroll_current)
 
-    # Maxima caida desde un pico previo: el peor bajon que se vivio dentro de la
-    # sesion, que un neto final positivo puede esconder por completo.
-    pico = saldo = inicial
-    caida_maxima = 0.0
-    for b in apuestas:
-        saldo += float(b.net_change or 0)
-        pico = max(pico, saldo)
-        caida_maxima = max(caida_maxima, pico - saldo)
+    variant = db.get(GameVariant, session.game_variant_id)
+    stats = session_bet_stats(
+        GameConfig.from_dict(variant.categories_json), _bet_rounds(db, variant, apuestas)
+    )
 
     fin = session.closed_at or datetime.now(UTC)
     minutos = (fin - session.started_at).total_seconds() / 60
@@ -278,9 +280,50 @@ def session_summary(
         bankroll_start=inicial,
         bankroll_final=actual,
         net_change=round(actual - inicial, 2),
-        max_drawdown=round(caida_maxima, 2),
+        max_drawdown=stats.max_drawdown,
         followed_suggestion_rate=seguidas / len(apuestas) if apuestas else 0.0,
+        rounds_bet=stats.rounds,
+        rounds_won=stats.rounds_won,
+        rounds_won_expected_rate=stats.expected_win_rate,
+        best_moment=stats.best_moment,
     )
+
+
+def _bet_rounds(db: DbSession, variant: GameVariant, apuestas: list[Bet]) -> list[BetRound]:
+    """Agrupa las apuestas resueltas por el giro que las resolvio, en orden.
+
+    Una apuesta cuya casilla ya no existe en la variante (un administrador le
+    quito el grupo despues de resolverla) se deja fuera: sin la casilla no hay
+    con que calcular lo esperable.
+    """
+    config = GameConfig.from_dict(variant.categories_json)
+    giros = {
+        s.id: s
+        for s in db.scalars(
+            select(Spin).where(Spin.id.in_({b.spin_id for b in apuestas if b.spin_id}))
+        )
+    }
+    por_giro: dict[UUID, list[PlacedBet]] = {}
+    for b in apuestas:
+        if b.spin_id is None or b.spin_id not in giros:
+            continue
+        categoria = config.category(b.category)
+        grupo = (
+            next(
+                (g for g in categoria.groups if b.option_label in (g.label, g.id)),
+                None,
+            )
+            if categoria is not None
+            else None
+        )
+        if grupo is None:
+            continue
+        por_giro.setdefault(b.spin_id, []).append(
+            PlacedBet(b.category, grupo.id, float(b.amount))
+        )
+
+    orden = sorted(por_giro, key=lambda spin_id: giros[spin_id].spin_index)
+    return [BetRound(tuple(por_giro[i]), giros[i].result_value) for i in orden]
 
 
 @router.post("/{session_id}/reset-strategy", response_model=SessionResponse)

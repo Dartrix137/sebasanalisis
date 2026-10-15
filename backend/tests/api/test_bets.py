@@ -403,6 +403,28 @@ def test_la_caida_maxima_no_la_esconde_un_neto_final_en_cero(
     assert c["max_drawdown"] == 3_000
 
 
+def test_el_resumen_cuenta_por_giro_con_lo_esperable_al_lado(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """Dos tercios son dos apuestas y un solo giro: el giro que gana un tercio
+    cierra con ganancia aunque la otra apuesta pierda (2026-10-15). Con 1, 2, 3
+    o 4 el giro gana: lo esperable es 4 de 7."""
+    for valor in ["1", "0"]:  # tercio bajo: gana +1.000; cero: pierde -2.000
+        _apostar(client, user_token, sesion, category="tercio", option_label="Bajo")
+        _apostar(client, user_token, sesion, category="tercio", option_label="Medio")
+        _girar(client, user_token, sesion, valor)
+
+    c = client.get(f"/sessions/{sesion}/summary", headers=auth(user_token)).json()
+    assert c["total_bets"] == 4
+    assert c["win_rate"] == 0.25
+    assert c["rounds_bet"] == 2
+    assert c["rounds_won"] == 1
+    assert c["rounds_won_expected_rate"] == pytest.approx(4 / 7)
+    assert c["best_moment"] == 1_000
+    assert c["max_drawdown"] == 2_000
+    assert c["net_change"] == -1_000
+
+
 def test_una_sesion_sin_apuestas_da_un_resumen_valido(
     client: TestClient, user_token: str, sesion: str
 ) -> None:

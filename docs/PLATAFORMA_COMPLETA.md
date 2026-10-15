@@ -798,11 +798,12 @@ Paso 6, entrega 1 (rama `fase-4-paso-6a-suscripciones-y-pagos`). La entrega 2 (n
 - `/admin/suscripciones`: filtros, lista y detalle con las tres acciones (`components/admin/SubscriptionActions.tsx`), sus pagos y su bitácora. "Cancelar de inmediato" pide marcar una casilla además del motivo.
 - `/admin/pagos`: filtros, lista y detalle (`components/admin/PaymentDetail.tsx`) con los eventos (y su cuerpo, desplegable), los reembolsos, "Reconsultar en Wompi" y "Registrar un reembolso". Acepta `?query=`.
 - `/admin/usuarios`: el detalle de la cuenta lleva las mismas acciones sobre su suscripción, y cada referencia de pago enlaza a `/admin/pagos`. `/admin` enlaza a las dos páginas nuevas; la navegación lateral es de la entrega 2.
+- **Cambio del 2026-10-15:** el detalle de la cuenta ya no repite las acciones. Resume la suscripción, lista sus pagos y enlaza a `/admin/suscripciones?query=<correo>`, que abre con el detalle desplegado cuando hay una sola coincidencia. Ahí también cada referencia de pago enlaza a `/admin/pagos`. Las dos secciones se quedan: Usuarios responde quién es la persona; Suscripciones filtra por estado, plan y modo.
 
 **Tests**
 
 - `tests/api/test_admin_payments.py` (54): `403` en los siete endpoints para una cuenta que no es administradora; cada acción con su fila y su motivo, y rechazada sin motivo y sin fila; el efecto de extender, cancelar al final y cancelar de inmediato sobre `has_access` y sobre el job de renovaciones (lo que se canceló no se vuelve a cobrar; lo que se extendió se cobra en la fecha nueva, con su aviso); reconsultar un pago ya resuelto no da otro período; las anulaciones (por evento y por reconsulta, con período posterior, de una renovación anticipada, de otra transacción); los reembolsos; y el administrador que cancela su propia suscripción.
-- Playwright (`e2e/admin-billing.spec.ts`): el administrador encuentra una suscripción, la extiende con motivo y lo ve en la bitácora; y desde el detalle de la cuenta la cancela de inmediato (la cuenta pierde la mesa) y registra un reembolso en Pagos.
+- Playwright (`e2e/admin-billing.spec.ts`): el administrador encuentra una suscripción, la extiende con motivo y lo ve en la bitácora; y desde el detalle de la cuenta la cancela de inmediato (la cuenta pierde la mesa) y registra un reembolso en Pagos. Desde el 2026-10-15 la cancela siguiendo el enlace de la ficha a Suscripciones.
 - La migración se subió, se bajó con un pago anulado y un reembolso puestos, y se volvió a subir en una base desechable; `alembic check` sin diferencias.
 
 **Lo que queda sin probar o sin hacer**

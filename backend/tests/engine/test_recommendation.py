@@ -344,10 +344,22 @@ def test_sin_los_giros_minimos_no_recomienda_aunque_llegue_al_umbral(europea) ->
 
 
 def test_con_los_giros_minimos_ya_puede_recomendar(europea) -> None:
-    diez_rojos = ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19"]
-    assert len(diez_rojos) == MIN_SPINS_FOR_SIGNAL
-    resultado = recommend(europea, diez_rojos)
+    once_rojos = ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19", "21"]
+    assert len(once_rojos) == MIN_SPINS_FOR_SIGNAL
+    resultado = recommend(europea, once_rojos)
     assert resultado.decision is Decision.recommend
+
+
+def test_con_diez_giros_todavia_falta_informacion(europea) -> None:
+    """El minimo subio de 10 a 11 el 2026-10-15: diez rojos seguidos pasan el
+    umbral, pero todavia no hay recomendacion."""
+    diez_rojos = ["1", "3", "5", "7", "9", "12", "14", "16", "18", "19"]
+    resultado = recommend(europea, diez_rojos)
+    assert resultado.best is not None
+    assert resultado.best.signal_score >= europea.recommendation_threshold
+    assert resultado.decision is Decision.no_bet
+    assert no_bet_reason(resultado.decision, len(diez_rojos)) is NoBetReason.insufficient_data
+    assert all(c.signal_band is SignalBand.none for c in resultado.candidates)
 
 
 def test_con_varios_tramos_la_consistencia_entra_al_score(europea) -> None:
@@ -492,17 +504,18 @@ def test_sin_giros_no_hay_score_ni_ventanas(europea) -> None:
     assert all(c.windows == () for c in resultado.candidates)
 
 
-def test_el_minimo_de_giros_es_la_ventana_mas_corta() -> None:
-    assert MIN_SPINS_FOR_SIGNAL == 10
+def test_el_minimo_de_giros_es_once() -> None:
+    """Decidido el 2026-10-15; antes era la ventana mas corta (10)."""
+    assert MIN_SPINS_FOR_SIGNAL == 11
 
 
 def test_sin_giros_suficientes_el_no_apostar_es_por_falta_de_informacion() -> None:
     assert no_bet_reason(Decision.no_bet, 0) is NoBetReason.insufficient_data
-    assert no_bet_reason(Decision.no_bet, 9) is NoBetReason.insufficient_data
+    assert no_bet_reason(Decision.no_bet, 10) is NoBetReason.insufficient_data
 
 
 def test_con_giros_suficientes_el_no_apostar_es_por_el_umbral() -> None:
-    assert no_bet_reason(Decision.no_bet, 10) is NoBetReason.below_threshold
+    assert no_bet_reason(Decision.no_bet, 11) is NoBetReason.below_threshold
     assert no_bet_reason(Decision.no_bet, 500) is NoBetReason.below_threshold
 
 

@@ -8,8 +8,13 @@
  *
  * El estado es el de la base: lo pone el job de renovaciones cada hora. Si el
  * período pagado sigue vigente lo dice el servidor con su reloj (`in_force`).
+ *
+ * `?query=` en la dirección abre la página ya filtrada, y si hay una sola
+ * coincidencia, con su detalle abierto: así enlaza la ficha de `/admin/usuarios`,
+ * que desde el 2026-10-15 no repite las acciones sobre la suscripción.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -55,7 +60,10 @@ export default function AdminSubscriptionsPage() {
   const router = useRouter();
   // `draft` es lo que hay escrito en el formulario; `filters`, lo que se buscó.
   const [draft, setDraft] = useState<Filters>(NO_FILTERS);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  // Null hasta leer la dirección: así la primera búsqueda ya lleva `?query=`.
+  const [filters, setFilters] = useState<Filters | null>(null);
+  // Abrir el detalle solo en la búsqueda que llegó por la dirección.
+  const openSingle = useRef(false);
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<AdminSubscriptionListResponse | null>(null);
   const [plans, setPlans] = useState<AdminPlanResponse[]>([]);
@@ -64,7 +72,16 @@ export default function AdminSubscriptionsPage() {
   // Una respuesta que llega después de que se pidió otra se descarta.
   const lastRequest = useRef(0);
 
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search).get("query") ?? "";
+    const initial = { ...NO_FILTERS, query };
+    openSingle.current = query !== "";
+    setDraft(initial);
+    setFilters(initial);
+  }, []);
+
   const load = useCallback(async () => {
+    if (!filters) return;
     const request = ++lastRequest.current;
     const result = await withToken((t) =>
       adminApi.listSubscriptions(t, {
@@ -76,7 +93,12 @@ export default function AdminSubscriptionsPage() {
         offset,
       }),
     );
-    if (request === lastRequest.current) setPage(result);
+    if (request !== lastRequest.current) return;
+    setPage(result);
+    if (openSingle.current) {
+      openSingle.current = false;
+      if (result.items.length === 1) setSelected(result.items[0].id);
+    }
   }, [withToken, filters, offset]);
 
   useEffect(() => {
@@ -321,7 +343,12 @@ function SubscriptionDetail({
                 <span className="text-white">
                   <span className="font-bold">{formatMoney(p.amount_cents, p.currency)}</span> ·{" "}
                   {formatDateTime(p.resolved_at ?? p.created_at)}
-                  <span className="block break-all text-xs text-muted">{p.reference}</span>
+                  <Link
+                    href={`/admin/pagos?query=${encodeURIComponent(p.reference)}`}
+                    className="block break-all text-xs text-gold underline-offset-2 hover:underline"
+                  >
+                    {p.reference}
+                  </Link>
                 </span>
                 <Badge tone={PAYMENT_STATUS_TONE[p.status]}>{PAYMENT_STATUS_LABEL[p.status]}</Badge>
               </li>
@@ -329,7 +356,8 @@ function SubscriptionDetail({
           </ul>
         )}
         <p className="mt-2 text-xs text-muted">
-          Los eventos de Wompi, reconsultar un pago y registrar un reembolso están en Pagos.
+          Los eventos de Wompi, reconsultar un pago y registrar un reembolso están en Pagos (el
+          enlace de cada referencia).
         </p>
       </section>
 
