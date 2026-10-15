@@ -23,6 +23,24 @@ Antes de aceptar cualquier texto (código, copy, commit, doc) que hable de suger
 | "acierto del modelo" | "coincidencia con el resultado observado" |
 | nombres de tabla/campo tipo `predictions`, `predicted_value` | `statistical_suggestions`, `suggested_action`, `option_label` |
 
+## Apuestas deportivas (no construidas; decidido el 2026-10-15)
+
+Deportes todavía no existe (`docs/PLATAFORMA_COMPLETA.md` §8.4), pero sus términos ya están fijados en §0 de `docs/ARQUITECTURA_Y_ESTADISTICA.md`:
+
+| Prohibido | Usar en su lugar |
+|---|---|
+| "pick", "fija", "dato seguro", "tipster" | "Recomendación" / "Apostar: …" / "No apostar este partido" |
+| "apuesta de valor" / "value bet", "cuota con ventaja" | "la cuota paga más que la estimación estadística" |
+| "probabilidad de que gane X" | "estimación estadística a partir de resultados anteriores" |
+| "va a ganar", "favorito seguro" | "la cuota implica una probabilidad de X %, sin el margen de la casa" |
+| "combinada segura", "parley seguro", "stake garantizado" | no usar |
+
+**"Pronóstico" es la única excepción** (decisión del usuario). Se acepta solo en el texto visible del módulo de deportes:
+
+- En la ruleta se marca igual que "predicción".
+- Nunca va con palabras de certeza ("pronóstico seguro", "fijo", "garantizado").
+- Los nombres en código siguen siendo `recommendation`, nunca `forecast` ni `prediction`.
+
 ## Checklist antes de aprobar un texto o pieza de código
 
 1. ¿Aparece la palabra "predic-" en cualquier forma (predicción, predictivo, predice)? → reescribir.

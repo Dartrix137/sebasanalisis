@@ -44,6 +44,7 @@ Este es el requisito más importante del proyecto, por encima de conveniencia de
 - Aplica también a todo lo que trae la Fase 4: página de planes, correos transaccionales, textos legales, nombres de planes y códigos de cupones. Ningún plan "da ventaja", ningún correo promete resultados.
 - Si al escribir un commit, componente de UI, string de copy o nombre de variable/tabla dudas si suena predictivo, revísalo contra la tabla de terminología en `docs/ARQUITECTURA_Y_ESTADISTICA.md` §0 antes de continuar.
 - **Única excepción**: el panel de admin. Son métricas internas que no ve el cliente, y ahí "aciertos" y "fallos" se usan tal cual.
+- **Deportes** (decidido el 2026-10-15): la palabra "pronóstico" se permite solo en el texto visible del módulo de deportes. En la ruleta sigue prohibida, nunca va con palabras de certeza y los nombres en código siguen siendo `recommendation`. Los demás términos de deportes y el alcance completo están en §0 del doc de arquitectura.
 
 ### Disclaimer
 
@@ -179,7 +180,7 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 - Un juego tiene `slug` (va en la URL y no se edita), `module`, `status` (`active | hidden | coming_soon`) e ícono de un set fijo (§7.7 del documento de la Fase 4). Los routers de cada módulo salen del registro `api/game_modules.py`; `sports` está reservado sin implementación. Un plan sin filas en `plan_games` incluye todos los juegos, y quitarle un juego a un plan con suscripciones vigentes se rechaza.
 - La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee. El frontend no supone ningún juego: el teclado sale de `possible_outcomes` y su tono de `display` (`lib/outcomes.toneOf`).
 - La mesa vive en `/juegos/<slug>/mesa/<id>` (`/games/roulette/<id>` redirige ahí) y su pantalla la elige `lib/game-modules.ts` según el módulo del juego. Los componentes de la mesa están en `components/mesa/`.
-- Las apuestas deportivas no se construyen en esta fase: solo se reserva su estructura (§8 del documento).
+- Las apuestas deportivas no se construyen en esta fase. Lo decidido para cuando se construyan está en §8.4 del documento (paso 8, 2026-10-15): fútbol y resultado final; calendario y resultados del proveedor, la cuota la escribe el usuario; apuesta fija y proporcional, sin martingala, dos sectores ni Kelly; y **salen solo si el backtest supera al mercado**. Faltan el proveedor y el concepto del abogado (§10 n.º 13 y 14). No se crean `engine/sports/`, `/sports` ni `/deportes` vacíos: el módulo ya está reservado en el enum y en los registros.
 
 ### Decisiones pendientes
 

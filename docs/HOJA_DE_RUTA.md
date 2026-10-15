@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15.
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15 (paso 8).
 
 ---
 
@@ -118,7 +118,7 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Cerrado el 2026-10-13**, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
 | 6 | Admin dashboard completo por secciones | §4, §4.8, §4.9, §4.10 | **Cerrado el 2026-10-14.** Entrega 1 (suscripciones y pagos en el admin) construida el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos` y mezclada ese día (PR #17). Entrega 2 (navegación lateral, resumen, `/admin/juegos` y `/admin/motor`, forzar el restablecimiento y reenviar la verificación) construida el 2026-10-14 en la rama `fase-4-paso-6b-navegacion-y-resumen` y mezclada ese día (PR #18). Entrega 3 (traslado de un precio nuevo a las suscripciones vigentes) construida el 2026-10-14 en la rama `fase-4-paso-6c-traslado-de-precio`, con tests (ver abajo), y mezclada ese día (PR #19). Con ella quedó construido todo el paso. El usuario desplegó la entrega 3 y la probó en el VPS el 2026-10-14 con un plan de prueba: una subida con su aviso, la cancelación del traslado y una bajada, con los avisos enviados por el job y correo real. Dio el paso por cerrado ese día |
 | 7 | Generalización multijuego, con dados como fixture de test | §7, §7.7, §7.8, §7.9 | **Cerrado el 2026-10-14.** Entrega 1 (backend y admin: metadatos del juego, registro de módulos, `plan_games` y la regla n.º 7 de `has_access` con `403 game_not_in_plan`, juegos por plan en `/admin/planes`, campos nuevos en `/admin/juegos`, fixture de dados por la API) construida el 2026-10-14 en la rama `fase-4-paso-7a-multijuego-backend`, con tests, y mezclada ese día (PR #21). Entrega 2 (la mesa en `/juegos/[slug]/mesa/[sessionId]` con la redirección de la ruta vieja, `components/mesa/*`, el teclado desde `possible_outcomes` y la pista `display`, el menú de juegos, la página de cada juego, los juegos incluidos en `/planes` y el fixture de dados en Playwright) construida el 2026-10-14 en la rama `fase-4-paso-7b-mesa-y-menu`, con tests, y mezclada ese día (PR #22). Ese mismo día el usuario decidió salir solo con la ruleta y dejar los juegos futuros para código (§7.9; el alta de juegos del admin quedó oculta, PR #23). El usuario lo desplegó y lo probó en el VPS el 2026-10-14 y dio el paso por cerrado |
-| 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8 | Pendiente |
+| 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8, §8.4 | **Documentado el 2026-10-15** (rama `fase-4-paso-8-deportivas`), sin código. Las siete preguntas de §8.3 respondidas en §8.4; la fuente de datos y el marco regulatorio quedan pendientes (§10 n.º 13 y 14) y bloquean construir y sacar deportes, no el lanzamiento de la ruleta. Los espacios de nombres quedan reservados solo en el documento. Ver abajo |
 | 9 | Lanzamiento comercial | §9, párrafo final | Pendiente |
 
 ### Paso 0: qué quedó hecho
@@ -313,7 +313,7 @@ No se construye hasta que el usuario lo pida explícitamente:
 - **Señales avanzadas del motor**: transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal (`ARQUITECTURA_Y_ESTADISTICA.md` §2.9). Entran una por una.
 - **Builder visual de categorías** en el admin. Se usa formulario estructurado.
 - **Juego de dados como producto.** En la Fase 4 entra solo como fixture de test de genericidad.
-- **Apuestas deportivas.** La Fase 4 reserva la estructura; el diseño espera las respuestas de `PLATAFORMA_COMPLETA.md` §8.3.
+- **Apuestas deportivas.** Las respuestas a `PLATAFORMA_COMPLETA.md` §8.3 están en §8.4 (paso 8). Para construirlas faltan el proveedor de datos y el concepto del abogado (§10 n.º 13 y 14), y salen solo si el backtest supera al mercado.
 - **Cambio de plan en caliente** (mensual ↔ anual) y reembolsos por API.
 - **Exportar CSV**, migración de datos locales, notificaciones.
 - **Cualquier IA, OCR o lectura de imágenes.** Descartado, no pospuesto.
@@ -400,3 +400,19 @@ Comprobado: la suite completa del backend (con un test nuevo); cuatro tests nuev
 
 Decisiones del usuario (2026-10-14): se quita el aviso fijo "La ruleta no tiene memoria…", que `CLAUDE.md` ya daba por retirado, del dashboard, del pie del login y del registro, y de la descripción de la página; y se corrige el ejemplo de dos dados de la skill `categories-json-validator` (las sumas no son equiprobables).
 
+
+### Paso 8: qué quedó hecho
+
+Documentado el 2026-10-15 en la rama `fase-4-paso-8-deportivas`, sin código. El detalle está en `PLATAFORMA_COMPLETA.md` §8.4.
+
+- **Fuente de datos**: pendiente (§10 n.º 13). No se elige proveedor hasta que se vaya a construir; el requisito es la licencia de uso comercial confirmada por escrito.
+- **Alcance inicial**: fútbol, resultado final (local, empate o visitante) y pocas ligas, que se eligen junto con el proveedor.
+- **Ingreso**: calendario y resultados automáticos desde el proveedor; la cuota la escribe el usuario. Sin IA.
+- **Recomendación y medición**: la probabilidad implícita en la cuota, sin margen, contra una estimación estadística propia; backtest fuera de muestra contra la cuota de cierre. **Deportes sale solo si el backtest supera al mercado.**
+- **Lenguaje**: términos de deportes agregados a la tabla de §0 de `ARQUITECTURA_Y_ESTADISTICA.md`. **"Pronóstico" se permite en deportes**, con el alcance de §8.4: no en la ruleta, nunca con palabras de certeza, y los nombres en código no cambian.
+- **Marco regulatorio**: pendiente del abogado (§10 n.º 14); deportes no sale sin concepto escrito.
+- **Gestión de banca**: apuesta fija y proporcional; sin martingala, sin dos sectores y sin Kelly.
+
+No se crearon `backend/app/engine/sports/`, `/sports` ni `/deportes` (decisión del usuario): el módulo ya está reservado en el enum de `games.module`, en los dos registros de módulos y en el admin.
+
+Comprobado: solo cambiaron documentos y la skill de terminología, así que no hacía falta correr la suite.
