@@ -33,6 +33,25 @@ Lo que la plataforma sí hace, y que es legítimo:
 
 Todo endpoint, componente de UI y texto de marketing debe pasar este filtro. Si Claude Code genera copy que suene predictivo, debe corregirse antes de continuar.
 
+### Términos de apuestas deportivas (2026-10-15)
+
+Deportes no está construido (`docs/PLATAFORMA_COMPLETA.md` §8.4). Estos términos se agregan antes de que exista una sola línea de su copy. La regla es la misma: el producto no anticipa el resultado de un partido.
+
+| Prohibido | Usar en su lugar |
+| --- | --- |
+| "Pick", "fija", "dato seguro", "tipster" | "Recomendación" / "Apostar: …" / "No apostar este partido" |
+| "Apuesta de valor" / "value bet", "cuota con ventaja" | "La cuota paga más que la estimación estadística" |
+| "Probabilidad de que gane X" | "Estimación estadística a partir de resultados anteriores" |
+| "Va a ganar", "favorito seguro" | "La cuota implica una probabilidad de X %, sin el margen de la casa" |
+| "Combinada segura", "parley seguro", "stake garantizado" | No usar: no hay equivalente aceptable |
+
+**Excepción: "pronóstico"** (decisión del usuario del 2026-10-15, tomada sabiendo que choca con esta sección). Se permite solo en el texto visible del módulo de deportes:
+
+- En la ruleta sigue prohibida, igual que "predicción".
+- Nunca con palabras de certeza: "pronóstico seguro", "fijo" o "garantizado" siguen prohibidos.
+- Los nombres en código siguen siendo `recommendation`, nunca `prediction` ni `forecast`.
+- Antes de usarla en una pantalla se redacta la línea fija de la tarjeta de deportes. No puede llamar "pronóstico" a lo mismo que dice que no es una predicción, y el abogado revisa la palabra (`PLATAFORMA_COMPLETA.md` §10 n.º 14).
+
 ### Disclaimers estructurales (obligatorios, no opcionales)
 
 - ~~Banner fijo y visible en toda pantalla donde se muestren sugerencias.~~ **Retirado en la Fase 3** (2026-09-22): el carácter estadístico y no predictivo del producto está cubierto en los términos y condiciones. Lo que queda en la vista de ruleta es la línea fija al pie de la tarjeta de recomendación (§2.10): _"Recomendación generada a partir del análisis estadístico de los resultados registrados. No es una predicción."_

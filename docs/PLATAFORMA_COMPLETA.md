@@ -20,7 +20,7 @@
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
 7. [Plataforma multijuego](#7-plataforma-multijuego)
-8. [Base para apuestas deportivas](#8-base-para-apuestas-deportivas)
+8. [Base para apuestas deportivas](#8-base-para-apuestas-deportivas) (lo decidido en el paso 8 está en §8.4)
 9. [Orden de construcción](#9-orden-de-construcción)
 10. [Decisiones pendientes](#10-decisiones-pendientes)
 11. [Endpoints nuevos](#11-endpoints-nuevos)
@@ -1414,7 +1414,7 @@ Forzarlo dentro de `categories_json` rompería la regla de que el motor es gené
 ### 8.2 Qué queda preparado en esta fase
 
 - `games.module = 'sports'` reservado en el enum y en los registros de módulos (§7.3), sin implementación.
-- Espacios de nombres reservados: `/deportes` en el frontend, `/sports` en la API, `backend/app/engine/sports/` para su motor (también puro y testeable).
+- Espacios de nombres reservados: `/deportes` en el frontend, `/sports` en la API, `backend/app/engine/sports/` para su motor (también puro y testeable). **Reservados solo en este documento** (decidido el 2026-10-15, §8.4): no se crean carpetas ni rutas vacías. El módulo ya está reservado donde hace efecto: el enum de `games.module`, los registros `api/game_modules.py` y `lib/game-modules.ts`, y el admin, que rechaza crear un juego con él.
 - Acceso por juego y por plan (§7.4), para venderlo como plan aparte o combinado.
 - Las tablas de suscripción, planes y cupones no dependen del tipo de juego.
 
@@ -1427,6 +1427,36 @@ Forzarlo dentro de `categories_json` rompería la regla de que el motor es gené
 5. **Lenguaje**: la regla no predictiva aplica igual. Hace falta extender la tabla de terminología de §0 con los términos propios de deportes antes de escribir copy.
 6. **Marco regulatorio**: confirmar con abogado que ofrecer análisis deportivo por suscripción no requiere autorización de Coljuegos, y qué avisos exige.
 7. **Gestión de banca**: si las progresiones actuales aplican, o se necesita otra (por ejemplo, stake fijo o proporcional), y con qué advertencias.
+
+### 8.4 Cómo quedó decidido (2026-10-15)
+
+Respuestas del usuario a §8.3, en el paso 8. **Deportes no se construye en esta fase.** Lo que sigue es lo que hay que respetar el día que se construya, como un módulo nuevo con su propio motor escrito en código (§7.9).
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| 1 | Fuente de datos | **Pendiente** (§10 n.º 13). Propuesta por defecto: no se elige proveedor hasta que se vaya a construir. El requisito es su confirmación por escrito de que la licencia permite el uso comercial en un producto de pago. Precio, límites de uso y condiciones se leen de sus términos vigentes, no de memoria. Sus cuotas sirven solo para el backtest interno y no se muestran al cliente, salvo que la licencia lo permita expresamente. |
+| 2 | Alcance inicial | **Pequeño**: fútbol, un solo mercado (resultado final: local, empate o visitante) y pocas ligas. Las ligas concretas se eligen junto con el proveedor; la propuesta es la Liga BetPlay y una o dos ligas europeas. Más o menos goles, ambos marcan y hándicap quedan para después, y cada mercado nuevo se mide por separado. |
+| 3 | Ingreso | **Mixto.** Calendario y resultados llegan automáticos desde el proveedor: un resultado mal escrito contaminaría la medición. La cuota la escribe el usuario, la de la casa donde apuesta, como hoy escribe los giros. Sin IA, sin OCR y sin lectura de pantallazos. |
+| 4 | Qué es una recomendación y cómo se mide | El motor compara la probabilidad implícita en la cuota, sin el margen de la casa, con una estimación estadística propia hecha a partir de resultados anteriores. "Apostar: …" sale solo cuando la cuota que escribió el usuario paga más de lo que justifica esa estimación; si no, "No apostar este partido". Se mide con un backtest sobre temporadas que el modelo no vio: número de recomendaciones, resultado neto a la cuota tomada y caída máxima, contra la línea base del propio mercado (la cuota de cierre sin margen). **Deportes sale solo si ese backtest supera al mercado.** Si el resultado neto queda en el margen de la casa, que es lo esperable, no sale. El backtest necesita cuotas históricas, así que depende de la n.º 1. |
+| 5 | Lenguaje | Los términos de deportes están en la tabla de §0 de `ARQUITECTURA_Y_ESTADISTICA.md`. **"Pronóstico" se permite en deportes** (decisión del usuario, tomada sabiendo que choca con la regla de lenguaje no predictivo). El alcance de esa excepción está abajo. |
+| 6 | Marco regulatorio | **Pendiente del abogado** (§10 n.º 14). Propuesta por defecto: mientras no haya concepto escrito se supone que podría requerir autorización de Coljuegos o tener restricciones de publicidad, y deportes no sale sin ese concepto. |
+| 7 | Gestión de banca | **Apuesta fija y proporcional** (un porcentaje fijo de la banca). En deportes no se ofrecen la martingala ni la de dos sectores: con una cuota distinta en cada partido la serie no tiene sentido y el riesgo de ruina crece. Tampoco el criterio de Kelly, que supone una ventaja que no se puede afirmar. Se conservan el límite de pérdida y el estado de parar de la ruleta, con la advertencia de que ninguna gestión cambia el margen de la casa. |
+
+**Alcance de la excepción de "pronóstico"**
+
+- Solo en el texto visible del módulo de deportes. En la ruleta sigue prohibida, igual que "predicción".
+- Nunca acompañada de palabras de certeza: "pronóstico seguro", "pronóstico fijo" o "pronóstico garantizado" siguen prohibidos.
+- Los nombres en código no cambian: `recommendation`, nunca `prediction` ni `forecast`. Es la lectura más conservadora de la decisión; si el usuario quiere otra, se cambia aquí y en `CLAUDE.md`.
+- **Queda abierto para cuando se diseñe la tarjeta de deportes**: la línea fija de la tarjeta de la ruleta dice "No es una predicción". La de deportes se redacta entonces, y no puede llamar "pronóstico" a lo mismo que dice que no es una predicción.
+- El abogado de la n.º 6 revisa también esta palabra, junto con los avisos.
+
+**Lo que tiene que estar antes de empezar a construir deportes**
+
+1. Proveedor elegido, con la licencia confirmada por escrito (n.º 1).
+2. Concepto escrito del abogado (n.º 6).
+3. El backtest fuera de muestra, y que supere al mercado (n.º 4). Es la condición para que salga, no para empezar: el backtest es lo primero que se construye.
+
+**Qué no se hizo en el paso 8, a propósito**: no se crearon `backend/app/engine/sports/`, el prefijo `/sports` de la API ni la ruta `/deportes`. Una carpeta o una ruta vacía no reserva nada que el enum y los registros de módulos no reserven ya, y una pantalla que no hace nada sería una promesa en la interfaz.
 
 ---
 
@@ -1444,7 +1474,7 @@ Como en `CLAUDE.md`: no se avanza a un paso sin que el anterior tenga tests o un
 | 5 | **Wompi**: alta, webhook, reconsulta, renovación, reintentos, cancelación, cambio de tarjeta, `/cuenta` (§3) | Es el núcleo del negocio y depende de 1-4. | Los 12 casos de §3.9 en verde + flujo completo probado a mano en el sandbox. |
 | 6 | **Admin dashboard completo**: secciones, auditoría, resumen (§4) | Con dinero real circulando, operarlo y auditarlo es obligatorio. | Toda acción de acceso o dinero deja fila en `admin_audit_log`. |
 | 7 | **Generalización multijuego** + fixture de dados (§7) | No bloquea vender ruleta; sí bloquea agregar juegos. | Tests de §7.6 en verde; la ruleta funciona igual en la ruta nueva. |
-| 8 | **Base de deportivas** (§8) | Solo estructura y respuestas a §8.3. | Preguntas de §8.3 respondidas por el usuario y documentadas. |
+| 8 | **Base de deportivas** (§8) | Solo estructura y respuestas a §8.3. | Preguntas de §8.3 respondidas por el usuario y documentadas. **Documentadas el 2026-10-15 en §8.4**, con la n.º 1 y la n.º 6 como pendientes (§10 n.º 13 y 14). |
 | 9 | **Lanzamiento comercial** | Con todo construido, lo que falta es operativo y no de código. | La lista "Antes del lanzamiento comercial" de abajo, completa. |
 
 Dos precisiones sobre el orden (2026-10-05):
@@ -1480,6 +1510,8 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente: el usuario decidió el 2026-10-08 no ponerlo todavía, y los borradores publicados lo llevan como `[PENDIENTE]`. Bloquea el lanzamiento. |
 | 11 | Servicio de monitoreo de errores | **Resuelta (2026-10-05): GlitchTip autohospedado** en el mismo VPS. Ver §13.6. |
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. Los tests de frontend ya están decididos (§13.3). |
+| 13 | Deportes: proveedor de calendario, resultados y cuotas, y presupuesto mensual (§8.3 n.º 1) | No se elige hasta que se vaya a construir deportes. Requisito: confirmación por escrito de que la licencia permite el uso comercial en un producto de pago; sus cuotas, solo para el backtest interno salvo que la licencia permita mostrarlas. Ver §8.4. Bloquea construir deportes, no el lanzamiento de la ruleta. |
+| 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
 
 ---
 
