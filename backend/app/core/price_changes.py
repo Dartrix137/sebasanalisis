@@ -272,6 +272,52 @@ def price_at(db: Session, subscription: Subscription, moment: datetime) -> int:
     return price_change.price_at(subscription.price_cents, pending, moment)
 
 
+def charge_price(db: Session, subscription: Subscription, first_charge_at: datetime) -> int:
+    """El precio de los tres intentos del cobro automatico del periodo cuyo
+    primer intento va en `first_charge_at` (y de su aviso): el que corria
+    entonces, aunque el job haya aplicado despues una subida (2026-10-15)."""
+    row = pending_for(db, subscription.id)
+    pending = (
+        PendingChange(new_price_cents=row.new_price_cents, effective_at=row.effective_at)
+        if row is not None
+        else None
+    )
+    applied = [
+        price_change.AppliedChange(
+            old_price_cents=r.old_price_cents,
+            new_price_cents=r.new_price_cents,
+            effective_at=r.effective_at,
+        )
+        for r in db.scalars(
+            select(SubscriptionPriceChange).where(
+                SubscriptionPriceChange.subscription_id == subscription.id,
+                SubscriptionPriceChange.applied_at.is_not(None),
+                SubscriptionPriceChange.effective_at > first_charge_at,
+            )
+        )
+        if r.effective_at is not None
+    ]
+    return price_change.charge_price(subscription.price_cents, pending, applied, first_charge_at)
+
+
+def first_charge_with_new_price(
+    subscription: Subscription, effective_at: datetime | None
+) -> datetime | None:
+    """El primer cobro automatico que sale con el precio nuevo. None en el pago
+    manual (el precio nuevo corre para los pagos desde `effective_at`) o si
+    todavia no se sabe la fecha."""
+    period_end = subscription.current_period_end
+    if effective_at is None or period_end is None or subscription.renewal_mode != "automatic":
+        return None
+    plan = subscription.plan
+    return price_change.first_charge_with_new_price(
+        effective_at,
+        period_end,
+        plan.interval,  # type: ignore[arg-type]
+        plan.interval_count,
+    )
+
+
 def apply_due(db: Session, now: datetime, subscription_id: uuid.UUID | None = None) -> int:
     """Pone en `subscriptions.price_cents` los precios nuevos cuya fecha ya
     llego. No hace commit. Devuelve cuantos aplico.

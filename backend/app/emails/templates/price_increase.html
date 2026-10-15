@@ -8,14 +8,18 @@
   <strong>{{ new_price_cents | money(currency) }}</strong> {{ period_label }}.
 </p>
 <p style="margin:0 0 12px 0;">
-  El precio nuevo se aplica a {% if automatic %}los cobros{% else %}los pagos{% endif %} desde
+  {% if automatic and first_charge_at %}El precio nuevo corre desde el
+  <strong>{{ effective_at | fecha }}</strong>: el primer cobro con el precio nuevo es el del
+  <strong>{{ first_charge_at | fecha }}</strong>. Hasta entonces sigues pagando
+  {{ old_price_cents | money(currency) }}.{% else %}El precio nuevo se aplica a
+  {% if automatic %}los cobros{% else %}los pagos{% endif %} desde
   el <strong>{{ effective_at | fecha }}</strong>. Hasta esa fecha sigues pagando
-  {{ old_price_cents | money(currency) }}.{% if has_discount %} El descuento que tienes se sigue
+  {{ old_price_cents | money(currency) }}.{% endif %}{% if has_discount %} El descuento que tienes se sigue
   aplicando, ahora sobre el precio nuevo.{% endif %}
 </p>
 <p style="margin:0 0 12px 0;">
   {% if automatic %}Si no quieres seguir con el precio nuevo, puedes cancelar la renovación o
-  pasar a pago manual desde tu cuenta antes de esa fecha.{% else %}Tu suscripción es de pago
+  pasar a pago manual desde tu cuenta antes de {% if first_charge_at %}ese cobro{% else %}esa fecha{% endif %}.{% else %}Tu suscripción es de pago
   manual: no se te cobra nada sin que tú pagues. Si decides no pagar el período siguiente, tu
   acceso termina cuando vence el que ya pagaste.{% endif %}
 </p>

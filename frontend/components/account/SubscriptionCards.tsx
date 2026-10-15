@@ -214,11 +214,15 @@ export function SubscriptionCard() {
               {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)}
             </Row>
             {subscription.price_change ? (
-              // Un cambio de precio que ya se le avisó por correo (§4.10).
+              // Un cambio de precio que ya se le avisó por correo (§4.10). En la
+              // renovación automática se dice desde qué cobro: un período cuyo
+              // primer intento llega antes de la fecha se cobra con el precio viejo.
               <Row label="Precio nuevo">
                 {formatMoney(subscription.price_change.new_price_cents, subscription.currency)} /{" "}
-                {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)}, desde
-                el {formatLegalDate(subscription.price_change.effective_at)}
+                {intervalLabel(subscription.plan.interval, subscription.plan.interval_count)},{" "}
+                {subscription.price_change.first_charge_at
+                  ? `desde el cobro del ${formatLegalDate(subscription.price_change.first_charge_at)}`
+                  : `desde el ${formatLegalDate(subscription.price_change.effective_at)}`}
               </Row>
             ) : null}
             <Row label="Forma de pago">{RENEWAL_MODE_LABEL[subscription.renewal_mode]}</Row>

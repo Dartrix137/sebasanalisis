@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.billing import pricing
+from app.billing.schedule import first_charge_at
 from app.core import price_changes, subscriptions
 from app.core.access import has_access
 from app.core.accounts import is_last_active_admin
@@ -44,9 +45,12 @@ def subscription_response(
     vigente = subscriptions.in_force(subscription, now)
     continues = vigente and subscription.status != "canceled"
     # Un traslado de precio ya avisado (§4.10): el proximo cobro automatico se
-    # muestra con el precio que correra ese dia.
+    # muestra con el precio de su periodo, el mismo en sus tres intentos.
     upcoming = price_changes.pending_for(db, subscription.id) if vigente else None
-    charge_moment = subscription.next_charge_at or now
+    if subscription.renewal_mode == "automatic" and period_end is not None:
+        next_price = price_changes.charge_price(db, subscription, first_charge_at(period_end))
+    else:
+        next_price = price_changes.price_at(db, subscription, subscription.next_charge_at or now)
     return SubscriptionResponse(
         id=subscription.id,
         status=subscription.status,  # type: ignore[arg-type]
@@ -64,7 +68,7 @@ def subscription_response(
         next_charge_at=subscription.next_charge_at if continues else None,
         next_charge_cents=(
             pricing.renewal_quote(
-                price_changes.price_at(db, subscription, charge_moment),
+                next_price,
                 subscription.currency,
                 subscriptions.renewal_discount(db, subscription),
             ).total_cents
@@ -73,7 +77,11 @@ def subscription_response(
         ),
         price_change=(
             UpcomingPriceChange(
-                new_price_cents=upcoming.new_price_cents, effective_at=upcoming.effective_at
+                new_price_cents=upcoming.new_price_cents,
+                effective_at=upcoming.effective_at,
+                first_charge_at=price_changes.first_charge_with_new_price(
+                    subscription, upcoming.effective_at
+                ),
             )
             if upcoming is not None and upcoming.effective_at is not None
             else None

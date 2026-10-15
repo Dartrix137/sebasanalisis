@@ -54,6 +54,7 @@ CONTEXT: dict[str, Any] = {
     "new_price_cents": 12_000_000,
     "period_label": "al mes",
     "effective_at": datetime(2026, 11, 14, 3, 30, tzinfo=UTC),
+    "first_charge_at": datetime(2026, 12, 12, 3, 30, tzinfo=UTC),
     "has_discount": True,
 }
 
