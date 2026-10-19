@@ -35,6 +35,7 @@
 
 import { EncryptJWT, importSPKI } from "jose";
 
+import { onlyDigits } from "./card-input";
 import type { PaymentSourceKind } from "./types/billing";
 
 export interface TokenizedSource {
@@ -42,7 +43,7 @@ export interface TokenizedSource {
   type: PaymentSourceKind;
 }
 
-/** Lo que el cliente escribe en el formulario. Nunca sale de este archivo salvo cifrado. */
+/** La tarjeta como la pide Wompi. Nunca sale de este archivo salvo cifrada. */
 export interface CardInput {
   number: string;
   cvc: string;
@@ -76,62 +77,6 @@ const WOMPI_UNREACHABLE = "No pudimos comunicarnos con Wompi. Intenta de nuevo e
 const CARD_REJECTED =
   "Wompi no aceptó los datos de la tarjeta. Revísalos y vuelve a escribirlos.";
 const NEQUI_REJECTED = "Wompi no aceptó ese número de Nequi. Revísalo e intenta de nuevo.";
-
-// ---------- Validación en el navegador ----------
-
-export function onlyDigits(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-/** Algoritmo de Luhn, sobre 13 a 19 dígitos. */
-export function luhnValid(number: string): boolean {
-  const digits = onlyDigits(number);
-  if (digits !== number.replace(/[\s-]/g, "")) return false;
-  if (digits.length < 13 || digits.length > 19) return false;
-  let sum = 0;
-  for (let i = 0; i < digits.length; i++) {
-    let d = Number(digits[digits.length - 1 - i]);
-    if (i % 2 === 1) {
-      d *= 2;
-      if (d > 9) d -= 9;
-    }
-    sum += d;
-  }
-  return sum % 10 === 0;
-}
-
-/** Mes y año de dos dígitos, sin vencer: la tarjeta vale hasta el último día de su mes. */
-export function expiryValid(expMonth: string, expYear: string, now: Date = new Date()): boolean {
-  if (!/^\d{2}$/.test(expMonth) || !/^\d{2}$/.test(expYear)) return false;
-  const month = Number(expMonth);
-  if (month < 1 || month > 12) return false;
-  const year = 2000 + Number(expYear);
-  const current = now.getFullYear() * 12 + now.getMonth();
-  return year * 12 + (month - 1) >= current;
-}
-
-export function cvcValid(cvc: string): boolean {
-  return /^\d{3,4}$/.test(cvc);
-}
-
-/** Celular colombiano: diez dígitos que empiezan por 3. */
-export function nequiPhoneValid(phone: string): boolean {
-  return /^3\d{9}$/.test(phone);
-}
-
-/** El primer problema de la tarjeta, en palabras para el cliente, o null si está bien. */
-export function cardProblem(card: CardInput, now: Date = new Date()): string | null {
-  if (!luhnValid(card.number)) return "Revisa el número de la tarjeta.";
-  if (!/^\d{2}$/.test(card.expMonth) || !/^\d{2}$/.test(card.expYear)) {
-    return "Escribe el mes y el año de vencimiento con dos dígitos cada uno (por ejemplo, 08 y 30).";
-  }
-  if (!expiryValid(card.expMonth, card.expYear, now)) {
-    return "La fecha de vencimiento no es válida o la tarjeta ya venció.";
-  }
-  if (!cvcValid(card.cvc)) return "El código de seguridad (CVC) tiene 3 o 4 dígitos.";
-  if (!card.holder.trim()) return "Escribe el nombre del titular como aparece en la tarjeta.";
-  return null;
-}
 
 // ---------- Llamadas a Wompi ----------
 

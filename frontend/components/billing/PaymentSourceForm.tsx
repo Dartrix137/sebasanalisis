@@ -21,21 +21,27 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 
 import { Button, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import {
-  TokenizeError,
-  cardProblem,
+  BRAND_LABEL,
+  cardBrand,
+  cardFieldErrors,
+  formatCardNumber,
+  formatCvc,
+  formatExpiry,
+  formatHolder,
+  formatPhone,
   nequiPhoneValid,
-  nequiStatus,
   onlyDigits,
-  startNequi,
-  tokenizeCard,
-} from "@/lib/tokenize";
-import type { CardInput, NequiStatus, TokenizedSource, TokenizerTarget } from "@/lib/tokenize";
+  parseExpiry,
+} from "@/lib/card-input";
+import type { CardField, CardForm } from "@/lib/card-input";
+import { TokenizeError, nequiStatus, startNequi, tokenizeCard } from "@/lib/tokenize";
+import type { NequiStatus, TokenizedSource, TokenizerTarget } from "@/lib/tokenize";
 import type { AcceptanceResponse, BillingAvailabilityResponse } from "@/lib/types/billing";
 
 const LINK = "font-bold text-gold hover:text-gold-soft";
@@ -51,7 +57,13 @@ const FAKE_SOURCES: [string, string][] = [
 export const NEQUI_TIMEOUT_MS = 3 * 60_000;
 export const NEQUI_POLL_MS = 3_000;
 
-const EMPTY_CARD: CardInput = { number: "", cvc: "", expMonth: "", expYear: "", holder: "" };
+const EMPTY_CARD: CardForm = { number: "", expiry: "", cvc: "", holder: "" };
+const ALL_TOUCHED: Record<CardField, boolean> = {
+  number: true,
+  expiry: true,
+  cvc: true,
+  holder: true,
+};
 
 const UNEXPECTED = "No se pudo guardar el medio de pago. Intenta de nuevo.";
 
@@ -65,16 +77,21 @@ type Method = "CARD" | "NEQUI";
  */
 type Stage = "idle" | "tokenizing" | "nequi_waiting" | "nequi_failed";
 
-/** El mes con dos dígitos y el año con los dos últimos, como los pide Wompi. */
-function normalizeExpiry(card: CardInput): CardInput {
-  const month = onlyDigits(card.expMonth);
-  const year = onlyDigits(card.expYear);
-  return {
-    ...card,
-    expMonth: month.length === 1 ? `0${month}` : month,
-    // El autocompletado del navegador puede llenar el año con cuatro dígitos.
-    expYear: year.length === 4 ? year.slice(2) : year,
-  };
+/**
+ * Pone el cursor después del mismo número de dígitos que tenía antes de
+ * reformatear: sin esto, corregir un dígito en medio del número lo manda al final.
+ */
+function keepCaret(input: HTMLInputElement, formatted: string): void {
+  const caret = input.selectionStart ?? input.value.length;
+  const digitsBefore = onlyDigits(input.value.slice(0, caret)).length;
+  requestAnimationFrame(() => {
+    if (document.activeElement !== input) return;
+    let position = 0;
+    for (let seen = 0; position < formatted.length && seen < digitsBefore; position++) {
+      if (/\d/.test(formatted[position])) seen++;
+    }
+    input.setSelectionRange(position, position);
+  });
 }
 
 function messageOf(err: unknown): string {
@@ -103,7 +120,9 @@ export function PaymentSourceForm({
   const [dataAccepted, setDataAccepted] = useState(false);
   const [fakeToken, setFakeToken] = useState(FAKE_SOURCES[0][0]);
   const [method, setMethod] = useState<Method>("CARD");
-  const [card, setCard] = useState<CardInput>(EMPTY_CARD);
+  const [card, setCard] = useState<CardForm>(EMPTY_CARD);
+  // Un campo muestra su error al salir de él, o al intentar guardar.
+  const [touched, setTouched] = useState<Partial<Record<CardField, boolean>>>({});
   const [phone, setPhone] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [nequiToken, setNequiToken] = useState<string | null>(null);
@@ -183,6 +202,8 @@ export function PaymentSourceForm({
   const target: TokenizerTarget | null =
     publicKey && apiBaseUrl ? { publicKey, apiBaseUrl } : null;
   const ready = !!acceptance && termsAccepted && dataAccepted;
+  const brand = cardBrand(card.number);
+  const cardErrors = cardFieldErrors(card);
   const locked = disabled || busy || stage === "tokenizing" || stage === "nequi_waiting";
 
   function chooseMethod(next: Method) {
@@ -197,16 +218,28 @@ export function PaymentSourceForm({
     onSource({ token: fakeToken, type: "CARD" }, acceptance);
   }
 
+  function changeNumber(e: ChangeEvent<HTMLInputElement>) {
+    const number = formatCardNumber(e.target.value);
+    keepCaret(e.target, number);
+    // Al cambiar de marca puede cambiar el largo del CVC (4 en American Express).
+    setCard({ ...card, number, cvc: formatCvc(card.cvc, cardBrand(number)) });
+  }
+
+  function touch(field: CardField) {
+    setTouched((before) => ({ ...before, [field]: true }));
+  }
+
   async function saveCard(e: FormEvent) {
     e.preventDefault();
     if (!acceptance || !target || locked || !ready) return;
-    const input = normalizeExpiry(card);
-    const problem = cardProblem(input);
-    if (problem) {
-      // Aquí no salió nada: se deja corregir sin volver a escribir todo.
-      setError(problem);
+    if (Object.keys(cardFieldErrors(card)).length > 0) {
+      // Aquí no salió nada: cada campo dice qué corregir, sin volver a escribir todo.
+      setTouched(ALL_TOUCHED);
+      setError(null);
       return;
     }
+    const { expMonth, expYear } = parseExpiry(card.expiry);
+    const input = { number: card.number, cvc: card.cvc, expMonth, expYear, holder: card.holder };
     setError(null);
     setStage("tokenizing");
     try {
@@ -218,6 +251,7 @@ export function PaymentSourceForm({
     } finally {
       // Salga bien o mal, la tarjeta no se queda en el formulario.
       setCard(EMPTY_CARD);
+      setTouched({});
       setStage("idle");
     }
   }
@@ -359,38 +393,38 @@ export function PaymentSourceForm({
               <fieldset disabled={locked} className="space-y-3">
                 <Field
                   label="Número de la tarjeta"
+                  placeholder="1234 5678 9012 3456"
                   inputMode="numeric"
                   autoComplete="cc-number"
                   maxLength={23}
                   value={card.number}
-                  onChange={(e) => setCard({ ...card, number: e.target.value })}
+                  onChange={changeNumber}
+                  onBlur={() => touch("number")}
+                  error={touched.number ? cardErrors.number : undefined}
+                  hint={brand ? BRAND_LABEL[brand] : undefined}
                 />
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <Field
-                    label="Mes"
-                    placeholder="MM"
+                    label="Vencimiento"
+                    placeholder="MM/AA"
                     inputMode="numeric"
-                    autoComplete="cc-exp-month"
-                    maxLength={2}
-                    value={card.expMonth}
-                    onChange={(e) => setCard({ ...card, expMonth: e.target.value })}
-                  />
-                  <Field
-                    label="Año"
-                    placeholder="AA"
-                    inputMode="numeric"
-                    autoComplete="cc-exp-year"
-                    maxLength={4}
-                    value={card.expYear}
-                    onChange={(e) => setCard({ ...card, expYear: e.target.value })}
+                    autoComplete="cc-exp"
+                    maxLength={5}
+                    value={card.expiry}
+                    onChange={(e) => setCard({ ...card, expiry: formatExpiry(e.target.value) })}
+                    onBlur={() => touch("expiry")}
+                    error={touched.expiry ? cardErrors.expiry : undefined}
                   />
                   <Field
                     label="CVC"
+                    placeholder={brand === "amex" ? "1234" : "123"}
                     inputMode="numeric"
                     autoComplete="cc-csc"
                     maxLength={4}
                     value={card.cvc}
-                    onChange={(e) => setCard({ ...card, cvc: e.target.value })}
+                    onChange={(e) => setCard({ ...card, cvc: formatCvc(e.target.value, brand) })}
+                    onBlur={() => touch("cvc")}
+                    error={touched.cvc ? cardErrors.cvc : undefined}
                   />
                 </div>
                 <Field
@@ -399,7 +433,9 @@ export function PaymentSourceForm({
                   autoComplete="cc-name"
                   maxLength={100}
                   value={card.holder}
-                  onChange={(e) => setCard({ ...card, holder: e.target.value })}
+                  onChange={(e) => setCard({ ...card, holder: formatHolder(e.target.value) })}
+                  onBlur={() => touch("holder")}
+                  error={touched.holder ? cardErrors.holder : undefined}
                 />
               </fieldset>
               {error ? <ErrorBox message={error} /> : null}
@@ -415,9 +451,10 @@ export function PaymentSourceForm({
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel-national"
-                  maxLength={13}
+                  placeholder="300 123 4567"
+                  maxLength={12}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(formatPhone(e.target.value))}
                 />
               </fieldset>
               {stage === "nequi_waiting" ? (

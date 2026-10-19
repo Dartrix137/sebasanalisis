@@ -134,8 +134,7 @@ async function startAutomatic(page: Page): Promise<void> {
 
 async function fillCard(page: Page, number: string): Promise<void> {
   await page.getByLabel("Número de la tarjeta").fill(number);
-  await page.getByLabel("Mes", { exact: true }).fill("08");
-  await page.getByLabel("Año", { exact: true }).fill("30");
+  await page.getByLabel("Vencimiento").fill("08/30");
   await page.getByLabel("CVC").fill(CARD_CVC);
   await page.getByLabel("Nombre del titular").fill(CARD_HOLDER);
 }
@@ -160,19 +159,42 @@ test("tarjeta: va cifrada directo a Wompi y a nuestra API solo llega el token", 
 
   const pagar = page.getByRole("button", { name: "Guardar medio de pago y pagar 100.000 COP" });
 
+  // Los campos solo admiten lo que corresponde, con el formato de una tarjeta.
+  const numero = page.getByLabel("Número de la tarjeta");
+  await numero.pressSequentially("4242abc-4242 4242$4242");
+  await expect(numero).toHaveValue("4242 4242 4242 4242");
+  await expect(page.getByText("Visa", { exact: true })).toBeVisible();
+  const vencimiento = page.getByLabel("Vencimiento");
+  await vencimiento.pressSequentially("99e/");
+  await expect(vencimiento).toHaveValue("09/9");
+  await vencimiento.fill("");
+  await vencimiento.pressSequentially("13");
+  await expect(vencimiento).toHaveValue("1");
+  const cvc = page.getByLabel("CVC");
+  await cvc.pressSequentially("9a8x7 6");
+  await expect(cvc).toHaveValue("987");
+  const titular = page.getByLabel("Nombre del titular");
+  await titular.pressSequentially("José 4 Pérez!");
+  await expect(titular).toHaveValue("José Pérez");
+
+  // Al salir de un campo mal escrito, el campo dice qué corregir.
+  await vencimiento.fill("08/2");
+  await titular.click();
+  await expect(page.getByText("Escribe el vencimiento como MM/AA.")).toBeVisible();
+
   // Un número que no pasa Luhn no sale del navegador, y no se borra lo escrito.
   await fillCard(page, "4242424242424241");
   await pagar.click();
-  await expect(page.getByText("Revisa el número de la tarjeta.")).toBeVisible();
-  await expect(page.getByLabel("Número de la tarjeta")).toHaveValue("4242424242424241");
-  await expect(page.getByLabel("Nombre del titular")).toHaveValue(CARD_HOLDER);
+  await expect(page.getByText("El número de la tarjeta no es válido.")).toBeVisible();
+  await expect(numero).toHaveValue("4242 4242 4242 4241");
+  await expect(titular).toHaveValue(CARD_HOLDER);
   expect(wompi.cards).toHaveLength(0);
 
   // Una tarjeta vencida tampoco.
-  await page.getByLabel("Número de la tarjeta").fill(CARD_NUMBER);
-  await page.getByLabel("Año", { exact: true }).fill("20");
+  await numero.fill(CARD_NUMBER);
+  await vencimiento.fill("08/20");
   await pagar.click();
-  await expect(page.getByText(/ya venció/)).toBeVisible();
+  await expect(page.getByText("Esta tarjeta ya venció.")).toBeVisible();
   expect(wompi.cards).toHaveLength(0);
 
   // Wompi la rechaza: un mensaje simple, sin su respuesta, y el formulario vacío.
@@ -231,7 +253,8 @@ test("Nequi: espera la aprobación en la app; si la rechaza, se puede volver a i
 
   // El cliente rechaza la solicitud en su app.
   wompi.nequiStatuses = ["PENDING", "DECLINED"];
-  await page.getByLabel("Celular de tu cuenta Nequi").fill("3991111111");
+  await page.getByLabel("Celular de tu cuenta Nequi").fill("399-111 1111");
+  await expect(page.getByLabel("Celular de tu cuenta Nequi")).toHaveValue("399 111 1111");
   await page.getByRole("button", { name: "Guardar medio de pago y pagar 100.000 COP" }).click();
   await expect(page.getByText(/Wompi envió una solicitud a tu app Nequi/)).toBeVisible();
   await expect(page.getByText(/Nequi no aprobó la solicitud/)).toBeVisible({ timeout: 15_000 });

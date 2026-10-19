@@ -7,7 +7,7 @@
  */
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 
 import logoMark from "./brand/logo-mark.png";
@@ -60,6 +60,7 @@ export function Field({
   hint,
   info,
   infoAlign,
+  error,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & {
   label: string;
@@ -67,7 +68,11 @@ export function Field({
   /** Explicación del campo, en un tooltip junto a la etiqueta. */
   info?: ReactNode;
   infoAlign?: "left" | "right";
+  /** Qué está mal en lo escrito. Reemplaza a `hint` mientras exista. */
+  error?: string;
 }) {
+  const messageId = useId();
+  const message = error ?? hint;
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-bold text-white">
@@ -80,9 +85,20 @@ export function Field({
       </span>
       <input
         {...props}
-        className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={message ? messageId : undefined}
+        className={`w-full rounded-lg border bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 ${
+          error ? "border-table-red/70 focus:border-table-red" : "border-edge focus:border-gold/60"
+        }`}
       />
-      {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
+      {message ? (
+        <span
+          id={messageId}
+          className={`mt-1 block text-xs ${error ? "font-bold text-table-red" : "text-muted"}`}
+        >
+          {message}
+        </span>
+      ) : null}
     </label>
   );
 }
