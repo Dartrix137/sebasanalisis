@@ -1018,6 +1018,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/card-encryption-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Card Encryption Key
+         * @description La llave con la que el navegador cifra la tarjeta antes de mandarla
+         *     directo al procesador (§3.16). Por aqui pasa solo la llave, nunca la
+         *     tarjeta: el procesador no deja pedirla desde el navegador. Se pide al
+         *     momento: no se guarda.
+         */
+        get: operations["card_encryption_key_billing_card_encryption_key_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/payment-method": {
         parameters: {
             query?: never;
@@ -2502,6 +2525,8 @@ export interface components {
          * @description Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.
          */
         BillingAvailabilityResponse: {
+            /** Api Base Url */
+            api_base_url: string | null;
             /** Enabled */
             enabled: boolean;
             /** Public Key */
@@ -2526,6 +2551,15 @@ export interface components {
             created: number;
             /** Spins */
             spins: components["schemas"]["SpinResponse"][];
+        };
+        /**
+         * CardEncryptionKeyResponse
+         * @description La llave publica (PEM) con la que el navegador cifra la tarjeta antes de
+         *     mandarla al procesador. No es un secreto.
+         */
+        CardEncryptionKeyResponse: {
+            /** Encryption Key */
+            encryption_key: string;
         };
         /**
          * CategoryGroup
@@ -4356,7 +4390,7 @@ export interface components {
          * TokenizerKind
          * @enum {string}
          */
-        TokenizerKind: "wompi_widget" | "fake";
+        TokenizerKind: "wompi_api" | "fake";
         /**
          * UpcomingPriceChange
          * @description Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).
@@ -6389,6 +6423,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingAvailabilityResponse"];
+                };
+            };
+        };
+    };
+    card_encryption_key_billing_card_encryption_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardEncryptionKeyResponse"];
                 };
             };
         };

@@ -16,12 +16,21 @@ leer la pagina que corresponde; nunca de memoria (CLAUDE.md, "Pagos con Wompi").
 - Fuentes de pago (tokenizar, guardar el medio y cobrarle):
   https://docs.wompi.co/docs/colombia/fuentes-de-pago/
 - Tokens de aceptacion: https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
+- Tokenizar una tarjeta cifrada (consultada el 2026-10-19):
+  https://docs.wompi.co/docs/colombia/metodos-de-pago/#tokeniza-una-tarjeta
+
+La tarjeta y el Nequi los tokeniza el navegador, directo contra Wompi, con
+nuestro formulario (`frontend/lib/tokenize.ts`, §3.16). Aqui solo se pide la
+llave de cifrado (`card_encryption_key`): su endpoint no admite llamadas desde
+el navegador (probado el 2026-10-19, ver el metodo).
 
 El pago manual usa el Web Checkout: el cliente paga en la pagina de Wompi con
 cualquier medio que el comercio tenga habilitado en su panel. Por aqui no pasa
 ningun dato de tarjeta ni de cuenta.
 """
 
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -182,6 +191,33 @@ def event_checksum(payload: Mapping[str, Any], events_secret: str) -> str | None
     return hashlib.sha256(chain.encode("utf-8")).hexdigest()
 
 
+_PEM_BEGIN = "-----BEGIN PUBLIC KEY-----"
+_PEM_END = "-----END PUBLIC KEY-----"
+
+
+def normalize_public_key_pem(value: object) -> str:
+    """La llave de cifrado como un PEM con sus saltos de linea.
+
+    En el sandbox, el 2026-10-19, llegaba en una sola linea, con espacios donde
+    van los saltos. Se rehace con lineas de 64 caracteres para que cualquier
+    lector de PEM la acepte. Lanza `ValueError` si no es una llave publica.
+    """
+    if not isinstance(value, str):
+        raise ValueError("La llave de cifrado no es texto")
+    text = value.strip()
+    if not (text.startswith(_PEM_BEGIN) and text.endswith(_PEM_END)):
+        raise ValueError("La llave de cifrado no es un PEM de llave publica")
+    body = "".join(text[len(_PEM_BEGIN) : -len(_PEM_END)].split())
+    try:
+        der = base64.b64decode(body, validate=True)
+    except binascii.Error as exc:
+        raise ValueError("La llave de cifrado no es base64") from exc
+    if not der:
+        raise ValueError("La llave de cifrado esta vacia")
+    lines = [body[i : i + 64] for i in range(0, len(body), 64)]
+    return "\n".join([_PEM_BEGIN, *lines, _PEM_END]) + "\n"
+
+
 def _same(a: str, b: str) -> bool:
     return hmac.compare_digest(a.strip().lower().encode(), b.strip().lower().encode())
 
@@ -303,9 +339,36 @@ class WompiProvider:
         return _transaction(response)
 
     def tokenizer(self) -> TokenizerInfo | None:
-        # El widget de Wompi en modo tokenizacion: el cliente escribe su tarjeta
-        # (o aprueba Nequi) en la ventana de Wompi y el navegador recibe un token.
-        return TokenizerInfo(kind="wompi_widget", public_key=self.public_key)
+        # Nuestro formulario tokeniza en el navegador contra la API de Wompi,
+        # con la llave publica: la tarjeta cifrada en POST /tokens/cards y el
+        # Nequi en POST /tokens/nequi. A nuestro servidor solo llega el token.
+        return TokenizerInfo(
+            kind="wompi_api", public_key=self.public_key, api_base_url=self.api_base_url
+        )
+
+    def card_encryption_key(self) -> str:
+        # Documentacion ("Tokeniza una tarjeta", consultada el 2026-10-19):
+        # GET /tokens/keys/tokenization devuelve en `data.publicKey` la llave
+        # RSA con la que se arma el JWE de la tarjeta. El ejemplo de la
+        # documentacion la pide con la llave publica del comercio como Bearer.
+        #
+        # La pide el servidor porque ese endpoint no admite llamadas desde el
+        # navegador: el 2026-10-19, en sandbox y en produccion, el preflight
+        # respondia con `Access-Control-Allow-Origin: *` pero la respuesta real
+        # no lo traia. POST /tokens/cards y los de Nequi si lo traen. La llave
+        # no es un secreto y la tarjeta no pasa por aqui (decision del usuario
+        # del 2026-10-19).
+        response = self._request(
+            "GET",
+            "/tokens/keys/tokenization",
+            headers={"Authorization": f"Bearer {self.public_key}"},
+        )
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Wompi respondio {response.status_code}")
+        try:
+            return normalize_public_key_pem(response.json()["data"]["publicKey"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PaymentProviderError("Respuesta de Wompi que no se entiende") from exc
 
     def acceptance(self) -> Acceptance:
         # Documentacion ("Tokens de aceptacion", consultada el 2026-10-13):

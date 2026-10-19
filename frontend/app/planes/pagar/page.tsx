@@ -7,16 +7,17 @@
  *
  * - **Pago manual**: un pago por período, en la página de Wompi, con cualquier
  *   medio. No se guarda nada.
- * - **Renovación automática**: el cliente guarda una tarjeta o su Nequi en la
- *   ventana de Wompi y se le cobra cada período, con un aviso por correo antes.
+ * - **Renovación automática**: el cliente guarda una tarjeta o su Nequi con
+ *   `PaymentSourceForm`, que los tokeniza directo contra Wompi, y se le cobra
+ *   cada período, con un aviso por correo antes.
  *
  * Ningún modo entra marcado (decidido el 2026-10-13): nadie queda con cobros
  * automáticos sin haberlo escogido.
  *
  * Aquí no se calcula ningún precio: el total viene del servidor, que lo vuelve
- * a calcular al abrir el pago. Y aquí tampoco se escribe ningún dato de pago:
- * eso ocurre en la ventana o en la página de Wompi, y a esta pantalla solo
- * vuelve un token.
+ * a calcular al abrir el pago. Y a nuestro servidor no llega ningún dato de
+ * pago: la tarjeta va del formulario directo a Wompi (o se paga en la página de
+ * Wompi), y aquí solo vuelve un token.
  */
 
 import Link from "next/link";
@@ -349,7 +350,7 @@ function Checkout() {
                 title="Renovación automática"
                 lines={[
                   `Se cobra ahora y luego cada ${interval}, hasta que canceles.`,
-                  "Guardas una tarjeta o tu Nequi en la ventana de Wompi.",
+                  "Guardas una tarjeta o tu Nequi; sus datos van directo a Wompi.",
                   "Antes de cada cobro te avisamos por correo con el monto y la fecha. Cancelas cuando quieras desde tu cuenta.",
                 ]}
               />

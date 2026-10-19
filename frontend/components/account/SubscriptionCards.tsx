@@ -7,8 +7,8 @@
  * y del historial (`GET /billing/payments`), y deja gestionarla: cancelar o
  * reanudar la renovación automática, cambiar el medio de pago guardado y pasar
  * de un modo de pago al otro. Aquí no se calcula ningún precio ni se decide
- * ningún acceso, y tampoco se escribe ningún dato de pago: eso ocurre en la
- * ventana de Wompi (`PaymentSourceForm`).
+ * ningún acceso. Un medio de pago se guarda con `PaymentSourceForm`, que manda
+ * la tarjeta o el Nequi directo a Wompi.
  */
 
 import Link from "next/link";

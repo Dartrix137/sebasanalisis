@@ -90,3 +90,29 @@ test("un evento sin petición pasa sin cambios", () => {
   const original = event({ message: "prueba" });
   expect(scrubEvent(original)).toEqual({ type: undefined, message: "prueba" });
 });
+
+test("las llamadas a la API de tokens de Wompi no dejan migas", () => {
+  const nequi = "nequi_test_token-pendiente";
+  const limpio = scrubEvent(
+    event({
+      breadcrumbs: [
+        {
+          category: "fetch",
+          data: { url: "https://sandbox.wompi.co/v1/tokens/cards", method: "POST", status_code: 201 },
+        },
+        {
+          category: "fetch",
+          data: { url: `https://sandbox.wompi.co/v1/tokens/nequi/${nequi}`, method: "GET" },
+        },
+        {
+          category: "fetch",
+          data: { url: "https://api.sebasanalisis.com/billing/subscription", method: "GET" },
+        },
+        { category: "ui.input", message: 'input[autocomplete="cc-number"]' },
+      ],
+    }),
+  );
+  expect(JSON.stringify(limpio)).not.toContain("/tokens/");
+  expect(JSON.stringify(limpio)).not.toContain(nequi);
+  expect(limpio.breadcrumbs?.map((b) => b.category)).toEqual(["fetch", "ui.input"]);
+});

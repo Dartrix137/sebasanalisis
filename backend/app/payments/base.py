@@ -93,10 +93,13 @@ class ProviderTransaction:
 class TokenizerInfo:
     """Lo que el frontend necesita para pedirle al proveedor un token."""
 
-    #: `wompi_widget`: el widget de Wompi. `fake`: selector de la pasarela simulada.
-    kind: Literal["wompi_widget", "fake"]
+    #: `wompi_api`: nuestro formulario, que tokeniza contra la API de Wompi
+    #: desde el navegador (§3.16). `fake`: selector de la pasarela simulada.
+    kind: Literal["wompi_api", "fake"]
     #: Llave PUBLICA del comercio. Nunca la privada.
     public_key: str | None = None
+    #: La API del proveedor a la que el navegador manda la tarjeta o el Nequi.
+    api_base_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +152,13 @@ class PaymentProvider(Protocol):
     def tokenizer(self) -> TokenizerInfo | None:
         """Como obtiene el navegador el token de un medio de pago. None si no
         se pueden guardar medios de pago."""
+        ...
+
+    def card_encryption_key(self) -> str:
+        """La llave publica (PEM) con la que el navegador cifra la tarjeta antes
+        de mandarla al proveedor. No es un secreto, y por aqui no pasa ningun
+        dato de tarjeta: solo la llave. Lanza `PaymentsUnavailable` si el
+        proveedor no tokeniza tarjetas cifradas."""
         ...
 
     def acceptance(self) -> Acceptance:
@@ -224,6 +234,9 @@ class UnconfiguredPaymentProvider:
 
     def tokenizer(self) -> TokenizerInfo | None:
         return None
+
+    def card_encryption_key(self) -> str:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 
     def acceptance(self) -> Acceptance:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")

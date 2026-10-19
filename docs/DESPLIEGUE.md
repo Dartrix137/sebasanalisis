@@ -247,10 +247,13 @@ checkout responde `403` antes de mostrar nada. En produccion no afecta
 hay que iniciar sesion en esa direccion, no en `localhost`.
 
 **Guardar un medio de pago (renovacion automatica) es al reves: en local solo
-funciona desde `http://localhost:3000`.** La ventana de Wompi cifra la tarjeta
-en el navegador y eso exige un contexto seguro (https o `localhost`); desde
-`http://localtest.me` responde "Tu tarjeta no pudo ser verificada (error
-desconocido)". Para probar los dos modos en local, `CORS_ORIGINS` lleva los
+funciona desde `http://localhost:3000`.** Nuestro formulario cifra la tarjeta
+en el navegador antes de mandarla a Wompi (`PLATAFORMA_COMPLETA.md` §3.16), y
+el cifrado del navegador (WebCrypto) solo existe en un contexto seguro (https o
+`localhost`); desde `http://localtest.me` el formulario dice "Tu navegador no
+pudo cifrar la tarjeta en esta pagina". (Con el widget, hasta el 2026-10-19,
+pasaba lo mismo.) Nequi no cifra nada, pero se prueba igual por `localhost`.
+Para probar los dos modos en local, `CORS_ORIGINS` lleva los
 dos origenes: el pago manual se prueba por `localtest.me` y la renovacion
 automatica por `localhost`. En produccion, con https, no hay diferencia.
 
@@ -400,8 +403,9 @@ La URL de la API de Wompi no se configura: sale del prefijo de las llaves. Con
 las cuatro de produccion (`pub_prod_`, `prv_prod_`, `prod_events_`,
 `prod_integrity_`) la API usa `https://production.wompi.co/v1`, y el arranque
 lo dice en el log: `Pagos: Wompi, ambiente production (...)`. La pagina de pago
-y el widget no cambian de direccion: Wompi decide el ambiente por la llave
-publica.
+no cambia de direccion: Wompi decide el ambiente por la llave publica. El
+formulario de tarjeta y Nequi recibe la URL de la API de Wompi desde
+`GET /billing/availability`, asi que tambien cambia solo.
 
 1. **Antes de cambiar las llaves, retirar las suscripciones de prueba.** Las de
    renovacion automatica tienen fuentes de pago del sandbox, que en produccion

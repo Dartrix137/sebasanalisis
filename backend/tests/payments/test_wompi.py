@@ -23,6 +23,7 @@ from app.payments.wompi import (
     event_checksum,
     integrity_signature,
     key_environment,
+    normalize_public_key_pem,
 )
 
 EVENTS_SECRET = "test_events_secreto-de-prueba"
@@ -360,3 +361,88 @@ def test_la_pasarela_simulada_no_convive_con_llaves_de_produccion() -> None:
     )
     with pytest.raises(ValueError):
         build_payment_provider(_settings(payment_provider="fake", **PRODUCCION))
+
+
+# ---------- Llave para cifrar la tarjeta (§3.16) ----------
+
+
+def test_la_llave_de_cifrado_se_rehace_como_pem() -> None:
+    cuerpo = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA" * 3
+    # Como la mandaba el sandbox el 2026-10-19: una linea, con espacios.
+    en_una_linea = (
+        f"-----BEGIN PUBLIC KEY----- {cuerpo[:64]} {cuerpo[64:]} -----END PUBLIC KEY-----"
+    )
+    pem = normalize_public_key_pem(en_una_linea)
+    lineas = pem.splitlines()
+    assert lineas[0] == "-----BEGIN PUBLIC KEY-----"
+    assert lineas[-1] == "-----END PUBLIC KEY-----"
+    assert "".join(lineas[1:-1]) == cuerpo
+    assert all(len(linea) <= 64 for linea in lineas[1:-1])
+    # Ya normalizada, queda igual.
+    assert normalize_public_key_pem(pem) == pem
+
+
+@pytest.mark.parametrize(
+    "valor",
+    [
+        None,
+        42,
+        "",
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA",
+        "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----",
+        "-----BEGIN PUBLIC KEY-----\nno es base64!\n-----END PUBLIC KEY-----",
+        "-----BEGIN PUBLIC KEY----------END PUBLIC KEY-----",
+    ],
+)
+def test_lo_que_no_es_una_llave_publica_se_rechaza(valor: object) -> None:
+    with pytest.raises(ValueError):
+        normalize_public_key_pem(valor)
+
+
+def test_la_llave_de_cifrado_se_pide_con_la_llave_publica() -> None:
+    pedidas: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        pedidas.append(request)
+        return httpx.Response(
+            200,
+            json={"data": {"publicKey": "-----BEGIN PUBLIC KEY----- QUJD -----END PUBLIC KEY-----"}},
+        )
+
+    provider = WompiProvider(
+        public_key="pub_test_abc",
+        private_key="prv_test_abc",
+        events_secret=EVENTS_SECRET,
+        integrity_secret=INTEGRITY_SECRET,
+        api_base_url="https://sandbox.wompi.co/v1",
+        environment="sandbox",
+        transport=httpx.MockTransport(handler),
+    )
+    assert provider.card_encryption_key() == (
+        "-----BEGIN PUBLIC KEY-----\nQUJD\n-----END PUBLIC KEY-----\n"
+    )
+    [pedida] = pedidas
+    assert str(pedida.url) == "https://sandbox.wompi.co/v1/tokens/keys/tokenization"
+    # Con la publica, como el ejemplo de la documentacion; nunca con la privada.
+    assert pedida.headers["Authorization"] == "Bearer pub_test_abc"
+    info = provider.tokenizer()
+    assert info is not None
+    assert (info.kind, info.public_key, info.api_base_url) == (
+        "wompi_api",
+        "pub_test_abc",
+        "https://sandbox.wompi.co/v1",
+    )
+
+
+def test_sin_llave_de_cifrado_falla_como_proveedor() -> None:
+    provider = WompiProvider(
+        public_key="pub_test_abc",
+        private_key="prv_test_abc",
+        events_secret=EVENTS_SECRET,
+        integrity_secret=INTEGRITY_SECRET,
+        api_base_url="https://sandbox.wompi.co/v1",
+        environment="sandbox",
+        transport=httpx.MockTransport(lambda _: httpx.Response(502, json={})),
+    )
+    with pytest.raises(PaymentProviderError):
+        provider.card_encryption_key()

@@ -672,7 +672,7 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 - Un cobro del job que coincida en el mismo instante con el borrado de la cuenta puede quedar aprobado sin cuenta. Queda en el log como error ("aprobado sin suscripción") y se devuelve a mano desde el panel de Wompi.
 - Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6. **Hechas en la entrega 1 del paso 6** (§4.8).
 
-### 3.16 Tokenización con un formulario propio (decidida el 2026-10-19, por construir)
+### 3.16 Tokenización con un formulario propio (decidida y construida el 2026-10-19)
 
 **Decisión del usuario (2026-10-19)**: el widget de Wompi en modo tokenización se reemplaza por un formulario nuestro que tokeniza contra la API de Wompi, como lo describe su documentación. Reemplaza la decisión del 2026-10-13 de escribir la tarjeta en el widget (§3.14). Motivos: en la ventana del widget los medios de pago se ven deshabilitados aunque funcionan, y eso no se puede corregir desde nuestra página; además, abrirlo en modo tokenización por JavaScript no está en la documentación, que solo lo muestra como botón dentro de un `<form>` (§3.14, "Lo que queda sin probar o sin hacer").
 
@@ -690,7 +690,7 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 **Lo que cambia**
 
 - **Tarjeta**: el formulario pide número, CVC, mes y año de vencimiento (dos dígitos cada uno) y titular. Se tokeniza con el flujo cifrado, que es el que recomienda la documentación: `GET /v1/tokens/keys/tokenization` para la llave de cifrado y `POST /v1/tokens/cards` con un JWE (RSA-OAEP-256, A256GCM) en el campo `payload`, con la llave **pública** del comercio como Bearer. Wompi responde el token en `data.id`. El flujo simple, sin cifrar, solo con decisión del usuario.
-- **Los datos de la tarjeta van del navegador directo a Wompi y nunca pasan por nuestro backend**: ni en una petición, ni en un log, ni en GlitchTip, ni en `localStorage`. Se borran del estado del formulario al terminar, salga bien o mal. Si la API de tokens no admite llamadas desde el navegador (CORS), no se resuelve pasándola por nuestro servidor: eso amplía lo que el comercio tiene que cumplir y es otra decisión del usuario.
+- **Los datos de la tarjeta van del navegador directo a Wompi y nunca pasan por nuestro backend**: ni en una petición, ni en un log, ni en GlitchTip, ni en `localStorage`. Se borran del estado del formulario al terminar, salga bien o mal. Si la API de tokens no admite llamadas desde el navegador (CORS), no se resuelve pasándola por nuestro servidor: eso amplía lo que el comercio tiene que cumplir y es otra decisión del usuario. (Al construir, solo el endpoint de la llave de cifrado no las admitía; el usuario decidió que esa llave, que no es un dato de tarjeta, la pida el backend. Ver "Cómo quedó construido".)
 - **Nequi**: el cliente escribe su celular; `POST /v1/tokens/nequi` con la llave pública devuelve un token `PENDING`; el cliente acepta la suscripción en su app; se consulta `GET /v1/tokens/nequi/{id}` hasta que quede `APPROVED`, con un tiempo límite y la opción de volver a intentar. Solo entonces el token va a nuestro backend, como hoy.
 - Un token de tarjeta no se usa más de dos veces (lo dice la documentación): cada intento de guardar pide uno nuevo.
 - `TokenizerInfo.kind` deja de ser `wompi_widget`, y `frontend/lib/tokenize.ts` se reescribe sin `widget.js`.
@@ -698,6 +698,46 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 **Por confirmar antes del lanzamiento** (§10 n.º 15): con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario se escribe en nuestra página. En general eso amplía lo que exige PCI DSS (de SAQ A a SAQ A-EP), así que hay que preguntarle a Wompi qué pide. Las cabeceras CSP de §13.4 pasan a convenir.
 
 **Cómo se da por bueno**: los tests de backend y de Playwright en verde, y una prueba a mano contra el sandbox, en `/planes/pagar` y en `/cuenta`, con una tarjeta que aprueba, una que rechaza el cobro, y los Nequi de prueba `3991111111` (aprueba) y `3992222222` (rechaza).
+
+#### Cómo quedó construido (2026-10-19)
+
+Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro ni el job de renovaciones.
+
+**Lo que se leyó de la documentación (2026-10-19)**, citado en `frontend/lib/tokenize.ts` y en `backend/app/payments/wompi.py`:
+
+- "Tokeniza una tarjeta" recomienda el flujo cifrado: `GET /v1/tokens/keys/tokenization` devuelve la llave RSA en `data.publicKey`; el JWE (RSA-OAEP-256, A256GCM) lleva `number`, `cvc`, `exp_month` y `exp_year` (dos dígitos cada uno) y `card_holder`, y va en `payload` a `POST /v1/tokens/cards`, con la llave pública del comercio como Bearer. El token viene en `data.id`. "No uses un token más de dos veces."
+- "Fuentes de pago", Nequi: `POST /v1/tokens/nequi {phone_number}` con la llave pública devuelve `PENDING`; `GET /v1/tokens/nequi/{id}` pasa a `APPROVED` cuando el cliente acepta en su app.
+- Datos de prueba: tarjeta `4242 4242 4242 4242` (aprobada) y `4111 1111 1111 1111` (declinada), con cualquier vencimiento futuro y CVC de 3 dígitos; cualquier otra termina en `ERROR`. Nequi `3991111111` (aprobada) y `3992222222` (declinada). Como ya se vio en §3.15, el rechazo aparece al cobrar, no al guardar.
+- La página usa `https://api.wompi.co/v1` como URL base de sus ejemplos. Aquí se sigue usando la de cada ambiente (`sandbox.wompi.co` / `production.wompi.co`, de "Ambientes y llaves"), que respondió bien en la prueba.
+
+**CORS, comprobado con la llave de sandbox el 2026-10-19** (origen `http://localhost:3000`): `POST /v1/tokens/cards`, `POST /v1/tokens/nequi` y `GET /v1/tokens/nequi/{id}` responden con `Access-Control-Allow-Origin: *`. **`GET /v1/tokens/keys/tokenization` no**: su preflight lo trae, pero la respuesta real no, en sandbox y en producción, así que el navegador no puede leerla. **Decisión del usuario (2026-10-19): la llave la pide el backend** y la entrega en `GET /billing/card-encryption-key` (con sesión). La llave no es un secreto y por ahí no pasa ningún dato de tarjeta: la tarjeta cifrada sigue yendo del navegador directo a Wompi. El sandbox la manda en una sola línea, con espacios donde van los saltos; el backend la rehace como PEM (`normalize_public_key_pem`) y rechaza lo que no lo sea.
+
+**Librería del JWE: `jose` 6.2.12** (decisión del usuario, 2026-10-19), la misma del ejemplo de la documentación (`importSPKI` + `EncryptJWT`). Cifra con WebCrypto, que solo existe en un contexto seguro (https o `localhost`), igual que el widget (`DESPLIEGUE.md`).
+
+**Backend**
+
+- `TokenizerInfo.kind` pasa de `wompi_widget` a `wompi_api`, y suma `api_base_url`, la API de Wompi del ambiente de las llaves, que `GET /billing/availability` le pasa al navegador.
+- `PaymentProvider.card_encryption_key()`: la de Wompi pide la llave con la pública como Bearer; la pasarela simulada y la "sin configurar" no la tienen (`503`). Wompi caído o una respuesta que no es una llave: `502 provider_unavailable`.
+- La fuente de pago, el cobro y lo que se guarda no cambian.
+
+**Frontend**
+
+- `lib/tokenize.ts`, sin `widget.js`: validación (Luhn sobre 13 a 19 dígitos, mes y año de dos dígitos sin vencer, CVC de 3 o 4 dígitos, titular, celular colombiano de diez dígitos que empieza por 3), `tokenizeCard`, `startNequi` y `nequiStatus`. Un error de Wompi se convierte en un mensaje simple (`TokenizeError`): nunca lleva el cuerpo de la respuesta, que trae el titular y los primeros dígitos. Las llamadas a Wompi van sin cookies ni página de origen.
+- `PaymentSourceForm`: los dos contratos de Wompi, y "Tarjeta de crédito o débito" o "Nequi". La tarjeta con sus `autocomplete` `cc-*` (el año acepta los cuatro dígitos del autocompletado y se recorta). Lo que la validación rechaza no sale del navegador y se deja corregir; **una vez enviada a Wompi, la tarjeta se borra del formulario, salga bien o mal**, así que tras un rechazo se vuelve a escribir. Nequi: mensaje para aceptar en la app, consulta cada 3 segundos hasta `APPROVED` con **un tiempo límite de 3 minutos** (elegido al construir: la documentación no da uno), estado de rechazo y "Volver a intentar". Un error de red durante la espera no la corta.
+- La pasarela simulada sigue con su selector, igual que antes.
+- **Monitoreo**: los datos de la tarjeta no llegan a GlitchTip. Ninguna miga guarda cuerpos de `fetch` ni valores de los campos (las de `ui.input` solo nombran el elemento), y ningún error que lancemos lleva datos de la tarjeta. Además `scrubEvent` quita las migas de las llamadas a `/v1/tokens/`: la consulta de Nequi lleva el token en la ruta. Nada se escribe en `localStorage` ni en la consola.
+
+**Tests**
+
+- Backend: `GET /billing/availability` con `wompi_api` y la URL; la llave de cifrado con sesión, normalizada, `502` con Wompi caído o con una respuesta que no es llave, `503` sin pasarela o con la simulada; la normalización del PEM y que la llave se pide con la pública, nunca con la privada.
+- Playwright (`e2e/payment-source-form.spec.ts`): con la API en la pasarela simulada, el test hace pasar la página por Wompi (intercepta `availability`, la llave y la API de Wompi) y descifra el JWE con su llave privada. Comprueba: Luhn y vencimiento no salen del navegador; un rechazo de Wompi muestra un mensaje simple, sin su respuesta, y deja el formulario vacío; lo que llega a Wompi son los campos y formatos de la documentación; **ningún cuerpo enviado a nuestra API lleva el número, el CVC ni el titular**; el alta termina con el pago aprobado. Nequi: rechazo en la app, "Volver a intentar" y aprobación; y el tiempo límite, con el reloj simulado. `e2e/monitoring.spec.ts` suma el filtro de las migas de la API de tokens.
+- Contra el sandbox, por script (2026-10-19): un JWE de la tarjeta `4242` armado con WebCrypto obtuvo `201 CREATED` con `brand: VISA`, y el Nequi `3991111111` pasó de `PENDING` a `APPROVED`.
+
+**Lo que queda sin probar o sin hacer**
+
+- **La prueba a mano contra el sandbox, en un navegador**, en `/planes/pagar` y en `/cuenta`: tarjeta que aprueba, tarjeta que rechaza el cobro, y los Nequi `3991111111` y `3992222222`. Es la que da por buena esta sección. El CORS se comprobó con `curl`, no con un navegador.
+- PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
+- Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
 
 ---
 
@@ -1563,6 +1603,7 @@ Billing:   GET  /plans                       (pública)
            POST /billing/quote               {plan_id, coupon_code?}   (con sesión)
            GET  /billing/availability        (pública: si hay pasarela configurada)
            GET  /billing/acceptance          (acceptance token y enlace de términos de Wompi)
+           GET  /billing/card-encryption-key (con sesión: la llave RSA de Wompi para cifrar la tarjeta, §3.16)
            POST /billing/subscriptions       {plan_id, coupon_code?, renewal_mode?, payment_source_token?,
                                               payment_source_type?, acceptance_token?, personal_data_token?}
            GET  /billing/subscription
