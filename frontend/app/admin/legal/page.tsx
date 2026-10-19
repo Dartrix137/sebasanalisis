@@ -277,6 +277,9 @@ function DraftEditor({
             {requiresAcceptance
               ? " Todas las cuentas tendrán que aceptarla antes de volver a la mesa."
               : " No se le pedirá a nadie aceptarla de nuevo."}
+            {requiresAcceptance && version > 1
+              ? " Además, las cuentas con una suscripción vigente y el correo confirmado reciben un aviso por correo con el enlace a esta versión. Sale por tandas, en las corridas siguientes del job de renovaciones."
+              : ""}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

@@ -58,3 +58,25 @@ class UserConsent(Base):
     user_agent: Mapped[str | None] = mapped_column(String(400))
 
     document: Mapped[LegalDocument] = relationship()
+
+
+class LegalNotice(Base):
+    """Un aviso por correo de una version nueva de un documento legal, ya
+    enviado (§6.7). La fila se escribe solo si el correo salio: la restriccion
+    unica es lo que impide avisarle dos veces a la misma cuenta de la misma
+    version, aunque el job corra de nuevo."""
+
+    __tablename__ = "legal_notices"
+    __table_args__ = (
+        UniqueConstraint("user_id", "legal_document_id", name="uq_legal_notices_user_document"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    legal_document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("legal_documents.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    # Cuando salio el correo. El tope diario de avisos se cuenta con esta columna.
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)

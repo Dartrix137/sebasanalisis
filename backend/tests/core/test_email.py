@@ -56,6 +56,16 @@ CONTEXT: dict[str, Any] = {
     "effective_at": datetime(2026, 11, 14, 3, 30, tzinfo=UTC),
     "first_charge_at": datetime(2026, 12, 12, 3, 30, tzinfo=UTC),
     "has_discount": True,
+    # Version nueva de un documento legal (paso 9).
+    "documents": [
+        {
+            "title": "Términos y Condiciones",
+            "version": 2,
+            "published_at": datetime(2026, 10, 20, 15, 0, tzinfo=UTC),
+            "url": "https://sebasanalisis.com/legal/terminos",
+        }
+    ],
+    "renews_automatically": True,
 }
 
 # Regla de producto no negociable (CLAUDE.md): ningun correo suena predictivo.

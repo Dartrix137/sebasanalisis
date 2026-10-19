@@ -46,6 +46,8 @@ SUBJECTS: dict[str, str] = {
     "price_increase": "Aviso: cambia el precio de tu suscripción a Sebasanálisis",
     "price_decrease": "Bajó el precio de tu suscripción a Sebasanálisis",
     "price_change_canceled": "El precio de tu suscripción a Sebasanálisis no cambia",
+    # Version nueva de un documento legal que exige aceptacion (paso 9, §6.7).
+    "legal_update": "Actualizamos los documentos legales de Sebasanálisis",
 }
 
 _MONTHS = (

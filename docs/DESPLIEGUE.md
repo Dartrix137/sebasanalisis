@@ -171,6 +171,31 @@ Que pasa al desplegar este paso:
   nueva, marcando "exigir aceptacion": eso se lo vuelve a pedir a todas las
   cuentas.
 
+#### Aviso por correo de una version nueva (Fase 4, paso 9)
+
+Desde el paso 9, publicar una version que exige aceptacion y reemplaza a otra
+manda ademas un correo a las cuentas con una suscripcion vigente (activa, en
+mora o cancelada con acceso), activas y con el correo confirmado
+(`PLATAFORMA_COMPLETA.md` §6.7). No le llega a quien ya acepto la version
+nueva. La pantalla de aceptacion sigue igual.
+
+- **Lo envia el job de renovaciones**, no la publicacion: hasta 40 por corrida
+  (una por hora) y, por dia, hasta la mitad de `EMAIL_DAILY_LIMIT`. Con
+  `EMAIL_DAILY_LIMIT=80` son 40 al dia: **antes de publicar el texto del
+  abogado, pasar a Resend Pro y subir el tope** (ver "Antes del lanzamiento
+  comercial").
+- La migracion `7d82b3f54867` crea la tabla `legal_notices` al desplegar; no hay
+  que correr nada a mano.
+- Comprobacion despues de publicar: en la tarea "Renovaciones" de Dokploy, el
+  log de cada corrida termina con `Avisos legales: enviados=N fallidos=M`, y
+  `enviados` baja a 0 cuando ya se le aviso a todos. Si dice "(quedan para
+  manana: tope diario)", sigue al dia siguiente solo. Cuantos faltan, en la
+  terminal de la base:
+
+  ```
+  select count(*) from legal_notices where legal_document_id = '<id de la version>';
+  ```
+
 ### Control de acceso (Fase 4, paso 3)
 
 Que pasa al desplegar este paso:
@@ -411,8 +436,9 @@ formulario de tarjeta y Nequi recibe la URL de la API de Wompi desde
    renovacion automatica tienen fuentes de pago del sandbox, que en produccion
    no existen: el job intentaria cobrarles, fallaria tres veces y las dejaria
    vencidas, con correos de cobro fallido. Y todas dan acceso sin que nadie
-   haya pagado. Lo mas limpio es eliminar esas cuentas o pasarlas a pago manual
-   desde su `/cuenta`.
+   haya pagado. Se cancelan de inmediato desde `/admin/suscripciones`; la
+   consulta para encontrarlas y la comprobacion estan en "Antes del lanzamiento
+   comercial", punto 6.
 2. Poner las cuatro llaves de produccion. **Las cuatro**: con llaves mezcladas
    la API no arranca, a proposito.
 3. Si `WOMPI_API_BASE_URL` esta puesta con la URL del sandbox, borrarla. Si no
@@ -712,6 +738,195 @@ provocado a proposito en cada lado tiene que aparecer en su proyecto:
 Si no llega nada: revisar que el DSN use `https://` y el dominio publico, que
 el Web se haya reconstruido (no solo reiniciado), y que el navegador no este
 bloqueando la peticion a `errores.sebasanalisis.com` (pestana Red).
+
+## Antes del lanzamiento comercial (Fase 4, paso 9)
+
+La lista de `PLATAFORMA_COMPLETA.md` §9, con el estado del 2026-10-19 en
+`HOJA_DE_RUTA.md` §5. Aqui van los pasos a mano y como comprobar que quedaron
+bien. El orden importa: **respaldos y correo primero**, llaves de produccion al
+final, cuando lo demas este hecho.
+
+Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
+legales revisados por el abogado, el responsable del tratamiento, la
+facturacion electronica (contador) y lo que exige Wompi, y PCI DSS, con el
+formulario de tarjeta propio (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 15).
+
+### 1. Respaldos de la base y prueba de restauracion
+
+Hoy no hay evidencia de que la base tenga respaldos: Dokploy los hace solo si
+se le configura un destino S3. Es lo primero, porque sin respaldo un error de
+disco o un borrado no tiene vuelta.
+
+**Destino: un bucket privado de Cloudflare R2.** Gratis hasta 10 GB al mes;
+despues, US$0,015 por GB (pagina de precios de R2, leida el 2026-10-19). Los
+pasos de los dos lados salen de la guia de Dokploy "Cloudflare R2"
+(`docs.dokploy.com/docs/core/cloudflare-r2`, leida el 2026-10-19); si la
+version de Dokploy del VPS muestra otros nombres, valen los de la pantalla.
+
+1. **En Cloudflare**: *R2 Object Storage* -> *Create bucket*, con un nombre como
+   `sebasanalisis-respaldos`. Sin acceso publico: el respaldo tiene correos,
+   pagos y datos personales.
+2. *R2 Object Storage* -> *Manage API tokens* -> crear un *User API Token* con
+   permiso **Object Read & Write**, **limitado a ese bucket**. Copiar el
+   *Access Key ID*, el *Secret Access Key* y el *Endpoint*
+   (`https://<id de la cuenta>.r2.cloudflarestorage.com`): el secreto se muestra
+   una sola vez. No pegarlos en ningun chat ni archivo del repositorio.
+3. **En Dokploy**, en los destinos S3 (`/dashboard/settings/destinations`):
+   *Access Key Id*, *Secret Access Key*, *Endpoint*, *Bucket* y *Region*. La
+   guia de Dokploy pide la region de R2 (`WNAM`, `ENAM`...); si la prueba de
+   conexion falla, probar con `auto`. Probar la conexion antes de guardar.
+4. **En la base de Sebasanalisis** (el servicio PostgreSQL de Dokploy, no la de
+   GlitchTip) -> pestana *Backup* -> crear el respaldo:
+   - *Select Destination S3 Bucket*: el destino del paso 3.
+   - *Database Name*: `sebasanalisis`.
+   - *Schedule Cron*: `0 8 * * *` (todos los dias a las 8:00 UTC, las 3 a. m.
+     en Colombia).
+   - *Prefix*: `produccion/`.
+   - *Enabled*: encendido.
+5. Usar *Test* y comprobar en el bucket de R2 que aparecio un archivo bajo
+   `produccion/`.
+6. **Cuanto se guarda**: si la pantalla del respaldo tiene un campo para
+   conservar las ultimas N copias, poner `14`. Si no lo tiene, en el bucket de
+   R2 crear una regla de ciclo de vida que borre los objetos de mas de 30 dias.
+   Sin ninguna de las dos, los respaldos se acumulan (es poco espacio, pero son
+   datos personales guardados sin plazo).
+
+**Prueba de restauracion, sin tocar la base de produccion.** Se restaura en una
+base aparte y se comparan cifras. **Nunca se usa *Restore* desde la pestana
+*Backup* de la base de produccion**: restauraria encima de los datos vigentes.
+
+1. En el mismo proyecto de Dokploy, crear un servicio PostgreSQL 16 nuevo,
+   `sebasanalisis-restauracion`, con una contrasena cualquiera. No se conecta a
+   ninguna aplicacion.
+2. En **ese** servicio nuevo: pestana *Backup* -> *Restore*:
+   - *Select Source S3 Bucket*: el destino de R2.
+   - *Search for Backup File*: escribir `produccion/` y elegir el mas reciente.
+   - *Database Name*: `sebasanalisis`.
+   - *Restore*.
+3. En la terminal de cada una de las dos bases (produccion y la restaurada),
+   correr lo mismo y comparar:
+
+   ```
+   psql -U <usuario> -d sebasanalisis -c "select version_num from alembic_version;"
+   psql -U <usuario> -d sebasanalisis -c "select (select count(*) from users) usuarios, (select count(*) from subscriptions) suscripciones, (select count(*) from payments) pagos, (select count(*) from spins) giros, (select max(created_at) from payments) ultimo_pago;"
+   ```
+
+   Tiene que coincidir la version de la migracion, y las cifras tienen que ser
+   iguales o un poco menores en la restaurada (lo que entro despues del
+   respaldo). Si la restaurada esta vacia o falla, el respaldo no sirve: se
+   revisa antes de seguir.
+4. Borrar el servicio `sebasanalisis-restauracion`: tiene una copia de los datos
+   personales y no hace falta.
+5. Anotar la fecha de la prueba en `HOJA_DE_RUTA.md` §5 (paso 9). Repetirla
+   cada vez que cambie la version de PostgreSQL o el destino.
+
+### 2. Resend Pro y `EMAIL_DAILY_LIMIT`
+
+Con 300 a 800 registros al abrir, el plan gratuito (100 correos al dia) deja a
+gente sin correo de verificacion. Y el aviso legal (§6.7) envia hasta la mitad
+del tope por dia.
+
+1. En el panel de Resend, en facturacion, pasar al plan **Pro**: US$20 al mes
+   por 50.000 correos, sin tope diario; el excedente se cobra por miles
+   (pagina de precios de Resend, leida el 2026-10-19).
+2. En *Environment* de la API: `EMAIL_DAILY_LIMIT=1500`. Es un freno ante un
+   abuso del registro, no la cuota: 50.000 al mes son unos 1.600 al dia.
+   Redesplegar la API. El job de renovaciones lee la misma variable.
+3. Comprobacion: registrar una cuenta con un correo propio y ver el correo en la
+   tabla *Emails* de Resend; en el log de la API no debe aparecer "Tope diario de
+   correos alcanzado". El plan vigente se ve en la facturacion de Resend.
+
+El contador del tope vive en memoria y por proceso: la API y el job llevan cada
+uno el suyo y un redespliegue lo pone en cero. Por eso no es un limite exacto.
+El aviso legal no depende de ese contador: cuenta sus envios en la base.
+
+### 3. Correo: SPF, DKIM, DMARC y la entrega en Hotmail
+
+Configurados el 2026-10-07 (ver "Correo"). Antes de abrir, comprobar que siguen
+asi y repetir la prueba en Hotmail, donde el correo llego a no deseado.
+
+1. En el panel de Resend, *Domains*: `correo.sebasanalisis.com` en *Verified*.
+2. Desde cualquier equipo:
+
+   ```
+   nslookup -type=TXT _dmarc.sebasanalisis.com
+   nslookup -type=TXT resend._domainkey.correo.sebasanalisis.com
+   nslookup -type=TXT send.correo.sebasanalisis.com
+   ```
+
+   Deben responder `v=DMARC1; p=none;`, la clave `p=...` del panel de Resend y el
+   `v=spf1 ...`, respectivamente.
+3. Registrar una cuenta con un correo de Gmail y otra con uno de Hotmail u
+   Outlook. En Gmail, "Mostrar original": SPF, DKIM y DMARC en `PASS`.
+4. En Hotmail, si llega a no deseado: marcarlo como "No es correo no deseado" y
+   repetir unos dias despues. Las pantallas ya le dicen al usuario que revise
+   esa carpeta. Subir el DMARC a `p=quarantine` solo con reportes (`rua`), que
+   hoy no hay.
+
+### 4. Job de renovaciones: comprobar que sigue corriendo
+
+Programado el 2026-10-13 (ver "Job de renovaciones"). Nadie avisa si deja de
+correr.
+
+1. Dokploy -> aplicacion API -> *Schedules* -> "Renovaciones": habilitada, con
+   `0 * * * *`.
+2. Abrir el log de la ultima ejecucion: debe ser de la ultima hora y terminar
+   con tres lineas, `Renovaciones: ...`, `Traslados de precio: ...` y, desde el
+   paso 9, `Avisos legales: ...`.
+3. Correrla una vez a mano desde la lista y ver las mismas tres lineas.
+
+### 5. Formulario de tarjeta y Nequi en el VPS (sandbox)
+
+El PR #29 esta desplegado y sin probar en el VPS (2026-10-19). Con las llaves de
+sandbox todavia puestas, desde `https://sebasanalisis.com`:
+
+1. Cuenta nueva, correo confirmado -> `/planes` -> "Suscribirme" -> "Renovacion
+   automatica" -> aceptar los dos documentos de Wompi -> tarjeta
+   `4242 4242 4242 4242`, vencimiento futuro, CVC de 3 digitos. Debe terminar en
+   "Pago aprobado" y entrar a la mesa.
+2. En `/cuenta`, "Cambiar el medio de pago" con el Nequi `3991111111`: sale la
+   espera de la aprobacion y despues la caja verde "Medio de pago actualizado:
+   Nequi".
+3. En el log de la API no debe aparecer ningun dato de la tarjeta, y en
+   GlitchTip tampoco.
+4. Esta cuenta es de prueba: se retira con las demas en el paso 6.
+
+### 6. Llaves de produccion de Wompi
+
+**Al final**, con lo anterior hecho, Wompi habiendo aprobado el comercio para
+produccion y la respuesta de Wompi sobre PCI DSS (§10 n.º 15). El procedimiento
+esta en "Pasar de sandbox a produccion" (seccion "Pagos con Wompi"). Lo que se
+agrega:
+
+1. **Listar las suscripciones de prueba**, en la terminal de la base:
+
+   ```
+   select u.email, s.status, s.renewal_mode, s.current_period_end
+   from subscriptions s join users u on u.id = s.user_id
+   where s.status in ('pending', 'active', 'past_due', 'canceled');
+   ```
+
+   Con llaves de sandbox todas son de prueba. A cada una: en
+   `/admin/suscripciones`, "Cancelar de inmediato", con el motivo "Suscripcion
+   de prueba del sandbox". Quita el acceso y la referencia del medio de pago, y
+   deja su fila en la bitacora. Repetir la consulta: no debe quedar ninguna
+   `active`, `past_due` ni `canceled` con el periodo vigente.
+2. Cambiar las cuatro llaves y redesplegar, como dice esa seccion. El log de
+   arranque debe decir `Pagos: Wompi, ambiente production
+   (https://production.wompi.co/v1)`.
+3. `https://api.sebasanalisis.com/billing/availability` debe responder la llave
+   `pub_prod_...` y `"api_base_url": "https://production.wompi.co/v1"`.
+4. URL de eventos en el panel de Wompi, **en modo produccion**:
+   `https://api.sebasanalisis.com/webhooks/wompi`.
+5. **Un pago real pequeno de punta a punta.** En `/admin/descuentos`, un cupon
+   del 99 % para el plan mensual, con un solo uso: el cobro queda en 1.000 COP.
+   La documentacion leida no dice el monto minimo de Wompi: si rechaza uno tan
+   bajo, usar un porcentaje menor.
+   Suscribirse con una tarjeta propia en renovacion automatica, ver "Pago
+   aprobado", el correo de bienvenida y el pago en `/admin/pagos`. Despues:
+   desactivar el cupon, cancelar esa suscripcion desde el admin, reembolsar el
+   pago en el panel de Wompi y registrarlo en `/admin/pagos`.
+6. Mirar el log del webhook en el panel de Wompi: la respuesta debe ser `200`.
 
 ## Antes del primer despliegue
 
