@@ -219,6 +219,30 @@ export function ErrorBox({ message, details }: { message: string; details?: stri
   );
 }
 
+/** Confirmación de que algo se guardó: la pareja de `ErrorBox`. */
+export function SuccessBox({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2.5 rounded-lg border border-signal-strong/50 bg-signal-strong/10 px-3.5 py-3 text-sm text-white"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        className="mt-0.5 h-4 w-4 shrink-0 text-signal-strong"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 10.5l4 4 8-9" />
+      </svg>
+      <p className="font-bold">{message}</p>
+    </div>
+  );
+}
+
 /**
  * El logo: el hexágono dorado, sin fondo. `size` es el alto en píxeles.
  *
