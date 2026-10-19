@@ -7,15 +7,15 @@
  * y del historial (`GET /billing/payments`), y deja gestionarla: cancelar o
  * reanudar la renovación automática, cambiar el medio de pago guardado y pasar
  * de un modo de pago al otro. Aquí no se calcula ningún precio ni se decide
- * ningún acceso, y tampoco se escribe ningún dato de pago: eso ocurre en la
- * ventana de Wompi (`PaymentSourceForm`).
+ * ningún acceso. Un medio de pago se guarda con `PaymentSourceForm`, que manda
+ * la tarjeta o el Nequi directo a Wompi.
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
-import { Badge, Button, Card, CardHeader, ErrorBox } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, ErrorBox, SuccessBox } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import {
   PAYMENT_STATUS_LABEL,
@@ -64,6 +64,15 @@ export function SubscriptionCard() {
   const [panel, setPanel] = useState<Panel>(null);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // El medio de pago se acaba de guardar: su fila lo marca hasta la siguiente acción.
+  const [sourceUpdated, setSourceUpdated] = useState(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
+
+  // Al guardar, el formulario se cierra y la tarjeta cambia de alto: se lleva
+  // la vista hasta la confirmación para que no pase desapercibida.
+  useEffect(() => {
+    if (notice) noticeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [notice]);
 
   useEffect(() => {
     withToken((t) => billingApi.subscription(t))
@@ -80,30 +89,34 @@ export function SubscriptionCard() {
     setPanel(next);
     setError(null);
     setNotice(null);
+    setSourceUpdated(false);
   }
 
   async function run(
     request: (token: string) => Promise<SubscriptionResponse>,
     done: (next: SubscriptionResponse) => string,
-  ) {
+  ): Promise<boolean> {
     setWorking(true);
     setError(null);
     setNotice(null);
+    setSourceUpdated(false);
     try {
       const next = await withToken(request);
       setSubscription(next);
       setPanel(null);
       setNotice(done(next));
+      return true;
     } catch (err) {
       setError(messageOf(err));
     } finally {
       setWorking(false);
     }
+    return false;
   }
 
-  function saveSource(source: TokenizedSource, acceptance: AcceptanceResponse) {
+  async function saveSource(source: TokenizedSource, acceptance: AcceptanceResponse) {
     const before = subscription;
-    void run(
+    const saved = await run(
       (t) =>
         billingApi.setPaymentMethod(t, {
           payment_source_token: source.token,
@@ -112,16 +125,18 @@ export function SubscriptionCard() {
           personal_data_token: acceptance.personal_data_token,
         }),
       (next) => {
+        const label = sourceLabel(next) ?? "tu medio de pago";
         if (before?.status === "past_due") {
           return next.status === "past_due"
-            ? "Medio de pago guardado. Volvimos a intentar el cobro pendiente y todavía no pasó; el resultado te llega por correo."
-            : "Medio de pago guardado, y el cobro pendiente quedó aprobado.";
+            ? `Medio de pago guardado: ${label}. Volvimos a intentar el cobro pendiente y todavía no pasó; el resultado te llega por correo.`
+            : `Medio de pago guardado: ${label}. El cobro pendiente quedó aprobado.`;
         }
         return before?.renewal_mode === "automatic" && before.status !== "canceled"
-          ? "Medio de pago actualizado. Hoy no se te cobró nada."
-          : "Renovación automática activada. Hoy no se te cobró nada.";
+          ? `Medio de pago actualizado: ${label}. Hoy no se te cobró nada.`
+          : `Renovación automática activada con ${label}. Hoy no se te cobró nada.`;
       },
     );
+    if (saved) setSourceUpdated(true);
   }
 
   // El acceso que no sale de una suscripción (administrador o acceso manual).
@@ -227,7 +242,14 @@ export function SubscriptionCard() {
             ) : null}
             <Row label="Forma de pago">{RENEWAL_MODE_LABEL[subscription.renewal_mode]}</Row>
             {automatic && sourceLabel(subscription) ? (
-              <Row label="Medio de pago">{sourceLabel(subscription)}</Row>
+              <Row label="Medio de pago">
+                {sourceUpdated ? (
+                  <span className="mr-2">
+                    <Badge tone="ok">Actualizado</Badge>
+                  </span>
+                ) : null}
+                {sourceLabel(subscription)}
+              </Row>
             ) : null}
             {subscription.next_charge_at && subscription.next_charge_cents !== null ? (
               <Row label="Próximo cobro">
@@ -237,9 +259,9 @@ export function SubscriptionCard() {
             ) : null}
           </dl>
           {notice ? (
-            <p role="status" className="mt-3 text-sm font-bold text-white">
-              {notice}
-            </p>
+            <div ref={noticeRef} className="mt-3 scroll-mt-4">
+              <SuccessBox message={notice} />
+            </div>
           ) : null}
 
           {withoutPaying ? (

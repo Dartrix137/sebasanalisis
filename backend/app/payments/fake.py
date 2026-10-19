@@ -20,6 +20,7 @@ from app.payments.base import (
     PaymentSource,
     PaymentSourceRejected,
     PaymentSourceType,
+    PaymentsUnavailable,
     ProviderEvent,
     ProviderTransaction,
     TokenizerInfo,
@@ -121,6 +122,10 @@ class FakePaymentProvider:
 
     def tokenizer(self) -> TokenizerInfo | None:
         return TokenizerInfo(kind="fake")
+
+    def card_encryption_key(self) -> str:
+        # El selector simulado no escribe ni cifra ninguna tarjeta.
+        raise PaymentsUnavailable("La pasarela simulada no cifra tarjetas")
 
     def acceptance(self) -> Acceptance:
         return Acceptance(

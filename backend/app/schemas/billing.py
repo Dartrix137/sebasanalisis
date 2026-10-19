@@ -129,7 +129,8 @@ class PaymentSourceKind(str, Enum):
 
 
 class TokenizerKind(str, Enum):
-    wompi_widget = "wompi_widget"
+    # Nuestro formulario, que tokeniza contra la API de Wompi (§3.16).
+    wompi_api = "wompi_api"
     fake = "fake"
 
 
@@ -139,8 +140,16 @@ class BillingAvailabilityResponse(ApiModel):
     # Como pide el navegador el token de un medio de pago. Null = no se ofrece
     # la renovacion automatica.
     tokenizer: TokenizerKind | None = None
-    # Llave PUBLICA del comercio, para el widget. Nunca la privada.
+    # Llave PUBLICA del comercio, con la que el navegador tokeniza. Nunca la privada.
     public_key: str | None = None
+    # La API del procesador a la que el navegador manda la tarjeta o el Nequi.
+    api_base_url: str | None = None
+
+
+class CardEncryptionKeyResponse(ApiModel):
+    """La llave publica (PEM) con la que el navegador cifra la tarjeta antes de
+    mandarla al procesador. No es un secreto."""
+    encryption_key: str
 
 
 class AcceptanceResponse(ApiModel):

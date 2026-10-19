@@ -1725,6 +1725,17 @@
       "BillingAvailabilityResponse": {
         "description": "Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.",
         "properties": {
+          "api_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base Url"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -1754,7 +1765,8 @@
         "required": [
           "enabled",
           "tokenizer",
-          "public_key"
+          "public_key",
+          "api_base_url"
         ],
         "title": "BillingAvailabilityResponse",
         "type": "object"
@@ -1800,6 +1812,20 @@
           "spins"
         ],
         "title": "BulkSpinsResponse",
+        "type": "object"
+      },
+      "CardEncryptionKeyResponse": {
+        "description": "La llave publica (PEM) con la que el navegador cifra la tarjeta antes de\nmandarla al procesador. No es un secreto.",
+        "properties": {
+          "encryption_key": {
+            "title": "Encryption Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "encryption_key"
+        ],
+        "title": "CardEncryptionKeyResponse",
         "type": "object"
       },
       "CategoryGroup-Input": {
@@ -5959,7 +5985,7 @@
       },
       "TokenizerKind": {
         "enum": [
-          "wompi_widget",
+          "wompi_api",
           "fake"
         ],
         "title": "TokenizerKind",
@@ -10123,6 +10149,33 @@
           }
         },
         "summary": "Availability",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/card-encryption-key": {
+      "get": {
+        "description": "La llave con la que el navegador cifra la tarjeta antes de mandarla\ndirecto al procesador (§3.16). Por aqui pasa solo la llave, nunca la\ntarjeta: el procesador no deja pedirla desde el navegador. Se pide al\nmomento: no se guarda.",
+        "operationId": "card_encryption_key_billing_card_encryption_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardEncryptionKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Card Encryption Key",
         "tags": [
           "billing"
         ]

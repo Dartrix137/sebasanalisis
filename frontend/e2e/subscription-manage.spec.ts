@@ -64,7 +64,9 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   await acceptProcessorTerms(page);
   await guardar.click();
   await expect(
-    suscripcion.getByText("Renovación automática activada. Hoy no se te cobró nada."),
+    suscripcion.getByText(
+      "Renovación automática activada con Visa •••• 4242. Hoy no se te cobró nada.",
+    ),
   ).toBeVisible();
   await expect(suscripcion.getByText("Renovación automática", { exact: true })).toBeVisible();
   await expect(suscripcion.getByText(/100\.000 COP, a partir del/)).toBeVisible();
@@ -85,8 +87,11 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-ok");
   await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
   await expect(
-    suscripcion.getByText("Medio de pago actualizado. Hoy no se te cobró nada."),
+    suscripcion.getByText("Medio de pago actualizado: Visa •••• 4242. Hoy no se te cobró nada."),
   ).toBeVisible();
+  // La confirmación se ve como tal, y la fila del medio de pago lo marca.
+  await expect(suscripcion.getByRole("status")).toContainText("Medio de pago actualizado");
+  await expect(suscripcion.getByText("Actualizado", { exact: true })).toBeVisible();
 
   // De automática a manual: pide confirmar, y se puede arrepentir.
   await suscripcion.getByRole("button", { name: "Pasar a pago manual" }).click();
@@ -129,7 +134,9 @@ test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, 
   await acceptProcessorTerms(page);
   await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
   await expect(
-    suscripcion.getByText("Renovación automática activada. Hoy no se te cobró nada."),
+    suscripcion.getByText(
+      "Renovación automática activada con Visa •••• 4242. Hoy no se te cobró nada.",
+    ),
   ).toBeVisible();
   await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
   await expect(suscripcion.getByText("Próximo cobro")).toBeVisible();

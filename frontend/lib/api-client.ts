@@ -51,6 +51,7 @@ import type {
   AdminPlanListResponse,
   AdminPlanResponse,
   BillingAvailabilityResponse,
+  CardEncryptionKeyResponse,
   CouponRedemptionListResponse,
   CreateCouponRequest,
   CreatePlanRequest,
@@ -349,6 +350,13 @@ export const billingApi = {
    * un medio de pago, con los tokens que viajan de vuelta al suscribirse.
    */
   acceptance: (token: string) => apiFetch<AcceptanceResponse>("/billing/acceptance", { token }),
+
+  /**
+   * La llave pública con la que el navegador cifra la tarjeta antes de mandarla
+   * directo a Wompi (§3.16). Por nuestro servidor pasa solo la llave.
+   */
+  cardEncryptionKey: (token: string) =>
+    apiFetch<CardEncryptionKeyResponse>("/billing/card-encryption-key", { token }),
 
   /** Detiene la renovación automática. Conserva el acceso hasta el fin del período. */
   cancelSubscription: (token: string) =>

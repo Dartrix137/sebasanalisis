@@ -21,12 +21,22 @@ INTEGRITY_SECRET = "test_integrity_solo-para-tests"
 PUBLIC_KEY = "pub_test_solo-para-tests"
 PRIVATE_KEY = "prv_test_solo-para-tests"
 
-# Tokens que "devuelve el widget". El de `rechazado` no sirve para guardar el medio.
+# Tokens que el navegador obtiene de Wompi. El de `rechazado` no sirve para guardar el medio.
 TOKEN_TARJETA = "tok_test_tarjeta"
 TOKEN_NEQUI = "nequi_test_token"
 TOKEN_RECHAZADO = "tok_test_que_wompi_no_acepta"
 ACEPTACION = "eyJ.aceptacion.test"
 DATOS_PERSONALES = "eyJ.datos-personales.test"
+
+# El cuerpo de la llave de cifrado de tarjetas (no es una llave RSA de verdad:
+# aqui solo importa que sea base64). El sandbox la mandaba en una sola linea,
+# con espacios donde van los saltos (2026-10-19).
+LLAVE_CIFRADO_B64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArXjbKu8DkQHVtzdvxlck" + "A" * 36
+LLAVE_CIFRADO_SANDBOX = (
+    "-----BEGIN PUBLIC KEY----- "
+    f"{LLAVE_CIFRADO_B64[:64]} {LLAVE_CIFRADO_B64[64:]}"
+    " -----END PUBLIC KEY-----"
+)
 
 
 class Wompi:
@@ -44,6 +54,8 @@ class Wompi:
         #: Los cuerpos que llegaron a POST /transactions y /payment_sources.
         self.cobros: list[dict] = []
         self.fuentes_pedidas: list[dict] = []
+        #: Lo que responde GET /tokens/keys/tokenization en `data.publicKey`.
+        self.llave_cifrado: object = LLAVE_CIFRADO_SANDBOX
         self.provider = WompiProvider(
             public_key=PUBLIC_KEY,
             private_key=PRIVATE_KEY,
@@ -79,6 +91,11 @@ class Wompi:
                     }
                 },
             )
+
+        if request.method == "GET" and path == "/tokens/keys/tokenization":
+            # Como en el ejemplo de la documentacion: con la llave publica.
+            assert request.headers.get("Authorization") == f"Bearer {PUBLIC_KEY}"
+            return httpx.Response(200, json={"data": {"publicKey": self.llave_cifrado}})
 
         if request.method == "POST" and path == "/payment_sources":
             assert privada, "la fuente de pago se crea con la llave privada"

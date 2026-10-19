@@ -39,10 +39,16 @@ from app.core.subscriptions import (
     coupon_terms,
 )
 from app.models import Coupon, Payment, Plan, User
-from app.payments.base import PaymentProvider, PaymentProviderError, get_payment_provider
+from app.payments.base import (
+    PaymentProvider,
+    PaymentProviderError,
+    PaymentsUnavailable,
+    get_payment_provider,
+)
 from app.schemas.billing import (
     AcceptanceResponse,
     BillingAvailabilityResponse,
+    CardEncryptionKeyResponse,
     PaymentListResponse,
     PaymentMethodRequest,
     PaymentResponse,
@@ -113,13 +119,11 @@ def availability(provider: PaymentProviderDep) -> BillingAvailabilityResponse:
         enabled=provider.enabled,
         tokenizer=tokenizer.kind if tokenizer else None,  # type: ignore[arg-type]
         public_key=tokenizer.public_key if tokenizer else None,
+        api_base_url=tokenizer.api_base_url if tokenizer else None,
     )
 
 
-@router.get("/billing/acceptance", response_model=AcceptanceResponse)
-def acceptance(user: CurrentUser, provider: PaymentProviderDep) -> AcceptanceResponse:
-    """Los contratos del procesador de pagos que hay que aceptar antes de
-    guardar un medio de pago (§3.4). Se piden al momento: no se guardan."""
+def _require_tokenizer(provider: PaymentProvider) -> None:
     if not provider.enabled or provider.tokenizer() is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -128,15 +132,50 @@ def acceptance(user: CurrentUser, provider: PaymentProviderDep) -> AcceptanceRes
                 "message": "La renovación automática todavía no está disponible.",
             },
         )
+
+
+_PROVIDER_UNAVAILABLE = {
+    "code": "provider_unavailable",
+    "message": "No pudimos consultar al procesador de pagos. Intenta de nuevo.",
+}
+
+
+@router.get("/billing/card-encryption-key", response_model=CardEncryptionKeyResponse)
+def card_encryption_key(
+    user: CurrentUser, provider: PaymentProviderDep
+) -> CardEncryptionKeyResponse:
+    """La llave con la que el navegador cifra la tarjeta antes de mandarla
+    directo al procesador (§3.16). Por aqui pasa solo la llave, nunca la
+    tarjeta: el procesador no deja pedirla desde el navegador. Se pide al
+    momento: no se guarda."""
+    _require_tokenizer(provider)
+    try:
+        key = provider.card_encryption_key()
+    except PaymentsUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "card_form_unavailable",
+                "message": "Este procesador de pagos no recibe tarjetas desde nuestro formulario.",
+            },
+        ) from exc
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=_PROVIDER_UNAVAILABLE
+        ) from exc
+    return CardEncryptionKeyResponse(encryption_key=key)
+
+
+@router.get("/billing/acceptance", response_model=AcceptanceResponse)
+def acceptance(user: CurrentUser, provider: PaymentProviderDep) -> AcceptanceResponse:
+    """Los contratos del procesador de pagos que hay que aceptar antes de
+    guardar un medio de pago (§3.4). Se piden al momento: no se guardan."""
+    _require_tokenizer(provider)
     try:
         found = provider.acceptance()
     except PaymentProviderError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "provider_unavailable",
-                "message": "No pudimos consultar al procesador de pagos. Intenta de nuevo.",
-            },
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=_PROVIDER_UNAVAILABLE
         ) from exc
     return AcceptanceResponse(
         acceptance_token=found.acceptance_token,

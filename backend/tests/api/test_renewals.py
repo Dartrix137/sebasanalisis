@@ -14,6 +14,8 @@ from sqlalchemy import create_engine, select, text
 from app.billing.periods import add_interval
 from app.core.renewals import advisory_lock, renewal_reference, run_renewals
 from app.models import Payment, Plan, Subscription
+from app.payments.base import get_payment_provider
+from app.payments.fake import FakePaymentProvider
 from app.payments.wompi import integrity_signature
 from tests.api.conftest import auth
 from tests.api.test_billing import _cupon, _mensual
@@ -32,6 +34,7 @@ from tests.api.wompi_double import (
     ACEPTACION,
     DATOS_PERSONALES,
     INTEGRITY_SECRET,
+    LLAVE_CIFRADO_B64,
     PRIVATE_KEY,
     PUBLIC_KEY,
     TOKEN_NEQUI,
@@ -101,7 +104,12 @@ def _de(reporte, correo: str) -> list[str]:
 
 def test_disponibilidad_dice_como_se_guarda_un_medio_de_pago(client, wompi) -> None:
     data = client.get("/billing/availability").json()
-    assert data == {"enabled": True, "tokenizer": "wompi_widget", "public_key": PUBLIC_KEY}
+    assert data == {
+        "enabled": True,
+        "tokenizer": "wompi_api",
+        "public_key": PUBLIC_KEY,
+        "api_base_url": "https://sandbox.wompi.co/v1",
+    }
     # La llave publica viaja; la privada, nunca.
     assert PRIVATE_KEY not in str(data)
 
@@ -111,10 +119,58 @@ def test_sin_pasarela_no_se_ofrece_la_renovacion_automatica(client, db) -> None:
         "enabled": False,
         "tokenizer": None,
         "public_key": None,
+        "api_base_url": None,
     }
     token, _, _ = _cuenta(client, db)
     r = client.get("/billing/acceptance", headers=auth(token))
     assert (r.status_code, r.json()["detail"]["code"]) == (503, "automatic_unavailable")
+    r = client.get("/billing/card-encryption-key", headers=auth(token))
+    assert (r.status_code, r.json()["detail"]["code"]) == (503, "automatic_unavailable")
+
+
+def test_la_llave_para_cifrar_la_tarjeta(client, db, wompi) -> None:
+    """§3.16: Wompi no deja pedirla desde el navegador, asi que la pide el
+    servidor. Por aqui pasa solo la llave: la tarjeta va directo a Wompi."""
+    token, _, _ = _cuenta(client, db)
+    assert client.get("/billing/card-encryption-key").status_code == 401
+
+    r = client.get("/billing/card-encryption-key", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "encryption_key": (
+            "-----BEGIN PUBLIC KEY-----\n"
+            f"{LLAVE_CIFRADO_B64[:64]}\n{LLAVE_CIFRADO_B64[64:]}\n"
+            "-----END PUBLIC KEY-----\n"
+        )
+    }
+    assert PRIVATE_KEY not in r.text
+
+    # Una respuesta que no es una llave no se reenvia al navegador.
+    wompi.llave_cifrado = "<html>error</html>"
+    r = client.get("/billing/card-encryption-key", headers=auth(token))
+    assert (r.status_code, r.json()["detail"]["code"]) == (502, "provider_unavailable")
+
+    wompi.caido = True
+    r = client.get("/billing/card-encryption-key", headers=auth(token))
+    assert (r.status_code, r.json()["detail"]["code"]) == (502, "provider_unavailable")
+
+
+def test_la_pasarela_simulada_no_entrega_llave_de_cifrado(client, db) -> None:
+    from app.main import app
+
+    fake = FakePaymentProvider(api_base_url="http://testserver")
+    anterior = app.dependency_overrides.get(get_payment_provider)
+    app.dependency_overrides[get_payment_provider] = lambda: fake
+    try:
+        assert client.get("/billing/availability").json()["tokenizer"] == "fake"
+        token, _, _ = _cuenta(client, db)
+        r = client.get("/billing/card-encryption-key", headers=auth(token))
+        assert (r.status_code, r.json()["detail"]["code"]) == (503, "card_form_unavailable")
+    finally:
+        if anterior is None:
+            app.dependency_overrides.pop(get_payment_provider, None)
+        else:
+            app.dependency_overrides[get_payment_provider] = anterior
 
 
 def test_los_contratos_del_procesador(client, db, wompi) -> None:
