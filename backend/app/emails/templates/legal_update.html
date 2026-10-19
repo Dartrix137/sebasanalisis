@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Te escribimos porque tienes una suscripción vigente a Sebasanálisis. Publicamos una versión
+  nueva de {% if documents | length > 1 %}estos documentos{% else %}este documento{% endif %}:
+</p>
+<ul style="margin:0 0 12px 0;padding-left:20px;">
+  {% for doc in documents %}
+  <li style="margin:0 0 6px 0;">
+    <a href="{{ doc.url }}" style="color:#e0b341;font-weight:bold;">{{ doc.title }}</a>:
+    versión {{ doc.version }}, publicada el {{ doc.published_at | fecha }}.
+  </li>
+  {% endfor %}
+</ul>
+<p style="margin:0 0 12px 0;">
+  La próxima vez que entres a la mesa te vamos a pedir que aceptes la versión nueva; sin
+  aceptarla no puedes usar la mesa. "Mi cuenta" sigue disponible sin aceptarla: ahí ves tu
+  suscripción y puedes cancelarla.
+</p>
+{% if renews_automatically %}
+<p style="margin:0 0 12px 0;">
+  Tu suscripción se renueva sola, y eso no cambia con este aviso. Si no estás de acuerdo con la
+  versión nueva, puedes cancelar la renovación desde "Mi cuenta" y no se te hace ningún cobro más.
+</p>
+{% endif %}
+{% if documents | length == 1 %}
+{{ button(documents[0].url, "Leer la versión nueva") }}
+{% else %}
+{{ button(account_url, "Ir a mi cuenta") }}
+{% endif %}
+{% endblock %}

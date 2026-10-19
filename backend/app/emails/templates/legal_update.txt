@@ -1,0 +1,19 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Te escribimos porque tienes una suscripción vigente a Sebasanálisis. Publicamos una versión nueva de {% if documents | length > 1 %}estos documentos{% else %}este documento{% endif %}:
+
+{% for doc in documents %}
+- {{ doc.title }}: versión {{ doc.version }}, publicada el {{ doc.published_at | fecha }}.
+  {{ doc.url }}
+{% endfor %}
+
+La próxima vez que entres a la mesa te vamos a pedir que aceptes la versión nueva; sin aceptarla no puedes usar la mesa. "Mi cuenta" sigue disponible sin aceptarla: ahí ves tu suscripción y puedes cancelarla.
+{% if renews_automatically %}
+
+Tu suscripción se renueva sola, y eso no cambia con este aviso. Si no estás de acuerdo con la versión nueva, puedes cancelar la renovación desde "Mi cuenta" y no se te hace ningún cobro más.
+{% endif %}
+
+Mi cuenta: {{ account_url }}
+{% endblock %}

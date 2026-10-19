@@ -745,6 +745,7 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 
 **Lo que queda sin probar o sin hacer**
 
+- **En el VPS (2026-10-19, llaves de sandbox)**, el usuario probó el alta con la tarjeta `4242` (aprobada) y el cambio a Nequi `3991111111` en `/cuenta`.
 - En `/planes/pagar` no se probaron a mano el alta con la tarjeta `4111` (primer cobro rechazado) ni el alta con Nequi: los cubre Playwright con la pasarela simulada, y los mismos medios ya se probaron contra el sandbox en `/cuenta`.
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
@@ -1207,7 +1208,16 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **`GET /auth/me/export`**: cuenta, mesas con sus giros y apuestas, y consentimientos. `payments` va vacío hasta el paso 5. Límite: 10 cada 15 min por usuario. No exige `RequireAccess`.
 - **Eliminar la cuenta** borra en cascada sus `user_consents`. Si el abogado pide conservar la constancia de la autorización después de la supresión, hay que cambiar ese `ON DELETE`.
 - **Pie de página**: en el layout raíz, así que aparece en todas las pantallas. Las pantallas dejaron de ocupar el alto completo por su cuenta (`min-h-screen`) para que el pie quede a la vista en login y registro.
-- **Pendiente para el lanzamiento: aviso por correo de una versión nueva** (anotado por decisión del usuario el 2026-10-08). Publicar una versión que exige aceptación hoy **no envía correo**: cada cuenta ve la pantalla de aceptación la próxima vez que entra, y quien no entra no se entera. Con cobros activos eso deja a una cuenta con renovación automática pagando bajo términos que no ha visto. Lo que falta construir: un correo a cada cuenta al publicar, que diga qué documento cambió y enlace a su página pública, enviado por tandas para respetar `EMAIL_DAILY_LIMIT` (por eso va después de pasar Resend al plan Pro). La pantalla de aceptación se mantiene: es la que deja la constancia. A confirmar con el abogado: si el aviso es obligatorio y si debe salir con antelación a la entrada en vigor.
+- **Aviso por correo de una versión nueva: construido en el paso 9 (2026-10-19)**, rama `fase-4-paso-9-lanzamiento`. Antes, publicar una versión que exige aceptación no enviaba correo: cada cuenta veía la pantalla de aceptación al volver a entrar, y una cuenta con renovación automática podía seguir pagando bajo términos que no había visto. Decidido por el usuario el 2026-10-19:
+  - **A quién**: a las cuentas con un período pagado vigente (suscripción activa, en mora o cancelada con acceso), activas y con el correo confirmado. No a las de acceso manual sin suscripción ni a correos sin confirmar.
+  - **Cuándo**: al publicar. La versión rige desde que se publica, como antes, y el correo sale en las corridas siguientes del job de renovaciones. Si el abogado pide antelación, se agrega aparte (una fecha de entrada en vigor por versión, con su migración y su regla en `has_access`).
+  - **De qué**: de la última versión de cada documento que exige aceptación, si reemplaza a una versión anterior publicada (la versión 1 que sembró la migración no avisa). No se le escribe a quien ya la aceptó. Dos versiones publicadas antes del aviso dan un solo correo, de la última. Un solo correo por cuenta aunque cambien términos y datos a la vez.
+  - **El correo** (`legal_update`) dice qué documento cambió, su versión y su fecha, enlaza a su página pública, explica que sin aceptarla no se puede usar la mesa y que `/cuenta` sigue disponible para ver o cancelar la suscripción; a quien se le renueva sola le dice que puede cancelar la renovación. No dice que el texto esté revisado por un abogado.
+  - **Por tandas**, en `scripts/run_renewals.py`, dentro del mismo candado de Postgres: hasta 40 por corrida y, por día UTC, la mitad de `EMAIL_DAILY_LIMIT`, contada en la base (el contador de `CappedEmailSender` vive en memoria y no se comparte entre la API y el job).
+  - **Idempotencia**: tabla `legal_notices` (migración `7d82b3f54867`, solo DDL), una fila por (cuenta, versión) con restricción única, escrita solo si el correo salió. Si el correo falla, se reintenta en la corrida siguiente. Queda la misma ventana que en los avisos de precio: si el proceso muere entre enviar y anotar, esa cuenta recibe el aviso otra vez.
+  - La pantalla de aceptación no cambió: es la que deja la constancia. `/admin/legal` avisa al confirmar la publicación que saldrá el correo.
+  - Código en `backend/app/core/legal_notices.py`; tests en `tests/api/test_legal_notices.py`.
+  - A confirmar con el abogado: si el aviso es obligatorio y si debe salir con antelación.
 - **Tests de punta a punta**: el de re-aceptación corre en un proyecto aparte de Playwright (`*.serial.spec.ts`), al final: publicar una versión le pide re-aceptar a todas las cuentas de la base y en paralelo le cortaría la mesa a los demás tests. `start-api.mjs` fija las credenciales del administrador sembrado para esa base desechable.
 
 ---
@@ -1567,7 +1577,7 @@ Trámites con tiempo de espera externo, que se inician al empezar la Fase 0 y no
 - Abogado para los textos de §6 (bloquea el lanzamiento, no la construcción: se construye con textos de borrador).
 - Compra del dominio, proveedor SMTP y registros DNS (bloquea el cierre del paso 1; mientras tanto se trabaja con `ConsoleEmailSender`).
 
-Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, que un abogado haya revisado los textos de §6, y el aviso por correo de versiones nuevas de los documentos legales (§6.7).
+Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, que un abogado haya revisado los textos de §6, y el aviso por correo de versiones nuevas de los documentos legales (§6.7). El estado de cada punto está en `HOJA_DE_RUTA.md` §5 (paso 9) y los pasos a mano en `DESPLIEGUE.md`, "Antes del lanzamiento comercial".
 
 ---
 

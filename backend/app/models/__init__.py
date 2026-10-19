@@ -13,7 +13,7 @@ from app.models.billing import (
 )
 from app.models.game import Game, GameVariant, PlanGame
 from app.models.game_session import GameSession
-from app.models.legal import LegalDocument, UserConsent
+from app.models.legal import LegalDocument, LegalNotice, UserConsent
 from app.models.performance import SessionPerformance
 from app.models.spin import Spin
 from app.models.suggestion import BankrollSuggestion, StatisticalSuggestion
@@ -31,6 +31,7 @@ __all__ = [
     "GameVariant",
     "GameSession",
     "LegalDocument",
+    "LegalNotice",
     "Payment",
     "PaymentEvent",
     "PaymentRefund",
