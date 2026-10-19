@@ -276,6 +276,37 @@ La lista "Antes del lanzamiento comercial" (`PLATAFORMA_COMPLETA.md` §9), con e
 | Aviso por correo de versiones nuevas de los documentos legales | **Construido** el 2026-10-19 (§6.7), con tests | Código |
 | Textos legales revisados (§10 n.º 8), responsable del tratamiento (n.º 10), facturación electrónica (n.º 4), PCI DSS con el formulario propio (n.º 15), precio en pantalla e IVA, la frase de "apostar el mínimo" del formulario de mesa nueva | Sin respuesta | Abogado, contador o Wompi |
 
+**Acabado del frontend** (agregado a la lista por el usuario el 2026-10-19). Estado comprobado en el repositorio ese día; lo que dice "por revisar" exige recorrer las pantallas:
+
+| Punto | Estado | Tipo |
+|---|---|---|
+| Página 404 personalizada | No existe: sale la 404 por defecto de Next. Solo hay `app/global-error.tsx`, sin `error.tsx` por ruta | Código |
+| Título meta por página | Solo uno global en `app/layout.tsx`. 17 de las 25 páginas son `"use client"` y no pueden exportar `metadata` | Código |
+| Descripción meta por página | Igual que el título. La global ("Análisis estadístico descriptivo de juegos de casino") es anterior al motor de recomendación | Código |
+| `robots.txt` | No existe | Código |
+| `sitemap.xml` | No existe. Solo páginas públicas: inicio, planes, legales, login y registro | Código |
+| Cortes para móvil | Por revisar a 360 px y a ancho de tableta, pantalla por pantalla | Revisión y código |
+| Estados de carga | No hay ningún `loading.tsx`; cada pantalla lo resuelve por su cuenta. Por revisar cuáles quedan en blanco o saltan | Revisión y código |
+| Errores de formulario visibles | Existen `ErrorBox` y, desde el PR #29, el error por campo en `Field`. Por revisar qué formularios no los usan | Revisión y código |
+
+**Seguridad** (agregado a la lista por el usuario el 2026-10-19). Estado comprobado en el repositorio ese día. Ninguno se da por hecho sin una revisión con evidencia (un test o una prueba a mano):
+
+| Punto | Estado | Tipo |
+|---|---|---|
+| Ocultar todo registro de llaves de API | Los secretos viven solo en variables de entorno y `.env` está en `.gitignore`. El monitoreo filtra cabeceras `Authorization`, cookies y cuerpos de `/auth/*`, `/billing/*` y `/webhooks/*`, y los errores de Wompi no llevan la URL ni las cabeceras. Por revisar: los logs de la API y del job en Dokploy, y el historial de git | Revisión |
+| Row-Level Security | No se usa RLS de Postgres: la API entra con un solo usuario de base y el aislamiento por cuenta lo hace el código, filtrando cada consulta por el dueño. Por decidir si se agrega RLS o se cubre con tests de aislamiento entre cuentas | Decisión del usuario |
+| Forzar autenticación | Las rutas privadas piden sesión (`CurrentUser`) y las de juego además `RequireAccess` y `RequireGameAccess`. Por revisar: un test que recorra todas las rutas y confirme que ninguna privada responde sin sesión | Revisión y código |
+| Restringir acceso a registros | Una mesa, un pago o una suscripción de otra cuenta no deberían verse. Por revisar con tests de acceso cruzado (una cuenta pidiendo el id de otra) en cada recurso | Revisión y código |
+| Bloquear manipulación de campos | Los cuerpos se validan con Pydantic y el servidor ignora lo que no espera (un monto enviado por el cliente se ignora, §3.3). Por revisar: que ningún esquema de entrada acepte campos como `role`, `access_type`, `user_id` o montos | Revisión |
+| Proteger cookies de sesión | Hoy no hay cookies de sesión: el access y el refresh token viven en `localStorage` (`lib/session.tsx`). Pasar el refresh token a una cookie `HttpOnly`, `Secure`, `SameSite` está en §10 n.º 12 como "no se hace hasta que el usuario lo diga" | Decisión del usuario |
+| Rate limiting | Existe, en memoria y por proceso (`core/rate_limit.py`): login; registro; verificación y reenvío del correo; recuperación, restablecimiento y cambio de contraseña; cambio de correo; exportación y eliminación de la cuenta; cotización y pago con cupón; y una acción del admin. Por revisar qué rutas sensibles faltan; con un solo proceso uvicorn es suficiente | Revisión y código |
+| Protección contra bots | No hay captcha ni desafío en el registro ni en el login | Decisión del usuario (qué servicio, por ejemplo Cloudflare Turnstile) |
+| Parametrizar queries | La API usa el ORM de SQLAlchemy. El único SQL crudo de `app/` es el candado del job (`core/renewals.py`) y va con parámetros | Revisión |
+| Validar inputs | Todo cuerpo de petición pasa por un esquema Pydantic (`ApiModel`), y los números de la mesa se validan contra `possible_outcomes` | Revisión |
+| Cabeceras de seguridad | No hay ninguna en `next.config.ts` ni en la API (CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`). La CSP está en §10 n.º 12 y conviene desde el formulario de tarjeta propio (§3.16) | Código |
+| Forzar HTTPS | Los dos dominios tienen HTTPS en Dokploy. Por revisar: que `http://` redirija a `https://` en los dos, y si se agrega HSTS | Revisión operativa |
+| Escanear dependencias | El CI corre `pip-audit` y `npm audit --omit=dev --audit-level=high`. El `npm audit` completo sigue con avisos altos de la cadena de Tailwind 3 (paso 0). Por decidir si se agrega un escaneo programado | Hecho en el CI; revisión |
+
 **Decisiones del usuario sobre el aviso legal (2026-10-19)**: solo a cuentas con una suscripción vigente, al publicar (sin antelación), y solo a correos confirmados.
 
 **Infraestructura.** Decidido el 2026-10-19: primero los respaldos con su prueba de restauración (Cloudflare R2) y el monitor externo (UptimeRobot), configurados por el usuario con los pasos de `DESPLIEGUE.md`. Propuestas todavía sin decidir (no se cambió nada): Resend Pro (US$20 al mes); que el job de renovaciones avise a un monitor de GlitchTip en cada corrida; revisar la memoria del VPS (`free -h`, `docker stats`). Un solo proceso uvicorn alcanza para la carga esperada: pasar a varios exige mover a Postgres los límites de intentos y el tope de correo, que hoy viven en memoria.
