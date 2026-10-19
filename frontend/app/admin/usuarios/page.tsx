@@ -368,7 +368,7 @@ function UserDetail({
       ) : (
         <AccessForm user={u} subscribed={detail.subscription?.in_force ?? false} onDone={refresh} />
       )}
-      <UserBilling detail={detail} onChanged={refresh} />
+      <UserBilling detail={detail} />
       {u.email_verified ? null : <ResendVerification user={u} onDone={refresh} />}
       <ForcePasswordResetForm user={u} isSelf={isSelf} onDone={refresh} />
       <StatusForm user={u} isSelf={isSelf} onDone={refresh} />

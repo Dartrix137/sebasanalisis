@@ -32,6 +32,13 @@ const SEPARATORS = /[\s,;]+/;
  */
 const WINDOW_SIZE = 50;
 
+/**
+ * Números registrados que pide el motor antes de su primera recomendación
+ * (`MIN_SPINS_FOR_SIGNAL`, 11 desde el 2026-10-15). Aquí va fijo porque la mesa
+ * todavía no existe; dentro de la mesa la tarjeta lo lee de la API.
+ */
+export const MIN_NUMEROS = 11;
+
 function parseValues(raw: string): string[] {
   return raw.trim().split(SEPARATORS).filter(Boolean);
 }
@@ -258,6 +265,34 @@ export function NewSessionForm({
       </details>
 
       {progressions ? <ProgressionPreviewTabs tables={progressions} /> : null}
+
+      {/*
+        El mínimo de números, dicho antes de abrir la mesa (pedido del
+        2026-10-15). La cifra es la del motor; la tarjeta la lee de la API.
+      */}
+      <div
+        data-testid="aviso-minimo"
+        className="rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-3 text-xs leading-relaxed text-white"
+      >
+        <p>
+          Para que aparezca la primera recomendación necesitas{" "}
+          <span className="font-bold">al menos {MIN_NUMEROS} números registrados</span>. Con el
+          número {MIN_NUMEROS} sale la recomendación para el giro siguiente.
+        </p>
+        <p className="mt-1.5 text-muted">
+          Tómalos del historial que la mesa muestra arriba o abajo de la ruleta y escríbelos
+          aquí. Si la mesa no muestra {MIN_NUMEROS} resultados, registra los que vayan saliendo
+          hasta completarlos. Si para ver un giro la mesa te obliga a apostar, apuesta solo el{" "}
+          <span className="font-bold text-white">mínimo que acepte la casa</span>, fuera de tus
+          progresiones.
+        </p>
+        {initialValues.length > 0 && initialValues.length < MIN_NUMEROS ? (
+          <p className="mt-1.5 font-bold">
+            Con estos {initialValues.length} te{" "}
+            {MIN_NUMEROS - initialValues.length === 1 ? "falta 1" : `faltan ${MIN_NUMEROS - initialValues.length}`}.
+          </p>
+        ) : null}
+      </div>
 
       {/*
         Carga inicial (§3.5). Los números los escribe el usuario: el proyecto no

@@ -3,13 +3,14 @@
 /**
  * Resumen de la sesión (§4). Aparece cuando la sesión se cierra.
  *
- * Todo lo que muestra describe lo que ya ocurrió. En particular `win_rate` es la
- * proporción de apuestas ganadas en ESTA sesión: no es una tasa de acierto del
+ * Todo lo que muestra describe lo que ya ocurrió: no es una tasa de acierto del
  * motor ni dice nada sobre las próximas — la ventaja de la casa no cambió.
+ * Desde el 2026-10-15 las apuestas se cuentan por giro (`BetStats`), con lo
+ * esperable por azar al lado; antes se contaba cada casilla por separado.
  */
 
 import { Card, CardHeader } from "@/components/ui";
-import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
+import { BetStats } from "@/components/mesa/BetStats";
 import type { SessionSummaryResponse } from "@/lib/types/sessions";
 
 const MONEY = (n: number) =>
@@ -73,17 +74,14 @@ export function SummaryPanel({ summary }: { summary: SessionSummaryResponse | nu
         </p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <dl className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Dato label="Números registrados" valor={String(summary.total_spins)} />
-        <Dato label="Apuestas resueltas" valor={String(summary.total_bets)} />
-        <Dato label="Apuestas ganadas" valor={PCT(summary.win_rate)} />
-        <Dato
-          label="Peor caída"
-          valor={MONEY(summary.max_drawdown)}
-          tono={summary.max_drawdown > 0 ? "alerta" : undefined}
-        />
+        <Dato label="Giros apostados" valor={String(summary.rounds_bet)} />
         <Dato label="Duración" valor={duracion(summary.duration_minutes)} />
       </dl>
+
+      {/* Las cifras por giro, las mismas que la mesa muestra en "Apuestas de esta sesión". */}
+      <BetStats summary={summary} />
 
       {summary.total_bets > 0 ? (
         <p className="mt-3 text-xs leading-relaxed text-muted">
@@ -92,15 +90,6 @@ export function SummaryPanel({ summary }: { summary: SessionSummaryResponse | nu
             {PCT(summary.followed_suggestion_rate)}
           </span>{" "}
           de tus apuestas.
-        </p>
-      ) : null}
-
-      {summary.max_drawdown > 0 ? (
-        <p className="mt-3 rounded-lg border border-edge bg-ink px-3.5 py-3 text-xs leading-relaxed text-muted">
-          La <span className="font-bold text-white">peor caída</span> es lo máximo que
-          llegaste a estar por debajo de tu mejor momento de la sesión. Un resultado
-          final parejo puede esconder un bajón grande por el camino, y es ese bajón el
-          que agota una banca.
         </p>
       ) : null}
 

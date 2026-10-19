@@ -156,7 +156,7 @@ def test_una_mesa_vacia_no_recomienda_por_falta_de_informacion(
 ) -> None:
     cuerpo = _recomendacion(client, user_token, sesion)
     assert cuerpo["no_bet_reason"] == "insufficient_data"
-    assert cuerpo["min_spins_for_signal"] == 10
+    assert cuerpo["min_spins_for_signal"] == 11
 
 
 def test_la_respuesta_trae_el_disclaimer_fijo(

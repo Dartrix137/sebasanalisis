@@ -18,9 +18,11 @@
 import { useState } from "react";
 
 import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
+import { BetStats } from "@/components/mesa/BetStats";
 import { Button, ErrorBox } from "@/components/ui";
 import type { GameVariantConfig } from "@/lib/types/games";
 import type { BetResponse, CreateBetRequest } from "@/lib/types/bets";
+import type { SessionSummaryResponse } from "@/lib/types/sessions";
 
 const MONEY = (n: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -249,8 +251,18 @@ export function BetRow({
 
 const SIGNED = (n: number) => `${n >= 0 ? "+" : "−"}${MONEY(Math.abs(n))}`;
 
-/** Apuestas ya resueltas de la sesión. Se consulta, no se usa a cada giro. */
-export function BetHistory({ bets }: { bets: BetResponse[] }) {
+/**
+ * Apuestas ya resueltas de la sesión. Se consulta, no se usa a cada giro.
+ *
+ * Arriba van las cifras por giro del resumen (`BetStats`); abajo, cada apuesta.
+ */
+export function BetHistory({
+  bets,
+  summary,
+}: {
+  bets: BetResponse[];
+  summary: SessionSummaryResponse | null;
+}) {
   const resueltas = bets.filter((b) => b.status === "resolved");
 
   if (resueltas.length === 0) {
@@ -261,21 +273,16 @@ export function BetHistory({ bets }: { bets: BetResponse[] }) {
     );
   }
 
-  const neto = resueltas.reduce((acc, b) => acc + (b.net_change ?? 0), 0);
-  const ganadas = resueltas.filter((b) => b.won).length;
-
   return (
     <div className="px-3 py-3">
-      <p className="mb-3 text-sm text-muted">
-        {resueltas.length} {resueltas.length === 1 ? "apuesta" : "apuestas"} ·{" "}
-        {ganadas} {ganadas === 1 ? "ganada" : "ganadas"} · neto{" "}
-        <span
-          className={`font-bold ${
-            neto > 0 ? "text-signal-strong" : neto < 0 ? "text-table-red" : "text-white"
-          }`}
-        >
-          {SIGNED(neto)}
-        </span>
+      {summary ? (
+        <div className="mb-3">
+          <BetStats summary={summary} />
+        </div>
+      ) : null}
+      <p className="mb-2 text-xs text-muted">
+        {resueltas.length} {resueltas.length === 1 ? "apuesta" : "apuestas"}, la más reciente
+        primero.
       </p>
 
       <ul className="space-y-1.5">

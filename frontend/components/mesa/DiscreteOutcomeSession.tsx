@@ -469,7 +469,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
           ) : null}
 
           <Detalle titulo="Apuestas de esta sesión">
-            <BetHistory bets={bets} />
+            <BetHistory bets={bets} summary={summary} />
           </Detalle>
 
           <Detalle titulo="Ajustes de la sesión">

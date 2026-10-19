@@ -109,8 +109,15 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
   await panel.goto("/admin/usuarios");
   await panel.getByLabel("Buscar por correo o nombre").fill(email);
   await panel.getByRole("button", { name: "Buscar" }).click();
+  const cuenta = panel.locator("li", { hasText: email });
+  await cuenta.getByRole("button", { name: "Ver" }).click();
+
+  // La ficha del usuario resume la suscripción; las acciones están en
+  // Suscripciones, que abre con el detalle de esa cuenta ya desplegado.
+  await expect(cuenta.getByRole("form", { name: "Cancelar de inmediato" })).toHaveCount(0);
+  await cuenta.getByRole("link", { name: "Extender o cancelar en Suscripciones →" }).click();
+  await expect(panel).toHaveURL(/\/admin\/suscripciones\?query=/);
   const fila = panel.locator("li", { hasText: email });
-  await fila.getByRole("button", { name: "Ver" }).click();
 
   // Cancelar de inmediato pide confirmarlo además del motivo.
   const cancelar = fila.getByRole("form", { name: "Cancelar de inmediato" });

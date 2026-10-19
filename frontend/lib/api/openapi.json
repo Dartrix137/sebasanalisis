@@ -5273,6 +5273,10 @@
             "title": "Bankroll Start",
             "type": "number"
           },
+          "best_moment": {
+            "title": "Best Moment",
+            "type": "number"
+          },
           "duration_minutes": {
             "title": "Duration Minutes",
             "type": "number"
@@ -5287,6 +5291,18 @@
           },
           "net_change": {
             "title": "Net Change",
+            "type": "number"
+          },
+          "rounds_bet": {
+            "title": "Rounds Bet",
+            "type": "integer"
+          },
+          "rounds_won": {
+            "title": "Rounds Won",
+            "type": "integer"
+          },
+          "rounds_won_expected_rate": {
+            "title": "Rounds Won Expected Rate",
             "type": "number"
           },
           "session_id": {
@@ -5317,7 +5333,11 @@
           "bankroll_final",
           "net_change",
           "max_drawdown",
-          "followed_suggestion_rate"
+          "followed_suggestion_rate",
+          "rounds_bet",
+          "rounds_won",
+          "rounds_won_expected_rate",
+          "best_moment"
         ],
         "title": "SessionSummaryResponse",
         "type": "object"
@@ -12050,7 +12070,7 @@
     },
     "/sessions/{session_id}/summary": {
       "get": {
-        "description": "Resumen de la sesion: cuanto se jugo y como termino la banca.\n\nSolo describe lo que ya paso. `win_rate` es la proporcion de apuestas\nresueltas que se ganaron en esta sesion — no es una tasa de acierto del\nmotor ni dice nada sobre las proximas.",
+        "description": "Resumen de la sesion: cuanto se jugo y como termino la banca.\n\nSolo describe lo que ya paso. `win_rate` es la proporcion de apuestas\nresueltas que se ganaron en esta sesion — no es una tasa de acierto del\nmotor ni dice nada sobre las proximas.\n\nDesde el 2026-10-15 trae tambien las cifras por giro de\n`engine/session_stats.py`, que son las que muestra la mesa: los giros con\nganancia van con lo esperable por azar con esas mismas apuestas, y el mejor\nmomento y la peor caida se miden giro a giro.",
         "operationId": "session_summary_sessions__session_id__summary_get",
         "parameters": [
           {

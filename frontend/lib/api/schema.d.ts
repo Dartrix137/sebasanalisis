@@ -1818,6 +1818,11 @@ export interface paths {
          *     Solo describe lo que ya paso. `win_rate` es la proporcion de apuestas
          *     resueltas que se ganaron en esta sesion — no es una tasa de acierto del
          *     motor ni dice nada sobre las proximas.
+         *
+         *     Desde el 2026-10-15 trae tambien las cifras por giro de
+         *     `engine/session_stats.py`, que son las que muestra la mesa: los giros con
+         *     ganancia van con lo esperable por azar con esas mismas apuestas, y el mejor
+         *     momento y la peor caida se miden giro a giro.
          */
         get: operations["session_summary_sessions__session_id__summary_get"];
         put?: never;
@@ -4069,6 +4074,8 @@ export interface components {
             bankroll_final: number;
             /** Bankroll Start */
             bankroll_start: number;
+            /** Best Moment */
+            best_moment: number;
             /** Duration Minutes */
             duration_minutes: number;
             /** Followed Suggestion Rate */
@@ -4077,6 +4084,12 @@ export interface components {
             max_drawdown: number;
             /** Net Change */
             net_change: number;
+            /** Rounds Bet */
+            rounds_bet: number;
+            /** Rounds Won */
+            rounds_won: number;
+            /** Rounds Won Expected Rate */
+            rounds_won_expected_rate: number;
             /**
              * Session Id
              * Format: uuid

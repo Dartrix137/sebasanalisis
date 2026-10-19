@@ -2,14 +2,15 @@
 
 /**
  * Suscripción y pagos de una cuenta, en el detalle de `/admin/usuarios` (§4.2 de
- * la Fase 4), con las acciones sobre la suscripción (§4.3): extender, cancelar
- * al final del período y cancelar de inmediato. Los eventos de Wompi,
- * reconsultar un pago y registrar un reembolso están en `/admin/pagos`.
+ * la Fase 4). Es un resumen: las acciones sobre la suscripción (§4.3: extender,
+ * cancelar al final del período y cancelar de inmediato) y su bitácora viven
+ * solo en `/admin/suscripciones`, a donde lleva el enlace (decidido el
+ * 2026-10-15, para no tener las mismas acciones en dos sitios). Los eventos de
+ * Wompi, reconsultar un pago y registrar un reembolso están en `/admin/pagos`.
  */
 
 import Link from "next/link";
 
-import { SubscriptionActions } from "@/components/admin/SubscriptionActions";
 import { Badge } from "@/components/ui";
 import { formatDateTime } from "@/lib/admin";
 import {
@@ -22,13 +23,7 @@ import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, intervalLabel } from "@/lib/money";
 import type { AdminUserDetailResponse } from "@/lib/types/admin";
 
-export function UserBilling({
-  detail,
-  onChanged,
-}: {
-  detail: AdminUserDetailResponse;
-  onChanged: () => Promise<void>;
-}) {
+export function UserBilling({ detail }: { detail: AdminUserDetailResponse }) {
   const { subscription, payments } = detail;
 
   return (
@@ -58,7 +53,14 @@ export function UserBilling({
         )}
       </div>
 
-      {subscription ? <SubscriptionActions subscription={subscription} onDone={onChanged} /> : null}
+      {subscription ? (
+        <Link
+          href={`/admin/suscripciones?query=${encodeURIComponent(detail.user.email)}`}
+          className="inline-block text-sm font-bold text-gold underline-offset-2 hover:underline"
+        >
+          Extender o cancelar en Suscripciones →
+        </Link>
+      ) : null}
 
       <div>
         <h3 className="text-sm font-bold text-white">Pagos</h3>
