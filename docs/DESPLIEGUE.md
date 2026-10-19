@@ -594,8 +594,8 @@ Si no llega nada: el log de la API en Dokploy y la tabla *Emails* de Resend.
 **Entrega conocida**: en Gmail llego a la bandeja principal; en Hotmail llego a
 **correo no deseado**. Es frecuente con un dominio recien estrenado y sin
 historial de envio, y no se arregla con una variable. Las pantallas le dicen al
-usuario que revise esa carpeta. Volver a probar con Hotmail/Outlook antes del
-lanzamiento comercial.
+usuario que revise esa carpeta. **Vuelto a probar el 2026-10-19**: en Hotmail
+el correo de verificacion llego a la bandeja principal.
 
 ### Sin proveedor
 
