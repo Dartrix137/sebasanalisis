@@ -104,6 +104,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | La primera recomendación salía con 10 números registrados (la ventana más corta). | Sale con 11, y el formulario de mesa nueva lo avisa antes de abrir. | 2026-10-15 |
 | Las apuestas de la sesión se contaban por casilla, y el porcentaje de ganadas solo se veía al cerrar. | Se cuentan por giro, con lo esperable por azar al lado, el resultado neto, el mejor momento y la peor caída, también con la mesa abierta. | 2026-10-15 |
 | La ficha de un usuario en el admin repetía las acciones sobre su suscripción. | Las acciones viven solo en `/admin/suscripciones`; la ficha resume y enlaza. | 2026-10-15 |
+| La tarjeta se escribía en el widget de Wompi, en modo tokenización. | Se escribe en un formulario propio que la tokeniza contra la API de Wompi, cifrada, desde el navegador. Nequi se tokeniza por la API. Por construir. | 2026-10-19 |
 
 ---
 
@@ -261,6 +262,7 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Decisiones tomadas para la Fase 4
 
+- **Tokenización con un formulario propio (2026-10-19), por construir antes del lanzamiento**: en la ventana del widget de Wompi los medios de pago se ven deshabilitados aunque funcionan, no se puede corregir desde nuestra página, y abrirlo en modo tokenización por JavaScript no está documentado. La tarjeta pasa a un formulario nuestro que la manda cifrada directo a Wompi (`POST /v1/tokens/cards`), y Nequi se tokeniza por la API (`POST /v1/tokens/nequi`, esperando la aprobación en la app). La fuente de pago, el cobro y el job no cambian. Queda por preguntarle a Wompi qué exige PCI DSS con la tarjeta escrita en nuestra página. Detalle en `PLATAFORMA_COMPLETA.md` §3.16.
 - **Ajustes de la mesa y del admin (2026-10-15)**, pedidos por el usuario tras la revisión de lanzamiento:
   - **11 números para la primera recomendación** (`MIN_SPINS_FOR_SIGNAL`, antes 10). El formulario de mesa nueva lo avisa: tomarlos del historial de la mesa y, si la mesa obliga a apostar para ver un giro, apostar solo el mínimo que acepte la casa. Detalle en `ARQUITECTURA_Y_ESTADISTICA.md` §2.10. A revisar con el abogado: la frase le pide al cliente apostar dinero real antes de usar la herramienta.
   - **"Apuestas de esta sesión" cuenta por giro**, con lo esperable por azar con esas mismas apuestas al lado (regla de §2): "Giros con ganancia 29 de 66 · 43.9 %" va junto a, por ejemplo, "Lo esperable por azar 45.1 %". Suma el resultado neto, el mejor momento y la peor caída, y el resumen al cerrar usa las mismas cifras. No se llama "efectividad": describe lo que pasó, no una capacidad del motor (`engine/session_stats.py`).
@@ -308,6 +310,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 |---|---|
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` | Lanzamiento |
+| Preguntarle a Wompi qué exige (PCI DSS) con la tarjeta escrita en un formulario de nuestra página (`PLATAFORMA_COMPLETA.md` §3.16 y §10 n.º 15) | Lanzamiento |
 | Aviso por correo cuando se publica una versión nueva de un documento legal que exige aceptación (2026-10-08). Hoy solo se muestra la pantalla de aceptación al volver a entrar: quien no entra no se entera. Detalle en `PLATAFORMA_COMPLETA.md` §6.7 | Lanzamiento |
 | Revisión del abogado del precio en pantalla (100.000 COP): si debe decir que incluye impuestos y si aplica IVA, y qué ley de consumo aplica a clientes de fuera de Colombia (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
 | Pasar el VPS de las llaves de sandbox a las de producción antes de abrir al público (con las de sandbox, cualquier cuenta obtiene acceso con la tarjeta de prueba). Cuenta de comercio en Wompi: llaves de sandbox ya puestas en Dokploy y en `backend/.env`, y la URL de eventos en su panel (`DESPLIEGUE.md`, "Pagos con Wompi"). Qué medios de pago se habilitan en el panel de Wompi. Facturación electrónica | Cierre del paso 5 (la entrega 1 se construyó sin llaves) |
