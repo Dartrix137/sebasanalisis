@@ -955,6 +955,8 @@ variar con la version de su panel.
 4. No hace falta vigilar `errores.sebasanalisis.com`: si cae solo GlitchTip, la
    aplicacion sigue funcionando.
 
+**Configurado el 2026-10-19** por el usuario: los dos monitores quedaron en verde.
+
 **Comprobacion**:
 
 - Los dos monitores aparecen en verde (*Up*) a los pocos minutos.
