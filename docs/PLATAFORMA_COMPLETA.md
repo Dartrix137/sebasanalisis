@@ -734,9 +734,18 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 - Playwright (`e2e/payment-source-form.spec.ts`): con la API en la pasarela simulada, el test hace pasar la página por Wompi (intercepta `availability`, la llave y la API de Wompi) y descifra el JWE con su llave privada. Comprueba: que los campos no admiten letras ni símbolos y se formatean (número en grupos, MM/AA sin mes 99); Luhn y vencimiento no salen del navegador; un rechazo de Wompi muestra un mensaje simple, sin su respuesta, y deja el formulario vacío; lo que llega a Wompi son los campos y formatos de la documentación; **ningún cuerpo enviado a nuestra API lleva el número, el CVC ni el titular**; el alta termina con el pago aprobado. Nequi: rechazo en la app, "Volver a intentar" y aprobación; y el tiempo límite, con el reloj simulado. `e2e/card-input.spec.ts` prueba el formato y la validación sin navegador. `e2e/monitoring.spec.ts` suma el filtro de las migas de la API de tokens.
 - Contra el sandbox, por script (2026-10-19): un JWE de la tarjeta `4242` armado con WebCrypto obtuvo `201 CREATED` con `brand: VISA`, y el Nequi `3991111111` pasó de `PENDING` a `APPROVED`.
 
+**Ajustes pedidos por el usuario al verlo (2026-10-19)**: el formulario de tarjeta formatea y valida mientras se escribe (`lib/card-input.ts`, arriba), y en `/cuenta` guardar un medio de pago se confirma con una caja verde que dice qué medio quedó (`SuccessBox`), la vista se lleva hasta ella y la fila del medio de pago lleva la etiqueta "Actualizado".
+
+**Prueba a mano contra el sandbox (2026-10-19, en local, desde `http://localhost:3000`)**, el usuario en el navegador y el job de renovaciones corrido a mano:
+
+- **Alta en `/planes/pagar`** con renovación automática y la tarjeta `4242` escrita en el formulario: el primer cobro quedó aprobado (Wompi lo reporta `CARD`, `VISA`, `4242`, con la fuente de pago creada desde el token del formulario). Con eso quedó comprobado también el CORS desde un navegador.
+- **En `/cuenta`**, cambio a la tarjeta `4111`: se guardó sin cobrar. Con el vencimiento adelantado en la base local, el job avisó, cobró y el cobro quedó rechazado ("La transacción fue rechazada (Sandbox)"): `past_due`, con acceso, y la marca `VISA` anotada.
+- En mora, cambio al Nequi `3992222222` desde el formulario (solicitud, aprobación en el sandbox y token): el reintento salió de inmediato como segundo intento y Wompi lo rechazó ("Pago automático DECLINADO en Sandbox").
+- Cambio al Nequi `3991111111`: el tercer intento salió de inmediato y quedó aprobado; la suscripción volvió a `active` y el período se extendió desde el vencimiento anterior. El usuario lo dio por bueno.
+
 **Lo que queda sin probar o sin hacer**
 
-- **La prueba a mano contra el sandbox, en un navegador**, en `/planes/pagar` y en `/cuenta`: tarjeta que aprueba, tarjeta que rechaza el cobro, y los Nequi `3991111111` y `3992222222`. Es la que da por buena esta sección. El CORS se comprobó con `curl`, no con un navegador.
+- En `/planes/pagar` no se probaron a mano el alta con la tarjeta `4111` (primer cobro rechazado) ni el alta con Nequi: los cubre Playwright con la pasarela simulada, y los mismos medios ya se probaron contra el sandbox en `/cuenta`.
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
 
