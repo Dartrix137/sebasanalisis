@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12)
+3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -235,7 +235,7 @@ payment_events (                        -- tabla existente
 
 Notas:
 
-- **Nunca se guardan datos de tarjeta.** La tarjeta la tokeniza el widget de Wompi en el navegador; el backend solo recibe y guarda la referencia de la fuente de pago y, para mostrar, marca y últimos cuatro dígitos.
+- **Nunca se guardan datos de tarjeta.** La tarjeta se tokeniza en el navegador, que la manda directo a Wompi (con el widget hasta el 2026-10-19; con un formulario propio desde entonces, §3.16); el backend solo recibe y guarda la referencia de la fuente de pago y, para mostrar, marca y últimos cuatro dígitos.
 - `payment_events` guarda **todo** evento recibido, verificado o no (`signature_verified` lo distingue), para poder auditar intentos de falsificación. Solo los verificados y reconsultados mueven estado.
 - `payments.reference` única por período es la segunda capa de idempotencia: dos corridas del job de renovación no pueden crear dos cobros para el mismo período (§3.5).
 
@@ -256,7 +256,7 @@ Usuario                 Frontend                     Backend                    
   │                        │◀──── total en centavos ────│                               │
   │                        │ GET /billing/acceptance ──▶│ obtiene el acceptance token ─▶│
   │ acepta términos Wompi  │◀── token + enlace términos ─│◀──────────────────────────────│
-  │ ingresa tarjeta        │ widget tokeniza ──────────────────────────────────────────▶│
+  │ ingresa tarjeta        │ el navegador tokeniza (§3.16) ────────────────────────────▶│
   │                        │◀────────────────────────────────────── token de tarjeta ───│
   │                        │ POST /billing/subscriptions▶│ crea payment source ─────────▶│
   │                        │  {plan, cupón, token,       │ crea suscripción 'pending'     │
@@ -528,7 +528,7 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 **Decisiones del usuario (2026-10-13)**
 
 - **Se pueden guardar tarjetas y Nequi.** Daviplata y Bancolombia quedan fuera; quien quiera pagar con otro medio tiene el pago manual.
-- **La tarjeta se escribe en el widget de Wompi**, en modo tokenización. A nuestra página solo vuelve un token y su tipo.
+- **La tarjeta se escribe en el widget de Wompi**, en modo tokenización. A nuestra página solo vuelve un token y su tipo. **Reemplazada el 2026-10-19** por un formulario propio que tokeniza contra la API de Wompi (§3.16).
 - **Cancelar y reanudar la renovación entran en esta entrega** (estaban en la 3): no se enciende un cobro automático que el cliente no pueda detener. Cambiar el medio de pago y pasar de un modo al otro siguen en la entrega 3.
 - **Ningún modo entra marcado** en la pantalla de pago: el cliente elige entre pago manual y renovación automática, y el botón no se enciende antes.
 - El aviso va 7 días antes del primer intento de cobro (decidido en la entrega 1); en el pago manual, 7 días antes del vencimiento.
@@ -597,7 +597,8 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 
 **Lo que queda sin probar o sin hacer**
 
-- **Lo que la prueba contra el sandbox corrigió o aclaró (2026-10-13)**: el widget entrega el token como se leyó en su código y ofrece tarjeta y Nequi. **La fuente de pago no trae la marca de la tarjeta** (su `public_data` solo tiene `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`); la marca viene en la transacción (`payment_method.extra.brand`), así que `apply_transaction` la anota con el primer cobro aprobado. **El widget solo tokeniza en un contexto seguro** (https o `localhost`): cifra la tarjeta en el navegador, y abierto desde `http://localtest.me` falla con "Tu tarjeta no pudo ser verificada (error desconocido)". En producción no afecta; para probar en local, `DESPLIEGUE.md`. En la ventana de Wompi los botones de tarjeta y Nequi se veían como deshabilitados aunque funcionaban; no se investigó.
+- **Lo que la prueba contra el sandbox corrigió o aclaró (2026-10-13)**: el widget entrega el token como se leyó en su código y ofrece tarjeta y Nequi. **La fuente de pago no trae la marca de la tarjeta** (su `public_data` solo tiene `bin`, `last_four`, `card_holder`, `validity_ends_at` y `type`); la marca viene en la transacción (`payment_method.extra.brand`), así que `apply_transaction` la anota con el primer cobro aprobado. **El widget solo tokeniza en un contexto seguro** (https o `localhost`): cifra la tarjeta en el navegador, y abierto desde `http://localtest.me` falla con "Tu tarjeta no pudo ser verificada (error desconocido)". En producción no afecta; para probar en local, `DESPLIEGUE.md`. En la ventana de Wompi los botones de tarjeta y Nequi se ven como deshabilitados (sin color, con el cursor de "no permitido") aunque funcionan.
+- **Los botones que se ven deshabilitados en la ventana de Wompi son un defecto de Wompi, no nuestro** (investigado el 2026-10-19). La ventana es un iframe de `https://checkout.wompi.co/p/`, y el estilo de lo que hay dentro no se puede cambiar desde nuestra página. En modo tokenización, el `widget.js` vigente ese día (`configAsTokenize`) solo lee `publicKey` y `widgetOperation`, y nosotros ya mandamos las dos: no hay opción que corrija el aspecto. La documentación ("Fuentes de pago") solo muestra el modo tokenización como botón (`<script data-render="button" data-widget-operation="tokenize">` dentro de un `<form method="POST">`); nosotros lo abrimos por JavaScript (`new WidgetCheckout(...).open`). En el `widget.js` los dos caminos pasan por la misma configuración (`configAsTokenize`) y la misma ventana (`openModal`): el botón solo agrega el `<form>` al que se envía el token. Lo demás coincide con esa página: la fuente de pago se crea en el backend con la llave privada y los dos tokens de aceptación, y se usa solo si queda `AVAILABLE`; el cobro va con `payment_source_id`, la firma de integridad, `recurrent` y, si es tarjeta, `installments`. Se redactó un reporte para el soporte de Wompi. **El mismo día el usuario decidió reemplazar el widget por un formulario propio** (§3.16).
 - **Nequi**: el token queda pendiente hasta que el cliente lo aprueba en su app. Se asumía que el widget espera esa aprobación antes de devolverlo. **Probado en la entrega 3** (§3.15): en el sandbox el widget entregó un token que Wompi aceptó como fuente de pago, y los cobros a esa fuente se aprobaron y se rechazaron según el número de prueba. No se escucha todavía el evento `nequi_token.updated`.
 - **Tarjetas que exigen 3D Secure**: la documentación tiene una guía aparte (3RI) que no se implementó. Si el banco pide autenticación en un cobro sin el cliente presente, ese cobro se rechaza y sigue el camino de los reintentos.
 - El cron no estaba programado al construir esta entrega. **El usuario lo programó en Dokploy el 2026-10-13**, al desplegarla (`DESPLIEGUE.md`). Sin él no hay cobros, ni avisos, ni vencimientos marcados (el acceso sí cae en su fecha, porque lo decide `has_access`).
@@ -670,6 +671,33 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 - **La fuente de pago no se anula en Wompi** al cambiarla, al pasar a manual ni al eliminar la cuenta: se borra nuestra referencia, que es lo único con lo que se le puede cobrar desde aquí. La documentación solo describe anularla para Daviplata y Bancolombia.
 - Un cobro del job que coincida en el mismo instante con el borrado de la cuenta puede quedar aprobado sin cuenta. Queda en el log como error ("aprobado sin suscripción") y se devuelve a mano desde el panel de Wompi.
 - Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6. **Hechas en la entrega 1 del paso 6** (§4.8).
+
+### 3.16 Tokenización con un formulario propio (decidida el 2026-10-19, por construir)
+
+**Decisión del usuario (2026-10-19)**: el widget de Wompi en modo tokenización se reemplaza por un formulario nuestro que tokeniza contra la API de Wompi, como lo describe su documentación. Reemplaza la decisión del 2026-10-13 de escribir la tarjeta en el widget (§3.14). Motivos: en la ventana del widget los medios de pago se ven deshabilitados aunque funcionan, y eso no se puede corregir desde nuestra página; además, abrirlo en modo tokenización por JavaScript no está en la documentación, que solo lo muestra como botón dentro de un `<form>` (§3.14, "Lo que queda sin probar o sin hacer").
+
+**Fuente de verdad**: "Fuentes de pago" (`https://docs.wompi.co/docs/colombia/fuentes-de-pago/`) y la sección "Tokeniza una tarjeta" de "Métodos de pago" (`https://docs.wompi.co/docs/colombia/metodos-de-pago/#tokeniza-una-tarjeta`), consultadas el 2026-10-19. Al construir se vuelven a leer: nada de memoria (§3.1).
+
+**Lo que no cambia**
+
+- La fuente de pago la crea el backend: `POST /v1/payment_sources` con la llave privada, `type`, `token`, `customer_email`, `acceptance_token` y `accept_personal_auth`, y solo sirve si queda `AVAILABLE` (`payments/wompi.create_payment_source`). El cobro, el job de renovaciones, las referencias y la idempotencia tampoco cambian.
+- Los dos contratos de Wompi se aceptan en nuestra pantalla antes de tokenizar (`GET /billing/acceptance`).
+- Solo tarjeta y Nequi. Daviplata y Bancolombia siguen fuera.
+- Nunca se guarda el token ni un dato de tarjeta: solo la referencia de la fuente de pago, la marca y los últimos cuatro.
+- `components/billing/PaymentSourceForm.tsx` sigue siendo el único lugar del frontend que guarda un medio de pago, en el alta (`/planes/pagar`) y en `/cuenta`. La pasarela simulada (`fake`) sigue para Playwright y desarrollo.
+- El pago manual sigue con el Web Checkout de Wompi (§3.12).
+
+**Lo que cambia**
+
+- **Tarjeta**: el formulario pide número, CVC, mes y año de vencimiento (dos dígitos cada uno) y titular. Se tokeniza con el flujo cifrado, que es el que recomienda la documentación: `GET /v1/tokens/keys/tokenization` para la llave de cifrado y `POST /v1/tokens/cards` con un JWE (RSA-OAEP-256, A256GCM) en el campo `payload`, con la llave **pública** del comercio como Bearer. Wompi responde el token en `data.id`. El flujo simple, sin cifrar, solo con decisión del usuario.
+- **Los datos de la tarjeta van del navegador directo a Wompi y nunca pasan por nuestro backend**: ni en una petición, ni en un log, ni en GlitchTip, ni en `localStorage`. Se borran del estado del formulario al terminar, salga bien o mal. Si la API de tokens no admite llamadas desde el navegador (CORS), no se resuelve pasándola por nuestro servidor: eso amplía lo que el comercio tiene que cumplir y es otra decisión del usuario.
+- **Nequi**: el cliente escribe su celular; `POST /v1/tokens/nequi` con la llave pública devuelve un token `PENDING`; el cliente acepta la suscripción en su app; se consulta `GET /v1/tokens/nequi/{id}` hasta que quede `APPROVED`, con un tiempo límite y la opción de volver a intentar. Solo entonces el token va a nuestro backend, como hoy.
+- Un token de tarjeta no se usa más de dos veces (lo dice la documentación): cada intento de guardar pide uno nuevo.
+- `TokenizerInfo.kind` deja de ser `wompi_widget`, y `frontend/lib/tokenize.ts` se reescribe sin `widget.js`.
+
+**Por confirmar antes del lanzamiento** (§10 n.º 15): con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario se escribe en nuestra página. En general eso amplía lo que exige PCI DSS (de SAQ A a SAQ A-EP), así que hay que preguntarle a Wompi qué pide. Las cabeceras CSP de §13.4 pasan a convenir.
+
+**Cómo se da por bueno**: los tests de backend y de Playwright en verde, y una prueba a mano contra el sandbox, en `/planes/pagar` y en `/cuenta`, con una tarjeta que aprueba, una que rechaza el cobro, y los Nequi de prueba `3991111111` (aprueba) y `3992222222` (rechaza).
 
 ---
 
@@ -1513,6 +1541,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. Los tests de frontend ya están decididos (§13.3). |
 | 13 | Deportes: proveedor de calendario, resultados y cuotas, y presupuesto mensual (§8.3 n.º 1) | No se elige hasta que se vaya a construir deportes. Requisito: confirmación por escrito de que la licencia permite el uso comercial en un producto de pago; sus cuotas, solo para el backtest interno salvo que la licencia permita mostrarlas. Ver §8.4. Bloquea construir deportes, no el lanzamiento de la ruleta. |
 | 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
+| 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | Preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
 
 ---
 
@@ -1669,7 +1698,7 @@ Hoy el frontend no tiene ningún test. Se agregan tests de punta a punta (navega
 | Mejora | Qué aporta | Cuándo convendría |
 |---|---|---|
 | `ruff` y `mypy` en el backend, dentro del CI | Errores de tipos y de estilo antes de la revisión. | **Hecho en la Fase 0 (decidido el 2026-10-06).** `ruff` revisa todo el backend (solo lint, sin formateador); `mypy` en modo estricto revisa `app/engine/`, y `app/billing/` se le suma al crearse. Configuración en `backend/pyproject.toml`. |
-| Cabeceras `Content-Security-Policy` en `next.config.ts` | Los tokens viven en `localStorage` y el checkout carga un script de terceros (el widget de Wompi). Una CSP limita qué puede ejecutar la página. | Paso 5. |
+| Cabeceras `Content-Security-Policy` en `next.config.ts` | Los tokens viven en `localStorage` y, desde el 2026-10-19, la tarjeta se escribe en un formulario de nuestra página (§3.16). Una CSP limita qué puede ejecutar la página y a dónde puede enviar datos. | Paso 5. Con el formulario propio conviene antes del lanzamiento; sigue siendo decisión del usuario (§10 n.º 12). |
 | Refresh token en cookie `httpOnly` en vez de `localStorage` | Lo saca del alcance de un script inyectado. Cambia el flujo de auth y la configuración de CORS. | Después del lanzamiento. |
 
 ### 13.5 Lo que no se agrega
