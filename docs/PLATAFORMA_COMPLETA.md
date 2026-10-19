@@ -745,6 +745,7 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 
 **Lo que queda sin probar o sin hacer**
 
+- **En el VPS (2026-10-19, llaves de sandbox)**, el usuario probó el alta con la tarjeta `4242` (aprobada) y el cambio a Nequi `3991111111` en `/cuenta`.
 - En `/planes/pagar` no se probaron a mano el alta con la tarjeta `4111` (primer cobro rechazado) ni el alta con Nequi: los cubre Playwright con la pasarela simulada, y los mismos medios ya se probaron contra el sandbox en `/cuenta`.
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.

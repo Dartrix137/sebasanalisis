@@ -876,8 +876,9 @@ correr.
 
 ### 5. Formulario de tarjeta y Nequi en el VPS (sandbox)
 
-El PR #29 esta desplegado y sin probar en el VPS (2026-10-19). Con las llaves de
-sandbox todavia puestas, desde `https://sebasanalisis.com`:
+**Probado el 2026-10-19 por el usuario**: el alta con la tarjeta `4242` quedo
+aprobada y el cambio a Nequi funciono. Los pasos, por si hay que repetirlo con
+las llaves de sandbox, desde `https://sebasanalisis.com`:
 
 1. Cuenta nueva, correo confirmado -> `/planes` -> "Suscribirme" -> "Renovacion
    automatica" -> aceptar los dos documentos de Wompi -> tarjeta
