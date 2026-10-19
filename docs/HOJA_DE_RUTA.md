@@ -96,7 +96,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Varios planes (mensual y anual). | Dos planes: mensual de 100.000 COP y de dos meses de 150.000 COP (el 2026-10-08 se había decidido uno solo). Se muestra y se cobra solo en COP. | 2026-10-09 |
 | Mostrar además un precio fijo de 30 USD, solo visual (2026-10-08). | No se muestra: un solo precio, el que se cobra. | 2026-10-09 |
 | Buzón de soporte en Hostinger sobre el dominio (`soporte@sebasanalisis.com`). | El correo de soporte y de contacto es una cuenta de Gmail: `sebas.analisis.ia.com@gmail.com`. | 2026-10-07 |
-| Chequeo externo de disponibilidad sobre la API y la página de inicio. | No se hace. Si el VPS se cae, no hay aviso. | 2026-10-07 |
+| Sin chequeo externo de disponibilidad: si el VPS se cae, no hay aviso (2026-10-07). | Monitor externo con UptimeRobot sobre `/health` de la API y la página de inicio, antes del lanzamiento: con clientes pagando, una caída del VPS tiene que avisar. Lo configura el usuario (`DESPLIEGUE.md`, "Antes del lanzamiento comercial"). | 2026-10-19 |
 | Página de Juego Responsable (`/legal/juego-responsable`), exigida por §0 del documento de arquitectura. | Descartada por decisión del usuario: no se construye. Los documentos legales son cuatro (términos, datos, reembolsos, cookies). | 2026-10-08 |
 | `GET /admin/users` devolvía todas las cuentas y el acceso se cambiaba con un desplegable, sin dejar rastro. | `/admin/usuarios` pagina, busca y filtra en el servidor; cada cambio de acceso pide un motivo y queda en la bitácora. | Fase 4, paso 3 |
 | El registro pedía correo y contraseña. | Exige además aceptar los términos y la política de datos vigentes y declarar la mayoría de edad. | Fase 4, paso 2 |
@@ -271,13 +271,14 @@ La lista "Antes del lanzamiento comercial" (`PLATAFORMA_COMPLETA.md` §9), con e
 | Cron de renovaciones en Dokploy | Hecho el 2026-10-13. Mirar su log antes de abrir | Hecho; comprobación operativa pendiente |
 | Restaurar un respaldo en un entorno de prueba | Sin hacer, y sin evidencia de respaldos configurados | Operativo (usuario) |
 | Resend Pro y `EMAIL_DAILY_LIMIT` | Sin hacer | Operativo (usuario) |
+| Monitor externo de disponibilidad (UptimeRobot), decidido el 2026-10-19 | Sin hacer | Operativo (usuario) |
 | Llaves de producción de Wompi | Sin hacer. Al final, con lo demás hecho y la respuesta de Wompi sobre PCI DSS | Operativo (usuario) |
 | Aviso por correo de versiones nuevas de los documentos legales | **Construido** el 2026-10-19 (§6.7), con tests | Código |
 | Textos legales revisados (§10 n.º 8), responsable del tratamiento (n.º 10), facturación electrónica (n.º 4), PCI DSS con el formulario propio (n.º 15), precio en pantalla e IVA, la frase de "apostar el mínimo" del formulario de mesa nueva | Sin respuesta | Abogado, contador o Wompi |
 
 **Decisiones del usuario sobre el aviso legal (2026-10-19)**: solo a cuentas con una suscripción vigente, al publicar (sin antelación), y solo a correos confirmados.
 
-**Propuestas de infraestructura, sin decidir** (no se cambió nada): respaldos con prueba de restauración (lo más urgente; R2 es gratis hasta 10 GB); Resend Pro (US$20 al mes); un monitor externo gratuito sobre `/health` y la página principal, porque GlitchTip vive en el mismo VPS (en 2026-10-07 se decidió no tenerlo); que el job de renovaciones avise a un monitor de GlitchTip en cada corrida; revisar la memoria del VPS (`free -h`, `docker stats`). Un solo proceso uvicorn alcanza para la carga esperada: pasar a varios exige mover a Postgres los límites de intentos y el tope de correo, que hoy viven en memoria.
+**Infraestructura.** Decidido el 2026-10-19: primero los respaldos con su prueba de restauración (Cloudflare R2) y el monitor externo (UptimeRobot), configurados por el usuario con los pasos de `DESPLIEGUE.md`. Propuestas todavía sin decidir (no se cambió nada): Resend Pro (US$20 al mes); que el job de renovaciones avise a un monitor de GlitchTip en cada corrida; revisar la memoria del VPS (`free -h`, `docker stats`). Un solo proceso uvicorn alcanza para la carga esperada: pasar a varios exige mover a Postgres los límites de intentos y el tope de correo, que hoy viven en memoria.
 
 ### Decisiones tomadas para la Fase 4
 
@@ -330,6 +331,7 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Textos legales revisados por abogado: los cuatro publicados son borradores y lo dicen (retracto de la Ley 1480, conformidad con la Ley 1581, limitación de responsabilidad, jurisdicción, plazos de conservación). Datos del responsable del tratamiento y prestador del servicio: nombre o razón social, identificación y domicilio figuran como `[PENDIENTE]` (decisión del usuario del 2026-10-08: todavía no se ponen) | Lanzamiento |
 | Pasar Resend al plan Pro y subir `EMAIL_DAILY_LIMIT` (propuesta: 1500). Antes de publicar el texto del abogado: con el tope actual el aviso legal sale a 40 cuentas por día. Pasos en `DESPLIEGUE.md` | Lanzamiento |
 | Configurar los respaldos de la base (Dokploy hacia un bucket privado de Cloudflare R2) y probar una restauración en una base aparte. Hoy no hay evidencia de respaldos. Pasos en `DESPLIEGUE.md` | Lanzamiento |
+| Monitor externo con UptimeRobot sobre la API y el sitio, con su prueba de caída. Revisar si sus términos admiten el plan gratuito para un producto por suscripción. Pasos en `DESPLIEGUE.md` | Lanzamiento |
 | Preguntarle a Wompi qué exige (PCI DSS) con la tarjeta escrita en un formulario de nuestra página (`PLATAFORMA_COMPLETA.md` §3.16 y §10 n.º 15) | Lanzamiento |
 | Revisión del abogado del precio en pantalla (100.000 COP): si debe decir que incluye impuestos y si aplica IVA, y qué ley de consumo aplica a clientes de fuera de Colombia (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
 | Pasar el VPS de las llaves de sandbox a las de producción antes de abrir al público (con las de sandbox, cualquier cuenta obtiene acceso con la tarjeta de prueba). Cuenta de comercio en Wompi: llaves de sandbox ya puestas en Dokploy y en `backend/.env`, y la URL de eventos en su panel (`DESPLIEGUE.md`, "Pagos con Wompi"). Qué medios de pago se habilitan en el panel de Wompi. Facturación electrónica | Cierre del paso 5 (la entrega 1 se construyó sin llaves) |

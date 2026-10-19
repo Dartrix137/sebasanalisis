@@ -711,12 +711,11 @@ GlitchTip corre en `https://errores.sebasanalisis.com`, como un servicio
    correo, se sube la ventana. La casilla de monitores de disponibilidad queda
    marcada, para el monitor del job de renovaciones del paso 5.
 10. **Retencion**: 90 dias, el valor por defecto (`GLITCHTIP_RETENTION_DAYS`).
-11. **Sin chequeo externo de disponibilidad** (decidido por el usuario el
-    2026-10-07). Consecuencia que se acepta: GlitchTip vive en el mismo VPS, asi
-    que si el VPS entero se cae, se cae con el y nadie recibe aviso. Si se cambia
-    de opinion, basta un servicio externo gratuito sobre
-    `https://api.sebasanalisis.com/health` y `https://sebasanalisis.com`; no toca
-    codigo.
+11. **Chequeo externo de disponibilidad.** El 2026-10-07 se decidio no
+    tenerlo; **el 2026-10-19 el usuario decidio ponerlo antes del lanzamiento**,
+    con UptimeRobot: GlitchTip vive en el mismo VPS, y si el VPS entero se cae,
+    se cae con el y nadie recibe aviso. Los pasos estan en "Antes del
+    lanzamiento comercial", punto 7.
 
 ### Comprobacion (cierra el paso 0 de la Fase 4)
 
@@ -743,8 +742,8 @@ bloqueando la peticion a `errores.sebasanalisis.com` (pestana Red).
 
 La lista de `PLATAFORMA_COMPLETA.md` §9, con el estado del 2026-10-19 en
 `HOJA_DE_RUTA.md` §5. Aqui van los pasos a mano y como comprobar que quedaron
-bien. El orden importa: **respaldos y correo primero**, llaves de produccion al
-final, cuando lo demas este hecho.
+bien. El orden importa: **respaldos, monitor externo y correo primero**, llaves
+de produccion al final, cuando lo demas este hecho.
 
 Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
 legales revisados por el abogado, el responsable del tratamiento, la
@@ -927,6 +926,42 @@ agrega:
    desactivar el cupon, cancelar esa suscripcion desde el admin, reembolsar el
    pago en el panel de Wompi y registrarlo en `/admin/pagos`.
 6. Mirar el log del webhook en el panel de Wompi: la respuesta debe ser `200`.
+
+### 7. Monitor externo de disponibilidad (UptimeRobot)
+
+Decidido el 2026-10-19. GlitchTip avisa de errores, pero vive en el mismo VPS:
+si el VPS se cae, nadie se entera. Un servicio de afuera revisa cada pocos
+minutos que la aplicacion responda y avisa por correo si no.
+
+**Plan**: el gratuito de UptimeRobot da 50 monitores, revisa cada 5 minutos y
+avisa por correo (pagina de precios, leida el 2026-10-19). La misma pagina lo
+describe "para proyectos de hobby y sin fines de lucro": antes de depender de
+el, revisar sus terminos de servicio, y si no admiten un producto por
+suscripcion, pasar al plan pago mas barato. Los nombres de los campos pueden
+variar con la version de su panel.
+
+1. Crear la cuenta en `uptimerobot.com` con el correo que tiene que recibir los
+   avisos, y confirmarlo. Si se usa el de soporte
+   (`sebas.analisis.ia.com@gmail.com`), el aviso llega al mismo lugar que las
+   consultas de los clientes.
+2. *Add New Monitor*, tipo **HTTP(s)**:
+   - Nombre: `API - health`.
+   - URL: `https://api.sebasanalisis.com/health`.
+   - Intervalo: 5 minutos.
+   - Contacto de alerta: el correo del paso 1.
+3. Otro igual para el sitio:
+   - Nombre: `Web`.
+   - URL: `https://sebasanalisis.com`.
+4. No hace falta vigilar `errores.sebasanalisis.com`: si cae solo GlitchTip, la
+   aplicacion sigue funcionando.
+
+**Comprobacion**:
+
+- Los dos monitores aparecen en verde (*Up*) a los pocos minutos.
+- Prueba de una caida, en un horario sin usuarios: en Dokploy, detener la
+  aplicacion API (*Stop*). En 5 a 10 minutos tiene que llegar el correo de
+  *Down*. Volver a iniciarla (*Start*) y esperar el correo de *Up*. Si no
+  llega nada, revisar el contacto de alerta y la carpeta de no deseado.
 
 ## Antes del primer despliegue
 
