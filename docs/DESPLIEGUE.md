@@ -955,7 +955,7 @@ variar con la version de su panel.
 4. No hace falta vigilar `errores.sebasanalisis.com`: si cae solo GlitchTip, la
    aplicacion sigue funcionando.
 
-**Configurado el 2026-10-19** por el usuario: los dos monitores quedaron en verde.
+**Configurado y comprobado el 2026-10-19** por el usuario: los dos monitores quedaron en verde, y con la API detenida llegaron los correos de *Down* y de *Up*. Los terminos de UptimeRobot, revisados por el usuario, admiten el plan gratuito para este uso.
 
 **Comprobacion**:
 
