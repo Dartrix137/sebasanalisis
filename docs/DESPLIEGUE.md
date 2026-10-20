@@ -608,6 +608,46 @@ historial de envio, y no se arregla con una variable. Las pantallas le dicen al
 usuario que revise esa carpeta. **Vuelto a probar el 2026-10-19**: en Hotmail
 el correo de verificacion llego a la bandeja principal.
 
+### Modo oscuro y colores (2026-10-20)
+
+Los correos son oscuros, con los colores de la app. Cada cliente los trata
+distinto en modo oscuro (Litmus, "The Ultimate Guide to Dark Mode for Email
+Marketers", y caniemail.com, leidos el 2026-10-20):
+
+- **Gmail web, Apple Mail**: como estan disenados, en los dos modos.
+- **Gmail en Android, Outlook.com y Outlook movil**: oscurecen solo los fondos
+  claros; un correo oscuro queda igual.
+- **Gmail en iPhone con el telefono en modo oscuro**: invierte todos los
+  colores y lo muestra **claro**. Es lo que se vio el 2026-10-20. No hay forma
+  documentada de evitarlo salvo un truco que solo conserva texto blanco; se
+  decidio aceptarlo y que esa version clara se lea bien. Con el telefono en
+  modo claro se ve oscuro.
+
+**Comprobacion de cada tipo de correo**, despues de desplegar la rama que lo
+cambio. Con una cuenta propia en `https://sebasanalisis.com` (llaves de
+sandbox):
+
+| Correo | Como provocarlo |
+|---|---|
+| Confirma tu correo | Registrar una cuenta nueva |
+| Restablece tu contraseña | "¿Olvidaste tu contraseña?" en el ingreso |
+| Tu contraseña cambió | `/cuenta`, Contraseña |
+| Confirma tu nuevo correo y el aviso al anterior | `/cuenta`, Correo |
+| Bienvenida y recibo | Suscribirse en `/planes` con la tarjeta `4242 4242 4242 4242` |
+| Medio de pago cambiado | `/cuenta`, "Cambiar el medio de pago" |
+| Paso a pago manual | `/cuenta`, pasar a pago manual |
+| Renovacion cancelada | `/cuenta`, cancelar la renovacion |
+| Extendimos, cancelamos la renovacion, termino | `/admin/suscripciones` sobre esa cuenta |
+| Elige una contraseña nueva | `/admin/usuarios`, forzar el restablecimiento |
+| Cuenta eliminada | `/cuenta`, Eliminar cuenta (al final) |
+
+Los avisos del job (cobro, periodo por vencer, cobro fallido, vencida, cambio
+de precio, aviso legal) usan la misma plantilla: si los de arriba se ven bien,
+esos tambien. En cada uno: abrirlo en la app de Gmail del iPhone en modo claro
+(debe verse oscuro) y en modo oscuro (claro, legible, con el boton y el enlace
+escrito debajo), y en Hotmail; el logo tiene que cargar, y en Gmail web
+"Mostrar original" debe seguir con SPF, DKIM y DMARC en `PASS`.
+
 ### Sin proveedor
 
 Con `EMAIL_BACKEND=console` (o sin la variable) no se envia nada: cada correo
