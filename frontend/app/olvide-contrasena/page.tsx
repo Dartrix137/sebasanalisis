@@ -8,6 +8,7 @@
 import { useState } from "react";
 
 import { AuthShell, SuccessBox, TextLink } from "@/components/AuthShell";
+import { useBotCheck } from "@/components/BotCheck";
 import { Button, ErrorBox, Field } from "@/components/ui";
 import { ApiError, authApi } from "@/lib/api-client";
 
@@ -16,16 +17,22 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const botCheck = useBotCheck("forgot-password");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setPending(true);
     try {
-      const { message } = await authApi.forgotPassword({ email });
+      const { message } = await authApi.forgotPassword({
+        email,
+        bot_check_token: botCheck.token,
+      });
       setSent(message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo completar la solicitud");
+      // El token ya se gastó en este intento: el siguiente necesita uno nuevo.
+      botCheck.reset();
     } finally {
       setPending(false);
     }
@@ -55,8 +62,9 @@ export default function ForgotPasswordPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          {botCheck.widget}
           {error ? <ErrorBox message={error} /> : null}
-          <Button type="submit" disabled={pending} className="w-full">
+          <Button type="submit" disabled={pending || botCheck.waiting} className="w-full">
             {pending ? "Un momento…" : "Enviar enlace"}
           </Button>
         </form>

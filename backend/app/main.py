@@ -21,8 +21,10 @@ from app.api.v1 import (
     legal,
     webhooks,
 )
+from app.core.bot_check import get_bot_checker
 from app.core.config import get_settings
 from app.core.monitoring import init_monitoring
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.validation_errors import validation_exception_handler
 from app.payments.base import get_payment_provider
 from app.payments.wompi import has_production_keys
@@ -47,6 +49,13 @@ _app_logger.info("Pagos: %s", get_payment_provider().describe())
 if settings.email_backend == "file" and has_production_keys(settings):
     raise RuntimeError("EMAIL_BACKEND=file no se usa con llaves de produccion de Wompi")
 
+# Igual con la verificacion contra bots: una sola de sus dos llaves es un error
+# de configuracion, y se dice aqui y no en el primer registro.
+_app_logger.info(
+    "Verificacion contra bots: %s",
+    "Turnstile" if get_bot_checker().site_key else "apagada (sin llaves de Turnstile)",
+)
+
 # Antes de crear la app: asi el monitoreo engancha sus rutas y sus errores.
 init_monitoring(settings.sentry_dsn)
 
@@ -65,6 +74,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# HSTS, nosniff, sin marcos y sin pagina de origen (core/security_headers.py).
+# Va por fuera de CORS: tambien lleva las cabeceras la respuesta a un preflight.
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth.router)
 # El menu de juegos es de la plataforma; la mesa la montan los modulos (§7.3).

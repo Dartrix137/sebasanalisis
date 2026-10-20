@@ -19,6 +19,7 @@ import { useSession } from "@/lib/session";
 import type { LegalDocumentResponse } from "@/lib/types/legal";
 
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "./AuthShell";
+import { useBotCheck } from "./BotCheck";
 import { BrandMark, Button, Card, Checkbox, ErrorBox, Field, PasswordField } from "./ui";
 
 const SUBTITLE = "Registra los números de tu mesa y revisa lo que ya salió. Tu progreso queda guardado en tu cuenta.";
@@ -44,6 +45,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [documents, setDocuments] = useState<LegalDocumentResponse[] | null>(null);
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [adult, setAdult] = useState(false);
+  const botCheck = useBotCheck(isRegister ? "register" : "login");
 
   useEffect(() => {
     if (!isRegister) return;
@@ -76,12 +78,15 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             // atada al texto exacto. El servidor rechaza el registro si faltan.
             accepted_document_ids: (documents ?? []).filter((d) => accepted[d.id]).map((d) => d.id),
             adult_confirmed: adult,
+            bot_check_token: botCheck.token,
           })
-        : await authApi.login({ email, password });
+        : await authApi.login({ email, password, bot_check_token: botCheck.token });
       signIn(tokens);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo completar la solicitud");
+      // El token ya se gastó en este intento: el siguiente necesita uno nuevo.
+      botCheck.reset();
     } finally {
       setPending(false);
     }
@@ -178,11 +183,13 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             </fieldset>
           ) : null}
 
+          {botCheck.widget}
+
           {error ? <ErrorBox message={error} /> : null}
 
           <Button
             type="submit"
-            disabled={pending || (isRegister && documents === null)}
+            disabled={pending || botCheck.waiting || (isRegister && documents === null)}
             className="w-full"
           >
             {pending ? "Un momento…" : isRegister ? "Crear mi cuenta" : "Entrar"}

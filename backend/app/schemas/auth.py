@@ -62,6 +62,12 @@ NewPassword = Annotated[str, AfterValidator(_check_password_policy)]
 
 # ---------- Requests ----------
 
+# El token del widget contra bots (core/bot_check.py). Opcional en el esquema:
+# con la verificacion apagada no viaja, y con ella encendida lo exige el
+# endpoint con un mensaje claro.
+BotCheckToken = Field(default=None, max_length=2048)
+
+
 class RegisterRequest(ApiModel):
     email: EmailStr
     password: NewPassword
@@ -72,11 +78,13 @@ class RegisterRequest(ApiModel):
     # defecto para que, si faltan, responda el endpoint con un mensaje claro.
     accepted_document_ids: list[UUID] = Field(default_factory=list, max_length=20)
     adult_confirmed: bool = False
+    bot_check_token: str | None = BotCheckToken
 
 
 class LoginRequest(ApiModel):
     email: EmailStr
     password: str
+    bot_check_token: str | None = BotCheckToken
 
 
 class RefreshRequest(ApiModel):
@@ -90,6 +98,7 @@ class TokenRequest(ApiModel):
 
 class ForgotPasswordRequest(ApiModel):
     email: EmailStr
+    bot_check_token: str | None = BotCheckToken
 
 
 class ResetPasswordRequest(ApiModel):
@@ -173,6 +182,11 @@ class TokenResponse(ApiModel):
 class MessageResponse(ApiModel):
     """Respuesta de las acciones que no devuelven un recurso."""
     message: str
+
+
+class BotCheckConfigResponse(ApiModel):
+    """La llave publica del widget contra bots, o null si esta apagado."""
+    site_key: str | None
 
 
 class ExportSession(ApiModel):

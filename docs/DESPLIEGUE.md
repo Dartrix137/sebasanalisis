@@ -59,7 +59,13 @@ WOMPI_PRIVATE_KEY=<llave privada de Wompi>
 WOMPI_EVENTS_SECRET=<secreto de eventos de Wompi>
 WOMPI_INTEGRITY_SECRET=<secreto de integridad de Wompi>
 WOMPI_API_BASE_URL=<https://sandbox.wompi.co/v1 o https://production.wompi.co/v1>
+TURNSTILE_SITE_KEY=<llave de sitio del widget de Cloudflare Turnstile>
+TURNSTILE_SECRET_KEY=<llave secreta del mismo widget>
 ```
+
+Las dos `TURNSTILE_*` van juntas o ninguna: sin ninguna, el registro, el ingreso
+y el olvido de contrasena no piden la verificacion contra bots; con una sola, la
+API no arranca. Como crearlas, en "Antes del lanzamiento comercial", paso 8.
 
 Las cinco `WOMPI_*` se dejan sin poner hasta tener la cuenta de comercio: sin
 ellas la API arranca con el pago apagado. El detalle esta en "Pagos con Wompi"
@@ -115,6 +121,11 @@ valor obliga a reconstruir, no basta con reiniciar.
 Este proyecto guarda la sesion en `localStorage` y llama la API desde el
 navegador, asi que la URL tiene que ser la **publica** de la API — la direccion
 interna de Docker no le sirve al navegador del usuario.
+
+Las dos tambien arman la politica de seguridad del sitio (CSP, `lib/csp.ts`): el
+navegador solo habla con la API, con GlitchTip, con Wompi y con Turnstile. Si
+cambia el dominio de la API o el DSN del frontend, hay que reconstruir; si no,
+el navegador bloquea esas peticiones.
 
 ## Dominios
 
@@ -965,6 +976,60 @@ variar con la version de su panel.
   aplicacion API (*Stop*). En 5 a 10 minutos tiene que llegar el correo de
   *Down*. Volver a iniciarla (*Start*) y esperar el correo de *Up*. Si no
   llega nada, revisar el contacto de alerta y la carpeta de no deseado.
+
+### 8. Verificacion contra bots (Cloudflare Turnstile)
+
+Decidido el 2026-10-20. El registro, el ingreso y el olvido de contrasena le
+piden al navegador un token de Turnstile, que la API valida contra Cloudflare
+(`app/core/bot_check.py`). Casi siempre es invisible; a veces muestra una
+casilla. No hace falta mover el DNS a Cloudflare. Los nombres de los campos del
+panel pueden variar con su version.
+
+1. Crear una cuenta en `dash.cloudflare.com` (o entrar con una existente).
+2. En el menu, **Turnstile** > *Add widget*:
+   - Nombre: `Sebasanalisis`.
+   - Hostnames: `sebasanalisis.com`.
+   - Modo: **Managed**.
+3. Al guardar, el panel muestra dos llaves: la de sitio (*Site Key*) y la secreta
+   (*Secret Key*). No pegarlas en ningun chat ni en el repositorio.
+4. En Dokploy, en la API (*Environment*), agregar `TURNSTILE_SITE_KEY` y
+   `TURNSTILE_SECRET_KEY` con esos valores y redesplegar la API. El frontend no
+   necesita nada: la llave de sitio la entrega la API.
+
+**Comprobacion**:
+
+- El log de arranque de la API dice `Verificacion contra bots: Turnstile`. Si
+  dice `apagada`, falta alguna de las dos variables; si la API no arranca, se
+  puso una sola.
+- En `https://sebasanalisis.com/login` aparece el widget de Cloudflare encima del
+  boton *Entrar*, y el boton espera a que termine. Entrar con una cuenta real
+  funciona.
+- Registrar una cuenta de prueba y pedir el enlace de "olvide mi contrasena"
+  funcionan igual.
+
+### 9. Cabeceras de seguridad y CSP: comprobar despues de desplegar
+
+Desde el paso 9 (2026-10-20) el sitio manda una CSP con nonce y las dos
+aplicaciones mandan HSTS, `nosniff`, `X-Frame-Options` y `Referrer-Policy`. Un
+recurso que la CSP no contemple deja de funcionar sin error visible en la
+pagina: por eso se comprueba en produccion.
+
+1. Desde cualquier equipo:
+
+   ```
+   curl -sI https://sebasanalisis.com/login
+   curl -sI https://api.sebasanalisis.com/health
+   ```
+
+   El sitio tiene que mostrar `content-security-policy` (con `'nonce-...'`),
+   `strict-transport-security: max-age=31536000`, `x-frame-options: DENY` y ya no
+   `x-powered-by`. La API, las mismas tres y ya no `server: uvicorn`.
+2. En el navegador, con la consola de desarrollador abierta (F12), recorrer el
+   ingreso, la mesa, Mi cuenta y el admin: no tiene que aparecer ningun error
+   que diga `Content Security Policy`.
+3. Repetir en `/cuenta` el cambio a tarjeta `4242` y el cambio a Nequi del paso 5
+   (sandbox): el formulario de tarjeta habla directo con Wompi, y es lo primero
+   que la CSP romperia.
 
 ## Antes del primer despliegue
 

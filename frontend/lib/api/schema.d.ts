@@ -701,6 +701,26 @@ export interface paths {
         patch: operations["update_user_status_admin_users__user_id__status_patch"];
         trace?: never;
     };
+    "/auth/bot-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bot Check Config
+         * @description La llave publica del widget contra bots. `null`: el formulario no lo muestra.
+         */
+        get: operations["bot_check_config_auth_bot_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/change-email": {
         parameters: {
             query?: never;
@@ -2534,6 +2554,14 @@ export interface components {
             tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
+         * BotCheckConfigResponse
+         * @description La llave publica del widget contra bots, o null si esta apagado.
+         */
+        BotCheckConfigResponse: {
+            /** Site Key */
+            site_key: string | null;
+        };
+        /**
          * BulkSpinsRequest
          * @description Carga inicial de los números ya observados en la mesa (§3.5).
          */
@@ -2954,6 +2982,8 @@ export interface components {
         };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
+            /** Bot Check Token */
+            bot_check_token?: string | null;
             /**
              * Email
              * Format: email
@@ -3217,6 +3247,8 @@ export interface components {
         LegalKind: "terms" | "privacy" | "refunds" | "cookies";
         /** LoginRequest */
         LoginRequest: {
+            /** Bot Check Token */
+            bot_check_token?: string | null;
             /**
              * Email
              * Format: email
@@ -3942,6 +3974,8 @@ export interface components {
              * @default false
              */
             adult_confirmed: boolean;
+            /** Bot Check Token */
+            bot_check_token?: string | null;
             /** Display Name */
             display_name?: string | null;
             /**
@@ -5939,6 +5973,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bot_check_config_auth_bot_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotCheckConfigResponse"];
                 };
             };
         };

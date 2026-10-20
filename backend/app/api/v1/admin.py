@@ -125,8 +125,13 @@ def list_admin_games(
     if module is not None:
         filtros.append(Game.module == module)
     if q and q.strip():
-        patron = f"%{q.strip()}%"
-        filtros.append(or_(Game.name.ilike(patron), Game.slug.ilike(patron)))
+        # Los comodines que escriba el admin se buscan literales, como en la
+        # busqueda de usuarios.
+        texto = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        patron = f"%{texto}%"
+        filtros.append(
+            or_(Game.name.ilike(patron, escape="\\"), Game.slug.ilike(patron, escape="\\"))
+        )
     total = db.scalar(select(func.count()).select_from(Game).where(*filtros)) or 0
     games = db.scalars(
         select(Game)

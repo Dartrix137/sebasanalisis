@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Inter } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 import { LegalFooter } from "@/components/LegalFooter";
 import { SessionProvider } from "@/lib/session";
@@ -22,7 +23,11 @@ export const metadata: Metadata = {
     "Registra los números de una mesa de ruleta y, después de cada giro, recibe una recomendación estadística sobre lo ya registrado, o la indicación de no apostar.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // La CSP lleva un nonce por petición (`proxy.ts`) y Next solo puede ponérselo
+  // a sus scripts al renderizar la página cuando se pide: nada se genera en el
+  // build. Casi todas las pantallas ya piden sus datos desde el navegador.
+  await connection();
   return (
     <html lang="es" className={`${inter.variable} ${display.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">

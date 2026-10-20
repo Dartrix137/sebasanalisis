@@ -1771,6 +1771,27 @@
         "title": "BillingAvailabilityResponse",
         "type": "object"
       },
+      "BotCheckConfigResponse": {
+        "description": "La llave publica del widget contra bots, o null si esta apagado.",
+        "properties": {
+          "site_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Key"
+          }
+        },
+        "required": [
+          "site_key"
+        ],
+        "title": "BotCheckConfigResponse",
+        "type": "object"
+      },
       "BulkSpinsRequest": {
         "description": "Carga inicial de los números ya observados en la mesa (§3.5).",
         "properties": {
@@ -2750,6 +2771,18 @@
       },
       "ForgotPasswordRequest": {
         "properties": {
+          "bot_check_token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Check Token"
+          },
           "email": {
             "format": "email",
             "title": "Email",
@@ -3284,6 +3317,18 @@
       },
       "LoginRequest": {
         "properties": {
+          "bot_check_token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Check Token"
+          },
           "email": {
             "format": "email",
             "title": "Email",
@@ -4924,6 +4969,18 @@
             "default": false,
             "title": "Adult Confirmed",
             "type": "boolean"
+          },
+          "bot_check_token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Check Token"
           },
           "display_name": {
             "anyOf": [
@@ -9457,6 +9514,28 @@
         "summary": "Update User Status",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/auth/bot-check": {
+      "get": {
+        "description": "La llave publica del widget contra bots. `null`: el formulario no lo muestra.",
+        "operationId": "bot_check_config_auth_bot_check_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCheckConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Bot Check Config",
+        "tags": [
+          "auth"
         ]
       }
     },

@@ -148,6 +148,14 @@ def card_encryption_key(
     directo al procesador (§3.16). Por aqui pasa solo la llave, nunca la
     tarjeta: el procesador no deja pedirla desde el navegador. Se pide al
     momento: no se guarda."""
+    # Cada llamada sale a Wompi: sin tope, una cuenta podria usar la API para
+    # martillarlo. Un formulario normal la pide una vez por intento.
+    if get_settings().rate_limit_enabled and not rate_limit.hit(
+        f"card-key:user:{user.id}", limit=20, window=15 * _MINUTE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
+        )
     _require_tokenizer(provider)
     try:
         key = provider.card_encryption_key()

@@ -19,7 +19,9 @@ import { API_URL, confirmEmail, loginViaUi, registerViaApi, uniqueEmail } from "
  * cifrada hacia Wompi y que a nuestra API no llega ningún dato de la tarjeta.
  */
 
-const WOMPI = "https://wompi.e2e.test/v1";
+// El origen del sandbox de verdad: la CSP del sitio solo deja hablar con Wompi
+// (lib/csp.ts). Playwright responde antes de que la petición salga a la red.
+const WOMPI = "https://sandbox.wompi.co/v1";
 const PUBLIC_KEY = "pub_test_e2e";
 
 const CARD_NUMBER = "4242424242424242";

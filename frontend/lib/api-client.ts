@@ -27,6 +27,7 @@ import type {
 } from "./types/admin";
 import type {
   AccessType,
+  BotCheckConfigResponse,
   ChangeEmailRequest,
   ChangePasswordRequest,
   DeleteAccountRequest,
@@ -197,6 +198,9 @@ export async function apiFetch<T>(
 }
 
 export const authApi = {
+  /** La llave del widget contra bots; `site_key: null` si está apagado. */
+  botCheck: () => apiFetch<BotCheckConfigResponse>("/auth/bot-check"),
+
   register: (body: RegisterRequest) =>
     apiFetch<TokenResponse>("/auth/register", {
       method: "POST",
