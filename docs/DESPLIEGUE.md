@@ -747,7 +747,7 @@ de produccion al final, cuando lo demas este hecho.
 
 Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
 legales revisados por el abogado, el responsable del tratamiento, la
-facturacion electronica (contador) y lo que exige Wompi, y PCI DSS, con el
+facturacion electronica (decidida: consumidor final con Siigo; sin construir) y lo que exige Wompi, y PCI DSS, con el
 formulario de tarjeta propio (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 15).
 
 ### 1. Respaldos de la base y prueba de restauracion
