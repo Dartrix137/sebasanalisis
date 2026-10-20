@@ -34,6 +34,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { BankrollPanel } from "@/components/mesa/BankrollPanel";
 import { BetHistory, BetRow } from "@/components/mesa/BetRow";
 import { AYUDA } from "@/components/mesa/NewSessionForm";
@@ -41,6 +42,7 @@ import { RecommendationCard } from "@/components/mesa/RecommendationCard";
 import { RoundStatus } from "@/components/mesa/RoundStatus";
 import { StopCard } from "@/components/mesa/StopCard";
 import { SummaryPanel } from "@/components/mesa/SummaryPanel";
+import { variantLabel } from "@/components/mesa/VariantChoice";
 import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
 import {
   ApiError,
@@ -151,7 +153,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
     }
   }
 
-  if (loading || !user) return null;
+  if (loading || !user) return <PageSkeleton shape="mesa" />;
   if (error && !session) {
     return (
       <div className="flex-1">
@@ -165,7 +167,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
       </div>
     );
   }
-  if (!session || !variant) return null;
+  if (!session || !variant) return <PageSkeleton shape="mesa" />;
 
   const abierta = session.status === "active";
   // Banca sin la apuesta base o límite de pérdida alcanzado: abierta, sin apuestas.
@@ -228,7 +230,9 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
         <Badge tone={abierta ? "ok" : "off"}>{abierta ? "sesión abierta" : "cerrada"}</Badge>
       </AppHeader>
 
-      <main className="mx-auto grid max-w-6xl items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
+      {/* `grid-cols-1` y no la columna implícita: esa crece con la tabla de
+          progresión (más ancha que un celular) y desborda la pantalla. */}
+      <main className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
         <div className="lg:col-span-2">
           <Link
             href="/dashboard"
@@ -321,7 +325,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
                   </Button>
                 </form>
               )}
-              <p className="mt-0.5 text-xs capitalize text-muted">{variant.name}</p>
+              <p className="mt-0.5 text-xs text-muted">{variantLabel(variant)}</p>
             </div>
 
             <div className="text-right">

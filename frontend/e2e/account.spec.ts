@@ -97,7 +97,7 @@ test("restablecer la contraseña cierra la sesión que estaba abierta", async ({
 
   // La contraseña anterior ya no entra; la nueva sí.
   await loginViaUi(page, email, PASSWORD);
-  await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
+  await expect(page.getByText("Correo o contraseña incorrectos")).toBeVisible();
   await loginViaUi(page, email, nueva);
   await expect(page).toHaveURL(/\/dashboard/);
 });
@@ -125,7 +125,7 @@ test("eliminar la cuenta cierra la sesión y la cuenta deja de existir", async (
 
   // La cuenta ya no existe, y al usuario le llegó el aviso.
   await loginViaUi(page, email);
-  await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
+  await expect(page.getByText("Correo o contraseña incorrectos")).toBeVisible();
   await expectEmail(email, "fue eliminada");
 });
 

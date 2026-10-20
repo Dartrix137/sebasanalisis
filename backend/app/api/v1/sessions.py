@@ -60,7 +60,7 @@ def get_owned_session(db: DbSession, user_id: UUID, session_id: UUID) -> GameSes
         )
     )
     if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesion no encontrada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesión no encontrada")
     return session
 
 
@@ -69,7 +69,7 @@ def require_active(session: GameSession) -> GameSession:
     if session.status != SessionStatus.active.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La sesion ya no esta abierta",
+            detail="La sesión ya no está abierta",
         )
     return session
 
@@ -547,7 +547,7 @@ def delete_spin(
     if spin.spin_index != ultimo:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Solo se puede deshacer el ultimo giro registrado",
+            detail="Solo se puede deshacer el último giro registrado",
         )
 
     # Deshacer el efecto del giro antes de borrarlo.

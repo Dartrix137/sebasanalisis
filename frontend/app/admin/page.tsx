@@ -13,6 +13,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, ErrorBox } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { SUBSCRIPTION_STATUS_LABEL } from "@/lib/billing";
@@ -59,7 +60,7 @@ export default function AdminOverviewPage() {
       .catch((e) => setError(messageOf(e)));
   }, [loading, user, router, withToken]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   // El tramo anterior termina en `previous_end`, que es excluyente: el último
   // día que cuenta es el anterior a ese instante si cae a medianoche.

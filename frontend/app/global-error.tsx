@@ -4,15 +4,16 @@ import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 /**
- * Última barrera: un error de render que nadie atrapó. Lo reporta al monitoreo
- * y deja al usuario una salida, en vez de una pantalla en blanco.
+ * Última barrera: un error en el propio layout raíz (los de una pantalla los
+ * atrapa `error.tsx`). Lo reporta al monitoreo y deja al usuario una salida, en
+ * vez de una pantalla en blanco.
  */
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     Sentry.captureException(error);
@@ -43,7 +44,7 @@ export default function GlobalError({
         </p>
         <button
           type="button"
-          onClick={reset}
+          onClick={() => retry()}
           style={{
             border: 0,
             borderRadius: "0.5rem",

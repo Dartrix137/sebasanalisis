@@ -72,11 +72,15 @@ export function Field({
   error?: string;
 }) {
   const messageId = useId();
+  const autoId = useId();
+  const inputId = props.id ?? autoId;
   const message = error ?? hint;
+  // La etiqueta apunta al campo por `htmlFor` en vez de envolverlo: si envolviera
+  // también el botón de ayuda, nombraría al botón y el campo quedaría sin nombre.
   return (
-    <label className="block">
+    <div>
       <span className="mb-1.5 block text-sm font-bold text-white">
-        {label}
+        <label htmlFor={inputId}>{label}</label>
         {info ? (
           <InfoTip label={label} align={infoAlign}>
             {info}
@@ -85,6 +89,7 @@ export function Field({
       </span>
       <input
         {...props}
+        id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={message ? messageId : undefined}
         className={`w-full rounded-lg border bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 ${
@@ -99,7 +104,7 @@ export function Field({
           {message}
         </span>
       ) : null}
-    </label>
+    </div>
   );
 }
 

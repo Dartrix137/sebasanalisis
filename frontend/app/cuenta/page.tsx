@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { PaymentsCard, SubscriptionCard } from "@/components/account/SubscriptionCards";
 import { AppHeader } from "@/components/AppHeader";
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, SuccessBox } from "@/components/AuthShell";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, PasswordField } from "@/components/ui";
 import { ApiError, authApi, legalApi } from "@/lib/api-client";
 import { formatLegalDate, legalPath } from "@/lib/legal";
@@ -44,7 +45,7 @@ export default function AccountPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <PageSkeleton />;
 
   return (
     <div className="flex-1">

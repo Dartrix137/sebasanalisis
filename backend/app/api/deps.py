@@ -20,7 +20,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 _CREDENTIALS_ERROR = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail="Credenciales invalidas o sesion expirada",
+    detail="Credenciales inválidas o sesión expirada",
     headers={"WWW-Authenticate": "Bearer"},
 )
 

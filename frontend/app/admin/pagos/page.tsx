@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pager } from "@/components/admin/Pager";
 import { PaymentDetail } from "@/components/admin/PaymentDetail";
 import { SelectField } from "@/components/admin/SelectField";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/admin";
@@ -90,7 +91,7 @@ export default function AdminPaymentsPage() {
     load().catch((e) => setError(messageOf(e)));
   }, [loading, user, router, load]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

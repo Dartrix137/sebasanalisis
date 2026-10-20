@@ -3,6 +3,7 @@ import { Barlow_Condensed, Inter } from "next/font/google";
 import "./globals.css";
 import { LegalFooter } from "@/components/LegalFooter";
 import { SessionProvider } from "@/lib/session";
+import { SITE_URL, TITLE_TEMPLATE } from "@/lib/site";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 // Condensada como los números impresos en el paño y el cilindro de la ruleta.
@@ -12,9 +13,13 @@ const display = Barlow_Condensed({
   variable: "--font-display",
 });
 
+// Cada carpeta pone su título con un `layout.tsx` de servidor (las páginas son
+// de cliente y no pueden exportar metadatos); la plantilla le suma la marca.
 export const metadata: Metadata = {
-  title: "Sebasanálisis",
-  description: "Análisis estadístico descriptivo de juegos de casino.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: "Sebasanálisis", template: TITLE_TEMPLATE },
+  description:
+    "Registra los números de una mesa de ruleta y, después de cada giro, recibe una recomendación estadística sobre lo ya registrado, o la indicación de no apostar.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

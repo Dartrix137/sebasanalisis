@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pager } from "@/components/admin/Pager";
 import { SelectField } from "@/components/admin/SelectField";
 import { VariantForm } from "@/components/admin/VariantForm";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { GAME_ICON_LABEL, GAME_MODULE_LABEL, GAME_STATUS_LABEL } from "@/lib/admin";
 import { ApiError, adminApi } from "@/lib/api-client";
@@ -119,7 +120,7 @@ export default function AdminGamesPage() {
     }
   }
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">

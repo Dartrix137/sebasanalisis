@@ -39,6 +39,11 @@ export function intervalLabel(interval: PlanInterval, count: number): string {
   return count === 1 ? "año" : `${count} años`;
 }
 
+/** Lo que compra un pago, para una frase: `un mes`, `2 meses`, `un año`. */
+export function periodLabel(interval: PlanInterval, count: number): string {
+  return count === 1 ? `un ${intervalLabel(interval, 1)}` : intervalLabel(interval, count);
+}
+
 /**
  * La nota que acompaña al precio en /planes, en la pantalla de pago y en el
  * recibo (decidido el 2026-10-13). Pendiente de la revisión del abogado.

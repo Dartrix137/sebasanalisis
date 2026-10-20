@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { AccessGate } from "@/components/AccessGate";
 import { GameMenu } from "@/components/GameMenu";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
 import { NumberChip, variantLabel } from "@/components/mesa/VariantChoice";
 import { Button, ErrorBox } from "@/components/ui";
@@ -103,7 +104,7 @@ function Dashboard() {
       .finally(() => setReady(true));
   }, [loading, user, router, load]);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <PageSkeleton />;
 
   const variants = new Map(games.flatMap((g) => g.variants).map((v) => [v.id, v]));
   const [principal, ...otras] = openSessions;
@@ -251,14 +252,21 @@ function OpenTableHero({
 
           {recientes.length > 0 ? (
             <div className="mt-5">
-              <ol
-                className="flex gap-1.5 overflow-x-auto pb-1"
-                aria-label="Últimos números, el más reciente primero"
-              >
-                {recientes.map((n, i) => (
-                  <NumberChip key={`${i}-${n}`} value={n} variant={variant} large index={i} />
-                ))}
-              </ol>
+              <div className="relative">
+                <ol
+                  className="flex gap-1.5 overflow-x-auto pb-1"
+                  aria-label="Últimos números, el más reciente primero"
+                >
+                  {recientes.map((n, i) => (
+                    <NumberChip key={`${i}-${n}`} value={n} variant={variant} large index={i} />
+                  ))}
+                </ol>
+                {/* En el celular la fila no cabe: el desvanecido dice que sigue. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-ink-raised to-transparent sm:hidden"
+                />
+              </div>
               <p className="mt-2 text-xs text-muted">
                 {numbers.length} {numbers.length === 1 ? "número registrado" : "números registrados"}
                 , el más reciente a la izquierda

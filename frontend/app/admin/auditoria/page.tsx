@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Pager } from "@/components/admin/Pager";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, ErrorBox } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { actionLabel, describeChange, formatDateTime } from "@/lib/admin";
@@ -39,7 +40,7 @@ export default function AdminAuditPage() {
       .catch((e) => setError(e instanceof ApiError ? e.message : "No se pudo cargar la bitácora"));
   }, [loading, user, router, withToken, offset]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

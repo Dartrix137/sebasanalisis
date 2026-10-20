@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { SuccessBox } from "@/components/AuthShell";
 import { Markdown } from "@/components/legal/Markdown";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { LEGAL_DOCUMENTS, formatLegalDate, legalPath } from "@/lib/legal";
@@ -48,7 +49,7 @@ export default function AdminLegalPage() {
     refresh().catch((e) => setError(messageOf(e)));
   }, [loading, user, router, refresh]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-6">

@@ -27,10 +27,11 @@ import type { FormEvent } from "react";
 
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
 import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
+import { InlineSkeleton } from "@/components/PageSkeleton";
 import { BrandMark, Button, Card, ErrorBox, Field } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
-import { CURRENCY_NOTE, formatMoney, intervalLabel } from "@/lib/money";
+import { CURRENCY_NOTE, formatMoney, intervalLabel, periodLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import type { TokenizedSource } from "@/lib/tokenize";
 import type {
@@ -100,7 +101,7 @@ function Checkout() {
     };
   }, [loading, userId, planId, router, withToken]);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <InlineSkeleton cards={2} />;
   if (error && !ready) {
     return (
       <div className="space-y-4">
@@ -111,7 +112,7 @@ function Checkout() {
       </div>
     );
   }
-  if (!ready) return <p className="text-sm text-muted">Cargando…</p>;
+  if (!ready) return <InlineSkeleton cards={2} />;
   if (!plan || !quote || !availability) {
     return (
       <div className="space-y-4">
@@ -154,6 +155,8 @@ function Checkout() {
   const currency = renewing ? current.currency : quote.currency;
   const totalText = formatMoney(total, currency);
   const interval = intervalLabel(plan.interval, plan.interval_count);
+  // "un mes de acceso", no "mes de acceso".
+  const period = periodLabel(plan.interval, plan.interval_count);
 
   // La renovación automática solo se ofrece en el alta, y si la pasarela la permite.
   const automaticOffered = !renewing && availability.tokenizer !== null;
@@ -254,7 +257,9 @@ function Checkout() {
           {plan.name}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          {renewing ? `Siguiente período: ${interval} de acceso.` : `${interval} de acceso.`}
+          {renewing
+            ? `Siguiente período: ${period} de acceso.`
+            : `${period.charAt(0).toUpperCase()}${period.slice(1)} de acceso.`}
         </p>
         {renewing && current.current_period_end ? (
           <p className="mt-3 text-sm text-white">
@@ -338,7 +343,7 @@ function Checkout() {
                 onChoose={chooseMode}
                 title="Pago manual"
                 lines={[
-                  `Pagas ${interval} de acceso ahora.`,
+                  `Pagas ${period} de acceso ahora.`,
                   "Eliges el medio en la página de Wompi: tarjeta, PSE, Nequi y otros.",
                   "No se guarda tu medio de pago ni se renueva solo. Antes de que venza te avisamos por correo.",
                 ]}

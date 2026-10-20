@@ -12,6 +12,7 @@ import { ApiError, legalApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import type { LegalDocumentResponse, LegalKind } from "@/lib/types/legal";
 
+import { InlineSkeleton } from "../PageSkeleton";
 import { BrandMark, ErrorBox } from "../ui";
 import { Markdown } from "./Markdown";
 
@@ -40,6 +41,12 @@ export function LegalDocumentView({ kind }: { kind: LegalKind }) {
       {error ? (
         <div className="mt-8">
           <ErrorBox message={error} />
+        </div>
+      ) : null}
+
+      {!document && !error ? (
+        <div className="mt-8">
+          <InlineSkeleton kind="text" />
         </div>
       ) : null}
 

@@ -169,6 +169,6 @@ test("eliminar la cuenta con renovación automática: avisa qué pasa con la sus
   await expect(page).toHaveURL(/\/login/);
 
   await loginViaUi(page, email);
-  await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
+  await expect(page.getByText("Correo o contraseña incorrectos")).toBeVisible();
   await expectEmail(email, "fue eliminada");
 });

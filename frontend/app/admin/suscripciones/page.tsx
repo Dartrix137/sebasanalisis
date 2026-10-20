@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pager } from "@/components/admin/Pager";
 import { SelectField } from "@/components/admin/SelectField";
 import { SubscriptionActions } from "@/components/admin/SubscriptionActions";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { actionLabel, describeChange, formatDateTime } from "@/lib/admin";
@@ -121,7 +122,7 @@ export default function AdminSubscriptionsPage() {
       .catch((e) => setError(messageOf(e)));
   }, [loading, user, withToken]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

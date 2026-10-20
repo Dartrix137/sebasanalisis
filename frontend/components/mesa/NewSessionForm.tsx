@@ -118,6 +118,7 @@ export function NewSessionForm({
 
   const apuestaExcedeBanca = Number(baseBet) > Number(bankroll);
   const limiteExcedeBanca = lossLimit !== "" && Number(lossLimit) > Number(bankroll);
+  const bloqueado = apuestaExcedeBanca || limiteExcedeBanca || faltaOrden || invalidos.length > 0;
 
   const { withToken } = useSession();
   const [progressions, setProgressions] = useState<
@@ -217,6 +218,7 @@ export function NewSessionForm({
           value={baseBet}
           onChange={(e) => setBaseBet(e.target.value)}
           info={AYUDA.apuestaBase}
+          error={apuestaExcedeBanca ? "No puede superar la banca inicial." : undefined}
         />
         <Field
           label="Límite de mesa"
@@ -240,6 +242,7 @@ export function NewSessionForm({
         onChange={(e) => setLossLimit(e.target.value)}
         hint="Opcional, pero recomendado."
         info={AYUDA.limitePerdida}
+        error={limiteExcedeBanca ? "No puede superar la banca inicial." : undefined}
       />
 
       <details className="rounded-lg border border-edge bg-ink px-3.5 py-3">
@@ -307,18 +310,30 @@ export function NewSessionForm({
           // La etiqueta envuelve también el botón de ayuda, y con él el campo
           // perdía su nombre accesible: se lo damos explícito.
           aria-label="Números ya observados en la mesa"
+          aria-invalid={invalidos.length > 0 ? true : undefined}
           value={initialRaw}
           onChange={(e) => setInitialRaw(e.target.value)}
           rows={3}
           // El ejemplo sale de los resultados de la variante, no de la ruleta.
           placeholder={variant.config.possible_outcomes.slice(-5).reverse().join(", ")}
-          className="w-full rounded-lg border border-edge bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
+          className={`w-full rounded-lg border bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 ${
+            invalidos.length > 0
+              ? "border-table-red/70 focus:border-table-red"
+              : "border-edge focus:border-gold/60"
+          }`}
         />
         <span className="mt-1 block text-xs text-muted">
           Opcional. Sepáralos con comas, espacios o saltos de línea. Escribe cada
           número tal como salió, repeticiones incluidas.
         </span>
       </label>
+
+      {invalidos.length > 0 ? (
+        <ErrorBox
+          message="Hay números que no pertenecen a esta variante."
+          details={invalidos}
+        />
+      ) : null}
 
       {initialValues.length > 0 ? (
         <fieldset className="rounded-lg border border-edge bg-ink px-3.5 py-3">
@@ -367,14 +382,13 @@ export function NewSessionForm({
               señales estadísticas.
             </p>
           ) : null}
-        </fieldset>
-      ) : null}
 
-      {invalidos.length > 0 ? (
-        <ErrorBox
-          message="Hay números que no pertenecen a esta variante."
-          details={invalidos}
-        />
+          {faltaOrden ? (
+            <p role="alert" className="mt-2 text-xs font-bold text-table-red">
+              Indica en qué orden los escribiste antes de empezar.
+            </p>
+          ) : null}
+        </fieldset>
       ) : null}
 
       <p className="rounded-lg border border-edge bg-ink px-3.5 py-3 text-xs leading-relaxed text-muted">
@@ -383,28 +397,20 @@ export function NewSessionForm({
         subas para recuperar.
       </p>
 
-      {apuestaExcedeBanca ? (
-        <ErrorBox message="La apuesta base no puede superar la banca inicial." />
-      ) : null}
-      {limiteExcedeBanca ? (
-        <ErrorBox message="El límite de pérdida no puede superar la banca inicial." />
-      ) : null}
-      {faltaOrden ? (
-        <ErrorBox message="Indica en qué orden escribiste los números antes de empezar." />
-      ) : null}
       {error ? <ErrorBox message={error} /> : null}
 
+      {/*
+        Cada error va junto a su campo. Aquí, al lado del botón deshabilitado,
+        solo se dice dónde mirar: en el celular el campo queda lejos del botón.
+      */}
+      {bloqueado ? (
+        <p className="text-xs font-bold text-table-red">
+          Revisa lo marcado en rojo más arriba para poder empezar.
+        </p>
+      ) : null}
+
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={
-            pending ||
-            apuestaExcedeBanca ||
-            limiteExcedeBanca ||
-            faltaOrden ||
-            invalidos.length > 0
-          }
-        >
+        <Button type="submit" disabled={pending || bloqueado}>
           {pending ? "Creando…" : "Empezar sesión"}
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>

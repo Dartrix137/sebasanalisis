@@ -103,7 +103,7 @@ test("forzar el restablecimiento cierra la sesión y la contraseña anterior dej
   await page.reload();
   await expect(page).toHaveURL(/\/login/);
   await loginViaUi(page, email, PASSWORD);
-  await expect(page.getByText("Correo o contrasena incorrectos")).toBeVisible();
+  await expect(page.getByText("Correo o contraseña incorrectos")).toBeVisible();
 
   // Con el enlace del correo elige una nueva y entra.
   await page.goto(await linkFromEmail(email, "Elige una contraseña nueva"));

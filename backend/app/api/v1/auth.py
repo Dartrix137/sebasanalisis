@@ -65,8 +65,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 EmailSenderDep = Annotated[EmailSender, Depends(get_email_sender)]
 
 # Mensaje unico para credenciales malas: no revela si el correo existe (§3.6).
-_INVALID_CREDENTIALS = "Correo o contrasena incorrectos"
-_SESSION_EXPIRED = "Sesion expirada, inicia sesion de nuevo"
+_INVALID_CREDENTIALS = "Correo o contraseña incorrectos"
+_SESSION_EXPIRED = "Sesión expirada, inicia sesión de nuevo"
 _INVALID_LINK = "El enlace no es válido o ya venció. Pide uno nuevo"
 _WRONG_PASSWORD = "La contraseña actual no es correcta"
 _TOO_MANY = "Demasiados intentos. Espera unos minutos antes de reintentar"

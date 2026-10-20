@@ -415,6 +415,16 @@ def test_el_registro_rechaza_contrasenas_debiles(client: TestClient, password: s
     assert "Value error" not in mensaje
 
 
+def test_un_correo_invalido_responde_en_espanol(client: TestClient) -> None:
+    # `a@b` lo acepta el navegador (type="email") y lo rechaza la API: el mensaje
+    # que se muestra tiene que estar en espanol y no repetir lo enviado.
+    r = client.post("/auth/register", json={"email": "a@b", "password": "clave-larga-y-rara-913"})
+    assert r.status_code == 422
+    (error,) = r.json()["detail"]
+    assert error["msg"] == "El correo no es válido."
+    assert "input" not in error
+
+
 def test_la_contrasena_no_puede_ser_el_correo(client: TestClient) -> None:
     email = _email()
     r = client.post("/auth/register", json={"email": email, "password": email})
