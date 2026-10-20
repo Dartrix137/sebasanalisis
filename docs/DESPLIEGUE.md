@@ -996,6 +996,11 @@ panel pueden variar con su version.
    `TURNSTILE_SECRET_KEY` con esos valores y redesplegar la API. El frontend no
    necesita nada: la llave de sitio la entrega la API.
 
+**Configurado y comprobado el 2026-10-20** por el usuario: widget en modo
+*Managed* para `sebasanalisis.com`, sin pre-clearance (el sitio no pasa por el
+proxy de Cloudflare). El log dice `Turnstile`, el widget aparece en las tres
+pantallas y los tres formularios funcionan.
+
 **Comprobacion**:
 
 - El log de arranque de la API dice `Verificacion contra bots: Turnstile`. Si
@@ -1013,6 +1018,10 @@ Desde el paso 9 (2026-10-20) el sitio manda una CSP con nonce y las dos
 aplicaciones mandan HSTS, `nosniff`, `X-Frame-Options` y `Referrer-Policy`. Un
 recurso que la CSP no contemple deja de funcionar sin error visible en la
 pagina: por eso se comprueba en produccion.
+
+**Comprobado el 2026-10-20** por el usuario, despues de desplegar el PR #34: las
+cabeceras, ninguna violacion de la CSP en la consola, y el cambio a tarjeta y a
+Nequi en el sandbox.
 
 1. Desde cualquier equipo:
 
