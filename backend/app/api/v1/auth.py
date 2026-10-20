@@ -25,6 +25,7 @@ from app.api.presenters import payment_response, subscription_response, user_res
 from app.api.v1.legal import client_ip, list_consents
 from app.core import legal, payment_privacy, rate_limit, subscriptions
 from app.core.accounts import is_last_active_admin
+from app.core.bot_check import BotChecker, get_bot_checker
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.password_policy import PasswordPolicyError, validate_password
@@ -40,6 +41,7 @@ from app.core.user_tokens import TOKEN_TTL, InvalidTokenError, consume_token, is
 from app.emails import build_email
 from app.models import Bet, GameSession, Payment, Spin, User
 from app.schemas.auth import (
+    BotCheckConfigResponse,
     ChangeEmailRequest,
     ChangePasswordRequest,
     DeleteAccountRequest,
@@ -63,6 +65,7 @@ from app.schemas.spins import SpinResponse
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 EmailSenderDep = Annotated[EmailSender, Depends(get_email_sender)]
+BotCheckerDep = Annotated[BotChecker, Depends(get_bot_checker)]
 
 # Mensaje unico para credenciales malas: no revela si el correo existe (§3.6).
 _INVALID_CREDENTIALS = "Correo o contraseña incorrectos"
@@ -74,6 +77,12 @@ _TOO_MANY = "Demasiados intentos. Espera unos minutos antes de reintentar"
 _FORGOT_SENT = (
     "Si ese correo tiene una cuenta, te enviamos un enlace para restablecer la contraseña"
 )
+
+# Va como objeto con codigo: el formulario reinicia el widget al recibirlo.
+_BOT_CHECK_FAILED = {
+    "code": "bot_check_failed",
+    "message": "No pudimos confirmar que no eres un robot. Vuelve a marcar la casilla e intenta de nuevo",
+}
 
 _ADULT_REQUIRED = "Para crear una cuenta debes declarar que eres mayor de edad"
 _CONSENTS_REQUIRED = (
@@ -104,6 +113,18 @@ def _limit(key: str, *, limit: int, window: int) -> None:
         return
     if not rate_limit.hit(key, limit=limit, window=window):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY)
+
+
+def _require_human(
+    checker: BotChecker, token: str | None, request: Request, action: str
+) -> None:
+    """Corta con 400 si el token del widget contra bots no es valido.
+
+    Va despues de los limites de intentos: una avalancha se cuenta y se corta
+    sin gastar una consulta a Cloudflare por cada peticion.
+    """
+    if not checker.verify(token, remote_ip=_client_ip(request), action=action):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_BOT_CHECK_FAILED)
 
 
 def _tokens_for(db: DbSession, user: User) -> TokenResponse:
@@ -158,6 +179,12 @@ def _queue_password_changed_email(
 # ---------- Registro, login, refresh ----------
 
 
+@router.get("/bot-check", response_model=BotCheckConfigResponse)
+def bot_check_config(checker: BotCheckerDep) -> BotCheckConfigResponse:
+    """La llave publica del widget contra bots. `null`: el formulario no lo muestra."""
+    return BotCheckConfigResponse(site_key=checker.site_key)
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(
     payload: RegisterRequest,
@@ -165,11 +192,13 @@ def register(
     request: Request,
     background: BackgroundTasks,
     sender: EmailSenderDep,
+    checker: BotCheckerDep,
 ) -> TokenResponse:
     # Cada registro envia un correo a la direccion que se escriba, sea de quien
     # sea: sin tope, la plataforma serviria para mandar correo a terceros.
     _limit(f"register:{_client_ip(request)}", limit=10, window=_HOUR)
     _limit(f"register-day:{_client_ip(request)}", limit=20, window=_DAY)
+    _require_human(checker, payload.bot_check_token, request, "register")
 
     email = payload.email.lower()
     _check_new_password(payload.password, email)
@@ -221,7 +250,9 @@ def register(
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenResponse:
+def login(
+    payload: LoginRequest, db: DbSession, request: Request, checker: BotCheckerDep
+) -> TokenResponse:
     email = payload.email.lower()
     ip = _client_ip(request)
     key = f"{ip}:{email}"
@@ -235,6 +266,7 @@ def login(payload: LoginRequest, db: DbSession, request: Request) -> TokenRespon
         or rate_limit.failures(ip_key, _LOGIN_IP_WINDOW) >= _LOGIN_IP_MAX_FAILURES
     ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY)
+    _require_human(checker, payload.bot_check_token, request, "login")
 
     user = db.scalar(select(User).where(User.email == email))
     # Se verifica el hash aunque el usuario no exista para no filtrar por tiempo
@@ -490,6 +522,7 @@ def forgot_password(
     request: Request,
     background: BackgroundTasks,
     sender: EmailSenderDep,
+    checker: BotCheckerDep,
 ) -> MessageResponse:
     """Responde siempre igual, exista o no el correo (§5.3).
 
@@ -501,6 +534,7 @@ def forgot_password(
     _limit(f"forgot-password:email:{email}", limit=3, window=15 * _MINUTE)
     # Sin tope por dia, 3 cada 15 minutos son 288 correos diarios a un mismo buzon.
     _limit(f"forgot-password:email-day:{email}", limit=10, window=_DAY)
+    _require_human(checker, payload.bot_check_token, request, "forgot-password")
 
     user = db.scalar(select(User).where(User.email == email))
     if user is not None:

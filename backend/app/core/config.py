@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # enlace de la pasarela simulada.
     api_public_url: str = "http://localhost:8000"
 
+    # Verificacion contra bots con Cloudflare Turnstile (core/bot_check.py). Van
+    # las dos o ninguna; sin ninguna, la verificacion queda apagada.
+    turnstile_site_key: str = ""
+    turnstile_secret_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

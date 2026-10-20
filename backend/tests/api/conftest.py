@@ -99,11 +99,17 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
     # las llaves de quien lo corre ni puede llegar a Wompi. El test que necesita
     # un proveedor lo pone encima (fixture `wompi` de test_subscriptions).
     app.dependency_overrides[get_payment_provider] = UnconfiguredPaymentProvider
+    # Igual con la verificacion contra bots: apagada, salvo en el test que la
+    # prueba (test_bot_check.py).
+    from app.core.bot_check import DisabledBotChecker, get_bot_checker
+
+    app.dependency_overrides[get_bot_checker] = DisabledBotChecker
     with TestClient(app) as c:
         register_with_consents(c, test_database)
         yield c
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(get_payment_provider, None)
+    app.dependency_overrides.pop(get_bot_checker, None)
     engine.dispose()
 
 

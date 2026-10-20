@@ -1,0 +1,45 @@
+# Auditoria semanal de dependencias (paso 9 de la Fase 4, revision de seguridad).
+#
+# El CI ya audita en cada push, pero entre un push y otro pueden publicarse
+# vulnerabilidades nuevas en dependencias que no cambiaron. Esto corre lo mismo
+# cada lunes sobre main y el trabajo queda en rojo si aparece algo: GitHub le
+# avisa por correo a quien tiene el repositorio.
+name: Auditoria semanal
+
+on:
+  schedule:
+    # Lunes 12:00 UTC (7:00 en Bogota).
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - name: Auditoria de dependencias
+        run: pip-audit -r requirements.txt
+
+  frontend:
+    name: Frontend (npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Solo lo que va a produccion, igual que el CI: las alertas de la cadena
+      # de Tailwind 3 son de herramientas de desarrollo (paso 0).
+      - name: Auditoria de dependencias de produccion
+        run: npm audit --omit=dev --audit-level=high

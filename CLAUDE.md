@@ -175,6 +175,13 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 - Transacción declinada → no se concede acceso.
 - Suscripción vencida (`current_period_end` en el pasado) → el acceso queda revocado.
 
+### Seguridad (paso 9, revisión del 2026-10-20)
+
+- **El aislamiento entre cuentas lo hace el código** (no hay Row-Level Security, decisión del usuario), y lo garantiza `tests/api/test_seguridad.py`, que recorre todas las rutas del OpenAPI: sin sesión responden 401 salvo las de `PUBLICAS`, otra cuenta recibe 404 en todo lo de una mesa ajena, y una cuenta normal 403 en todo el admin. Una ruta pública nueva se agrega a `PUBLICAS` a propósito; una ruta nueva con un id de un recurso de la cuenta necesita su caso de acceso cruzado.
+- **CSP con nonce** (`frontend/proxy.ts`, `lib/csp.ts`): todas las páginas se generan al pedirlas (`connection()` en el layout raíz). Un origen nuevo con el que hable el navegador va en `lib/csp.ts`, o el navegador lo bloquea sin error visible. Nada de scripts en línea ni `eval`; un script de terceros se inserta desde nuestro código (`strict-dynamic`), como el de Turnstile.
+- Los tokens de sesión siguen en `localStorage` (decisión del usuario): lo que los protege es la CSP. No se pasa el refresh token a una cookie sin que el usuario lo pida.
+- **Verificación contra bots** con Cloudflare Turnstile en el registro, el ingreso y el olvido de contraseña (`core/bot_check.py`, `components/BotCheck.tsx`). La API valida el token contra Cloudflare, falla cerrado y, sin llaves, queda apagada. El algoritmo sale de la documentación oficial de Cloudflare, citada en el módulo, nunca de memoria.
+
 ### Multijuego y deportivas
 
 - **Por ahora, solo la ruleta** (decisión del 2026-10-14): crear un juego desde cero con la configuración a mano resultó difícil de hacer bien (resultados que tienen que ser equiprobables, pagos y progresiones pensados para la ruleta). Los juegos futuros se escriben en código, cada uno con su motor, como un módulo nuevo. En `/admin/juegos` el alta de juegos y de variantes está oculta (`ALTA_DE_JUEGOS` en `app/admin/juegos/page.tsx`), no borrada; la API la conserva. La edición de las variantes de la ruleta (umbrales) y del estado, el orden y la descripción del juego siguen a la vista.

@@ -24,6 +24,7 @@ export type RefreshRequest = S["RefreshRequest"];
 export type UserResponse = S["UserResponse"];
 export type TokenResponse = S["TokenResponse"];
 export type MessageResponse = S["MessageResponse"];
+export type BotCheckConfigResponse = S["BotCheckConfigResponse"];
 export type TokenRequest = S["TokenRequest"];
 export type ForgotPasswordRequest = S["ForgotPasswordRequest"];
 export type ResetPasswordRequest = S["ResetPasswordRequest"];
