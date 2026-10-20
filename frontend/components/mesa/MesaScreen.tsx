@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button, Card, ErrorBox } from "@/components/ui";
 import { ApiError, sessionsApi } from "@/lib/api-client";
 import { SESSION_SCREENS } from "@/lib/game-modules";
@@ -58,7 +59,7 @@ export function MesaScreen({ slug, sessionId }: { slug: string; sessionId: strin
     };
   }, [withToken, sessionId, slug, router]);
 
-  if (estado.kind === "cargando") return null;
+  if (estado.kind === "cargando") return <PageSkeleton shape="mesa" />;
   if (estado.kind === "lista") {
     const Screen = SESSION_SCREENS[estado.session.game_module];
     if (Screen) return <Screen sessionId={sessionId} />;

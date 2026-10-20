@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { InlineSkeleton } from "@/components/PageSkeleton";
 import { BrandMark, Button, Card, ErrorBox } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
@@ -96,7 +97,9 @@ export function PaymentResult({ paymentId }: { paymentId: string }) {
         Tu pago
       </h1>
       <div className="mt-6">
-        {loading ? null : !user ? (
+        {loading ? (
+          <InlineSkeleton />
+        ) : !user ? (
           <Card>
             <p className="text-sm leading-relaxed text-white">
               Inicia sesión para ver el resultado de tu pago.

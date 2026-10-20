@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { GameIcon } from "@/components/GameIcon";
 import { NewSessionForm } from "@/components/mesa/NewSessionForm";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { VariantChoice, variantLabel } from "@/components/mesa/VariantChoice";
 import { Card, ErrorBox } from "@/components/ui";
 import { ApiError, gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
@@ -81,7 +82,13 @@ export function GamePage({ slug }: { slug: string }) {
   }
 
   if (!user || game === undefined) {
-    return error ? <Pantalla><ErrorBox message={error} /></Pantalla> : null;
+    return error ? (
+      <Pantalla>
+        <ErrorBox message={error} />
+      </Pantalla>
+    ) : (
+      <PageSkeleton />
+    );
   }
 
   if (game === null) {

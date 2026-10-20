@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { BacktestPanel } from "@/components/admin/BacktestPanel";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { ErrorBox } from "@/components/ui";
 import { adminApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
@@ -38,7 +39,7 @@ export default function AdminEnginePage() {
     load().catch((e) => setError(e instanceof Error ? e.message : "Error inesperado"));
   }, [loading, user, router, load]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">

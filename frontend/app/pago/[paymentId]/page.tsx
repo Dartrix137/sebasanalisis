@@ -1,6 +1,10 @@
 import { Suspense } from "react";
 
+import { privateMetadata } from "@/lib/site";
+
 import { PaymentResult } from "./PaymentResult";
+
+export const metadata = privateMetadata("Tu pago");
 
 export default async function PaymentResultPage({
   params,

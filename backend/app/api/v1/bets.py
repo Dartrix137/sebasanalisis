@@ -44,14 +44,14 @@ def _group_id_for_label(
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"La variante no tiene la categoria '{category_id}'",
+            detail=f"La variante no tiene la categoría '{category_id}'",
         )
     for group in category.groups:
         if group.label == option_label or group.id == option_label:
             return group.id
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=f"La categoria '{category_id}' no tiene la opcion '{option_label}'",
+        detail=f"La categoría '{category_id}' no tiene la opción '{option_label}'",
     )
 
 

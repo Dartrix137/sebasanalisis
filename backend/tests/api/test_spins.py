@@ -190,7 +190,7 @@ def test_solo_se_puede_deshacer_el_ultimo_giro(
 
     r = client.delete(f"/sessions/{sid}/spins/{giros[0]['id']}", headers=auth(user_token))
     assert r.status_code == 409
-    assert "ultimo giro" in r.text
+    assert "último giro" in r.text
     assert len(client.get(f"/sessions/{sid}/spins", headers=auth(user_token)).json()) == 3
 
 

@@ -18,6 +18,7 @@ import { PlanGamesPanel } from "@/components/admin/PlanGamesPanel";
 import { PriceTransferPanel } from "@/components/admin/PriceTransferPanel";
 import { SelectField } from "@/components/admin/SelectField";
 import { SuccessBox } from "@/components/AuthShell";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { centsToInput, formatMoney, intervalLabel, parseMoneyToCents } from "@/lib/money";
@@ -123,7 +124,7 @@ export default function AdminPlansPage() {
     refresh().catch((e) => setError(messageOf(e)));
   }, [loading, user, router, refresh]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

@@ -278,18 +278,20 @@ La lista "Antes del lanzamiento comercial" (`PLATAFORMA_COMPLETA.md` §9), con e
 | Facturación electrónica (§10 n.º 4) | **Decidida el 2026-10-20**: factura electrónica a consumidor final, sin nombre ni cédula, con Siigo por su API. Sin construir. Antes: IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, y la cuenta de Siigo con la resolución de la DIAN | Código y operativo (usuario) |
 | Textos legales revisados (§10 n.º 8), responsable del tratamiento (n.º 10), PCI DSS con el formulario propio (n.º 15), precio en pantalla e IVA, la frase de "apostar el mínimo" del formulario de mesa nueva | Sin respuesta | Abogado, contador o Wompi |
 
-**Acabado del frontend** (agregado a la lista por el usuario el 2026-10-19). Estado comprobado en el repositorio ese día; lo que dice "por revisar" exige recorrer las pantallas:
+**Acabado del frontend** (agregado a la lista por el usuario el 2026-10-19). **Construido el 2026-10-20** en la rama `fase-4-paso-9-acabado-frontend`, después de un inventario con Playwright: 31 rutas a 360 px y a 768 px, como visitante, con acceso, sin acceso y como administrador, más el envío de datos inválidos en cada formulario del cliente. Las decisiones del usuario ese día: los metadatos van en un `layout.tsx` de servidor por carpeta (las páginas no se tocan), la URL pública es una constante (`lib/site.ts`, sin variable en Dokploy), la carga se muestra con una silueta del contenido, y entran además los mensajes en español, las etiquetas de los campos, el encabezado en el celular y los textos sueltos. Tests en `e2e/acabado.spec.ts` y `tests/core/test_validation_errors.py`.
 
-| Punto | Estado | Tipo |
-|---|---|---|
-| Página 404 personalizada | No existe: sale la 404 por defecto de Next. Solo hay `app/global-error.tsx`, sin `error.tsx` por ruta | Código |
-| Título meta por página | Solo uno global en `app/layout.tsx`. 17 de las 25 páginas son `"use client"` y no pueden exportar `metadata` | Código |
-| Descripción meta por página | Igual que el título. La global ("Análisis estadístico descriptivo de juegos de casino") es anterior al motor de recomendación | Código |
-| `robots.txt` | No existe | Código |
-| `sitemap.xml` | No existe. Solo páginas públicas: inicio, planes, legales, login y registro | Código |
-| Cortes para móvil | Por revisar a 360 px y a ancho de tableta, pantalla por pantalla | Revisión y código |
-| Estados de carga | No hay ningún `loading.tsx`; cada pantalla lo resuelve por su cuenta. Por revisar cuáles quedan en blanco o saltan | Revisión y código |
-| Errores de formulario visibles | Existen `ErrorBox` y, desde el PR #29, el error por campo en `Field`. Por revisar qué formularios no los usan | Revisión y código |
+| Punto | Lo que se encontró | Lo que quedó | Tipo |
+|---|---|---|---|
+| Página 404 personalizada | La de Next, en inglés y con fondo blanco, también en `/legal/<slug>` inexistente | `app/not-found.tsx` con el estilo de la aplicación, dentro del layout (con el pie) y enlace a `/`. Un solo `app/error.tsx` para errores de pantalla, que reporta a GlitchTip; `global-error.tsx` queda para el layout y usa `retry()` (Next 16.3) | **Hecho** |
+| Título meta por página | Uno global para las 31 rutas | Un `layout.tsx` de servidor por carpeta con la plantilla `"%s · Sebasanálisis"`; las privadas llevan además `noindex, nofollow`. El layout del admin pasó su navegación a `components/admin/AdminShell.tsx`. Un layout con carpetas adentro (admin, juegos, planes) repite la plantilla con `sectionTitle`: si pone su título como texto, las de adentro la pierden | **Hecho** |
+| Descripción meta por página | La global era anterior al motor de recomendación, y salía también como subtítulo del encabezado | Global nueva, más las de ingreso, registro, planes y documentos legales. El subtítulo del encabezado cambió | **Hecho** |
+| `robots.txt` | No existía | `app/robots.ts`: bloquea las rutas de `PRIVATE_PATHS` y apunta al sitemap | **Hecho** |
+| `sitemap.xml` | No existía. No hay página de inicio pública: `/` redirige a `/login` | `app/sitemap.ts`: ingreso, registro, planes y los cuatro documentos legales. `/` no va, porque es una redirección | **Hecho** |
+| Cortes para móvil | Ninguna ruta se desbordaba, salvo la mesa con "Gestión de banca" abierta (420 px a 360). El encabezado ocupaba unos 145 px en tres filas. El menú del admin y los últimos números del inicio se desplazaban sin dar señal | La cuadrícula de la mesa con `grid-cols-1`. Encabezado en dos filas en el celular. Desvanecido al borde del menú del admin y de los últimos números, y la sección abierta del admin se desplaza a la vista | **Hecho** |
+| Estados de carga | 15 de 31 rutas quedaban en blanco mientras llegaban la sesión y los datos. `loading.tsx` no lo resuelve: la espera es del navegador, no del servidor | `components/PageSkeleton.tsx`: silueta con la forma de la pantalla (página, mesa o lista del admin) y `InlineSkeleton` para planes, pago y documentos legales | **Hecho** |
+| Errores de formulario visibles | Los errores de validación de la API llegaban en inglés (un correo `a@b`, que el navegador acepta). Los campos con "?" de ayuda quedaban sin nombre accesible. En la mesa nueva el error salía lejos del campo, con el botón deshabilitado | `core/validation_errors.py` traduce los 422 y ya no devuelve lo que mandó el cliente. `Field` asocia la etiqueta con `htmlFor`. La mesa nueva marca el campo y dice junto al botón dónde mirar. Mensajes de la API con sus tildes ("Correo o contraseña incorrectos", "Sesión no encontrada") | **Hecho** |
+
+Textos sueltos corregidos de paso: la mesa decía "European" (ahora "Europea") y la pantalla de pago decía "Pagas mes de acceso ahora" (ahora "un mes"). **Sin comprobar:** las pantallas de suscripciones y pagos del admin con datos reales (en la base de prueba estaban vacías), y los formularios del admin enviando datos inválidos (solo se leyó el código: usan `ErrorBox`).
 
 **Seguridad** (agregado a la lista por el usuario el 2026-10-19). Estado comprobado en el repositorio ese día. Ninguno se da por hecho sin una revisión con evidencia (un test o una prueba a mano):
 

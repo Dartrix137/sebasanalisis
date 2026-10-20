@@ -31,6 +31,7 @@ import { CURRENCY_NOTE, formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import type { PlanResponse, SubscriptionResponse } from "@/lib/types/billing";
 
+import { InlineSkeleton } from "./PageSkeleton";
 import { Badge, Card, ErrorBox } from "./ui";
 
 const PAY_LINK =
@@ -64,7 +65,7 @@ export function PlansView() {
   }, [loading, userId, withToken]);
 
   if (error) return <ErrorBox message={error} />;
-  if (!plans || loading) return null;
+  if (!plans || loading) return <InlineSkeleton cards={2} />;
   if (plans.length === 0) {
     return <p className="text-sm text-muted">Por ahora no hay planes disponibles.</p>;
   }

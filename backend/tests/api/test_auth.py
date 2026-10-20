@@ -92,7 +92,7 @@ def test_login_no_revela_si_el_correo_existe(client: TestClient, caso: str) -> N
 
     r = client.post("/auth/login", json=body)
     assert r.status_code == 401
-    assert r.json()["detail"] == "Correo o contrasena incorrectos"
+    assert r.json()["detail"] == "Correo o contraseña incorrectos"
 
 
 def test_me_rechaza_token_ausente_invalido_y_de_refresh(client: TestClient) -> None:

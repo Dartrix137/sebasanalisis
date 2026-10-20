@@ -75,7 +75,7 @@ def _validate_config_or_422(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
-                "message": "La configuracion del juego no es valida",
+                "message": "La configuración del juego no es válida",
                 "errors": result.errors,
             },
         )

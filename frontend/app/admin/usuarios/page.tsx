@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Pager } from "@/components/admin/Pager";
 import { SuccessBox } from "@/components/AuthShell";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import {
@@ -115,7 +116,7 @@ export default function AdminUsersPage() {
     load().catch((e) => setError(messageOf(e)));
   }, [loading, user, router, load]);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.game_modules import game_routers
@@ -22,6 +23,7 @@ from app.api.v1 import (
 )
 from app.core.config import get_settings
 from app.core.monitoring import init_monitoring
+from app.core.validation_errors import validation_exception_handler
 from app.payments.base import get_payment_provider
 from app.payments.wompi import has_production_keys
 
@@ -49,6 +51,9 @@ if settings.email_backend == "file" and has_production_keys(settings):
 init_monitoring(settings.sentry_dsn)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
+# Los errores de validacion salen en espanol: el frontend muestra el mensaje
+# tal cual (core/validation_errors.py).
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # Sin esto el frontend en otro puerto no puede llamar la API: el navegador
 # bloquea la peticion antes de que salga. Los tests con TestClient corren en

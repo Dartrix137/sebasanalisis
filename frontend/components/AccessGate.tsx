@@ -29,6 +29,7 @@ import { useSession } from "@/lib/session";
 import type { LegalDocumentResponse, PendingConsentResponse } from "@/lib/types/legal";
 
 import { Markdown } from "./legal/Markdown";
+import { PageSkeleton, type SkeletonShape } from "./PageSkeleton";
 import { BrandMark, Button, Card, Checkbox, ErrorBox } from "./ui";
 
 function messageOf(err: unknown): string {
@@ -38,10 +39,13 @@ function messageOf(err: unknown): string {
 export function AccessGate({
   children,
   onboarding = false,
+  skeleton = "page",
 }: {
   children: ReactNode;
   /** Muestra la pantalla de bienvenida si la cuenta no la ha leído. */
   onboarding?: boolean;
+  /** Forma de la silueta mientras se decide el acceso: la de la pantalla que viene. */
+  skeleton?: SkeletonShape;
 }) {
   const { user, loading, withToken, refreshUser } = useSession();
   const router = useRouter();
@@ -77,7 +81,7 @@ export function AccessGate({
     if (toPlans) router.replace("/planes");
   }, [toPlans, router]);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <PageSkeleton shape={skeleton} />;
   if (error) {
     return (
       <Shell title="No se pudo continuar">
@@ -85,14 +89,18 @@ export function AccessGate({
       </Shell>
     );
   }
-  if (!fresh) return null;
+  if (!fresh) return <PageSkeleton shape={skeleton} />;
 
   if (user.access.granted) {
     if (onboarding && !user.onboarding_completed_at) return <OnboardingScreen />;
     return <>{children}</>;
   }
   if (user.access.reason === "consent_required") {
-    return pending ? <ConsentScreen pending={pending} onAccepted={setPending} /> : null;
+    return pending ? (
+      <ConsentScreen pending={pending} onAccepted={setPending} />
+    ) : (
+      <PageSkeleton />
+    );
   }
   if (user.access.reason === "suspended") {
     // Una cuenta suspendida no resuelve nada pagando: no se le ofrecen planes.
@@ -106,7 +114,7 @@ export function AccessGate({
     );
   }
   // Sin acceso: el efecto de arriba ya está llevando a /planes.
-  return null;
+  return <PageSkeleton />;
 }
 
 function Shell({

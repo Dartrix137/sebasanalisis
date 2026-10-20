@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pager } from "@/components/admin/Pager";
 import { SelectField } from "@/components/admin/SelectField";
 import { SuccessBox } from "@/components/AuthShell";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/admin";
@@ -191,7 +192,7 @@ export default function AdminCouponsPage() {
       .catch((e) => setError(messageOf(e)));
   }, [loading, isAdmin, withToken]);
 
-  if (loading || !user || !isAdmin) return null;
+  if (loading || !user || !isAdmin) return <PageSkeleton shape="list" />;
 
   function handleSearch(event: React.FormEvent) {
     event.preventDefault();
