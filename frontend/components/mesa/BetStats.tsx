@@ -28,12 +28,19 @@ const SIGNED = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${MONEY(Math.a
 
 const PCT = (n: number) => `${(n * 100).toFixed(1)} %`;
 
-export function BetStats({ summary }: { summary: SessionSummaryResponse }) {
+export function BetStats({
+  summary,
+  withNet = true,
+}: {
+  summary: SessionSummaryResponse;
+  /** El resumen al cerrar ya muestra el resultado neto arriba: no se repite. */
+  withNet?: boolean;
+}) {
   if (summary.rounds_bet === 0) return null;
 
   return (
     <div data-testid="estadisticas-apuestas">
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <Dato
           label="Giros con ganancia"
           valor={`${summary.rounds_won} de ${summary.rounds_bet} · ${PCT(
@@ -45,11 +52,13 @@ export function BetStats({ summary }: { summary: SessionSummaryResponse }) {
           valor={PCT(summary.rounds_won_expected_rate)}
           nota="con esas mismas apuestas"
         />
-        <Dato
-          label="Resultado neto"
-          valor={SIGNED(summary.net_change)}
-          tono={summary.net_change > 0 ? "bien" : summary.net_change < 0 ? "alerta" : undefined}
-        />
+        {withNet ? (
+          <Dato
+            label="Resultado neto"
+            valor={SIGNED(summary.net_change)}
+            tono={summary.net_change > 0 ? "bien" : summary.net_change < 0 ? "alerta" : undefined}
+          />
+        ) : null}
         <Dato label="Mejor momento" valor={SIGNED(summary.best_moment)} />
         <Dato
           label="Peor caída"
@@ -81,10 +90,10 @@ function Dato({
   tono?: "alerta" | "bien";
 }) {
   return (
-    <div className="rounded-lg border border-edge bg-ink px-3 py-2.5">
+    <div className="border-l-2 border-edge pl-3">
       <dt className="text-xs text-muted">{label}</dt>
       <dd
-        className={`mt-0.5 text-sm font-bold tabular-nums ${
+        className={`mt-0.5 font-display text-xl font-semibold leading-tight tabular-nums ${
           tono === "alerta"
             ? "text-table-red"
             : tono === "bien"

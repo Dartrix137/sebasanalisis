@@ -37,6 +37,17 @@ function OutcomeBox({ outcome }: { outcome: Outcome }) {
   );
 }
 
+const SECCIONES: readonly [string, string][] = [
+  ["perfil", "Perfil"],
+  ["suscripcion", "Suscripción"],
+  ["pagos", "Pagos"],
+  ["correo", "Correo"],
+  ["contrasena", "Contraseña"],
+  ["documentos", "Documentos"],
+  ["datos", "Mis datos"],
+  ["eliminar", "Eliminar cuenta"],
+];
+
 export default function AccountPage() {
   const { user, loading } = useSession();
   const router = useRouter();
@@ -50,18 +61,57 @@ export default function AccountPage() {
   return (
     <div className="flex-1">
       <AppHeader />
-      <main className="mx-auto max-w-2xl space-y-5 px-4 pb-12 pt-8 sm:px-6">
+      <main className="mx-auto max-w-2xl px-4 pb-12 pt-8 sm:px-6">
         <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
           Mi cuenta
         </h1>
-        <ProfileCard />
-        <SubscriptionCard />
-        <PaymentsCard />
-        <EmailCard />
-        <PasswordCard />
-        <DocumentsCard />
-        <ExportCard />
-        <DeleteAccountCard />
+        {/* Índice: la página es larga y cada sección se busca por su nombre. */}
+        <nav aria-label="Secciones de la cuenta" className="mt-4">
+          <ul className="-mx-1.5 flex flex-wrap gap-x-1 text-sm font-bold">
+            {SECCIONES.map(([id, nombre]) => (
+              <li key={id}>
+                <a
+                  href={`#${id}`}
+                  className="inline-flex min-h-11 items-center px-1.5 text-gold hover:text-gold-soft"
+                >
+                  {nombre}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        {/*
+          Cada sección va directo sobre la página, separada por una línea: ocho
+          tarjetas iguales una debajo de otra no dejaban ver dónde empezaba
+          cada cosa. Los componentes siguen usando `Card`; aquí se le quita la
+          caja.
+        */}
+        <div className="mt-2 divide-y divide-edge [&>div>section]:rounded-none [&>div>section]:border-0 [&>div>section]:bg-transparent [&>div>section]:p-0 [&>div>section]:shadow-none">
+          <div id="perfil" className="scroll-mt-4 py-6">
+            <ProfileCard />
+          </div>
+          <div id="suscripcion" className="scroll-mt-4 py-6">
+            <SubscriptionCard />
+          </div>
+          <div id="pagos" className="scroll-mt-4 py-6">
+            <PaymentsCard />
+          </div>
+          <div id="correo" className="scroll-mt-4 py-6">
+            <EmailCard />
+          </div>
+          <div id="contrasena" className="scroll-mt-4 py-6">
+            <PasswordCard />
+          </div>
+          <div id="documentos" className="scroll-mt-4 py-6">
+            <DocumentsCard />
+          </div>
+          <div id="datos" className="scroll-mt-4 py-6">
+            <ExportCard />
+          </div>
+          <div id="eliminar" className="scroll-mt-4 py-6">
+            <DeleteAccountCard />
+          </div>
+        </div>
       </main>
     </div>
   );

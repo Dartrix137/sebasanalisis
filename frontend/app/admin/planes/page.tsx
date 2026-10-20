@@ -127,10 +127,10 @@ export default function AdminPlansPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Planes</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Planes</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Lo que se ofrece en la página de planes. Un plan no se borra: se desactiva. Todo
             cambio pide un motivo y queda en la bitácora.
@@ -157,7 +157,7 @@ export default function AdminPlansPage() {
             <ul className="divide-y divide-edge">
               {plans.map((plan) => (
                 <li key={plan.id} className="py-3" data-testid={`plan-${plan.code}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="relative flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="break-words font-bold text-white">
                         {plan.name} <span className="font-normal text-muted">· {plan.code}</span>
@@ -176,6 +176,7 @@ export default function AdminPlansPage() {
                       </Badge>
                       <Button
                         variant="ghost"
+                        className="after:absolute after:inset-0 after:rounded-lg after:content-['']"
                         aria-expanded={selected === plan.id}
                         onClick={() => setSelected(selected === plan.id ? null : plan.id)}
                       >

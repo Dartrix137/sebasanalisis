@@ -28,7 +28,8 @@ import type { FormEvent } from "react";
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
 import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
 import { InlineSkeleton } from "@/components/PageSkeleton";
-import { BrandMark, Button, Card, ErrorBox, Field } from "@/components/ui";
+import { AppHeader } from "@/components/AppHeader";
+import { Button, Card, ErrorBox, Field } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import { CURRENCY_NOTE, formatMoney, intervalLabel, periodLabel } from "@/lib/money";
@@ -454,24 +455,22 @@ function ModeOption({
 
 export default function CheckoutPage() {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Sebasanálisis, ir al inicio">
-          <BrandMark size={38} />
+    <>
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12 pt-6 sm:px-6">
+        <Link href="/planes" className={`inline-flex min-h-11 items-center self-start text-sm ${LINK}`}>
+          <span aria-hidden className="mr-1.5">←</span>Volver a los planes
         </Link>
-        <Link href="/planes" className={`text-sm ${LINK}`}>
-          Volver a los planes
-        </Link>
-      </div>
-      <h1 className="mt-8 font-display text-4xl font-semibold leading-none tracking-tight">
-        Confirma tu pago
-      </h1>
-      <div className="mt-6">
-        {/* useSearchParams necesita un límite de Suspense para el build estático. */}
-        <Suspense fallback={null}>
-          <Checkout />
-        </Suspense>
-      </div>
-    </main>
+        <h1 className="mt-3 font-display text-4xl font-semibold leading-none tracking-tight">
+          Confirma tu pago
+        </h1>
+        <div className="mt-6">
+          {/* useSearchParams necesita un límite de Suspense para el build estático. */}
+          <Suspense fallback={null}>
+            <Checkout />
+          </Suspense>
+        </div>
+      </main>
+    </>
   );
 }

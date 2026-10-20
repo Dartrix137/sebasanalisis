@@ -120,12 +120,15 @@ test.describe("en un celular de 360 px", () => {
     expect(ancho).toBeLessThanOrEqual(360);
   });
 
-  test("en el admin, la sección abierta queda a la vista en la fila del menú", async ({ page }) => {
+  test("en el admin, el selector de sección muestra la sección abierta", async ({ page }) => {
+    // Hasta el 2026-10-20 era una fila que se desplazaba de lado; ahora es un
+    // selector (e2e/diseno.spec.ts).
     await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await page.waitForURL(/\/(dashboard|admin)/);
     await page.goto("/admin/auditoria");
-    const nav = page.getByRole("navigation", { name: "Administración" });
-    await expect(nav.getByRole("link", { name: "Bitácora" })).toBeInViewport();
+    const seccion = page.getByRole("combobox", { name: "Administración" });
+    await expect(seccion).toBeInViewport();
+    await expect(seccion).toHaveValue("/admin/auditoria");
   });
 
   test("la mesa nueva dice el error junto al campo", async ({ page, request }) => {

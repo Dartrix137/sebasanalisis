@@ -51,18 +51,10 @@ export function SummaryPanel({ summary }: { summary: SessionSummaryResponse | nu
         subtitle="Lo que ocurrió en esta mesa, de principio a fin."
       />
 
-      <div
-        className={`mb-4 rounded-lg border px-4 py-3 ${
-          plano
-            ? "border-edge bg-ink"
-            : gano
-              ? "border-signal-strong/40 bg-signal-strong/10"
-              : "border-table-red/40 bg-table-red/10"
-        }`}
-      >
+      <div className="mb-4">
         <p className="text-xs text-muted">Resultado neto</p>
         <p
-          className={`text-2xl font-bold tabular-nums ${
+          className={`font-display text-5xl font-semibold leading-none tabular-nums ${
             plano ? "text-white" : gano ? "text-signal-strong" : "text-table-red"
           }`}
         >
@@ -74,14 +66,14 @@ export function SummaryPanel({ summary }: { summary: SessionSummaryResponse | nu
         </p>
       </div>
 
-      <dl className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <dl className="mb-4 grid grid-cols-3 gap-x-4 gap-y-3 border-y border-edge py-3">
         <Dato label="Números registrados" valor={String(summary.total_spins)} />
         <Dato label="Giros apostados" valor={String(summary.rounds_bet)} />
         <Dato label="Duración" valor={duracion(summary.duration_minutes)} />
       </dl>
 
       {/* Las cifras por giro, las mismas que la mesa muestra en "Apuestas de esta sesión". */}
-      <BetStats summary={summary} />
+      <BetStats summary={summary} withNet={false} />
 
       {summary.total_bets > 0 ? (
         <p className="mt-3 text-xs leading-relaxed text-muted">
@@ -112,7 +104,7 @@ function Dato({
   tono?: "alerta";
 }) {
   return (
-    <div className="rounded-lg border border-edge bg-ink px-3 py-2.5">
+    <div>
       <dt className="text-xs text-muted">{label}</dt>
       <dd
         className={`mt-0.5 text-sm font-bold tabular-nums ${

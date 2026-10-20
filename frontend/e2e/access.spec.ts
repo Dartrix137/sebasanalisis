@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  goViaAccountMenu,
   loginViaUi,
   registerViaApi,
   uniqueEmail,
@@ -30,7 +31,7 @@ test("cuenta sin acceso: no ve la mesa hasta que el administrador le da acceso",
   await expect(page.getByRole("heading", MESA)).toHaveCount(0);
 
   // La cuenta no queda bloqueada: "Mi cuenta" abre.
-  await page.getByRole("link", { name: "Mi cuenta" }).click();
+  await goViaAccountMenu(page, "Mi cuenta");
   await expect(page.getByRole("heading", { level: 1, name: "Mi cuenta" })).toBeVisible();
 
   // El administrador la busca en /admin/usuarios y le da acceso, con motivo.

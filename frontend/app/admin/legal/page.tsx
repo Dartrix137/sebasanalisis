@@ -52,10 +52,10 @@ export default function AdminLegalPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Documentos legales</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Documentos legales</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Una versión publicada no se edita: para cambiar un texto se publica una versión nueva.
           </p>

@@ -50,7 +50,7 @@ export function Button({ variant = "primary", className = "", ...props }: Button
   return (
     <button
       {...props}
-      className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${styles} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${styles} ${className}`}
     />
   );
 }
@@ -92,7 +92,7 @@ export function Field({
         id={inputId}
         aria-invalid={error ? true : undefined}
         aria-describedby={message ? messageId : undefined}
-        className={`w-full rounded-lg border bg-ink-sunken px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-muted/70 ${
+        className={`min-h-12 w-full rounded-lg border bg-ink-sunken px-3.5 py-2.5 text-base text-white outline-none placeholder:text-muted/70 sm:text-sm ${
           error ? "border-table-red/70 focus:border-table-red" : "border-edge focus:border-gold/60"
         }`}
       />
@@ -114,11 +114,11 @@ export function Checkbox({
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { children: ReactNode }) {
   return (
-    <label className="flex items-start gap-2.5 text-sm leading-relaxed text-white">
+    <label className="flex min-h-11 items-start gap-3 py-1 text-sm leading-relaxed text-white">
       <input
         {...props}
         type="checkbox"
-        className="mt-1 h-4 w-4 shrink-0 rounded border-edge bg-ink-sunken accent-gold"
+        className="mt-0.5 h-5 w-5 shrink-0 rounded border-edge bg-ink-sunken accent-gold"
       />
       <span>{children}</span>
     </label>
@@ -153,14 +153,14 @@ export function PasswordField({
           id={id}
           type={visible ? "text" : "password"}
           aria-describedby={hintId}
-          className="w-full rounded-lg border border-edge bg-ink-sunken py-2.5 pl-3.5 pr-24 text-sm text-white outline-none placeholder:text-muted/70 focus:border-gold/60"
+          className="min-h-12 w-full rounded-lg border border-edge bg-ink-sunken py-2.5 pl-3.5 pr-24 text-base text-white outline-none placeholder:text-muted/70 focus:border-gold/60 sm:text-sm"
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-controls={id}
           aria-pressed={visible}
-          className="absolute inset-y-1 right-1 flex items-center gap-1.5 rounded-md px-2.5 text-xs font-bold text-muted transition-colors hover:bg-ink hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+          className="absolute inset-y-0.5 right-0.5 flex min-w-[5.5rem] items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-bold text-muted transition-colors hover:bg-ink hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
         >
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
             <path
@@ -278,10 +278,13 @@ export function BrandMark({ size = 88 }: { size?: number }) {
  */
 export function InfoTip({
   label,
+  buttonLabel,
   align = "left",
   children,
 }: {
   label: string;
+  /** Nombre del botón cuando no es "Qué significa <label>". */
+  buttonLabel?: string;
   /** Hacia qué lado se abre; "right" para etiquetas pegadas al borde derecho. */
   align?: "left" | "right";
   children: ReactNode;
@@ -309,10 +312,10 @@ export function InfoTip({
     <span ref={box} className="relative inline-block">
       <button
         type="button"
-        aria-label={`Qué significa ${label}`}
+        aria-label={buttonLabel ?? `Qué significa ${label}`}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-muted/50 text-[9px] font-bold leading-none text-muted transition-colors hover:border-gold hover:text-gold"
+        className="relative ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-muted/50 text-[10px] font-bold leading-none text-muted transition-colors before:absolute before:-inset-3.5 before:content-[''] hover:border-gold hover:text-gold"
       >
         ?
       </button>

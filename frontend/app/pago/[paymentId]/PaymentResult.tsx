@@ -15,7 +15,8 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { InlineSkeleton } from "@/components/PageSkeleton";
-import { BrandMark, Button, Card, ErrorBox } from "@/components/ui";
+import { AppHeader } from "@/components/AppHeader";
+import { Button, Card, ErrorBox } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import { CURRENCY_NOTE, formatMoney } from "@/lib/money";
@@ -89,47 +90,47 @@ export function PaymentResult({ paymentId }: { paymentId: string }) {
   }, [loading, userId, check, refreshUser, round]);
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
-      <Link href="/" aria-label="Sebasanálisis, ir al inicio" className="self-start">
-        <BrandMark size={38} />
-      </Link>
-      <h1 className="mt-8 font-display text-4xl font-semibold leading-none tracking-tight">
-        Tu pago
-      </h1>
-      <div className="mt-6">
-        {loading ? (
-          <InlineSkeleton />
-        ) : !user ? (
-          <Card>
-            <p className="text-sm leading-relaxed text-white">
-              Inicia sesión para ver el resultado de tu pago.
-            </p>
-            <p className="mt-4">
-              <Link href="/login" className={BUTTON_LINK}>
-                Entrar
+    <>
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-12 pt-8 sm:px-6">
+        <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
+          Tu pago
+        </h1>
+        <div className="mt-6">
+          {loading ? (
+            <InlineSkeleton />
+          ) : !user ? (
+            <Card>
+              <p className="text-sm leading-relaxed text-white">
+                Inicia sesión para ver el resultado de tu pago.
+              </p>
+              <p className="mt-4">
+                <Link href="/login" className={BUTTON_LINK}>
+                  Entrar
+                </Link>
+              </p>
+            </Card>
+          ) : error ? (
+            <div className="space-y-4">
+              <ErrorBox message={error} />
+              <Link href="/planes" className={LINK}>
+                Volver a los planes
               </Link>
-            </p>
-          </Card>
-        ) : error ? (
-          <div className="space-y-4">
-            <ErrorBox message={error} />
-            <Link href="/planes" className={LINK}>
-              Volver a los planes
-            </Link>
-          </div>
-        ) : (
-          <Outcome
-            payment={payment}
-            waiting={waiting}
-            onRetry={() => {
-              polls.current = 0;
-              setWaiting(true);
-              setRound((r) => r + 1);
-            }}
-          />
-        )}
-      </div>
-    </main>
+            </div>
+          ) : (
+            <Outcome
+              payment={payment}
+              waiting={waiting}
+              onRetry={() => {
+                polls.current = 0;
+                setWaiting(true);
+                setRound((r) => r + 1);
+              }}
+            />
+          )}
+        </div>
+      </main>
+    </>
   );
 }
 

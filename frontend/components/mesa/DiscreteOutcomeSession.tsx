@@ -20,7 +20,10 @@
  *   lo que pediría cada una para el mercado recomendado.
  *
  * Sigue la composición de `docs/design/ruleta.jpeg` y `ruleta2.jpeg` en lo que
- * queda vigente: columna izquierda con el análisis, derecha con la mesa.
+ * queda vigente: columna izquierda con el análisis, derecha con la mesa. En el
+ * celular (decidido el 2026-10-20) va una sola columna con la recomendación
+ * compacta arriba y el teclado justo debajo: es lo que se mira y se toca en
+ * cada giro, con una mano, mientras se sigue la mesa del casino.
  *
  * El copy se aparta de los mockups a propósito. El original decía "Predicciones
  * — próxima tirada", "Precisión verificada" y "el motor empezará a medir tus
@@ -43,7 +46,7 @@ import { RoundStatus } from "@/components/mesa/RoundStatus";
 import { StopCard } from "@/components/mesa/StopCard";
 import { SummaryPanel } from "@/components/mesa/SummaryPanel";
 import { variantLabel } from "@/components/mesa/VariantChoice";
-import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
+import { Badge, Button, ErrorBox, Field } from "@/components/ui";
 import {
   ApiError,
   betsApi,
@@ -225,33 +228,94 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex-1">
-      <AppHeader>
-        <Badge>{spins.length} números</Badge>
-        <Badge tone={abierta ? "ok" : "off"}>{abierta ? "sesión abierta" : "cerrada"}</Badge>
-      </AppHeader>
+      <AppHeader />
 
-      {/* `grid-cols-1` y no la columna implícita: esa crece con la tabla de
-          progresión (más ancha que un celular) y desborda la pantalla. */}
-      <main className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
-        <div className="lg:col-span-2">
+      {/*
+        Franja de la mesa: volver, cuál es y cuánto queda en la banca. Reemplaza
+        al botón "Volver al menú" y a los indicadores que iban en el encabezado,
+        para que la recomendación empiece lo más arriba posible en el celular.
+      */}
+      <div className="border-b border-edge">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-2 py-1.5 sm:px-4">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-ink-sunken px-3 py-2 text-sm font-bold text-muted transition-colors hover:border-gold/50 hover:text-white"
+            aria-label="Volver al menú"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl text-muted transition-colors hover:bg-ink-raised hover:text-white"
           >
-            <span aria-hidden>←</span> Volver al menú
+            <span aria-hidden>←</span>
           </Link>
+          <div className="min-w-0 flex-1">
+            {renaming === null ? (
+              <button
+                type="button"
+                onClick={() => abierta && setRenaming(session.name ?? "")}
+                disabled={!abierta}
+                className="block max-w-full truncate text-left text-base font-bold leading-tight text-white enabled:hover:text-gold"
+              >
+                {session.name ?? "Sesión sin nombre"}
+              </button>
+            ) : (
+              <p className="text-base font-bold leading-tight text-white">Cambiar el nombre</p>
+            )}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+              <span>{variantLabel(variant)}</span>
+              <span>{spins.length} números</span>
+              {abierta ? null : <Badge tone="off">cerrada</Badge>}
+            </p>
+          </div>
+          <div className="shrink-0 pr-2 text-right">
+            <p className="text-xs text-muted">Banca</p>
+            <p className="font-display text-2xl font-semibold leading-none tabular-nums text-white">
+              {CURRENCY.format(session.bankroll_current)}
+            </p>
+          </div>
         </div>
+        {renaming !== null ? (
+          <form
+            className="mx-auto flex max-w-6xl flex-wrap items-end gap-2 px-4 pb-3 sm:px-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => {
+                await withToken((t) =>
+                  sessionsApi.update(t, sessionId, { name: renaming.trim() || null }),
+                );
+                setRenaming(null);
+              });
+            }}
+          >
+            <div className="min-w-0 flex-1 basis-48">
+              <Field
+                label="Nombre"
+                maxLength={100}
+                autoFocus
+                value={renaming}
+                onChange={(e) => setRenaming(e.target.value)}
+              />
+            </div>
+            <Button type="submit" disabled={pending}>
+              Guardar
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>
+              Cancelar
+            </Button>
+          </form>
+        ) : null}
+      </div>
 
+      {/* `grid-cols-1` y no la columna implícita: esa crece con la tabla de
+          progresión (más ancha que un celular) y desborda la pantalla. Desde
+          tableta, dos columnas: la recomendación al lado del teclado. */}
+      <main className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-4 px-4 pb-6 pt-4 sm:gap-5 sm:px-6 md:grid-cols-2">
         {error ? (
-          <div className="lg:col-span-2">
+          <div className="md:col-span-2">
             <ErrorBox message={error} />
           </div>
         ) : null}
 
         {/*
-          La recomendación: lo primero y lo más grande de la pantalla. Responde
-          la pregunta que el analizador dejaba abierta — qué apostar en el
-          siguiente giro, o no apostar (§2.10).
+          La recomendación: lo primero de la pantalla. Responde la pregunta que
+          el analizador dejaba abierta — qué apostar en el siguiente giro, o no
+          apostar (§2.10).
         */}
         <div className="space-y-5">
           {!abierta ? <SummaryPanel summary={summary} /> : null}
@@ -282,79 +346,96 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
         </div>
 
         {/*
-          Derecha: la mesa. Apostar y registrar el número son un solo bucle, así
-          que van en una tarjeta y no en tres.
+          La mesa: el teclado justo debajo de la recomendación (al lado, desde
+          tableta), porque es lo que se toca en cada giro. Lo que dejó el número,
+          los últimos números y las apuestas del giro van después.
         */}
-        <Card>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              {renaming === null ? (
-                <button
-                  type="button"
-                  onClick={() => abierta && setRenaming(session.name ?? "")}
-                  disabled={!abierta}
-                  className="text-left text-base font-bold text-white enabled:hover:text-gold"
-                >
-                  {session.name ?? "Sesión sin nombre"}
-                </button>
-              ) : (
-                <form
-                  className="flex items-end gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    run(async () => {
-                      await withToken((t) =>
-                        sessionsApi.update(t, sessionId, { name: renaming.trim() || null }),
-                      );
-                      setRenaming(null);
-                    });
-                  }}
-                >
-                  <Field
-                    label="Nombre"
-                    maxLength={100}
-                    autoFocus
-                    value={renaming}
-                    onChange={(e) => setRenaming(e.target.value)}
-                  />
-                  <Button type="submit" disabled={pending}>
-                    Guardar
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>
-                    Cancelar
-                  </Button>
-                </form>
-              )}
-              <p className="mt-0.5 text-xs text-muted">{variantLabel(variant)}</p>
-            </div>
-
-            <div className="text-right">
-              <p className="text-xs text-muted">Banca</p>
-              <p className="text-xl font-bold tabular-nums text-white">
-                {CURRENCY.format(session.bankroll_current)}
-              </p>
-            </div>
-          </div>
-
+        <section aria-label="La mesa" className="space-y-4">
           {abierta ? (
-            <div className="mt-4 border-t border-edge pt-4">
-              <RoundStatus
-                session={session}
-                lastSpin={ultimo}
-                previousSpin={penultimo}
-                bets={bets}
-                history={history}
+            <div>
+              <h2 className="mb-2 text-sm font-bold text-white">Número que salió</h2>
+              <Keypad
+                config={variant.config}
+                columns={columnas}
+                disabled={pending}
+                onPick={addSpin}
               />
             </div>
           ) : null}
 
+          {abierta ? (
+            <RoundStatus
+              session={session}
+              lastSpin={ultimo}
+              previousSpin={penultimo}
+              bets={bets}
+              history={history}
+            />
+          ) : (
+            <p className="text-sm text-muted">
+              Esta sesión está cerrada. Puedes consultarla, pero no registrar más números.
+            </p>
+          )}
+
+          <div className="border-t border-edge pt-2">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-bold text-white">
+                Últimos números
+                <span className="ml-2 text-xs font-normal text-muted">
+                  el más reciente primero
+                </span>
+              </h2>
+              {abierta && ultimo ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    run(() => withToken((t) => spinsApi.remove(t, sessionId, ultimo.id)))
+                  }
+                  className="-mr-3 inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold text-muted transition-colors hover:bg-ink-raised hover:text-white disabled:opacity-40"
+                >
+                  Deshacer último
+                </button>
+              ) : null}
+            </div>
+
+            {spins.length === 0 ? (
+              <p className="py-3 text-sm text-muted">
+                Toca el número que salió para empezar a registrar.
+              </p>
+            ) : (
+              <>
+                <ol className="mt-1 flex flex-wrap gap-1.5">
+                  {masRecientePrimero.slice(0, 24).map((s) => (
+                    <li
+                      key={s.id}
+                      title={describeOutcome(variant.config, s.result_value)
+                        .map((d) => `${d.category}: ${d.option}`)
+                        .join(" · ")}
+                      className={`flex h-8 w-8 items-center justify-center rounded-md font-display text-base font-semibold ${
+                        TONE_CLASSES[toneOf(variant.config, s.result_value)]
+                      }`}
+                    >
+                      {s.result_value}
+                    </li>
+                  ))}
+                </ol>
+                {spins.length > 24 ? (
+                  <p className="mt-2 text-xs text-muted">
+                    y {spins.length - 24} más atrás.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+
           {parada ? (
-            <p className="mt-4 border-t border-edge pt-4 text-xs text-muted">
+            <p className="border-t border-edge pt-3 text-xs text-muted">
               Esta mesa ya no acepta apuestas. Puedes seguir anotando números o
               deshacer el último si quedó mal ingresado.
             </p>
           ) : abierta ? (
-            <div className="mt-4 border-t border-edge pt-4">
+            <div className="border-t border-edge pt-3">
               <BetRow
                 config={variant.config}
                 bets={bets}
@@ -371,101 +452,14 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
                 }
               />
             </div>
-          ) : (
-            <p className="mt-4 border-t border-edge pt-4 text-xs text-muted">
-              Esta sesión está cerrada. Puedes consultarla, pero no registrar más números.
-            </p>
-          )}
-
-          {abierta ? (
-            <div className="mt-4 border-t border-edge pt-4">
-              <h3 className="mb-2 text-sm font-bold text-white">Número que salió</h3>
-              <div
-                data-testid="teclado"
-                className={`grid gap-1 sm:gap-1.5 ${
-                  columnas === null ? "grid-cols-7 sm:grid-cols-10" : ""
-                }`}
-                style={
-                  columnas === null
-                    ? undefined
-                    : { gridTemplateColumns: `repeat(${columnas}, minmax(0, 1fr))` }
-                }
-              >
-                {variant.config.possible_outcomes.map((o) => (
-                  <button
-                    key={o}
-                    type="button"
-                    disabled={pending}
-                    onClick={() => addSpin(o)}
-                    className={`rounded-lg py-3 text-sm font-bold transition-transform disabled:opacity-40 enabled:hover:scale-105 sm:py-2 ${
-                      TONE_CLASSES[toneOf(variant.config, o)]
-                    }`}
-                  >
-                    {o}
-                  </button>
-                ))}
-              </div>
-            </div>
           ) : null}
-
-          <div className="mt-4 border-t border-edge pt-4">
-            <div className="flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-bold text-white">
-                Últimos números
-                <span className="ml-2 text-xs font-normal text-muted">
-                  el más reciente primero
-                </span>
-              </h3>
-              {abierta && ultimo ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() => withToken((t) => spinsApi.remove(t, sessionId, ultimo.id)))
-                  }
-                  className="text-xs text-muted transition-colors hover:text-white disabled:opacity-40"
-                >
-                  Deshacer último
-                </button>
-              ) : null}
-            </div>
-
-            {spins.length === 0 ? (
-              <p className="py-4 text-sm text-muted">
-                Toca el número que salió para empezar a registrar.
-              </p>
-            ) : (
-              <>
-                <ol className="mt-2 flex flex-wrap gap-1.5">
-                  {masRecientePrimero.slice(0, 24).map((s) => (
-                    <li
-                      key={s.id}
-                      title={describeOutcome(variant.config, s.result_value)
-                        .map((d) => `${d.category}: ${d.option}`)
-                        .join(" · ")}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold ${
-                        TONE_CLASSES[toneOf(variant.config, s.result_value)]
-                      }`}
-                    >
-                      {s.result_value}
-                    </li>
-                  ))}
-                </ol>
-                {spins.length > 24 ? (
-                  <p className="mt-2 text-xs text-muted">
-                    y {spins.length - 24} más atrás.
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-        </Card>
+        </section>
 
         {/*
           Todo lo que no forma parte del bucle de la mesa se consulta de vez en
-          cuando, no a cada giro: va plegado y a ancho completo.
+          cuando, no a cada giro: va plegado, en filas, a ancho completo.
         */}
-        <div className="space-y-3 lg:col-span-2">
+        <div className="divide-y divide-edge border-y border-edge md:col-span-2">
           {abierta ? (
             <Detalle titulo="Gestión de banca y tabla de progresión">
               <BankrollPanel sessionId={sessionId} version={bankrollVersion} />
@@ -477,7 +471,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
           </Detalle>
 
           <Detalle titulo="Ajustes de la sesión">
-            <Card>
+            <div>
               {editingAjustes ? (
                 <form
                   className="space-y-4"
@@ -617,7 +611,7 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
                   ) : null}
                 </>
               )}
-            </Card>
+            </div>
           </Detalle>
         </div>
       </main>
@@ -625,21 +619,75 @@ export function DiscreteOutcomeSession({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** Bloque plegado para lo que se consulta de vez en cuando, no a cada giro. */
+/**
+ * El teclado de resultados. Sale de `possible_outcomes`, en el orden de la
+ * variante, sin suponer ningún juego.
+ *
+ * Seis columnas por defecto (o las de la pista `display`): en un celular de
+ * 360 px cada tecla queda de más de 44 px de ancho. Los resultados que sobran
+ * al repartir en filas completas van primero, en una fila que ocupa todo el
+ * ancho: en la ruleta europea es el 0 solo, y en la americana el 0 y el 00 a
+ * medias. El resto queda en filas completas, sin un hueco al final.
+ */
+function Keypad({
+  config,
+  columns,
+  disabled,
+  onPick,
+}: {
+  config: GameVariantResponse["config"];
+  columns: number | null;
+  disabled: boolean;
+  onPick: (value: string) => void;
+}) {
+  const cols = columns ?? 6;
+  const outcomes = config.possible_outcomes;
+  const sobran = outcomes.length % cols;
+  // Solo si esa primera fila se reparte en partes iguales.
+  const ancho = sobran > 0 && cols % sobran === 0 ? cols / sobran : 1;
+
+  return (
+    <div
+      data-testid="teclado"
+      className="grid gap-1.5"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {outcomes.map((o, i) => (
+        <button
+          key={o}
+          type="button"
+          disabled={disabled}
+          onClick={() => onPick(o)}
+          style={i < sobran && ancho > 1 ? { gridColumn: `span ${ancho}` } : undefined}
+          className={`flex min-h-12 items-center justify-center rounded-lg font-display text-xl font-semibold transition-transform enabled:active:scale-95 disabled:opacity-40 ${
+            TONE_CLASSES[toneOf(config, o)]
+          }`}
+        >
+          {o}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Fila plegada para lo que se consulta de vez en cuando, no a cada giro. */
 function Detalle({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <details className="rounded-card border border-edge bg-ink-raised/60">
-      <summary className="cursor-pointer px-5 py-3 text-sm font-bold text-muted transition-colors hover:text-white">
+    <details className="group">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white [&::-webkit-details-marker]:hidden">
         {titulo}
+        <span aria-hidden className="text-xs transition-transform group-open:rotate-180">
+          ▼
+        </span>
       </summary>
-      <div className="px-2 pb-2">{children}</div>
+      <div className="pb-4">{children}</div>
     </details>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-edge bg-ink px-3 py-2.5">
+    <div>
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-0.5 text-sm font-bold capitalize">{value}</dd>
     </div>

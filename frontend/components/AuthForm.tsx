@@ -148,8 +148,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           />
 
           {isRegister ? null : (
-            <p className="-mt-1 text-right text-xs">
-              <Link href="/olvide-contrasena" className="font-bold text-gold hover:text-gold-soft">
+            <p className="-my-2 text-right text-sm">
+              <Link
+                href="/olvide-contrasena"
+                className="inline-flex min-h-11 items-center font-bold text-gold hover:text-gold-soft"
+              >
                 ¿Olvidaste tu contraseña?
               </Link>
             </p>
@@ -217,7 +220,7 @@ function Tab({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`rounded-md px-4 py-2 text-center text-sm font-bold transition-colors ${
+      className={`flex min-h-11 items-center justify-center rounded-md px-4 text-center text-sm font-bold transition-colors ${
         active ? "bg-gold text-gold-ink" : "text-white hover:text-gold"
       }`}
     >

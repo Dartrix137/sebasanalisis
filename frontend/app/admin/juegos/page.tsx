@@ -125,7 +125,7 @@ export default function AdminGamesPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <header>
-        <h1 className="text-xl font-extrabold">Juegos</h1>
+        <h1 className="font-display text-3xl font-semibold leading-none">Juegos</h1>
         <p className="mt-1 text-sm text-muted">
           Juegos del menú y sus variantes. Formulario estructurado, sin builder visual.
         </p>

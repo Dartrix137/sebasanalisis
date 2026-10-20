@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MobileFilters } from "@/components/admin/MobileFilters";
 import { Pager } from "@/components/admin/Pager";
 import { SelectField } from "@/components/admin/SelectField";
 import { SubscriptionActions } from "@/components/admin/SubscriptionActions";
@@ -51,6 +52,12 @@ interface Filters {
 }
 
 const NO_FILTERS: Filters = { query: "", status: "", planId: "", renewalMode: "" };
+
+/** Filtros con un valor distinto del de "todos", sin contar la búsqueda. */
+function activeFilters(f: Filters): number {
+  return Object.entries(f).filter(([k, v]) => k !== "query" && v !== "" && v !== false)
+    .length;
+}
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -125,10 +132,10 @@ export default function AdminSubscriptionsPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Suscripciones</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Suscripciones</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Lo que cada cuenta pagó y hasta cuándo. Extender o cancelar pide un motivo, queda en la
             bitácora y le llega un correo al cliente.
@@ -155,35 +162,37 @@ export default function AdminSubscriptionsPage() {
               onChange={(e) => setDraft({ ...draft, query: e.target.value })}
             />
           </div>
-          <SelectField
-            label="Estado"
-            value={draft.status}
-            onChange={(v) => setDraft({ ...draft, status: v })}
-            options={[
-              ["", "Todas menos sin completar"],
-              ["active", SUBSCRIPTION_STATUS_LABEL.active],
-              ["past_due", SUBSCRIPTION_STATUS_LABEL.past_due],
-              ["canceled", SUBSCRIPTION_STATUS_LABEL.canceled],
-              ["expired", SUBSCRIPTION_STATUS_LABEL.expired],
-              ["pending", SUBSCRIPTION_STATUS_LABEL.pending],
-            ]}
-          />
-          <SelectField
-            label="Plan"
-            value={draft.planId}
-            onChange={(v) => setDraft({ ...draft, planId: v })}
-            options={[["", "Todos"], ...plans.map((p) => [p.id, p.name] as const)]}
-          />
-          <SelectField
-            label="Modo"
-            value={draft.renewalMode}
-            onChange={(v) => setDraft({ ...draft, renewalMode: v })}
-            options={[
-              ["", "Todos"],
-              ["automatic", "Renovación automática"],
-              ["manual", "Pago manual"],
-            ]}
-          />
+          <MobileFilters active={activeFilters(draft)}>
+            <SelectField
+              label="Estado"
+              value={draft.status}
+              onChange={(v) => setDraft({ ...draft, status: v })}
+              options={[
+                ["", "Todas menos sin completar"],
+                ["active", SUBSCRIPTION_STATUS_LABEL.active],
+                ["past_due", SUBSCRIPTION_STATUS_LABEL.past_due],
+                ["canceled", SUBSCRIPTION_STATUS_LABEL.canceled],
+                ["expired", SUBSCRIPTION_STATUS_LABEL.expired],
+                ["pending", SUBSCRIPTION_STATUS_LABEL.pending],
+              ]}
+            />
+            <SelectField
+              label="Plan"
+              value={draft.planId}
+              onChange={(v) => setDraft({ ...draft, planId: v })}
+              options={[["", "Todos"], ...plans.map((p) => [p.id, p.name] as const)]}
+            />
+            <SelectField
+              label="Modo"
+              value={draft.renewalMode}
+              onChange={(v) => setDraft({ ...draft, renewalMode: v })}
+              options={[
+                ["", "Todos"],
+                ["automatic", "Renovación automática"],
+                ["manual", "Pago manual"],
+              ]}
+            />
+          </MobileFilters>
           <div className="flex items-end">
             <Button type="submit" className="w-full">
               Buscar
@@ -199,10 +208,10 @@ export default function AdminSubscriptionsPage() {
           {page.items.length === 0 ? (
             <p className="text-sm text-muted">Ninguna suscripción coincide con la búsqueda.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="-my-1 divide-y divide-edge">
               {page.items.map((s) => (
-                <li key={s.id} className="rounded-lg border border-edge bg-ink">
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
+                <li key={s.id}>
+                  <div className="relative flex flex-wrap items-center justify-between gap-3 py-3">
                     <div className="min-w-0 text-sm">
                       <p className="truncate font-bold text-white">{s.user_email}</p>
                       <p className="text-xs text-muted">
@@ -220,6 +229,7 @@ export default function AdminSubscriptionsPage() {
                       </Badge>
                       <Button
                         variant="ghost"
+                        className="after:absolute after:inset-0 after:rounded-lg after:content-['']"
                         aria-expanded={selected === s.id}
                         onClick={() => setSelected(selected === s.id ? null : s.id)}
                       >
