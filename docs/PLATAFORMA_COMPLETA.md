@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16)
+3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica con Siigo, en §3.17)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -423,7 +423,7 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - **La nota de la tasa de cambio se repite** en la pantalla de pago y en el recibo, mientras el abogado decide.
 - **Al eliminar una cuenta se conservan los pagos anonimizados**: las filas de `payments` y `payment_events` quedan sin usuario; la suscripción se borra. Las llaves foráneas ya quedaron así; el flujo completo (cancelar la renovación antes de borrar) es de la entrega 3.
 - **`/planes` con sesión**: un administrador o una cuenta con acceso manual (`full`, `invited`) ve los planes sin botón de pago; un suscriptor ve su plan marcado "Tu plan actual", con la fecha hasta la que tiene acceso y el botón de pagar el período siguiente solo en ese plan.
-- De §10 no cambia nada más: no hay facturación electrónica (n.º 4), el precio no se traslada a las suscripciones vigentes (n.º 5) y los reembolsos son manuales en el panel de Wompi (n.º 7).
+- De §10 no cambia nada más: no hay facturación electrónica (n.º 4; resuelta el 2026-10-20: consumidor final con Siigo), el precio no se traslada a las suscripciones vigentes (n.º 5) y los reembolsos son manuales en el panel de Wompi (n.º 7).
 
 **Proveedor de pagos (`backend/app/payments/`)**
 
@@ -749,6 +749,47 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 - En `/planes/pagar` no se probaron a mano el alta con la tarjeta `4111` (primer cobro rechazado) ni el alta con Nequi: los cubre Playwright con la pasarela simulada, y los mismos medios ya se probaron contra el sandbox en `/cuenta`.
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
+
+### 3.17 Facturación electrónica con Siigo (decidida el 2026-10-20, sin construir)
+
+Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la propuesta de diseño, para retomarla cuando estén resueltos los pendientes del final.
+
+**Lo decidido por el usuario**
+
+- **Hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica ante la DIAN.
+- **A consumidor final**, sin el nombre ni la cédula del comprador: el registro no los pide y no se agregan.
+- **Proveedor: Siigo**, por su API. Siigo valida la factura con la DIAN.
+- **El recibo por correo no cambia**: sigue siendo una constancia de pago y lo dice ("no una factura"). Un correo propio no puede ser factura electrónica: la factura es un XML UBL 2.1 firmado, con numeración autorizada por la DIAN, CUFE, código QR y validación previa de la DIAN antes de entregarse.
+
+**Diseño propuesto** (a confirmar al construir)
+
+- Cuando `core/subscriptions.apply_transaction` aprueba un pago, en la misma transacción se crea una fila en una tabla `invoices`, en estado pendiente y **única por pago**. Así un webhook repetido no genera dos facturas.
+- La llamada a Siigo **no va dentro del pago**: si Siigo está caído, el cobro no puede fallar. Las facturas pendientes las emite el job que ya corre cada hora (`scripts/run_renewals.py`), con reintentos y sin cola (§13.5).
+- Siigo queda detrás de una interfaz, como `PaymentProvider` y `EmailSender`; los tests de API usan el proveedor real con un transporte HTTP simulado.
+- Las facturas no se borran al eliminar una cuenta: son documentos tributarios. Como son a consumidor final, no guardan datos personales (encaja con `core/payment_privacy.py`).
+- Una anulación de Wompi, o un reembolso, probablemente pida una nota crédito en Siigo. Por confirmar con el contador.
+- Credenciales de Siigo solo por variable de entorno, como las de Wompi.
+
+**Pendiente antes de construir**
+
+1. **IVA**: si la suscripción lleva IVA del 19 % y si los 100.000 y 150.000 COP ya lo incluyen (va con el precio en pantalla de §3.11). Lo responde el contador. Una vía en estudio es la exclusión de IVA de los servicios de computación en la nube; ver abajo.
+2. **Cómo le llega la factura al cliente**: con el consumidor final genérico, Siigo no tiene el correo del comprador. Hay dos salidas: poner en cada factura el correo de la cuenta, si la API lo permite, o bajar el PDF por la API y adjuntarlo al recibo. Depende de la documentación de Siigo.
+3. **La documentación oficial vigente de la API de Siigo**, leída al construir y citada en un comentario, igual que la de Wompi: nunca de memoria ni de código de terceros. El 2026-10-20 no se pudo leer la oficial (la página de Apiary no cargó); solo apareció código de terceros que usa `POST /v1/invoices`, que no sirve como base.
+4. **Operativo (usuario)**: un plan de Siigo Nube con acceso a la API, sus credenciales, la resolución de facturación de la DIAN configurada en Siigo y el producto o servicio "suscripción" creado allá.
+
+**Computación en la nube y la exclusión de IVA (consulta del 2026-10-20)**
+
+El usuario preguntó si el servicio cumple los requisitos de la DIAN y el MinTIC para computación en la nube: las cinco características esenciales y un modelo de servicio reconocido. El modelo es **SaaS**. La evaluación técnica:
+
+| Característica | ¿La cumple? | Evidencia |
+|---|---|---|
+| Autoservicio bajo demanda | Sí | Registro, verificación del correo, pago y acceso sin intervención humana (`apply_transaction`); sin tope de mesas por cuenta. Con llaves de sandbox el acceso real lo da el admin a mano. |
+| Amplio acceso a la red | Sí | Aplicación web por HTTPS, desde cualquier navegador. |
+| Agrupación de recursos (multi-inquilino) | Sí | Una API y una base para todos los clientes; el aislamiento por cuenta lo hace el código. |
+| Elasticidad rápida | Parcial | Un solo VPS y un solo proceso de la API. Crecer en vertical es subir el plan del VPS. Para varias réplicas, el limitador de intentos tiene que salir de la memoria del proceso a Postgres (`core/rate_limit.py` lo advierte); el job ya aguanta réplicas por el candado de Postgres. |
+| Servicio medido | Parcial | Se mide el uso por cuenta y las suscripciones activas, pero el cobro es una tarifa fija, no por consumo. |
+
+Si el servicio cuenta como computación en la nube es una calificación tributaria, no técnica: la decide el contador. Para él se redactó una descripción técnica del servicio, un documento de Claude Docs, privado, en la cuenta del usuario ("Descripción técnica del servicio Sebasanálisis"). Si hace falta reforzar la elasticidad, el cambio concreto es mover el limitador a Postgres; no se hace sin que el usuario lo pida.
 
 ---
 
@@ -1590,7 +1631,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
-| 4 | Facturación electrónica ante la DIAN | Consultar con el contador si aplica y con qué proveedor; no se integra hasta definirlo. |
+| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica a **consumidor final**, sin el nombre ni la cédula del comprador, emitida con **Siigo** por su API. El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, la cuenta de Siigo) están en §3.17. Bloquea el lanzamiento. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción** (construida ese día, §4.10), en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |
