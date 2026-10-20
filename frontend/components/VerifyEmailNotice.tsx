@@ -19,7 +19,7 @@ export function VerifyEmailNotice() {
   return (
     <div
       role="status"
-      className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gold/40 bg-gold/10 px-4 py-3"
+      className="mt-6 flex flex-col gap-3 rounded-lg border border-gold/40 bg-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <p className="min-w-0 flex-1 break-words text-sm leading-relaxed text-white">
         <span className="font-bold">Confirma tu correo.</span>{" "}

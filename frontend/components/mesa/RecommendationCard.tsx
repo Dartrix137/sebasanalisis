@@ -30,7 +30,7 @@
 
 import { useState } from "react";
 
-import { Card } from "@/components/ui";
+import { Card, InfoTip } from "@/components/ui";
 import type { BetResponse, CreateBetRequest } from "@/lib/types/bets";
 import type { GameVariantConfig } from "@/lib/types/games";
 import type { BankrollStrategy } from "@/lib/types/sessions";
@@ -116,6 +116,13 @@ export const STRATEGY_LABEL: Record<BankrollStrategy, string> = {
   two_sector_recovery: "Recuperación de 2 sectores",
 };
 
+/** El nombre corto, para que las tres gestiones quepan en una fila del celular. */
+const STRATEGY_SHORT: Record<BankrollStrategy, string> = {
+  flat: "Plana",
+  martingale: "Martingala",
+  two_sector_recovery: "2 sectores",
+};
+
 export function RecommendationCard({
   recommendation,
   registration,
@@ -139,7 +146,7 @@ export function RecommendationCard({
       {recomienda && recommendation.market ? <Why recommendation={recommendation} /> : null}
 
       {/* Línea fija: va siempre, haya o no señal. */}
-      <p className="mt-4 border-t border-edge pt-3 text-xs leading-relaxed text-muted">
+      <p className="mt-3 border-t border-edge pt-3 text-xs leading-relaxed text-muted">
         {recommendation.disclaimer}
       </p>
     </Card>
@@ -162,12 +169,12 @@ function BetState({
         <StatePill band={banda} />
         <p className="text-xs text-muted">Recomendación para el siguiente giro</p>
       </div>
-      <h2 className="mt-2 text-3xl font-bold leading-tight text-white sm:text-4xl">
+      <h2 className="mt-2 font-display text-[2rem] font-bold leading-none text-white sm:text-5xl">
         APOSTAR: <span className="text-gold">{market.label.toUpperCase()}</span>
       </h2>
 
       {/* Fuerza interna */}
-      <div className="mt-4">
+      <div className="mt-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm text-muted">Fuerza interna</span>
           <span className={`text-sm font-bold ${BAND_TEXT[banda]}`}>
@@ -209,7 +216,7 @@ function NoBetState({ recommendation }: { recommendation: RecommendationResponse
         <StatePill band="none" />
         <p className="text-xs text-muted">Recomendación para el siguiente giro</p>
       </div>
-      <h2 className="mt-2 text-3xl font-bold leading-tight text-white sm:text-4xl">
+      <h2 className="mt-2 font-display text-[2rem] font-bold leading-none text-white sm:text-5xl">
         {faltanDatos ? "FALTA INFORMACIÓN" : "NO APOSTAR ESTE GIRO"}
       </h2>
 
@@ -236,7 +243,7 @@ function NoBetState({ recommendation }: { recommendation: RecommendationResponse
         otra, y cualquier monto mayor solo agranda la exposición a la ventaja de
         la casa.
       */}
-      <div className="mt-4 rounded-lg border border-edge bg-ink px-3.5 py-3 text-xs leading-relaxed text-muted">
+      <div className="mt-4 border-l-2 border-edge pl-3 text-xs leading-relaxed text-muted">
         <p>
           <span className="font-bold text-white">No apuestes este giro.</span> Si la
           mesa te obliga a apostar en cada giro, apuesta el{" "}
@@ -267,7 +274,7 @@ function perSectorLabel(config: GameVariantConfig | undefined, market: MarketRes
  */
 function WeakNotice() {
   return (
-    <div className="mt-4 rounded-lg border border-signal-weak/40 bg-signal-weak/10 px-3.5 py-3 text-xs leading-relaxed text-white">
+    <div className="mt-4 border-l-2 border-signal-weak pl-3 text-xs leading-relaxed text-white">
       <p className="font-bold uppercase tracking-wider text-signal-weak">Señal débil</p>
       <p className="mt-1">
         La desviación observada es pequeña. Aun así, es la opción que más se ha
@@ -316,91 +323,106 @@ function StakeList({
   const sectors = market.sectors;
   const enCada = perSectorLabel(registration?.config, market);
   const anotada = registration?.pendingBets.some((b) => b.followed_suggestion) ?? false;
+  const aplicables = stakes.filter((s) => s.applicable);
+  // Las que no aplican van en una línea cada motivo, sin recuadro: con señal
+  // débil martingala y dos sectores comparten el mismo.
+  const porMotivo = new Map<string, string[]>();
+  for (const s of stakes) {
+    if (s.applicable) continue;
+    const motivo = s.reason ?? "";
+    porMotivo.set(motivo, [...(porMotivo.get(motivo) ?? []), STRATEGY_LABEL[s.strategy]]);
+  }
 
   return (
-    <div className="mt-5 border-t border-edge pt-4">
-      <h3 className="text-sm font-bold text-white">Apuesta indicada, por gestión</h3>
-      <p className="mt-0.5 text-xs text-muted">
-        {registration && !anotada
-          ? "Sigue la gestión que estés usando. Si apostaste, toca la que usaste: queda anotada y solo esa avanza de escalón."
-          : "Sigue la gestión que estés usando."}
-      </p>
+    <div className="mt-4 border-t border-edge pt-3">
+      <h3 className="text-sm font-bold text-white">
+        Apuesta indicada, por gestión
+        <InfoTip label="la apuesta indicada" buttonLabel="Cómo anotar la apuesta">
+          {registration && !anotada
+            ? "Sigue la gestión que estés usando. Si apostaste, toca la que usaste: queda anotada y solo esa avanza de escalón."
+            : "Sigue la gestión que estés usando."}
+        </InfoTip>
+      </h3>
+      {sectors > 1 ? (
+        <p className="mt-0.5 text-xs text-muted">
+          Monto {enCada}: son {sectors} apuestas.
+        </p>
+      ) : null}
 
       {anotada ? (
-        <p className="mt-3 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-xs text-white">
+        <p className="mt-3 border-l-2 border-gold pl-3 text-xs text-white">
           Ya anotaste tu apuesta de este giro. Se resuelve con el próximo número; si
           te equivocaste, quítala en la mesa.
         </p>
       ) : null}
 
-      <ul className="mt-3 space-y-1.5">
-        {stakes.map((s) => (
-          <li
-            key={s.strategy}
-            className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 ${
-              s.applicable
-                ? "border-edge bg-ink-sunken"
-                : "border-edge/50 bg-ink-sunken/40"
-            }`}
-          >
-            <span
-              className={`text-sm font-bold ${s.applicable ? "text-white" : "text-muted"}`}
-            >
-              {STRATEGY_LABEL[s.strategy]}
-              {s.applicable && s.strategy !== "flat" ? (
-                <span className="ml-2 text-xs font-normal text-muted">
-                  escalón {s.stage + 1}
+      {/* Una al lado de la otra, en una sola fila: se comparan de un vistazo. */}
+      <ul
+        className="mt-2.5 grid gap-1.5"
+        style={{ gridTemplateColumns: `repeat(${Math.max(aplicables.length, 1)}, minmax(0, 1fr))` }}
+      >
+        {aplicables.map((s) => {
+          const contenido = (
+            <>
+              <span className="block truncate text-xs font-bold text-white">
+                {STRATEGY_SHORT[s.strategy]}
+              </span>
+              <span className="block font-display text-2xl font-semibold leading-tight tabular-nums text-white">
+                {CURRENCY.format(s.bet_per_sector)}
+              </span>
+              {s.strategy !== "flat" || sectors > 1 ? (
+                <span className="block text-[11px] leading-snug text-muted">
+                  {s.strategy !== "flat" ? `escalón ${s.stage + 1}` : null}
+                  {s.strategy !== "flat" && sectors > 1 ? <br /> : null}
+                  {sectors > 1 ? `${CURRENCY.format(s.total_bet)} en total` : null}
                 </span>
               ) : null}
-            </span>
-
-            {s.applicable ? (
-              <span className="flex items-center gap-3">
-                <span className="text-right">
-                  <span className="text-sm font-bold tabular-nums text-white">
-                    {CURRENCY.format(s.bet_per_sector)}
-                  </span>
-                  {sectors > 1 ? (
-                    <>
-                      <span className="ml-1.5 text-xs text-white">{enCada}</span>
-                      <span className="block text-xs text-muted">
-                        {CURRENCY.format(s.total_bet)} en total
-                      </span>
-                    </>
-                  ) : null}
-                  {s.exceeds_bankroll || s.exceeds_table_limit ? (
-                    <span className="mt-0.5 block text-xs text-table-red">
-                      {s.exceeds_bankroll
-                        ? "La banca no lo cubre"
-                        : "Supera el límite de la mesa"}
-                    </span>
-                  ) : null}
+              {s.exceeds_bankroll || s.exceeds_table_limit ? (
+                <span className="mt-0.5 block text-xs text-table-red">
+                  {s.exceeds_bankroll ? "La banca no lo cubre" : "Supera el límite de la mesa"}
                 </span>
-                {registration && !anotada ? (
-                  <button
-                    type="button"
-                    disabled={
-                      registration.busy ||
-                      s.exceeds_table_limit ||
-                      s.total_bet > registration.available
-                    }
-                    onClick={() =>
-                      registration.onRegister(betsFor(registration.config, market, s))
-                    }
-                    className="rounded-md border border-gold/50 px-2.5 py-1.5 text-xs font-bold text-gold transition-colors enabled:hover:bg-gold enabled:hover:text-gold-ink disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Aposté esto
-                  </button>
-                ) : null}
-              </span>
-            ) : (
-              <span className="max-w-xs text-right text-xs leading-relaxed text-muted">
-                {s.reason}
-              </span>
-            )}
-          </li>
-        ))}
+              ) : null}
+            </>
+          );
+
+          return (
+            <li key={s.strategy}>
+              {registration && !anotada ? (
+                // La gestión entera es el botón: el toque que más se repite en
+                // la mesa no puede ser un botón chico al costado.
+                <button
+                  type="button"
+                  disabled={
+                    registration.busy ||
+                    s.exceeds_table_limit ||
+                    s.total_bet > registration.available
+                  }
+                  onClick={() =>
+                    registration.onRegister(betsFor(registration.config, market, s))
+                  }
+                  className="flex h-full min-h-12 w-full flex-col items-start rounded-lg border border-gold/40 bg-ink-sunken px-2.5 py-2 text-left transition-colors enabled:hover:border-gold enabled:active:bg-gold/15 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {contenido}
+                  <span className="mt-auto block pt-1 text-xs font-bold text-gold">Aposté esto</span>
+                </button>
+              ) : (
+                <div className="h-full rounded-lg border border-edge bg-ink-sunken px-2.5 py-2">
+                  {contenido}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
+
+      {[...porMotivo].map(([motivo, nombres]) => (
+        <p key={nombres.join()} className="mt-2 text-xs leading-relaxed text-muted">
+          <span className="font-bold">{nombres.join(" y ")}:</span> no aplica en este giro.
+          <InfoTip label={nombres.join(" y ")} buttonLabel={`Por qué no aplica: ${nombres.join(" y ")}`}>
+            {motivo}
+          </InfoTip>
+        </p>
+      ))}
     </div>
   );
 }
@@ -418,12 +440,12 @@ function Why({ recommendation }: { recommendation: RecommendationResponse }) {
   if (!mejor) return null;
 
   return (
-    <div className="mt-4 border-t border-edge pt-3">
+    <div className="mt-3 border-t border-edge pt-1">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
-        className="flex w-full items-center justify-between text-sm font-bold text-muted transition-colors hover:text-white"
+        className="flex min-h-11 w-full items-center justify-between text-sm font-bold text-muted transition-colors hover:text-white"
       >
         ¿Por qué recomienda esto?
         <span aria-hidden className="text-xs">

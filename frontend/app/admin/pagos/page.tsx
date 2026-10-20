@@ -13,6 +13,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MobileFilters } from "@/components/admin/MobileFilters";
 import { Pager } from "@/components/admin/Pager";
 import { PaymentDetail } from "@/components/admin/PaymentDetail";
 import { SelectField } from "@/components/admin/SelectField";
@@ -37,6 +38,12 @@ interface Filters {
 }
 
 const NO_FILTERS: Filters = { query: "", status: "", kind: "", reversed: false, refunded: false };
+
+/** Filtros con un valor distinto del de "todos", sin contar la búsqueda. */
+function activeFilters(f: Filters): number {
+  return Object.entries(f).filter(([k, v]) => k !== "query" && v !== "" && v !== false)
+    .length;
+}
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -94,10 +101,10 @@ export default function AdminPaymentsPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Pagos</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Pagos</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Cada intento de cobro, con lo que respondió Wompi. Reconsultar un pago usa la misma
             función del webhook. Los reembolsos se hacen en el panel de Wompi y aquí se registran.
@@ -124,43 +131,45 @@ export default function AdminPaymentsPage() {
               onChange={(e) => setDraft({ ...draft, query: e.target.value })}
             />
           </div>
-          <SelectField
-            label="Estado"
-            value={draft.status}
-            onChange={(v) => setDraft({ ...draft, status: v })}
-            options={[
-              ["", "Todos"],
-              ["approved", PAYMENT_STATUS_LABEL.approved],
-              ["pending", PAYMENT_STATUS_LABEL.pending],
-              ["declined", PAYMENT_STATUS_LABEL.declined],
-              ["voided", PAYMENT_STATUS_LABEL.voided],
-              ["error", PAYMENT_STATUS_LABEL.error],
-            ]}
-          />
-          <SelectField
-            label="Tipo"
-            value={draft.kind}
-            onChange={(v) => setDraft({ ...draft, kind: v })}
-            options={[
-              ["", "Todos"],
-              ["initial", PAYMENT_KIND_LABEL.initial],
-              ["renewal", PAYMENT_KIND_LABEL.renewal],
-            ]}
-          />
-          <div className="space-y-2 self-end">
-            <Checkbox
-              checked={draft.reversed}
-              onChange={(e) => setDraft({ ...draft, reversed: e.target.checked })}
-            >
-              Anulados después de aprobados
-            </Checkbox>
-            <Checkbox
-              checked={draft.refunded}
-              onChange={(e) => setDraft({ ...draft, refunded: e.target.checked })}
-            >
-              Con reembolso registrado
-            </Checkbox>
-          </div>
+          <MobileFilters active={activeFilters(draft)}>
+            <SelectField
+              label="Estado"
+              value={draft.status}
+              onChange={(v) => setDraft({ ...draft, status: v })}
+              options={[
+                ["", "Todos"],
+                ["approved", PAYMENT_STATUS_LABEL.approved],
+                ["pending", PAYMENT_STATUS_LABEL.pending],
+                ["declined", PAYMENT_STATUS_LABEL.declined],
+                ["voided", PAYMENT_STATUS_LABEL.voided],
+                ["error", PAYMENT_STATUS_LABEL.error],
+              ]}
+            />
+            <SelectField
+              label="Tipo"
+              value={draft.kind}
+              onChange={(v) => setDraft({ ...draft, kind: v })}
+              options={[
+                ["", "Todos"],
+                ["initial", PAYMENT_KIND_LABEL.initial],
+                ["renewal", PAYMENT_KIND_LABEL.renewal],
+              ]}
+            />
+            <div className="space-y-2 self-end">
+              <Checkbox
+                checked={draft.reversed}
+                onChange={(e) => setDraft({ ...draft, reversed: e.target.checked })}
+              >
+                Anulados después de aprobados
+              </Checkbox>
+              <Checkbox
+                checked={draft.refunded}
+                onChange={(e) => setDraft({ ...draft, refunded: e.target.checked })}
+              >
+                Con reembolso registrado
+              </Checkbox>
+            </div>
+          </MobileFilters>
           <div className="flex items-end sm:col-span-2 lg:col-span-3">
             <Button type="submit">Buscar</Button>
           </div>
@@ -174,10 +183,10 @@ export default function AdminPaymentsPage() {
           {page.items.length === 0 ? (
             <p className="text-sm text-muted">Ningún pago coincide con la búsqueda.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="-my-1 divide-y divide-edge">
               {page.items.map((p) => (
-                <li key={p.id} className="rounded-lg border border-edge bg-ink">
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
+                <li key={p.id}>
+                  <div className="relative flex flex-wrap items-center justify-between gap-3 py-3">
                     <div className="min-w-0 text-sm">
                       <p className="truncate font-bold text-white">
                         {formatMoney(p.amount_cents, p.currency)} ·{" "}
@@ -196,6 +205,7 @@ export default function AdminPaymentsPage() {
                       </Badge>
                       <Button
                         variant="ghost"
+                        className="after:absolute after:inset-0 after:rounded-lg after:content-['']"
                         aria-expanded={selected === p.id}
                         onClick={() => setSelected(selected === p.id ? null : p.id)}
                       >

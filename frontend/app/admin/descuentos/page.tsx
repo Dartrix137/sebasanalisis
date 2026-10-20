@@ -202,10 +202,10 @@ export default function AdminCouponsPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Descuentos</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Descuentos</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Cupones para la suscripción. Un cupón no se borra: se desactiva. Todo cambio pide un
             motivo y queda en la bitácora.
@@ -250,7 +250,7 @@ export default function AdminCouponsPage() {
               <ul className="mt-4 divide-y divide-edge">
                 {page.items.map((c) => (
                   <li key={c.id} className="py-3" data-testid={`cupon-${c.code}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words font-bold text-white">{c.code}</p>
                         <p className="text-xs text-muted">
@@ -265,6 +265,7 @@ export default function AdminCouponsPage() {
                         </Badge>
                         <Button
                           variant="ghost"
+                          className="after:absolute after:inset-0 after:rounded-lg after:content-['']"
                           aria-expanded={selected === c.id}
                           onClick={() => setSelected(selected === c.id ? null : c.id)}
                         >

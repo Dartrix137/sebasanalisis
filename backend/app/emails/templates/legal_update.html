@@ -9,7 +9,7 @@
 <ul style="margin:0 0 12px 0;padding-left:20px;">
   {% for doc in documents %}
   <li style="margin:0 0 6px 0;">
-    <a href="{{ doc.url }}" style="color:#e0b341;font-weight:bold;">{{ doc.title }}</a>:
+    <a href="{{ doc.url }}" style="color:#dda520;font-weight:bold;">{{ doc.title }}</a>:
     versión {{ doc.version }}, publicada el {{ doc.published_at | fecha }}.
   </li>
   {% endfor %}

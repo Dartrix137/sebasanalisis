@@ -34,6 +34,7 @@ const config: Config = {
         },
       },
       fontFamily: {
+        sans: ["var(--font-body)", "Arial", "sans-serif"],
         display: ["var(--font-display)", "Arial Narrow", "sans-serif"],
       },
       borderRadius: { card: "0.875rem" },

@@ -124,6 +124,16 @@ export async function checkRegisterConsents(page: Page): Promise<void> {
   await page.getByRole("checkbox", { name: /Declaro que soy mayor de edad/ }).check();
 }
 
+/**
+ * Abre el menú de la cuenta del encabezado y sigue uno de sus enlaces ("Mi
+ * cuenta", "Planes", "Administración"...). Desde el 2026-10-20 esos enlaces
+ * viven en el menú, no sueltos en el encabezado.
+ */
+export async function goViaAccountMenu(page: Page, link: string): Promise<void> {
+  await page.getByRole("button", { name: "Menú de la cuenta" }).click();
+  await page.getByRole("link", { name: link, exact: true }).click();
+}
+
 export async function loginViaUi(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Correo electrónico").fill(email);

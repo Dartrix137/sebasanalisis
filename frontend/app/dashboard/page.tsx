@@ -41,6 +41,9 @@ const SIGNED = (n: number) => `${n >= 0 ? "+" : "−"}${CURRENCY.format(Math.abs
 /** Cuántas mesas abiertas traen sus números: más allá, la lista es solo texto. */
 const MESAS_CON_NUMEROS = 6;
 
+/** Mesas cerradas a la vista; el resto, con "Ver todas". */
+const CERRADAS_A_LA_VISTA = 5;
+
 export default function DashboardPage() {
   // El menú llama a los endpoints de juego: sin acceso responderían 403, así
   // que primero pasa por la compuerta.
@@ -62,6 +65,7 @@ function Dashboard() {
   const [numbers, setNumbers] = useState<Record<string, string[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [verTodas, setVerTodas] = useState(false);
 
   const load = useCallback(async () => {
     const [g, abiertas, cerradas] = await Promise.all([
@@ -175,10 +179,22 @@ function Dashboard() {
           <section className="mt-12" aria-labelledby="historial">
             <SectionTitle id="historial">Mesas cerradas</SectionTitle>
             <ul className="mt-3 divide-y divide-edge border-y border-edge">
-              {closedSessions.map((s) => (
-                <ClosedTableRow key={s.id} session={s} onOpen={() => abrir(s)} />
-              ))}
+              {(verTodas ? closedSessions : closedSessions.slice(0, CERRADAS_A_LA_VISTA)).map(
+                (s) => (
+                  <ClosedTableRow key={s.id} session={s} onOpen={() => abrir(s)} />
+                ),
+              )}
             </ul>
+            {closedSessions.length > CERRADAS_A_LA_VISTA ? (
+              <Button
+                variant="ghost"
+                className="mt-3 w-full sm:w-auto"
+                aria-expanded={verTodas}
+                onClick={() => setVerTodas((v) => !v)}
+              >
+                {verTodas ? "Ver menos" : `Ver todas (${closedSessions.length})`}
+              </Button>
+            ) : null}
             <p className="mt-3 max-w-prose text-xs leading-relaxed text-muted">
               Un buen o mal resultado pasado no dice nada sobre la próxima mesa: cada giro
               es independiente y la ventaja de la casa no cambia.
@@ -315,26 +331,31 @@ function OpenTableRow({
 }) {
   const recientes = numbers ? [...numbers].reverse().slice(0, 6) : [];
   return (
-    <li className="flex flex-wrap items-center gap-x-6 gap-y-3 py-3.5">
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-bold">{session.name ?? "Mesa sin nombre"}</p>
-        <p className="text-xs text-muted">
-          {tableDescription(session, variant)}
-        </p>
-      </div>
-      {recientes.length > 0 ? (
-        <ol className="hidden gap-1 md:flex" aria-label="Últimos números">
-          {recientes.map((n, i) => (
-            <NumberChip key={`${i}-${n}`} value={n} variant={variant} />
-          ))}
-        </ol>
-      ) : null}
-      <p className="w-32 text-right font-display text-xl font-semibold tabular-nums">
-        {CURRENCY.format(session.bankroll_current)}
-      </p>
-      <Button variant="ghost" onClick={onContinue}>
-        Continuar
-      </Button>
+    <li>
+      <button
+        type="button"
+        onClick={onContinue}
+        className="flex min-h-14 w-full items-center gap-x-4 py-3 text-left transition-colors hover:bg-ink-raised/60"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-bold">{session.name ?? "Mesa sin nombre"}</span>
+          <span className="block text-xs text-muted">{tableDescription(session, variant)}</span>
+        </span>
+        {recientes.length > 0 ? (
+          <ol className="hidden gap-1 md:flex" aria-label="Últimos números">
+            {recientes.map((n, i) => (
+              <NumberChip key={`${i}-${n}`} value={n} variant={variant} />
+            ))}
+          </ol>
+        ) : null}
+        <span className="shrink-0 text-right font-display text-xl font-semibold tabular-nums">
+          {CURRENCY.format(session.bankroll_current)}
+        </span>
+        <span aria-hidden className="shrink-0 text-muted">
+          ›
+        </span>
+        <span className="sr-only">Continuar</span>
+      </button>
     </li>
   );
 }
@@ -350,34 +371,40 @@ function ClosedTableRow({ session, onOpen }: { session: SessionResponse; onOpen:
     : "Sin fecha de cierre";
 
   return (
-    <li className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
-      <p className="w-28 shrink-0 text-xs text-muted">{fecha}</p>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold">{session.name ?? "Mesa sin nombre"}</p>
-        <p className="text-xs text-muted">
-          {session.name ? "" : null}
-          {[
-            session.stage_martingale > 0
-              ? `martingala, escalón ${session.stage_martingale + 1}`
-              : null,
-            session.stage_two_sector > 0
-              ? `2 sectores, escalón ${session.stage_two_sector + 1}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "sin serie abierta"}
-        </p>
-      </div>
-      <p
-        className={`w-32 text-right font-display text-xl font-semibold tabular-nums ${
-          neto > 0 ? "text-signal-strong" : neto < 0 ? "text-table-red" : "text-muted"
-        }`}
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-14 w-full items-center gap-x-4 py-3 text-left transition-colors hover:bg-ink-raised/60"
       >
-        {neto === 0 ? "$ 0" : SIGNED(neto)}
-      </p>
-      <Button variant="ghost" onClick={onOpen}>
-        Ver
-      </Button>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold">{session.name ?? "Mesa sin nombre"}</span>
+          <span className="block text-xs text-muted">
+            {fecha} ·{" "}
+            {[
+              session.stage_martingale > 0
+                ? `martingala, escalón ${session.stage_martingale + 1}`
+                : null,
+              session.stage_two_sector > 0
+                ? `2 sectores, escalón ${session.stage_two_sector + 1}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "sin serie abierta"}
+          </span>
+        </span>
+        <span
+          className={`shrink-0 text-right font-display text-xl font-semibold tabular-nums ${
+            neto > 0 ? "text-signal-strong" : neto < 0 ? "text-table-red" : "text-muted"
+          }`}
+        >
+          {neto === 0 ? "$ 0" : SIGNED(neto)}
+        </span>
+        <span aria-hidden className="shrink-0 text-muted">
+          ›
+        </span>
+        <span className="sr-only">Ver</span>
+      </button>
     </li>
   );
 }

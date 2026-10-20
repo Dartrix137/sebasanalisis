@@ -43,10 +43,10 @@ export default function AdminAuditPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Bitácora</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Bitácora</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Lo que los administradores han hecho sobre accesos, cuentas, planes, cupones y
             documentos legales. No se puede editar ni borrar.

@@ -10,11 +10,10 @@
  */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { PlansView } from "@/components/PlansView";
-import { BrandMark } from "@/components/ui";
+import { AppHeader } from "@/components/AppHeader";
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
 import { formatLegalDate } from "@/lib/legal";
 import { useSession } from "@/lib/session";
@@ -23,8 +22,7 @@ import type { UserResponse } from "@/lib/types/auth";
 const LINK = "font-bold text-gold hover:text-gold-soft";
 
 export default function PlansPage() {
-  const { user, loading, signOut, refreshUser } = useSession();
-  const router = useRouter();
+  const { user, loading, refreshUser } = useSession();
   const userId = user?.id ?? null;
 
   // La decisión guardada en la sesión puede ser vieja: un administrador pudo
@@ -35,52 +33,25 @@ export default function PlansPage() {
   }, [loading, userId, refreshUser]);
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <BrandMark size={38} />
-        {loading ? null : user ? (
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/cuenta" className={LINK}>
-              Mi cuenta
-            </Link>
-            <button
-              type="button"
-              className="font-bold text-muted hover:text-white"
-              onClick={() => {
-                signOut();
-                router.replace("/login");
-              }}
-            >
-              Salir
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/login" className={LINK}>
-              Entrar
-            </Link>
-            <Link href="/register" className={LINK}>
-              Crear cuenta
-            </Link>
-          </div>
-        )}
-      </div>
+    <>
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 pb-12 pt-8 sm:px-6">
+        <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
+          Planes
+        </h1>
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
+          La suscripción da acceso a la plataforma. No cambia el resultado de ningún juego ni la
+          ventaja de la casa.
+        </p>
 
-      <h1 className="mt-8 font-display text-4xl font-semibold leading-none tracking-tight">
-        Planes
-      </h1>
-      <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
-        La suscripción da acceso a la plataforma. No cambia el resultado de ningún juego ni la
-        ventaja de la casa.
-      </p>
+        {user ? <AccountStatus user={user} /> : null}
+        {user && !user.access.granted ? <VerifyEmailNotice /> : null}
 
-      {user ? <AccountStatus user={user} /> : null}
-      {user && !user.access.granted ? <VerifyEmailNotice /> : null}
-
-      <div className="mt-6">
-        <PlansView />
-      </div>
-    </main>
+        <div className="mt-6">
+          <PlansView />
+        </div>
+      </main>
+    </>
   );
 }
 

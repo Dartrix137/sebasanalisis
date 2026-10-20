@@ -18,7 +18,6 @@
  * de juego. La compuerta solo evita mostrar una mesa llena de errores.
  */
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -30,7 +29,8 @@ import type { LegalDocumentResponse, PendingConsentResponse } from "@/lib/types/
 
 import { Markdown } from "./legal/Markdown";
 import { PageSkeleton, type SkeletonShape } from "./PageSkeleton";
-import { BrandMark, Button, Card, Checkbox, ErrorBox } from "./ui";
+import { AppHeader } from "./AppHeader";
+import { Button, Card, Checkbox, ErrorBox } from "./ui";
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -126,37 +126,20 @@ function Shell({
   subtitle?: string;
   children: ReactNode;
 }) {
-  const { signOut } = useSession();
-  const router = useRouter();
+  // La cuenta nunca queda bloqueada: "Mi cuenta" está en el menú del encabezado.
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-12 pt-10 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <BrandMark size={38} />
-        <div className="flex items-center gap-4 text-sm">
-          {/* La cuenta nunca queda bloqueada: se puede revisar o eliminar. */}
-          <Link href="/cuenta" className="font-bold text-gold hover:text-gold-soft">
-            Mi cuenta
-          </Link>
-          <button
-            type="button"
-            className="font-bold text-muted hover:text-white"
-            onClick={() => {
-              signOut();
-              router.replace("/login");
-            }}
-          >
-            Salir
-          </button>
-        </div>
-      </div>
-      <h1 className="mt-8 font-display text-4xl font-semibold leading-none tracking-tight">
-        {title}
-      </h1>
-      {subtitle ? (
-        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">{subtitle}</p>
-      ) : null}
-      <div className="mt-6 space-y-5">{children}</div>
-    </main>
+    <>
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-12 pt-8 sm:px-6">
+        <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
+          {title}
+        </h1>
+        {subtitle ? (
+          <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">{subtitle}</p>
+        ) : null}
+        <div className="mt-6 space-y-5">{children}</div>
+      </main>
+    </>
   );
 }
 

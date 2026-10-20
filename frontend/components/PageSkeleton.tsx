@@ -29,14 +29,14 @@ function Block({ children, className = "" }: { children: ReactNode; className?: 
 function HeaderSkeleton() {
   return (
     <div className="border-b border-edge bg-ink-raised">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3">
-          <BrandMark size={38} />
-          <span className="text-base font-extrabold leading-tight">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+        <div className="flex min-h-11 items-center gap-2.5">
+          <BrandMark size={34} />
+          <span className="text-lg font-extrabold leading-none tracking-tight">
             Sebas<span className="text-gold">análisis</span>
           </span>
         </div>
-        <Bar className="h-9 w-20" />
+        <Bar className="h-11 w-11 rounded-full" />
       </div>
     </div>
   );
@@ -61,8 +61,8 @@ function PageBody() {
 
 function MesaBody() {
   return (
-    <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-4 p-4 sm:gap-5 sm:p-6 lg:grid-cols-2">
-      <Bar className="h-9 w-36 lg:col-span-2" />
+    <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-4 p-4 sm:gap-5 sm:p-6 md:grid-cols-2">
+      <Bar className="h-11 w-full md:col-span-2" />
       <Block className="space-y-3">
         <Bar className="h-5 w-28" />
         <Bar className="h-10 w-4/5" />
@@ -74,9 +74,9 @@ function MesaBody() {
           <Bar className="h-5 w-32" />
           <Bar className="h-6 w-24" />
         </div>
-        <div className="grid grid-cols-7 gap-1 sm:grid-cols-10 sm:gap-1.5">
+        <div className="grid grid-cols-6 gap-1.5">
           {Array.from({ length: 37 }, (_, i) => (
-            <Bar key={i} className="h-10" />
+            <Bar key={i} className={`h-12 ${i === 0 ? "col-span-6" : ""}`} />
           ))}
         </div>
       </Block>

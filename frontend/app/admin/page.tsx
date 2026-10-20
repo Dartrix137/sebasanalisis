@@ -74,9 +74,9 @@ export default function AdminOverviewPage() {
     : "";
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header>
-        <h1 className="text-xl font-extrabold">Resumen</h1>
+        <h1 className="font-display text-3xl font-semibold leading-none">Resumen</h1>
         <p className="mt-1 max-w-prose text-sm text-muted">
           {data
             ? `Mes en curso (${currentLabel}) frente al mismo tramo del mes anterior (${previousLabel}), en hora de Bogotá.`
@@ -95,7 +95,7 @@ export default function AdminOverviewPage() {
             {data.recurring.length === 0 ? (
               <Card>
                 <p className="text-sm text-muted">Ingreso recurrente mensual</p>
-                <p className="mt-1 text-5xl font-extrabold text-white">
+                <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums text-white">
                   {formatMoney(0, "COP")}
                 </p>
                 <p className="mt-1 text-sm text-muted">Ninguna suscripción vigente que siga.</p>
@@ -104,7 +104,7 @@ export default function AdminOverviewPage() {
               data.recurring.map((r) => (
                 <Card key={r.currency}>
                   <p className="text-sm text-muted">Ingreso recurrente mensual</p>
-                  <p className="mt-1 text-5xl font-extrabold text-white">
+                  <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums text-white">
                     {formatMoney(r.total_cents, r.currency)}
                   </p>
                   <p className="mt-2 text-sm text-muted">
@@ -119,7 +119,7 @@ export default function AdminOverviewPage() {
                 </Card>
               ))
             )}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 pt-1 sm:grid-cols-3 lg:grid-cols-6">
               <Tile label="Con período vigente" value={data.subscriptions.in_force} />
               <Tile label={SUBSCRIPTION_STATUS_LABEL.active} value={data.subscriptions.active} />
               <Tile label={SUBSCRIPTION_STATUS_LABEL.past_due} value={data.subscriptions.past_due} />
@@ -133,7 +133,7 @@ export default function AdminOverviewPage() {
             <h2 id="mes" className="text-sm font-bold uppercase tracking-wide text-muted">
               Este mes
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-3">
               {data.collected.length === 0 ? (
                 <Tile
                   label="Cobrado, neto de reembolsos"
@@ -214,12 +214,16 @@ function Tile({
   note?: string;
 }) {
   return (
-    <Card>
+    // Sin caja propia: una línea a la izquierda agrupa la cifra con su etiqueta.
+    // Las cajas iguales hacían que nada se destacara.
+    <div className="border-l-2 border-edge pl-3">
       <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-3xl font-extrabold text-white">{format(value)}</p>
+      <p className="mt-0.5 font-display text-3xl font-semibold leading-tight tabular-nums text-white">
+        {format(value)}
+      </p>
       {delta ? <Delta delta={delta} direction={direction} format={format} /> : null}
       {note ? <p className="mt-1 text-xs text-muted">{note}</p> : null}
-    </Card>
+    </div>
   );
 }
 
@@ -240,7 +244,7 @@ function Delta({
   const tone = good === null ? "text-muted" : good ? "text-signal-strong" : "text-table-red";
   const signed = diff > 0 ? `+${format(diff)}` : diff < 0 ? `−${format(-diff)}` : "sin cambio";
   return (
-    <p className="mt-1 text-sm">
+    <p className="mt-1 text-xs sm:text-sm">
       <span className={`font-bold ${tone}`}>
         <span aria-hidden="true">{arrow} </span>
         {signed}

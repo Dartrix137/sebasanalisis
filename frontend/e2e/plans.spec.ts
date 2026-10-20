@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  goViaAccountMenu,
   loginViaUi,
   registerViaApi,
   uniqueEmail,
@@ -48,7 +49,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(plan.getByRole("link", { name: "Suscribirme" })).toBeVisible();
 
   // La cuenta no queda bloqueada, y volver a la mesa la trae aquí otra vez.
-  await page.getByRole("link", { name: "Mi cuenta" }).click();
+  await goViaAccountMenu(page, "Mi cuenta");
   await expect(page.getByRole("heading", { level: 1, name: "Mi cuenta" })).toBeVisible();
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/planes/);

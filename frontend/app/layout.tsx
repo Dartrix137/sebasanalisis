@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, Inter } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import { connection } from "next/server";
 import "./globals.css";
 import { LegalFooter } from "@/components/LegalFooter";
 import { SessionProvider } from "@/lib/session";
 import { SITE_URL, TITLE_TEMPLATE } from "@/lib/site";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-// Condensada como los números impresos en el paño y el cilindro de la ruleta.
+// Una sola familia en dos anchos: Barlow para el texto y Barlow Condensed para
+// títulos y cifras, condensada como los números impresos en el paño y el
+// cilindro de la ruleta (decidido el 2026-10-20; antes se cargaba Inter, que
+// Tailwind nunca usó, y el texto salía en la fuente del sistema).
+const body = Barlow({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-body",
+});
 const display = Barlow_Condensed({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
@@ -29,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // build. Casi todas las pantallas ya piden sus datos desde el navegador.
   await connection();
   return (
-    <html lang="es" className={`${inter.variable} ${display.variable}`}>
+    <html lang="es" className={`${body.variable} ${display.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
         <SessionProvider>
           {/* Cada página llena el alto que deja el pie con `flex-1`. */}

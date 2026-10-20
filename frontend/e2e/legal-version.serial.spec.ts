@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  goViaAccountMenu,
   loginViaUi,
   registerViaApi,
   uniqueEmail,
@@ -79,7 +80,7 @@ test("versión nueva de los términos: la mesa pide re-aceptar y después deja e
   await expect(page.getByRole("heading", { name: "Elige un juego" })).toHaveCount(0);
 
   // La cuenta no queda bloqueada: "Mi cuenta" sigue abriendo.
-  await page.getByRole("link", { name: "Mi cuenta" }).click();
+  await goViaAccountMenu(page, "Mi cuenta");
   await expect(page.getByRole("heading", { level: 1, name: "Mi cuenta" })).toBeVisible();
   await expect(page.getByText("Versión anterior")).toBeVisible();
 

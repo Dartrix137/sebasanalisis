@@ -9,13 +9,17 @@ import { LEGAL_DOCUMENTS } from "@/lib/legal";
 
 export function LegalFooter() {
   return (
-    <footer className="border-t border-edge px-4 py-5">
+    <footer className="border-t border-edge px-4 py-3">
       <nav
         aria-label="Documentos legales"
-        className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted"
+        className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-2 text-xs text-muted"
       >
         {LEGAL_DOCUMENTS.map((doc) => (
-          <Link key={doc.kind} href={`/legal/${doc.slug}`} className="hover:text-gold">
+          <Link
+            key={doc.kind}
+            href={`/legal/${doc.slug}`}
+            className="inline-flex min-h-11 items-center px-1.5 hover:text-gold"
+          >
             {doc.label}
           </Link>
         ))}

@@ -17,6 +17,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MobileFilters } from "@/components/admin/MobileFilters";
 import { Pager } from "@/components/admin/Pager";
 import { SuccessBox } from "@/components/AuthShell";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -61,6 +62,12 @@ const NO_FILTERS: Filters = {
   isActive: "",
   subscription: "",
 };
+
+/** Filtros con un valor distinto del de "todos", sin contar la búsqueda. */
+function activeFilters(f: Filters): number {
+  return Object.entries(f).filter(([k, v]) => k !== "query" && v !== "" && v !== false)
+    .length;
+}
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : "No se pudo completar la solicitud";
@@ -119,10 +126,10 @@ export default function AdminUsersPage() {
   if (loading || !user || user.role !== "admin") return <PageSkeleton shape="list" />;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">
+    <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 py-6 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold">Usuarios</h1>
+          <h1 className="font-display text-3xl font-semibold leading-none">Usuarios</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
             Cuentas, su acceso a la mesa y las acciones de acceso manual. Cada cambio pide un
             motivo y queda en la bitácora.
@@ -149,59 +156,61 @@ export default function AdminUsersPage() {
               onChange={(e) => setDraft({ ...draft, query: e.target.value })}
             />
           </div>
-          <Select
-            label="Acceso manual"
-            value={draft.accessType}
-            onChange={(v) => setDraft({ ...draft, accessType: v as Filters["accessType"] })}
-            options={[
-              ["", "Todos"],
-              ["none", "Sin acceso manual"],
-              ["invited", "Invitado"],
-              ["full", "Completo"],
-            ]}
-          />
-          <Select
-            label="Suscripción"
-            value={draft.subscription}
-            onChange={(v) => setDraft({ ...draft, subscription: v as Filters["subscription"] })}
-            options={[
-              ["", "Todas"],
-              ["in_force", "Vigente"],
-              ["lapsed", "Vencida"],
-              ["pending", "Pago sin completar"],
-              ["none", "Nunca abrió un pago"],
-            ]}
-          />
-          <Select
-            label="Estado"
-            value={draft.isActive}
-            onChange={(v) => setDraft({ ...draft, isActive: v as Filters["isActive"] })}
-            options={[
-              ["", "Todas"],
-              ["true", "Activas"],
-              ["false", "Suspendidas"],
-            ]}
-          />
-          <Select
-            label="Correo"
-            value={draft.emailVerified}
-            onChange={(v) => setDraft({ ...draft, emailVerified: v as Filters["emailVerified"] })}
-            options={[
-              ["", "Todos"],
-              ["true", "Confirmado"],
-              ["false", "Sin confirmar"],
-            ]}
-          />
-          <Select
-            label="Rol"
-            value={draft.role}
-            onChange={(v) => setDraft({ ...draft, role: v as Filters["role"] })}
-            options={[
-              ["", "Todos"],
-              ["user", "Usuario"],
-              ["admin", "Administrador"],
-            ]}
-          />
+          <MobileFilters active={activeFilters(draft)}>
+            <Select
+              label="Acceso manual"
+              value={draft.accessType}
+              onChange={(v) => setDraft({ ...draft, accessType: v as Filters["accessType"] })}
+              options={[
+                ["", "Todos"],
+                ["none", "Sin acceso manual"],
+                ["invited", "Invitado"],
+                ["full", "Completo"],
+              ]}
+            />
+            <Select
+              label="Suscripción"
+              value={draft.subscription}
+              onChange={(v) => setDraft({ ...draft, subscription: v as Filters["subscription"] })}
+              options={[
+                ["", "Todas"],
+                ["in_force", "Vigente"],
+                ["lapsed", "Vencida"],
+                ["pending", "Pago sin completar"],
+                ["none", "Nunca abrió un pago"],
+              ]}
+            />
+            <Select
+              label="Estado"
+              value={draft.isActive}
+              onChange={(v) => setDraft({ ...draft, isActive: v as Filters["isActive"] })}
+              options={[
+                ["", "Todas"],
+                ["true", "Activas"],
+                ["false", "Suspendidas"],
+              ]}
+            />
+            <Select
+              label="Correo"
+              value={draft.emailVerified}
+              onChange={(v) => setDraft({ ...draft, emailVerified: v as Filters["emailVerified"] })}
+              options={[
+                ["", "Todos"],
+                ["true", "Confirmado"],
+                ["false", "Sin confirmar"],
+              ]}
+            />
+            <Select
+              label="Rol"
+              value={draft.role}
+              onChange={(v) => setDraft({ ...draft, role: v as Filters["role"] })}
+              options={[
+                ["", "Todos"],
+                ["user", "Usuario"],
+                ["admin", "Administrador"],
+              ]}
+            />
+          </MobileFilters>
           <div className="flex items-end">
             <Button type="submit" className="w-full">
               Buscar
@@ -217,10 +226,10 @@ export default function AdminUsersPage() {
           {page.items.length === 0 ? (
             <p className="text-sm text-muted">Ninguna cuenta coincide con la búsqueda.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="-my-1 divide-y divide-edge">
               {page.items.map((u) => (
-                <li key={u.id} className="rounded-lg border border-edge bg-ink">
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
+                <li key={u.id}>
+                  <div className="relative flex flex-wrap items-center justify-between gap-3 py-3">
                     <div className="min-w-0 text-sm">
                       <p className="truncate font-bold text-white">{u.email}</p>
                       {u.display_name ? (
@@ -234,6 +243,7 @@ export default function AdminUsersPage() {
                       </Badge>
                       <Button
                         variant="ghost"
+                        className="after:absolute after:inset-0 after:rounded-lg after:content-['']"
                         aria-expanded={selected === u.id}
                         onClick={() => setSelected(selected === u.id ? null : u.id)}
                       >
