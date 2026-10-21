@@ -21,6 +21,11 @@ Idempotencia, en dos capas:
   numero de intento). `payments.reference` es unica: si dos corridas llegaran a
   intentar lo mismo, la segunda choca con la restriccion en vez de cobrar.
 
+Los avisos previos (el del cobro y, en el pago manual, el de vencimiento) se
+envian en la corrida misma, y `notice_sent_for` se anota solo si el envio
+salio: un aviso que no llego no cuenta, y sin aviso no se cobra. La siguiente
+corrida lo intenta de nuevo. Los demas correos se envian despues de confirmar.
+
 Aqui no se decide el acceso: eso es de `core/access.has_access`.
 """
 
@@ -36,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.billing import pricing, schedule
 from app.core import billing_emails, price_changes, subscriptions
-from app.core.email import EmailMessage
+from app.core.email import EmailMessage, EmailSender
 from app.models import Payment, Subscription, User
 from app.payments.base import PaymentProvider, PaymentProviderError
 
@@ -60,12 +65,17 @@ class RenewalReport:
     failed: int = 0
     expired: int = 0
     errors: int = 0
+    #: Avisos que no se pudieron enviar: se reintentan en la siguiente corrida.
+    notices_failed: int = 0
+    #: Los avisos que ya salieron en la corrida.
+    sent: list[EmailMessage] = field(default_factory=list)
     #: Los correos que hay que enviar. El job los envia despues de confirmar.
     emails: list[EmailMessage] = field(default_factory=list)
 
     def summary(self) -> str:
         return (
-            f"avisos={self.notices} cobros={self.charges} aprobados={self.approved} "
+            f"avisos={self.notices} avisos_fallidos={self.notices_failed} "
+            f"cobros={self.charges} aprobados={self.approved} "
             f"fallidos={self.failed} vencidas={self.expired} errores={self.errors}"
         )
 
@@ -102,8 +112,14 @@ def _reference_prefix(subscription: Subscription, period_end: datetime) -> str:
     return f"SA-R-{subscription.id.hex}-{int(period_end.timestamp())}-"
 
 
-def run_renewals(db: Session, provider: PaymentProvider, now: datetime) -> RenewalReport:
-    """Una corrida del job. Quien llama debe tener el candado (`advisory_lock`)."""
+def run_renewals(
+    db: Session, provider: PaymentProvider, sender: EmailSender, now: datetime
+) -> RenewalReport:
+    """Una corrida del job. Quien llama debe tener el candado (`advisory_lock`).
+
+    `sender` envia los avisos previos; el resto de los correos queda en
+    `report.emails` para enviarlos despues.
+    """
     report = RenewalReport()
     # Primero los precios nuevos cuya fecha ya llego: ningun cobro de esta
     # corrida sale con un precio que ya no corre (§4.10).
@@ -121,7 +137,7 @@ def run_renewals(db: Session, provider: PaymentProvider, now: datetime) -> Renew
     )
     for subscription_id in ids:
         try:
-            _process(db, provider, subscription_id, now, report)
+            _process(db, provider, sender, subscription_id, now, report)
         except Exception:
             # Una suscripcion con problemas no detiene a las demas.
             db.rollback()
@@ -172,6 +188,7 @@ def retry_now(
 def _process(
     db: Session,
     provider: PaymentProvider,
+    sender: EmailSender,
     subscription_id: object,
     now: datetime,
     report: RenewalReport,
@@ -191,13 +208,18 @@ def _process(
         return
 
     if subscription.renewal_mode == "automatic" and provider.enabled:
-        _process_automatic(db, provider, subscription, user, now, report)
+        _process_automatic(db, provider, sender, subscription, user, now, report)
     else:
-        _process_manual(db, subscription, user, now, report)
+        _process_manual(db, sender, subscription, user, now, report)
 
 
 def _process_manual(
-    db: Session, subscription: Subscription, user: User, now: datetime, report: RenewalReport
+    db: Session,
+    sender: EmailSender,
+    subscription: Subscription,
+    user: User,
+    now: datetime,
+    report: RenewalReport,
 ) -> None:
     period_end = subscription.current_period_end
     assert period_end is not None
@@ -212,15 +234,13 @@ def _process_manual(
         price = price_changes.price_at(db, subscription, period_end)
         amount = _renewal_quote(db, subscription, price).total_cents
         message = billing_emails.period_ending(user, subscription, amount)
-        subscription.notice_sent_for = period_end
-        db.commit()
-        report.notices += 1
-        report.emails.append(message)
+        _send_notice(db, sender, subscription, period_end, message, report)
 
 
 def _process_automatic(
     db: Session,
     provider: PaymentProvider,
+    sender: EmailSender,
     subscription: Subscription,
     user: User,
     now: datetime,
@@ -244,7 +264,8 @@ def _process_automatic(
 
     # 2. El aviso va ANTES del primer intento (§3.8), una vez por periodo. Si
     #    todavia no ha salido, esta corrida avisa y no cobra: el cobro queda
-    #    para la siguiente.
+    #    para la siguiente. Si el envio falla, tampoco cobra: la siguiente
+    #    corrida vuelve a avisar.
     if not attempts and subscription.notice_sent_for != period_end:
         if schedule.renewal_notice_due(now, period_end):
             charge_at = max(schedule.first_charge_at(period_end), now)
@@ -254,10 +275,7 @@ def _process_automatic(
             message = billing_emails.renewal_notice(
                 user, subscription, quote.total_cents, charge_at
             )
-            subscription.notice_sent_for = period_end
-            db.commit()
-            report.notices += 1
-            report.emails.append(message)
+            _send_notice(db, sender, subscription, period_end, message, report)
         return
 
     # 3. El intento que toque.
@@ -276,6 +294,31 @@ def _process_automatic(
         _expire(db, subscription)
         report.expired += 1
         report.emails.append(message)
+
+
+def _send_notice(
+    db: Session,
+    sender: EmailSender,
+    subscription: Subscription,
+    period_end: datetime,
+    message: EmailMessage,
+    report: RenewalReport,
+) -> None:
+    """Envia el aviso del periodo y, solo si salio, lo anota."""
+    try:
+        sender.send(message)
+    except Exception:
+        logger.exception(
+            "Renovaciones: no se pudo enviar el aviso de la suscripcion %s; "
+            "se reintenta en la siguiente corrida",
+            subscription.id,
+        )
+        report.notices_failed += 1
+        return
+    subscription.notice_sent_for = period_end
+    db.commit()
+    report.notices += 1
+    report.sent.append(message)
 
 
 def _attempts(db: Session, prefix: str) -> list[Payment]:

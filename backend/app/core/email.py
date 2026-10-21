@@ -16,6 +16,7 @@ import json
 import logging
 import smtplib
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 SMTP_TIMEOUT_SECONDS = 15
 SMTP_IMPLICIT_TLS_PORT = 465
+#: Las esperas antes de cada reintento de un envio que fallo por algo pasajero.
+#: Dos reintentos: en el peor caso son tres timeouts mas siete segundos.
+SMTP_RETRY_DELAYS_SECONDS: tuple[float, ...] = (2, 5)
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,8 @@ class SmtpEmailSender:
         password: str,
         sender: str,
         use_tls: bool,
+        retry_delays: tuple[float, ...] = SMTP_RETRY_DELAYS_SECONDS,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not host:
             raise ValueError("EMAIL_BACKEND=smtp necesita SMTP_HOST")
@@ -104,8 +110,33 @@ class SmtpEmailSender:
         self.password = password
         self.sender = sender
         self.use_tls = use_tls
+        self.retry_delays = retry_delays
+        self._sleep = sleep
 
     def send(self, message: EmailMessage) -> None:
+        """Envia, y ante un fallo pasajero lo intenta otra vez.
+
+        Un timeout esperando la respuesta al final del envio no dice si el
+        servidor se quedo con el correo: el reintento puede hacer que llegue
+        dos veces. Para estos correos es mejor eso que no llegue ninguno.
+        """
+        for delay in self.retry_delays:
+            try:
+                self._send_once(message)
+                return
+            except Exception as exc:
+                if not _is_transient(exc):
+                    raise
+                logger.warning(
+                    "Fallo pasajero enviando '%s' (%s); se reintenta en %s s",
+                    message.subject,
+                    type(exc).__name__,
+                    delay,
+                )
+            self._sleep(delay)
+        self._send_once(message)
+
+    def _send_once(self, message: EmailMessage) -> None:
         mime = MimeMessage()
         mime["From"] = self.sender
         mime["To"] = message.to
@@ -126,6 +157,17 @@ class SmtpEmailSender:
             if self.user:
                 smtp.login(self.user, self.password)
             smtp.send_message(mime)
+
+
+def _is_transient(exc: Exception) -> bool:
+    """El servidor se cayo, no contesto a tiempo o pidio volver despues (4xx).
+
+    Un 5xx (credenciales, destinatario o remitente rechazado) no se arregla
+    reintentando.
+    """
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return 400 <= exc.smtp_code < 500
+    return isinstance(exc, (smtplib.SMTPServerDisconnected, TimeoutError, ConnectionError))
 
 
 class EmailDailyLimitReached(RuntimeError):

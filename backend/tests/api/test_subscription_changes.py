@@ -16,6 +16,7 @@ from tests.api.test_renewals import (
     DIA,
     H,
     _avisada,
+    _correos,
     _correr,
     _de,
     _suscripcion,
@@ -469,7 +470,7 @@ def test_eliminar_la_cuenta_cancela_la_renovacion_y_conserva_los_pagos_anonimos(
     # El job no tiene a quien cobrarle.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence):
         reporte = _correr(db, wompi, cuando)
-        assert (reporte.notices, reporte.charges, reporte.errors, reporte.emails) == (0, 0, 0, [])
+        assert (reporte.notices, reporte.charges, reporte.errors, _correos(reporte)) == (0, 0, 0, [])
     assert len(wompi.cobros) == 1
 
 
