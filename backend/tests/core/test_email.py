@@ -44,6 +44,7 @@ CONTEXT: dict[str, Any] = {
     "period_end": datetime(2026, 11, 14, 3, 30, tzinfo=UTC),
     "reference": "SA-abc123",
     "automatic": True,
+    "notice_failed": False,
     "activated_renewal": True,
     "had_subscription": True,
     "had_renewal": True,
