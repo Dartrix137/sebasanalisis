@@ -128,8 +128,11 @@ def period_ending(user: User, subscription: Subscription, amount_cents: int) -> 
     )
 
 
-def subscription_expired(user: User, subscription: Subscription, *, automatic: bool) -> EmailMessage:
-    """La suscripcion vencio: se agotaron los cobros, o no se pago el siguiente periodo."""
+def subscription_expired(
+    user: User, subscription: Subscription, *, automatic: bool, notice_failed: bool = False
+) -> EmailMessage:
+    """La suscripcion vencio: se agotaron los cobros, no se pago el siguiente
+    periodo o, en la automatica, el aviso del cobro nunca salio y no se cobro."""
     return build_email(
         "subscription_expired",
         to=user.email,
@@ -137,6 +140,7 @@ def subscription_expired(user: User, subscription: Subscription, *, automatic: b
         plan_name=subscription.plan.name,
         period_end=subscription.current_period_end,
         automatic=automatic,
+        notice_failed=notice_failed,
         url=frontend_url("/planes"),
     )
 

@@ -5,7 +5,9 @@
 <p style="margin:0 0 12px 0;">
   Tu suscripción al plan <strong>{{ plan_name }}</strong> venció el
   <strong>{{ period_end | fecha }}</strong> y tu cuenta ya no tiene acceso a la mesa.
-  {% if automatic %}
+  {% if notice_failed %}
+  No pudimos enviarte el aviso del cobro de la renovación, y sin ese aviso no te cobramos.
+  {% elif automatic %}
   Intentamos cobrar la renovación tres veces y ninguna pasó. No vamos a intentarlo más.
   {% else %}
   Tu plan era de pago manual y no recibimos el pago del siguiente período.

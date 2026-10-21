@@ -874,6 +874,45 @@ def test_pago_manual_aviso_de_vencimiento_y_vencimiento_sin_ningun_cobro(client,
     assert _correos(_correr(db, wompi, vence + DIA)) == []
 
 
+def test_si_el_aviso_nunca_sale_la_suscripcion_vence_en_su_fecha_sin_cobrar(
+    client, db, wompi
+) -> None:
+    """Sin aviso no se cobra; pasado el vencimiento, vence (2026-10-21)."""
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    vence = suscripcion.current_period_end
+
+    assert _correr(db, wompi, vence - 9 * DIA, _CorreoCaido()).notices_failed == 1
+    reporte = _correr(db, wompi, vence - H, _CorreoCaido())
+    assert (reporte.notices_failed, reporte.expired) == (1, 0)
+    assert _suscripcion(db, user_id).status == "active"
+
+    reporte = _correr(db, wompi, vence, _CorreoCaido())
+    assert (reporte.notices_failed, reporte.expired, reporte.charges) == (1, 1, 0)
+    assert _suscripcion(db, user_id).status == "expired"
+    assert len(wompi.cobros) == 1  # solo el del alta
+    assert not _tiene_acceso(client, token)
+    [vencida] = [m for m in _correos(reporte) if m.to == correo]
+    assert "No pudimos enviarte el aviso del cobro" in vencida.text
+    assert "tres veces" not in vencida.text
+
+    # Ya vencida, el job no vuelve a intentar nada.
+    reporte = _correr(db, wompi, vence + H)
+    assert (reporte.notices, reporte.notices_failed, reporte.charges, _correos(reporte)) == (0, 0, 0, [])
+
+
+def test_un_aviso_que_sale_despues_del_vencimiento_todavia_cobra(client, db, wompi) -> None:
+    """El job estuvo caido hasta pasado el vencimiento: avisa, y la siguiente
+    corrida cobra. Lo que vence es el aviso que no sale, no el que sale tarde."""
+    _, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+    vence = suscripcion.current_period_end
+
+    reporte = _correr(db, wompi, vence + H)
+    assert (reporte.notices, reporte.expired, reporte.charges) == (1, 0, 0)
+    reporte = _correr(db, wompi, vence + 2 * H)
+    assert (reporte.charges, reporte.approved) == (1, 1)
+    assert _suscripcion(db, user_id).status == "active"
+
+
 def test_pago_manual_el_aviso_que_no_sale_se_reintenta_en_la_siguiente_corrida(
     client, db, wompi
 ) -> None:

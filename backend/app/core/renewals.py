@@ -24,7 +24,8 @@ Idempotencia, en dos capas:
 Los avisos previos (el del cobro y, en el pago manual, el de vencimiento) se
 envian en la corrida misma, y `notice_sent_for` se anota solo si el envio
 salio: un aviso que no llego no cuenta, y sin aviso no se cobra. La siguiente
-corrida lo intenta de nuevo. Los demas correos se envian despues de confirmar.
+corrida lo intenta de nuevo. Si el periodo ya termino y el aviso sigue sin salir,
+la suscripcion vence. Los demas correos se envian despues de confirmar.
 
 Aqui no se decide el acceso: eso es de `core/access.has_access`.
 """
@@ -265,7 +266,9 @@ def _process_automatic(
     # 2. El aviso va ANTES del primer intento (§3.8), una vez por periodo. Si
     #    todavia no ha salido, esta corrida avisa y no cobra: el cobro queda
     #    para la siguiente. Si el envio falla, tampoco cobra: la siguiente
-    #    corrida vuelve a avisar.
+    #    corrida vuelve a avisar, y si el periodo ya termino, vence en su
+    #    fecha (2026-10-21). Un aviso que si sale tarde (el job estuvo caido, o
+    #    paso a automatica a ultima hora) sigue cobrando despues.
     if not attempts and subscription.notice_sent_for != period_end:
         if schedule.renewal_notice_due(now, period_end):
             charge_at = max(schedule.first_charge_at(period_end), now)
@@ -275,7 +278,14 @@ def _process_automatic(
             message = billing_emails.renewal_notice(
                 user, subscription, quote.total_cents, charge_at
             )
-            _send_notice(db, sender, subscription, period_end, message, report)
+            if not _send_notice(db, sender, subscription, period_end, message, report):
+                if now >= period_end:
+                    expired = billing_emails.subscription_expired(
+                        user, subscription, automatic=True, notice_failed=True
+                    )
+                    _expire(db, subscription)
+                    report.expired += 1
+                    report.emails.append(expired)
         return
 
     # 3. El intento que toque.
@@ -303,8 +313,8 @@ def _send_notice(
     period_end: datetime,
     message: EmailMessage,
     report: RenewalReport,
-) -> None:
-    """Envia el aviso del periodo y, solo si salio, lo anota."""
+) -> bool:
+    """Envia el aviso del periodo y, solo si salio, lo anota. Dice si salio."""
     try:
         sender.send(message)
     except Exception:
@@ -314,11 +324,12 @@ def _send_notice(
             subscription.id,
         )
         report.notices_failed += 1
-        return
+        return False
     subscription.notice_sent_for = period_end
     db.commit()
     report.notices += 1
     report.sent.append(message)
+    return True
 
 
 def _attempts(db: Session, prefix: str) -> list[Payment]:
