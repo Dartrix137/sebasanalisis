@@ -9,7 +9,8 @@ los de una version nueva de un documento legal (§6.7). Es idempotente: se puede
 sin cobrar dos veces (ver `app/core/renewals.py`).
 
 Sale con codigo 0 si corrio (o si otra corrida tenia el candado) y con 1 si
-alguna suscripcion fallo, para que el programador de tareas lo marque.
+alguna suscripcion fallo o algun aviso previo al cobro no salio, para que el
+programador de tareas lo marque.
 """
 
 import logging
@@ -44,7 +45,7 @@ def main() -> int:
             return 0
         sender = get_email_sender()
         with SessionLocal() as db:
-            report = run_renewals(db, provider, datetime.now(UTC))
+            report = run_renewals(db, provider, sender, datetime.now(UTC))
             # Los avisos de un traslado de precio se envian aqui, uno por uno:
             # su plazo de 30 dias corre solo si el correo salio (§4.10).
             notices = send_price_notices(db, sender, datetime.now(UTC))
@@ -67,7 +68,8 @@ def main() -> int:
         legal.failed,
         " (quedan para manana: tope diario)" if legal.deferred_by_daily_limit else "",
     )
-    return 1 if report.errors else 0
+    # Un aviso que no salio tambien marca la corrida: sin aviso no se cobra.
+    return 1 if report.errors or report.notices_failed else 0
 
 
 if __name__ == "__main__":

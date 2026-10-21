@@ -18,7 +18,7 @@ from app.billing.periods import add_interval
 from app.models import AdminAuditLog, Payment, PaymentEvent, PaymentRefund, Plan, Subscription
 from tests.api.conftest import auth
 from tests.api.test_billing import _mensual
-from tests.api.test_renewals import _avisada, _correr, _suscriptor_automatico
+from tests.api.test_renewals import _avisada, _correos, _correr, _suscriptor_automatico
 from tests.api.test_subscriptions import (
     PRECIO,
     _abrir_pago,
@@ -437,7 +437,7 @@ def test_cancelar_de_inmediato_quita_el_acceso_y_no_se_vuelve_a_cobrar(
     # El job no la cobra en ninguna de las horas del cobro.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence - 24 * H, vence):
         reporte = _correr(db, wompi, cuando)
-        assert (reporte.charges, reporte.notices, reporte.emails) == (0, 0, [])
+        assert (reporte.charges, reporte.notices, _correos(reporte)) == (0, 0, [])
     assert len(wompi.cobros) == 1
 
     # Y otra accion sobre ella ya no aplica.

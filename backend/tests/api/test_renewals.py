@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import create_engine, select, text
 
 from app.billing.periods import add_interval
+from app.core.email import EmailMessage, FakeEmailSender
 from app.core.renewals import advisory_lock, renewal_reference, run_renewals
 from app.models import Payment, Plan, Subscription
 from app.payments.base import get_payment_provider
@@ -84,10 +85,15 @@ def _suscriptor_automatico(client, db, wompi: Wompi, *, codigo=None) -> tuple[st
     return token, user_id, correo, suscripcion
 
 
-def _correr(db, wompi: Wompi, cuando: datetime):
-    reporte = run_renewals(db, wompi.provider, cuando)
+def _correr(db, wompi: Wompi, cuando: datetime, sender=None):
+    reporte = run_renewals(db, wompi.provider, sender or FakeEmailSender(), cuando)
     db.expire_all()
     return reporte
+
+
+def _correos(reporte) -> list:
+    """Los avisos que salieron en la corrida y los correos que quedan por enviar."""
+    return [*reporte.sent, *reporte.emails]
 
 
 def _suscripcion(db, user_id: str) -> Subscription:
@@ -96,7 +102,7 @@ def _suscripcion(db, user_id: str) -> Subscription:
 
 
 def _de(reporte, correo: str) -> list[str]:
-    return [m.subject for m in reporte.emails if m.to == correo]
+    return [m.subject for m in _correos(reporte) if m.to == correo]
 
 
 # ---------- Disponibilidad y contratos ----------
@@ -388,11 +394,11 @@ def test_el_aviso_sale_siete_dias_antes_del_primer_intento_y_una_sola_vez(client
     primer_intento = vence - 48 * H
 
     reporte = _correr(db, wompi, primer_intento - 7 * DIA - H)
-    assert (reporte.notices, reporte.emails) == (0, [])
+    assert (reporte.notices, _correos(reporte)) == (0, [])
 
     reporte = _correr(db, wompi, primer_intento - 7 * DIA)
     assert reporte.notices == 1
-    [aviso] = [m for m in reporte.emails if m.to == correo]
+    [aviso] = [m for m in _correos(reporte) if m.to == correo]
     assert aviso.subject == "Aviso: próximo cobro de tu suscripción a Sebasanálisis"
     # Que plan, cuanto, en que moneda, a que medio y como gestionarlo.
     assert "Acceso Mensual" in aviso.text and "100.000 COP" in aviso.text
@@ -415,6 +421,40 @@ def test_si_el_aviso_no_ha_salido_la_corrida_avisa_y_no_cobra(client, db, wompi)
     assert len(wompi.cobros) == 1
 
     reporte = _correr(db, wompi, cuando + H)
+    assert (reporte.notices, reporte.charges, reporte.approved) == (0, 1, 1)
+
+
+class _CorreoCaido:
+    """Un servidor de correo que no responde."""
+
+    def send(self, message: EmailMessage) -> None:
+        raise ConnectionError("sin correo")
+
+
+def test_si_el_aviso_no_sale_no_se_anota_ni_se_cobra_y_la_siguiente_corrida_avisa(
+    client, db, wompi
+) -> None:
+    """Un aviso que no llego no cuenta: sin aviso no hay cobro (2026-10-21)."""
+    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    vence = suscripcion.current_period_end
+
+    reporte = _correr(db, wompi, vence - 9 * DIA, _CorreoCaido())
+    assert (reporte.notices, reporte.notices_failed, _correos(reporte)) == (0, 1, [])
+    assert _suscripcion(db, user_id).notice_sent_for is None
+
+    # Llega la hora del primer intento con el correo todavia caido: no se cobra.
+    reporte = _correr(db, wompi, vence - 48 * H, _CorreoCaido())
+    assert (reporte.notices_failed, reporte.charges) == (1, 0)
+    assert len(wompi.cobros) == 1  # solo el del alta
+
+    # Vuelve el correo: esta corrida avisa y no cobra; la siguiente cobra.
+    sender = FakeEmailSender()
+    reporte = _correr(db, wompi, vence - 47 * H, sender)
+    assert (reporte.notices, reporte.notices_failed, reporte.charges) == (1, 0, 0)
+    assert [m.to for m in sender.sent] == [correo]
+    assert _suscripcion(db, user_id).notice_sent_for == vence
+
+    reporte = _correr(db, wompi, vence - 46 * H)
     assert (reporte.notices, reporte.charges, reporte.approved) == (0, 1, 1)
 
 
@@ -467,7 +507,7 @@ def test_dos_corridas_sobre_el_mismo_periodo_un_solo_cobro(client, db, wompi) ->
     assert _correr(db, wompi, vence - 48 * H).charges == 1
     for _ in range(3):
         reporte = _correr(db, wompi, vence - 48 * H)
-        assert (reporte.charges, reporte.emails) == (0, [])
+        assert (reporte.charges, _correos(reporte)) == (0, [])
     assert len(wompi.cobros) == 2  # el del alta y uno de renovacion
     assert len(_pagos(db, user_id)) == 2
 
@@ -564,7 +604,7 @@ def test_los_tres_intentos_fallan_y_vence_exactamente_en_el_vencimiento(client, 
     assert suscripcion.current_period_end == vence  # el periodo no se mueve
     # En mora conserva el acceso: el periodo pagado sigue corriendo.
     assert _tiene_acceso(client, token)
-    [fallido] = [m for m in reporte.emails if m.to == correo]
+    [fallido] = [m for m in _correos(reporte) if m.to == correo]
     assert fallido.subject == "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis"
     assert "100.000 COP" in fallido.text and "conservas el acceso" in fallido.text
 
@@ -594,7 +634,7 @@ def test_los_tres_intentos_fallan_y_vence_exactamente_en_el_vencimiento(client, 
         "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis",
         "Tu suscripción a Sebasanálisis venció",
     ]
-    vencida = reporte.emails[-1].text
+    vencida = _correos(reporte)[-1].text
     assert "tres veces" in vencida and "No vamos a intentarlo más" in vencida
 
     # Tres intentos, ni uno mas, con sus tres referencias.
@@ -605,7 +645,7 @@ def test_los_tres_intentos_fallan_y_vence_exactamente_en_el_vencimiento(client, 
     assert {p.status for p in renovaciones} == {"declined"}
     for horas in (1, 24, 500):
         reporte = _correr(db, wompi, vence + horas * H)
-        assert (reporte.charges, reporte.expired, reporte.emails) == (0, 0, [])
+        assert (reporte.charges, reporte.expired, _correos(reporte)) == (0, 0, [])
     assert len(wompi.cobros) == 4  # el del alta y los tres intentos
 
     # El acceso quedo revocado: el periodo termino y nada lo extendio.
@@ -643,7 +683,7 @@ def test_si_wompi_no_responde_cuenta_como_intento_y_no_se_le_escribe_al_cliente(
     vence = _avisada(db, wompi, suscripcion)
     wompi.cobro_caido = True
     reporte = _correr(db, wompi, vence - 48 * H)
-    assert (reporte.charges, reporte.failed, reporte.emails) == (1, 1, [])
+    assert (reporte.charges, reporte.failed, _correos(reporte)) == (1, 1, [])
     assert _suscripcion(db, user_id).status == "past_due"
     renovacion = _pagos(db, user_id)[1]
     assert (renovacion.status, renovacion.provider_transaction_id) == ("error", None)
@@ -681,7 +721,7 @@ def test_cupon_repeating_descuenta_un_periodo_en_cada_renovacion(client, db, wom
         aviso = _correr(db, wompi, vence - 9 * DIA)
         # El aviso anuncia lo que de verdad se va a cobrar.
         esperado = "80.000 COP" if monto == 8_000_000 else "100.000 COP"
-        assert esperado in aviso.emails[0].text
+        assert esperado in _correos(aviso)[0].text
         assert _correr(db, wompi, vence - 48 * H).approved == 1
         assert wompi.cobros[-1]["amount_in_cents"] == monto
         assert _suscripcion(db, user_id).discount_periods_remaining == quedan
@@ -728,13 +768,13 @@ def test_cancelar_conserva_el_acceso_y_detiene_los_cobros(client, db, wompi, out
     # El job no avisa ni cobra.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence - 24 * H, vence - H):
         reporte = _correr(db, wompi, cuando)
-        assert (reporte.notices, reporte.charges, reporte.emails) == (0, 0, [])
+        assert (reporte.notices, reporte.charges, _correos(reporte)) == (0, 0, [])
     assert len(wompi.cobros) == 1
     assert _suscripcion(db, user_id).current_period_end == vence
 
     # Al terminar el periodo queda vencida, sin correo: ya sabia.
     reporte = _correr(db, wompi, vence)
-    assert (reporte.expired, reporte.charges, reporte.emails) == (1, 0, [])
+    assert (reporte.expired, reporte.charges, _correos(reporte)) == (1, 0, [])
     assert _suscripcion(db, user_id).status == "expired"
 
 
@@ -812,26 +852,44 @@ def test_pago_manual_aviso_de_vencimiento_y_vencimiento_sin_ningun_cobro(client,
     suscripcion = _suscripcion(db, user_id)
     vence = suscripcion.current_period_end
 
-    assert _correr(db, wompi, vence - 7 * DIA - H).emails == []
+    assert _correos(_correr(db, wompi, vence - 7 * DIA - H)) == []
 
     reporte = _correr(db, wompi, vence - 7 * DIA)
     assert reporte.notices == 1
-    [aviso] = [m for m in reporte.emails if m.to == correo]
+    [aviso] = [m for m in _correos(reporte) if m.to == correo]
     assert aviso.subject == "Tu acceso a Sebasanálisis está por terminar"
     assert "no te vamos a hacer ningún cobro" in aviso.text and "100.000 COP" in aviso.text
     assert f"/planes/pagar?plan={suscripcion.plan_id}" in aviso.text
     # Una vez por periodo.
-    assert _correr(db, wompi, vence - 3 * DIA).emails == []
+    assert _correos(_correr(db, wompi, vence - 3 * DIA)) == []
 
     reporte = _correr(db, wompi, vence)
     assert (reporte.expired, reporte.charges) == (1, 0)
-    [vencida] = [m for m in reporte.emails if m.to == correo]
+    [vencida] = [m for m in _correos(reporte) if m.to == correo]
     assert vencida.subject == "Tu suscripción a Sebasanálisis venció"
     assert "pago manual" in vencida.text and "tres veces" not in vencida.text
     assert _suscripcion(db, user_id).status == "expired"
     # Nunca se le cobro nada por el job.
     assert wompi.cobros == []
-    assert _correr(db, wompi, vence + DIA).emails == []
+    assert _correos(_correr(db, wompi, vence + DIA)) == []
+
+
+def test_pago_manual_el_aviso_que_no_sale_se_reintenta_en_la_siguiente_corrida(
+    client, db, wompi
+) -> None:
+    token, user_id, correo = _cuenta(client, db)
+    _aprobar(client, wompi, _abrir_pago(client, db, token))
+    vence = _suscripcion(db, user_id).current_period_end
+
+    reporte = _correr(db, wompi, vence - 7 * DIA, _CorreoCaido())
+    assert (reporte.notices, reporte.notices_failed) == (0, 1)
+    assert _suscripcion(db, user_id).notice_sent_for is None
+
+    sender = FakeEmailSender()
+    assert _correr(db, wompi, vence - 7 * DIA + H, sender).notices == 1
+    [aviso] = sender.sent
+    assert (aviso.to, aviso.subject) == (correo, "Tu acceso a Sebasanálisis está por terminar")
+    assert _correr(db, wompi, vence - 3 * DIA).notices == 0
 
 
 def test_pagar_a_mano_despues_del_aviso_renueva_y_vuelve_a_avisar_el_periodo_siguiente(
@@ -847,7 +905,7 @@ def test_pagar_a_mano_despues_del_aviso_renueva_y_vuelve_a_avisar_el_periodo_sig
     assert nuevo == add_interval(vence, "month", 1)
     # El vencimiento viejo ya no vence nada.
     reporte = _correr(db, wompi, vence + H)
-    assert (reporte.expired, reporte.emails) == (0, [])
+    assert (reporte.expired, _correos(reporte)) == (0, [])
     assert _correr(db, wompi, nuevo - 7 * DIA).notices == 1
 
 

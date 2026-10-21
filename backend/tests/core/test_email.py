@@ -1,6 +1,7 @@
 """Envio de correo y plantillas (§5.5). Sin red ni base."""
 
 import json
+import smtplib
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -271,6 +272,84 @@ def test_smtp_en_el_465_no_hace_starttls(fake_smtp: type[_FakeSmtp]) -> None:
     """El 465 ya es TLS desde el primer byte: pedir STARTTLS encima falla."""
     _smtp(port=465).send(MESSAGE)
     assert fake_smtp.instances[0].calls == ["login:usuario", "send", "quit"]
+
+
+class _FallaSmtp(_FakeSmtp):
+    """Falla en `send_message` con lo que haya en `fallas`, en orden."""
+
+    fallas: list[Exception] = []
+
+    def send_message(self, mime: Any) -> None:
+        if _FallaSmtp.fallas:
+            raise _FallaSmtp.fallas.pop(0)
+        super().send_message(mime)
+
+
+@pytest.fixture
+def falla_smtp(monkeypatch: pytest.MonkeyPatch) -> type[_FallaSmtp]:
+    _FakeSmtp.instances = []
+    monkeypatch.setattr(email_module.smtplib, "SMTP", _FallaSmtp)
+    return _FallaSmtp
+
+
+def _smtp_con_esperas(esperas: list[float]) -> SmtpEmailSender:
+    return SmtpEmailSender(
+        host="smtp.ejemplo.com",
+        port=587,
+        user="usuario",
+        password="clave",
+        sender="x@ejemplo.com",
+        use_tls=True,
+        sleep=esperas.append,
+    )
+
+
+@pytest.mark.parametrize(
+    "falla",
+    [
+        # El caso real de GlitchTip del 2026-10-19: el servidor no contesto al DATA.
+        smtplib.SMTPServerDisconnected("Connection unexpectedly closed: The read operation timed out"),
+        TimeoutError("timed out"),
+        ConnectionResetError("reset"),
+        smtplib.SMTPDataError(451, b"Try again later"),
+    ],
+)
+def test_smtp_reintenta_un_fallo_pasajero(falla_smtp: type[_FallaSmtp], falla: Exception) -> None:
+    falla_smtp.fallas = [falla]
+    esperas: list[float] = []
+    _smtp_con_esperas(esperas).send(MESSAGE)
+
+    assert len(falla_smtp.instances) == 2, "el reintento abre una conexion nueva"
+    assert len(falla_smtp.instances[1].sent) == 1
+    assert esperas == [email_module.SMTP_RETRY_DELAYS_SECONDS[0]]
+
+
+def test_smtp_se_rinde_despues_de_los_reintentos(falla_smtp: type[_FallaSmtp]) -> None:
+    intentos = len(email_module.SMTP_RETRY_DELAYS_SECONDS) + 1
+    falla_smtp.fallas = [TimeoutError("timed out") for _ in range(intentos)]
+    esperas: list[float] = []
+    with pytest.raises(TimeoutError):
+        _smtp_con_esperas(esperas).send(MESSAGE)
+    assert len(falla_smtp.instances) == intentos
+    assert esperas == list(email_module.SMTP_RETRY_DELAYS_SECONDS)
+
+
+@pytest.mark.parametrize(
+    "falla",
+    [
+        smtplib.SMTPDataError(550, b"Rejected"),
+        smtplib.SMTPAuthenticationError(535, b"Bad credentials"),
+        ValueError("no es del servidor"),
+    ],
+)
+def test_smtp_no_reintenta_un_rechazo_definitivo(
+    falla_smtp: type[_FallaSmtp], falla: Exception
+) -> None:
+    falla_smtp.fallas = [falla]
+    esperas: list[float] = []
+    with pytest.raises(type(falla)):
+        _smtp_con_esperas(esperas).send(MESSAGE)
+    assert (len(falla_smtp.instances), esperas) == (1, [])
 
 
 def test_smtp_sin_host_se_rechaza() -> None:

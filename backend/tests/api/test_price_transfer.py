@@ -24,7 +24,7 @@ from app.models import AdminAuditLog, Payment, Plan, SubscriptionPriceChange
 from tests.api.conftest import auth
 from tests.api.test_admin_payments import MOTIVO, _accion, _suscripcion, _suscriptor_manual
 from tests.api.test_billing import _cupon, _mensual
-from tests.api.test_renewals import _avisada, _correr, _suscriptor_automatico
+from tests.api.test_renewals import _avisada, _correos, _correr, _suscriptor_automatico
 from tests.api.test_subscriptions import PRECIO, _pagos, _suscribir
 
 NUEVO = 12_000_000  # 120.000 COP
@@ -265,7 +265,7 @@ def test_la_subida_se_cobra_desde_su_fecha_y_el_cupon_sigue_descontando(
         suscripcion = _suscripcion(db, suscripcion.id)
         vence = suscripcion.current_period_end
         reporte = _correr(db, wompi, vence - 9 * DIA)
-        [aviso_cobro] = [m for m in reporte.emails if m.to == correo]
+        [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
         assert "96.000 COP" in aviso_cobro.text
         assert _correr(db, wompi, vence - 48 * H).charges == 1
         assert wompi.cobros[-1]["amount_in_cents"] == NUEVO * 80 // 100
@@ -299,7 +299,7 @@ def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
 
     # El aviso de 7 dias dice el precio de hoy.
     reporte = _correr(db, wompi, vence - 9 * DIA)
-    [aviso_cobro] = [m for m in reporte.emails if m.to == correo]
+    [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
     assert "100.000 COP" in aviso_cobro.text
 
     # Primer intento, rechazado, con el precio de hoy.
@@ -324,7 +324,7 @@ def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
     data = client.get("/billing/subscription", headers=auth(token)).json()
     assert data["price_change"] is None and data["next_charge_cents"] == NUEVO
     reporte = _correr(db, wompi, siguiente - 9 * DIA)
-    [aviso_cobro] = [m for m in reporte.emails if m.to == correo]
+    [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
     assert "120.000 COP" in aviso_cobro.text
     assert _correr(db, wompi, siguiente - 48 * H).charges == 1
     assert wompi.cobros[-1]["amount_in_cents"] == NUEVO
