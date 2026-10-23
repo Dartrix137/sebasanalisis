@@ -789,10 +789,10 @@ Si no llega nada: revisar que el DSN use `https://` y el dominio publico, que
 el Web se haya reconstruido (no solo reiniciado), y que el navegador no este
 bloqueando la peticion a `errores.sebasanalisis.com` (pestana Red).
 
-## Antes del lanzamiento comercial (Fase 4, paso 9)
+## Antes del lanzamiento comercial (Fase 5, paso 5.6; antes Fase 4, paso 9)
 
 La lista de `PLATAFORMA_COMPLETA.md` §9, con el estado del 2026-10-19 en
-`HOJA_DE_RUTA.md` §5. Aqui van los pasos a mano y como comprobar que quedaron
+`HOJA_DE_RUTA.md` §5 (paso 5.6). Aqui van los pasos a mano y como comprobar que quedaron
 bien. El orden importa: **respaldos, monitor externo y correo primero**, llaves
 de produccion al final, cuando lo demas este hecho.
 
@@ -867,7 +867,7 @@ base aparte y se comparan cifras. **Nunca se usa *Restore* desde la pestana
    revisa antes de seguir.
 4. Borrar el servicio `sebasanalisis-restauracion`: tiene una copia de los datos
    personales y no hace falta.
-5. Anotar la fecha de la prueba en `HOJA_DE_RUTA.md` §5 (paso 9). Repetirla
+5. Anotar la fecha de la prueba en `HOJA_DE_RUTA.md` §5 (paso 5.6). Repetirla
    cada vez que cambie la version de PostgreSQL o el destino.
 
 ### 2. Resend Pro y `EMAIL_DAILY_LIMIT`

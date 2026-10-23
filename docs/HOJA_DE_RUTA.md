@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-15 (ajustes de la mesa y del admin).
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-23 (Fase 5: cambio de pasarela, facturación con Dataico y lanzamiento).
 
 ---
 
@@ -12,9 +12,14 @@ Sebasanálisis es una plataforma web por suscripción. El usuario registra a man
 
 La recomendación sale de reglas estadísticas sobre los resultados registrados. **No es una predicción**: cada giro es independiente y ninguna gestión de banca cambia la ventaja de la casa. Esa regla de lenguaje es la más importante del proyecto (`ARQUITECTURA_Y_ESTADISTICA.md` §0).
 
-**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. Desde el paso 3 de la Fase 4 la mesa exige acceso, y desde el paso 5 (cerrado el 2026-10-13) una cuenta nueva lo obtiene suscribiéndose con Wompi o por acceso manual de un administrador. **El VPS cobra todavía contra el sandbox de Wompi**: con las llaves de prueba cualquiera obtiene acceso con una tarjeta de prueba, sin que se mueva dinero. Antes de abrir al público hay que pasar a las llaves de producción (`DESPLIEGUE.md`).
+**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. La Fase 4 (acceso, pagos, correo, legal, admin completo, multijuego) quedó construida. El cobro se construyó con Wompi y **solo se probó contra su sandbox: nunca se cobró dinero real y no hay clientes que migrar**. El 2026-10-22 Wompi salió del proyecto porque no admite el modelo de negocio, y lo reemplaza **Tipster Page**. El correo con el anexo técnico ya se le envió. Hasta integrarlo, la única vía de acceso es la manual del administrador, y **no se vende**.
 
-**Hacia dónde va:** la Fase 4 lo convierte en plataforma comercial. Control de acceso, pagos con Wompi, correo, textos legales, admin completo y una base que admita más juegos.
+**Hacia dónde va:** la Fase 5 (§5) deja la aplicación lista para vender:
+- retirar Wompi;
+- integrar Tipster Page, que cobra en euros;
+- facturar cada pago con Dataico, convertido a pesos con la tasa del día;
+- publicar los textos legales revisados;
+- lanzar.
 
 ---
 
@@ -25,7 +30,7 @@ La recomendación sale de reglas estadísticas sobre los resultados registrados.
 | `CLAUDE.md` | Reglas de trabajo vigentes: lenguaje, stack, convenciones, qué no hacer. | Siempre, antes de escribir código. |
 | `docs/HOJA_DE_RUTA.md` (este) | Estado, historia y rumbo. | Para ubicarse. |
 | `docs/ARQUITECTURA_Y_ESTADISTICA.md` | Filosofía y terminología (§0), motor estadístico y de recomendación (§2), arquitectura y modelo de datos del núcleo (§3), alcance por etapas (§4). | Al tocar el motor, la mesa o el modelo de juego. |
-| `docs/PLATAFORMA_COMPLETA.md` | Especificación de la Fase 4: acceso, pagos, admin, auth, legal, multijuego, preparación del stack. | Al tocar cualquiera de esas áreas. Es el trabajo en curso. |
+| `docs/PLATAFORMA_COMPLETA.md` | Especificación de la Fase 4: acceso, pagos, admin, auth, legal, multijuego, preparación del stack. La Fase 5 la sigue usando: el núcleo de cobro se conserva, y la facturación con Dataico está en §3.17. | Al tocar cualquiera de esas áreas. |
 | `docs/DESPLIEGUE.md` | Despliegue en el VPS con Dokploy, variables de entorno, dominios. | Al desplegar o agregar una variable. |
 | `docs/design/` | Mockups de login, registro y mesa. | Al construir o cambiar esas pantallas. |
 | `docs/reference/` | Insumos que no se modifican: estrategia verificada por un analista, boceto estadístico previo, comparativo que originó la Fase 3. | Como fuente; nunca como especificación vigente. |
@@ -106,12 +111,82 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | La ficha de un usuario en el admin repetía las acciones sobre su suscripción. | Las acciones viven solo en `/admin/suscripciones`; la ficha resume y enlaza. | 2026-10-15 |
 | Sin facturación electrónica: el correo de cada pago es una constancia de pago. | Además, una factura electrónica a consumidor final por cada pago aprobado, emitida con Siigo. Sin construir. | 2026-10-20 |
 | La tarjeta se escribía en el widget de Wompi, en modo tokenización. | Se escribe en un formulario propio que la tokeniza contra la API de Wompi, cifrada, desde el navegador. Nequi se tokeniza por la API. La llave de cifrado la pide el backend, porque Wompi no deja pedirla desde el navegador. Construido y probado a mano contra el sandbox el 2026-10-19. | 2026-10-19 |
+| Wompi como pasarela, con el sandbox probado y las llaves de producción como último paso del lanzamiento. | **Tipster Page** reemplaza a Wompi: Wompi no admite el modelo de negocio. Se retira el código propio de Wompi y se conserva el núcleo de cobro. Nunca se cobró dinero real, así que no hay clientes que migrar. | 2026-10-22 |
+| Facturación electrónica con Siigo. | Con **Dataico**, por su API. Sigue siendo a consumidor final, una factura por pago aprobado. | 2026-10-23 |
+| Se cobra y se muestra un solo precio, en COP. | Tipster Page cobra en **euros**. La factura va en pesos, convertida con la tasa del día del pago (hora de Colombia): de euros a dólares con la tasa del día, y de dólares a pesos con la TRM (Decreto 1625 de 2016). El precio en pantalla y los planes se redefinen al integrar Tipster Page (paso 5.3). | 2026-10-23 |
+| El lanzamiento era el paso 9 de la Fase 4. | La Fase 4 se da por cerrada en lo construido. Lo que faltaba del paso 9 pasa a la Fase 5, junto con el cambio de pasarela y la facturación. | 2026-10-23 |
+| Sin pasarela, el acceso manual del admin era una vía provisional mientras llegaba el cobro. | **No se vende hasta integrar Tipster Page y Dataico.** Mientras tanto solo hay accesos manuales de prueba o de cortesía, y no hay ventas que facturar. | 2026-10-23 |
 
 ---
 
-## 5. Lo que se construye ahora: Fase 4
+## 5. Lo que se construye ahora: Fase 5 — Salida al mercado
 
-Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden pone primero lo que bloquea cobrar, y no se avanza a un paso sin que el anterior tenga tests o una verificación manual funcionando.
+Decidida el 2026-10-23. Deja la aplicación lista para vender. No toca el motor. Parte de tres hechos:
+- Wompi salió (2026-10-22). Se probó solo contra su sandbox, nunca con dinero real.
+- Tipster Page lo reemplaza y cobra en euros.
+- Cada pago aprobado lleva una factura electrónica emitida con Dataico.
+
+**Regla de la fase: no se vende hasta tener los pasos 5.3 y 5.4.** Mientras tanto, el acceso es solo manual y de prueba o de cortesía, y por eso no hay ventas que facturar a mano.
+
+No se avanza a un paso de código sin que el anterior tenga tests o una verificación manual funcionando. Las fechas las ponen los terceros: Tipster Page, el contador, Dataico y el abogado. Por eso cada paso dice qué lo bloquea, y lo que no está bloqueado se hace en paralelo.
+
+| # | Paso | Qué entrega | Bloqueado por | Se cierra cuando | Estado |
+|---|---|---|---|---|---|
+| 5.1 | **Retiro de Wompi** | Se borra lo que solo existe por Wompi: el proveedor, sus variables, la llave de cifrado, el formulario de tarjeta y Nequi, `jose`, sus orígenes en la CSP y sus tests de firma. Se conserva el núcleo: `PaymentProvider`, `apply_transaction`, renovaciones, precios, cupones, traslado de precios, admin de pagos y pasarela simulada. El webhook pasa a `POST /webhooks/payments`, genérico. Un doble de pruebas nuevo, `tests/api/pasarela_double.py`. Las reglas de pagos de `CLAUDE.md` quedan para cualquier pasarela. Detalle en el documento "Cambio de pasarela: de Wompi a Tipster Page" (Claude Docs, 2026-10-22). Al construir, el detalle pasa a `PLATAFORMA_COMPLETA.md` | Nada: se puede empezar ya | Los doce casos de §3.9 en verde sobre el doble nuevo. En local sin pasarela, el pago se ve apagado y el acceso manual funciona. Desplegado en el orden del documento, con las suscripciones de sandbox canceladas en el admin | Por empezar |
+| 5.2 | **Base de la facturación, sin proveedor** | `billing/fx.py` (puro y con tests): la fecha de la operación en hora de Colombia, la conversión de euros a dólares a pesos con `Decimal` y los montos en centavos. La tabla `invoices`, única por pago. La fila pendiente que crea `apply_transaction` al aprobar un pago, en la misma transacción. El estado de la factura en el detalle del pago del admin. La emisión queda apagada | 5.1 (los tests van sobre el doble nuevo). El redondeo lo confirma el contador, pero no frena la construcción | Tests en verde. Un pago aprobado con la pasarela simulada deja una factura pendiente, y un webhook repetido no deja dos | Por empezar |
+| 5.3 | **Integración de Tipster Page** | Un `TipsterPageProvider` detrás de `PaymentProvider`, con la firma, la reconsulta y la idempotencia leídas de su documentación oficial. Si se conserva nuestro calendario de cobros o se usa su recurrencia: preguntas 6 y 7 del anexo. Los precios de los planes en la moneda que cobra Tipster Page (migración de datos), con la regla del precio en pantalla reescrita. Sus orígenes en la CSP. Los tests de API con el proveedor real sobre transporte simulado; el doble de 5.1 se retira | Las respuestas de Tipster Page al anexo y su sandbox | Los doce casos de §3.9 y los cuatro obligatorios de `CLAUDE.md` en verde con el proveedor real. Flujo completo en el sandbox de Tipster Page en el VPS: alta, renovación si aplica, cancelación, anulación | Esperando a Tipster Page |
+| 5.4 | **Emisión con Dataico** | `InvoiceIssuer` con `DataicoIssuer` (y uno simulado). Las tasas de cambio: la TRM de la Superfinanciera y la tasa de euros a dólares que diga el contador, guardadas en la base con su fuente. La emisión desde el job de cada hora, con reintentos y la tasa congelada en la factura. "Reintentar emisión" en el admin, con motivo y bitácora. La nota crédito, si el contador la pide. Todo leído de la documentación oficial de Dataico y citado | 5.2. Las respuestas del contador. La cuenta de Dataico con API, la resolución de la DIAN vinculada y la documentación de `app.dataico.com/api-docs` | Una factura de un pago en euros emitida en el ambiente `PRUEBAS` con la tasa y la fecha correctas, visible en el portal de Dataico y en el admin. Habilitación ante la DIAN completa | Esperando al contador y a Dataico |
+| 5.5 | **Textos legales, versión 2** | Una sola versión nueva de términos, datos, reembolsos y cookies, que reúne tres cosas: el texto del abogado, Tipster Page como pasarela y la facturación. Los datos del responsable dejan de ser `[PENDIENTE]`. Se publica una vez para no pedir dos veces la aceptación (§6.7 envía el aviso) | Abogado. Que Tipster Page confirme las condiciones (5.3) | Publicada en producción, con el aviso enviado a las cuentas que correspondan | Esperando al abogado |
+| 5.6 | **Lanzamiento** | Lo que quedaba del paso 9 de la Fase 4, más la pasarela y la facturación en producción: ver la lista abajo | 5.3, 5.4 y 5.5 | La lista de abajo completa, con un pago real de punta a punta | Pendiente |
+
+**Lista del lanzamiento (paso 5.6)**, heredada del paso 9 con lo que cambió:
+
+| Punto | Estado | Tipo |
+|---|---|---|
+| Respaldos de la base y una restauración probada en una base aparte | Pendiente. Se espera a Cloudflare R2 (decisión del 2026-10-20) | Operativo (usuario) |
+| Resend Pro y `EMAIL_DAILY_LIMIT` (propuesta: 1500) | Pendiente. Antes de publicar la versión 2 de los textos legales | Operativo (usuario) |
+| Revisar un correo de cada tipo en modo claro y oscuro | Pendiente (`DESPLIEGUE.md`, "Correo") | Operativo (usuario) |
+| Precio en pantalla: si incluye impuestos, IVA, ley de consumo para clientes de fuera | Pendiente. Ahora en euros: va con 5.3 | Abogado y contador |
+| La frase de "apostar el mínimo" del formulario de mesa nueva | Pendiente | Abogado |
+| Qué exige Tipster Page en seguridad de pagos (antes era la pregunta de PCI DSS a Wompi, §10 n.º 15) | Depende de cómo se cobre: con una página suya, la tarjeta no pasa por la nuestra | Tipster Page |
+| Llaves de producción de Tipster Page en Dokploy y su URL de eventos | Al final, con lo demás hecho | Operativo (usuario) |
+| Dataico en `PRODUCCION` | Al final, con la habilitación ante la DIAN completa | Operativo (usuario) |
+| **Un pago real de punta a punta**, hecho por el usuario: cobro, acceso, factura validada por la DIAN y recibo. Después, su anulación o reembolso, con la nota crédito si aplica | Al final | Operativo (usuario) |
+| Ya hecho en el paso 9: SPF, DKIM y DMARC; job de renovaciones en Dokploy; UptimeRobot; acabado del frontend; seguridad; diseño móvil; aviso de versiones legales | Hecho (ver §6, "Paso 9: estado") | — |
+
+**Lo que se puede hacer ya, en paralelo:**
+- **Código**: 5.1 y después 5.2.
+- **Usuario con Tipster Page**:
+  - seguir la respuesta al anexo;
+  - mandar un segundo correo con cuatro preguntas que el anexo no hizo: en qué moneda y cada cuánto liquidan a la empresa, qué comisión cobran, si emiten un documento por esa comisión, y si el cliente ve el cobro en euros o en su moneda.
+- **Usuario con Dataico**: abrir la cuenta con API, vincular la resolución de facturación de la DIAN, hacer la habilitación y dar acceso a la documentación de la API.
+- **Contador**:
+  - factura en euros con la tasa o directamente en pesos;
+  - de dónde sale la tasa de euros a dólares y cómo se redondea;
+  - el IVA;
+  - si la comisión de Tipster Page cambia el valor de la factura;
+  - si una anulación o un reembolso piden nota crédito.
+- **Abogado**: la versión 2 de los textos.
+- **Usuario**: respaldos y Resend Pro.
+
+### Pendiente de terceros y del usuario (Fase 5)
+
+| Quién | Qué | Bloquea |
+|---|---|---|
+| Tipster Page | Las 18 preguntas del anexo (enviado el 2026-10-22), la documentación de la API y el sandbox | 5.3 |
+| Tipster Page | Moneda y frecuencia de la liquidación, comisión, documento por la comisión, moneda que ve el cliente | 5.3 y 5.4 (base de la factura) |
+| Contador | Moneda de la factura, fuente de la tasa de euros a dólares y redondeo, IVA (incluida la exclusión por computación en la nube, `PLATAFORMA_COMPLETA.md` §3.17), comisión y nota crédito | 5.4 |
+| Usuario con Dataico | Cuenta con API, llave y `dataico_account_id`, resolución de la DIAN vinculada, habilitación, acceso a `app.dataico.com/api-docs` | 5.4 |
+| Abogado | Textos legales revisados, datos del responsable del tratamiento, precio en pantalla, frase de "apostar el mínimo" | 5.5 y 5.6 |
+| Usuario | Respaldos con Cloudflare R2 y su prueba de restauración, Resend Pro | 5.6 |
+
+---
+
+## 6. Fase 4 — Plataforma comercial (construida; cerrada el 2026-10-23)
+
+Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden puso primero lo que bloquea cobrar, y no se avanzó a un paso sin que el anterior tuviera tests o una verificación manual funcionando. El 2026-10-23 se dio por cerrada en lo construido:
+- El paso 5 se construyó y se probó con Wompi, que salió del proyecto. Lo superan los pasos 5.1 y 5.3 de la Fase 5.
+- Lo que faltaba del paso 9 pasó al paso 5.6.
 
 | # | Paso | Detalle | Estado |
 |---|---|---|---|
@@ -120,11 +195,11 @@ Especificación completa en `PLATAFORMA_COMPLETA.md`. No toca el motor. El orden
 | 2 | Legal: documentos versionados, consentimientos, páginas públicas, onboarding | §6 | **Construido el 2026-10-08** (rama `fase-4-paso-2-legal`), con tests de backend y de punta a punta (ver abajo). Los textos son borradores: la revisión del abogado y los datos del responsable bloquean el lanzamiento, no este paso |
 | 3 | Modelo de acceso (`has_access`, `RequireAccess`) y bitácora de auditoría | §2, §4.6 | **Construido el 2026-10-08** (rama `fase-4-paso-3-acceso`), con los tests de §2.4 y de punta a punta (ver abajo) |
 | 4 | Planes y cupones, cálculo de precios, página de planes | §3.2, §3.3, §3.11, §4.4, §4.5 | **Construido el 2026-10-09** (rama `fase-4-paso-4-planes`), con tests de backend y de punta a punta (ver abajo). No cobra: eso es el paso 5 |
-| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Cerrado el 2026-10-13**, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
+| 5 | Wompi: alta, webhook, renovación automática, cancelación, cambio de tarjeta, página de cuenta | §3, §3.12 | **Superado (2026-10-22): Wompi salió del proyecto** y el cambio de pasarela es la Fase 5 (5.1 y 5.3). Lo que sigue es la historia. Cerrado el 2026-10-13, en tres entregas. Entrega 1 (alta con pago manual, webhook y reconsulta) construida el 2026-10-13 en la rama `fase-4-paso-5a-alta-y-webhook`, con tests, y mezclada y desplegada ese día; pagos de prueba aprobados en el sandbox de Wompi, en local y en el VPS, con el webhook recibiendo eventos reales (ver abajo). Entrega 2 (tokenización y renovación automática, con cancelar y reanudar) construida el 2026-10-13 en la rama `fase-4-paso-5b-renovacion`, con los doce casos de §3.9 en verde y probada con tarjeta contra el sandbox (falta Nequi). Entrega 3 (cambiar el medio de pago, pasar de un modo al otro, borrado y exportación de la cuenta con pagos) construida el 2026-10-13 en la rama `fase-4-paso-5c-cuenta-y-cierre` y probada contra el sandbox. El job de renovaciones quedó programado en Dokploy ese día. El usuario desplegó la entrega 3, la probó en el VPS y dio el paso por cerrado. **Sigue con llaves de sandbox**: el paso a producción está en `DESPLIEGUE.md`. Las acciones del admin sobre suscripciones y pagos son del paso 6 |
 | 6 | Admin dashboard completo por secciones | §4, §4.8, §4.9, §4.10 | **Cerrado el 2026-10-14.** Entrega 1 (suscripciones y pagos en el admin) construida el 2026-10-14 en la rama `fase-4-paso-6a-suscripciones-y-pagos` y mezclada ese día (PR #17). Entrega 2 (navegación lateral, resumen, `/admin/juegos` y `/admin/motor`, forzar el restablecimiento y reenviar la verificación) construida el 2026-10-14 en la rama `fase-4-paso-6b-navegacion-y-resumen` y mezclada ese día (PR #18). Entrega 3 (traslado de un precio nuevo a las suscripciones vigentes) construida el 2026-10-14 en la rama `fase-4-paso-6c-traslado-de-precio`, con tests (ver abajo), y mezclada ese día (PR #19). Con ella quedó construido todo el paso. El usuario desplegó la entrega 3 y la probó en el VPS el 2026-10-14 con un plan de prueba: una subida con su aviso, la cancelación del traslado y una bajada, con los avisos enviados por el job y correo real. Dio el paso por cerrado ese día |
 | 7 | Generalización multijuego, con dados como fixture de test | §7, §7.7, §7.8, §7.9 | **Cerrado el 2026-10-14.** Entrega 1 (backend y admin: metadatos del juego, registro de módulos, `plan_games` y la regla n.º 7 de `has_access` con `403 game_not_in_plan`, juegos por plan en `/admin/planes`, campos nuevos en `/admin/juegos`, fixture de dados por la API) construida el 2026-10-14 en la rama `fase-4-paso-7a-multijuego-backend`, con tests, y mezclada ese día (PR #21). Entrega 2 (la mesa en `/juegos/[slug]/mesa/[sessionId]` con la redirección de la ruta vieja, `components/mesa/*`, el teclado desde `possible_outcomes` y la pista `display`, el menú de juegos, la página de cada juego, los juegos incluidos en `/planes` y el fixture de dados en Playwright) construida el 2026-10-14 en la rama `fase-4-paso-7b-mesa-y-menu`, con tests, y mezclada ese día (PR #22). Ese mismo día el usuario decidió salir solo con la ruleta y dejar los juegos futuros para código (§7.9; el alta de juegos del admin quedó oculta, PR #23). El usuario lo desplegó y lo probó en el VPS el 2026-10-14 y dio el paso por cerrado |
 | 8 | Base para apuestas deportivas: solo estructura y preguntas respondidas | §8, §8.4 | **Documentado el 2026-10-15** (rama `fase-4-paso-8-deportivas`), sin código. Las siete preguntas de §8.3 respondidas en §8.4; la fuente de datos y el marco regulatorio quedan pendientes (§10 n.º 13 y 14) y bloquean construir y sacar deportes, no el lanzamiento de la ruleta. Los espacios de nombres quedan reservados solo en el documento. Ver abajo |
-| 9 | Lanzamiento comercial | §9, párrafo final | **En curso desde el 2026-10-19** (rama `fase-4-paso-9-lanzamiento`). Lo único con código, el aviso por correo de una versión nueva de los documentos legales (§6.7), está construido y con tests. Lo demás es operativo (del usuario) o depende del abogado o del contador: ver "Paso 9: estado" abajo. Se cierra cuando esa lista esté completa |
+| 9 | Lanzamiento comercial | §9, párrafo final | **Pasó a la Fase 5, paso 5.6 (2026-10-23).** En curso desde el 2026-10-19 (rama `fase-4-paso-9-lanzamiento`). Lo único con código, el aviso por correo de una versión nueva de los documentos legales (§6.7), está construido y con tests. Lo demás es operativo (del usuario) o depende del abogado o del contador: ver "Paso 9: estado" abajo. Se cierra cuando esa lista esté completa |
 
 ### Paso 0: qué quedó hecho
 
@@ -263,6 +338,8 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Paso 9: estado (2026-10-19)
 
+> Historia. Desde el 2026-10-23, lo que quedó sin hacer está en la lista del paso 5.6 (§5). Las filas que nombran a Wompi o a Siigo describen lo que se decidió entonces.
+
 La lista "Antes del lanzamiento comercial" (`PLATAFORMA_COMPLETA.md` §9), con el estado comprobado en el repositorio y en los documentos. Los pasos a mano de cada punto operativo y su comprobación están en `DESPLIEGUE.md`, "Antes del lanzamiento comercial".
 
 | Punto | Estado | Tipo |
@@ -374,7 +451,9 @@ Tests en `e2e/diseno.spec.ts`. Las dos líneas de la tarjeta de recomendación, 
 - Las cuentas anteriores al paso 2 aceptan los documentos y declaran la mayoría de edad al volver a la mesa; no se les crean consentimientos por migración (2026-10-08).
 - La versión 1 de los documentos legales se publica como borrador marcado; el texto del abogado entra como versión 2 y pide re-aceptación a todas las cuentas (2026-10-08).
 
-### Pendiente del usuario
+### Pendiente del usuario (Fase 4, historia)
+
+> Superada el 2026-10-23 por "Pendiente de terceros y del usuario (Fase 5)" (§5). Las filas de Wompi y de Siigo ya no aplican.
 
 La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORMA_COMPLETA.md` §10. Las que bloquean un paso:
 
@@ -386,20 +465,6 @@ La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORM
 | Preguntarle a Wompi qué exige (PCI DSS) con la tarjeta escrita en un formulario de nuestra página (`PLATAFORMA_COMPLETA.md` §3.16 y §10 n.º 15) | Lanzamiento |
 | Revisión del abogado del precio en pantalla (100.000 COP): si debe decir que incluye impuestos y si aplica IVA, y qué ley de consumo aplica a clientes de fuera de Colombia (`PLATAFORMA_COMPLETA.md` §3.11) | Lanzamiento |
 | Pasar el VPS de las llaves de sandbox a las de producción antes de abrir al público (con las de sandbox, cualquier cuenta obtiene acceso con la tarjeta de prueba). Cuenta de comercio en Wompi: llaves de sandbox ya puestas en Dokploy y en `backend/.env`, y la URL de eventos en su panel (`DESPLIEGUE.md`, "Pagos con Wompi"). Qué medios de pago se habilitan en el panel de Wompi. Facturación electrónica: decidida el 2026-10-20 (consumidor final con Siigo), sin construir; falta la cuenta de Siigo con acceso a la API | Cierre del paso 5 (la entrega 1 se construyó sin llaves) |
-
----
-
-## 6. Fuera de alcance
-
-No se construye hasta que el usuario lo pida explícitamente:
-
-- **Señales avanzadas del motor**: transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal (`ARQUITECTURA_Y_ESTADISTICA.md` §2.9). Entran una por una.
-- **Builder visual de categorías** en el admin. Se usa formulario estructurado.
-- **Juego de dados como producto.** En la Fase 4 entra solo como fixture de test de genericidad.
-- **Apuestas deportivas.** Las respuestas a `PLATAFORMA_COMPLETA.md` §8.3 están en §8.4 (paso 8). Para construirlas faltan el proveedor de datos y el concepto del abogado (§10 n.º 13 y 14), y salen solo si el backtest supera al mercado.
-- **Cambio de plan en caliente** (mensual ↔ anual) y reembolsos por API.
-- **Exportar CSV**, migración de datos locales, notificaciones.
-- **Cualquier IA, OCR o lectura de imágenes.** Descartado, no pospuesto.
 
 ### Paso 6, entrega 1: qué quedó hecho
 
@@ -499,3 +564,17 @@ Documentado el 2026-10-15 en la rama `fase-4-paso-8-deportivas`, sin código. El
 No se crearon `backend/app/engine/sports/`, `/sports` ni `/deportes` (decisión del usuario): el módulo ya está reservado en el enum de `games.module`, en los dos registros de módulos y en el admin.
 
 Comprobado: solo cambiaron documentos y la skill de terminología, así que no hacía falta correr la suite.
+
+---
+
+## 7. Fuera de alcance
+
+No se construye hasta que el usuario lo pida explícitamente:
+
+- **Señales avanzadas del motor**: transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal (`ARQUITECTURA_Y_ESTADISTICA.md` §2.9). Entran una por una.
+- **Builder visual de categorías** en el admin. Se usa formulario estructurado.
+- **Juego de dados como producto.** En la Fase 4 entra solo como fixture de test de genericidad.
+- **Apuestas deportivas.** Las respuestas a `PLATAFORMA_COMPLETA.md` §8.3 están en §8.4 (paso 8). Para construirlas faltan el proveedor de datos y el concepto del abogado (§10 n.º 13 y 14), y salen solo si el backtest supera al mercado.
+- **Cambio de plan en caliente** (mensual ↔ anual) y reembolsos por API.
+- **Exportar CSV**, migración de datos locales, notificaciones.
+- **Cualquier IA, OCR o lectura de imágenes.** Descartado, no pospuesto.
