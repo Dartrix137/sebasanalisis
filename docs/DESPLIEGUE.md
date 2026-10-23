@@ -843,7 +843,7 @@ de produccion al final, cuando lo demas este hecho.
 
 Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
 legales revisados por el abogado, el responsable del tratamiento, la
-facturacion electronica (decidida: consumidor final con Dataico; sin construir) y lo que exige la pasarela nueva
+facturacion electronica (con Dataico; a quien va, por definir; la base esta construida y la emision no) y lo que exige la pasarela nueva
 en seguridad de pagos (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 16).
 
 ### 1. Respaldos de la base y prueba de restauracion

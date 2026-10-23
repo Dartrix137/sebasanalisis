@@ -137,6 +137,11 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
   await expect(pago.getByText("Aprobado", { exact: true })).toBeVisible();
   await pago.getByRole("button", { name: "Ver" }).click();
   const detalle = panel.getByTestId("detalle-pago");
+  // El pago aprobado dejó su factura, pendiente: la emisión es del paso 5.4.
+  await expect(
+    detalle.getByText("Pendiente de emitir: la emisión todavía no está encendida"),
+  ).toBeVisible();
+  await expect(detalle.getByText("Día de la operación")).toBeVisible();
   await detalle.getByLabel("Monto (COP)").fill("50000");
   await detalle.getByLabel("Fecha en la pasarela").fill(new Date().toISOString().slice(0, 10));
   await detalle.getByLabel("Motivo del reembolso").fill(`Devolución parcial (${email})`);

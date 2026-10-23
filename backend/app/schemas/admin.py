@@ -2,7 +2,7 @@
 Schemas: administracion de usuarios, suscripciones, pagos y bitacora (§4.2, §4.3 y §4.6
 de la Fase 4)
 """
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -181,8 +181,25 @@ class AdminPaymentListResponse(ApiModel):
     offset: int
 
 
+class InvoiceStatus(str, Enum):
+    # Hoy solo `pending`: la emision con Dataico es del paso 5.4.
+    pending = "pending"
+
+
+class InvoiceResponse(ApiModel):
+    """La factura electronica de un pago aprobado (§3.17; paso 5.2)."""
+    status: InvoiceStatus
+    # El dia de la aprobacion del pago, en hora de Colombia.
+    operation_date: date
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AdminPaymentDetailResponse(ApiModel):
     payment: AdminPaymentResponse
+    # Null mientras el pago no este aprobado.
+    invoice: InvoiceResponse | None = None
     # Lo que llego del proveedor sobre este pago, en orden de llegada.
     events: list[PaymentEventResponse]
     refunds: list[PaymentRefundResponse]

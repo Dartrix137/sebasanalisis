@@ -2040,6 +2040,7 @@ export interface components {
             audit: components["schemas"]["AuditLogEntry"][];
             /** Events */
             events: components["schemas"]["PaymentEventResponse"][];
+            invoice: components["schemas"]["InvoiceResponse"] | null;
             payment: components["schemas"]["AdminPaymentResponse"];
             /** Refunds */
             refunds: components["schemas"]["PaymentRefundResponse"][];
@@ -3184,6 +3185,28 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * InvoiceResponse
+         * @description La factura electronica de un pago aprobado (§3.17; paso 5.2).
+         */
+        InvoiceResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Operation Date
+             * Format: date
+             */
+            operation_date: string;
+            status: components["schemas"]["InvoiceStatus"];
+        };
+        /**
+         * InvoiceStatus
+         * @enum {string}
+         */
+        InvoiceStatus: "pending";
         /**
          * LegalDocumentResponse
          * @description Una version publicada, con su texto en Markdown.

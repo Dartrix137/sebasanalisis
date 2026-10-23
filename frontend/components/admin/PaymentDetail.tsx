@@ -11,7 +11,9 @@
  * - Registrar un reembolso hecho en el panel de la pasarela. Es un registro: no
  *   cambia el pago ni el acceso.
  *
- * La pasarela de cada pago se muestra con `providerLabel` (`lib/admin.ts`).
+ * La pasarela de cada pago se muestra con `providerLabel` (`lib/admin.ts`). Un
+ * pago aprobado muestra además su factura electrónica (§3.17): hoy siempre
+ * pendiente, porque la emisión con Dataico es del paso 5.4.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -19,7 +21,14 @@ import { useCallback, useEffect, useState } from "react";
 import { SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
-import { actionLabel, describeChange, formatDateTime, providerLabel } from "@/lib/admin";
+import {
+  INVOICE_STATUS_LABEL,
+  actionLabel,
+  describeChange,
+  formatCalendarDate,
+  formatDateTime,
+  providerLabel,
+} from "@/lib/admin";
 import { PAYMENT_KIND_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/billing";
 import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, parseMoneyToCents } from "@/lib/money";
@@ -93,6 +102,20 @@ export function PaymentDetail({
         {p.failure_reason ? <Data label="Lo que dijo la pasarela" value={p.failure_reason} /> : null}
         {p.refunded_cents > 0 ? (
           <Data label="Reembolsado" value={formatMoney(p.refunded_cents, p.currency)} />
+        ) : null}
+        <Data
+          label="Factura electrónica"
+          value={
+            detail.invoice
+              ? `${INVOICE_STATUS_LABEL[detail.invoice.status]}: la emisión todavía no está encendida`
+              : "Sin factura"
+          }
+        />
+        {detail.invoice ? (
+          <Data
+            label="Día de la operación"
+            value={formatCalendarDate(detail.invoice.operation_date)}
+          />
         ) : null}
       </dl>
 

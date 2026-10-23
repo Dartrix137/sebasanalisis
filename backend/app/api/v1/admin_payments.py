@@ -28,7 +28,15 @@ from app.api.v1.billing import EmailSenderDep, PaymentProviderDep, queue_payment
 from app.api.v1.legal import client_ip
 from app.core import audit, billing_emails, subscription_admin, subscriptions
 from app.core.email import send_safely
-from app.models import AdminAuditLog, Payment, PaymentEvent, PaymentRefund, Subscription, User
+from app.models import (
+    AdminAuditLog,
+    Invoice,
+    Payment,
+    PaymentEvent,
+    PaymentRefund,
+    Subscription,
+    User,
+)
 from app.payments.base import PaymentProviderError
 from app.schemas.admin import (
     AdminPaymentDetailResponse,
@@ -36,6 +44,7 @@ from app.schemas.admin import (
     AdminSubscriptionDetailResponse,
     AdminSubscriptionListResponse,
     AuditLogEntry,
+    InvoiceResponse,
     PaymentEventResponse,
     PaymentRefundResponse,
     RecordRefundRequest,
@@ -286,9 +295,11 @@ def _payment_detail(db: DbSession, payment: Payment) -> AdminPaymentDetailRespon
         .where(PaymentRefund.payment_id == payment.id)
         .order_by(PaymentRefund.refunded_at, PaymentRefund.id)
     )
+    invoice = db.scalar(select(Invoice).where(Invoice.payment_id == payment.id))
     [response] = admin_payment_responses(db, [payment])
     return AdminPaymentDetailResponse(
         payment=response,
+        invoice=InvoiceResponse.model_validate(invoice) if invoice is not None else None,
         events=[
             PaymentEventResponse(
                 id=e.id,

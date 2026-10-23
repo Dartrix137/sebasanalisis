@@ -51,7 +51,7 @@ A_MANUAL = "Tu suscripción a Sebasanálisis pasó a pago manual"
 def sin_suscripciones_de_otros_tests(db) -> None:
     """El job recorre TODAS las suscripciones de la base: cada test empieza sin
     las de los demas."""
-    for tabla in ("payment_events", "payments", "coupon_redemptions", "subscriptions"):
+    for tabla in ("invoices", "payment_events", "payments", "coupon_redemptions", "subscriptions"):
         db.execute(text(f"DELETE FROM {tabla}"))
     db.commit()
 

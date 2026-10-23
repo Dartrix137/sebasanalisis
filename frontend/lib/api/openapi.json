@@ -411,6 +411,16 @@
             "title": "Events",
             "type": "array"
           },
+          "invoice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvoiceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "payment": {
             "$ref": "#/components/schemas/AdminPaymentResponse"
           },
@@ -424,6 +434,7 @@
         },
         "required": [
           "payment",
+          "invoice",
           "events",
           "refunds",
           "audit"
@@ -3231,6 +3242,38 @@
         },
         "title": "HTTPValidationError",
         "type": "object"
+      },
+      "InvoiceResponse": {
+        "description": "La factura electronica de un pago aprobado (§3.17; paso 5.2).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "operation_date": {
+            "format": "date",
+            "title": "Operation Date",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InvoiceStatus"
+          }
+        },
+        "required": [
+          "status",
+          "operation_date",
+          "created_at"
+        ],
+        "title": "InvoiceResponse",
+        "type": "object"
+      },
+      "InvoiceStatus": {
+        "enum": [
+          "pending"
+        ],
+        "title": "InvoiceStatus",
+        "type": "string"
       },
       "LegalDocumentResponse": {
         "description": "Una version publicada, con su texto en Markdown.",
