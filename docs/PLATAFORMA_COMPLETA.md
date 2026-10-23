@@ -821,7 +821,7 @@ El usuario preguntó si el servicio cumple los requisitos de la DIAN y el MinTIC
 
 Si el servicio cuenta como computación en la nube es una calificación tributaria, no técnica: la decide el contador. Para él se redactó una descripción técnica del servicio, un documento de Claude Docs, privado, en la cuenta del usuario ("Descripción técnica del servicio Sebasanálisis"). Si hace falta reforzar la elasticidad, el cambio concreto es mover el limitador a Postgres; no se hace sin que el usuario lo pida.
 
-### 3.18 Retiro de Wompi (Fase 5, paso 5.1; construido el 2026-10-23)
+### 3.18 Retiro de Wompi (Fase 5, paso 5.1; construido y desplegado el 2026-10-23)
 
 **Por qué.** Wompi no admite el modelo de negocio (2026-10-22). Nunca se cobró dinero real: en el VPS solo hubo llaves de sandbox, así que no hay clientes que migrar. Lo reemplaza Tipster Page (paso 5.3), que todavía no ha mandado su documentación: por eso aquí no se diseña nada de la pasarela nueva, ni se rediseña la interfaz de proveedor. El plan salió del documento "Cambio de pasarela: de Wompi a Tipster Page" (Claude Docs, 2026-10-22). Rama `fase-5-retiro-wompi`.
 
@@ -857,6 +857,8 @@ Si el servicio cuenta como computación en la nube es una calificación tributar
 2. En `/admin/suscripciones`: cancelar las suscripciones de sandbox, con motivo.
 3. Desplegar backend y frontend desde el mismo commit.
 4. En el panel de Wompi: desactivar la URL de eventos y, si se quiere, cerrar la cuenta.
+
+Hecho por el usuario el 2026-10-23, con el PR #41 mezclado y desplegado.
 
 ---
 
