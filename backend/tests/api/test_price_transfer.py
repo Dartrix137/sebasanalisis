@@ -117,14 +117,14 @@ def test_solo_un_administrador(client, db, user_token: str, metodo: str, ruta: s
 
 
 def test_registrar_un_traslado_alcanza_a_las_vigentes_del_plan_y_deja_fila(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, _, manual = _suscriptor_manual(client, db, wompi)
-    _, _, _, automatica = _suscriptor_automatico(client, db, wompi)
+    _, _, _, manual = _suscriptor_manual(client, db, pasarela)
+    _, _, _, automatica = _suscriptor_automatico(client, db, pasarela)
     # Una cancelada y una vencida no entran.
-    _, _, _, cancelada = _suscriptor_automatico(client, db, wompi)
+    _, _, _, cancelada = _suscriptor_automatico(client, db, pasarela)
     assert _accion(client, admin_token, cancelada.id, "cancel_at_period_end").status_code == 200
-    _, _, _, vencida = _suscriptor_manual(client, db, wompi)
+    _, _, _, vencida = _suscriptor_manual(client, db, pasarela)
     assert _accion(client, admin_token, vencida.id, "cancel_now").status_code == 200
     plan = _precio_del_plan(db, NUEVO)
 
@@ -163,16 +163,16 @@ def test_registrar_un_traslado_alcanza_a_las_vigentes_del_plan_y_deja_fila(
 
 
 @pytest.mark.parametrize("motivo", ["", "no"])
-def test_sin_motivo_no_se_registra(client, db, wompi, admin_token: str, motivo: str) -> None:
-    _suscriptor_manual(client, db, wompi)
+def test_sin_motivo_no_se_registra(client, db, pasarela, admin_token: str, motivo: str) -> None:
+    _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id, motivo).status_code == 422
     assert _filas(db) == []
     assert db.scalars(select(AdminAuditLog).where(AdminAuditLog.target_type == "plan")).all() == []
 
 
-def test_sin_suscripciones_con_otro_precio_no_hay_traslado(client, db, wompi, admin_token: str) -> None:
-    _suscriptor_manual(client, db, wompi)
+def test_sin_suscripciones_con_otro_precio_no_hay_traslado(client, db, pasarela, admin_token: str) -> None:
+    _suscriptor_manual(client, db, pasarela)
     r = _trasladar(client, admin_token, _mensual(db).id)
     assert r.status_code == 409
     assert client.post(
@@ -186,9 +186,9 @@ def test_sin_suscripciones_con_otro_precio_no_hay_traslado(client, db, wompi, ad
 
 
 def test_el_aviso_de_una_subida_fija_la_fecha_treinta_dias_despues(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    token, _, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, _, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
 
@@ -219,9 +219,9 @@ def test_el_aviso_de_una_subida_fija_la_fecha_treinta_dias_despues(
 
 
 def test_si_el_aviso_no_sale_no_corre_el_plazo_ni_cambia_el_precio(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+    _, _, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
 
@@ -241,10 +241,10 @@ def test_si_el_aviso_no_sale_no_corre_el_plazo_ni_cambia_el_precio(
 
 
 def test_la_subida_se_cobra_desde_su_fecha_y_el_cupon_sigue_descontando(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
     cupon = _cupon(db, value=20, duration="forever")
-    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi, codigo=cupon.code)
+    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela, codigo=cupon.code)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
     aviso = datetime.now(UTC)
@@ -253,34 +253,34 @@ def test_la_subida_se_cobra_desde_su_fecha_y_el_cupon_sigue_descontando(
 
     # Un cobro antes de la fecha va con el precio viejo; uno despues, con el
     # nuevo, y el 20 % se descuenta del nuevo.
-    vence = _avisada(db, wompi, suscripcion)
+    vence = _avisada(db, pasarela, suscripcion)
     cobro = vence - 48 * H
-    reporte = _correr(db, wompi, cobro)
+    reporte = _correr(db, pasarela, cobro)
     assert reporte.charges == 1
     esperado = PRECIO if cobro < efectiva else NUEVO
-    assert wompi.cobros[-1]["amount_in_cents"] == esperado * 80 // 100
+    assert pasarela.cobros[-1]["amount_cents"] == esperado * 80 // 100
 
     if cobro < efectiva:
         # El periodo siguiente ya cae despues: su aviso y su cobro son con el nuevo.
         suscripcion = _suscripcion(db, suscripcion.id)
         vence = suscripcion.current_period_end
-        reporte = _correr(db, wompi, vence - 9 * DIA)
+        reporte = _correr(db, pasarela, vence - 9 * DIA)
         [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
         assert "96.000 COP" in aviso_cobro.text
-        assert _correr(db, wompi, vence - 48 * H).charges == 1
-        assert wompi.cobros[-1]["amount_in_cents"] == NUEVO * 80 // 100
+        assert _correr(db, pasarela, vence - 48 * H).charges == 1
+        assert pasarela.cobros[-1]["amount_cents"] == NUEVO * 80 // 100
     assert _suscripcion(db, suscripcion.id).price_cents == NUEVO
     assert _filas(db)[0].applied_at is not None
 
 
 def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
     """El caso del 2026-10-15: la subida corria desde el 13 de noviembre, el
     primer intento era el 12 y el periodo vencia el 14. Si el primer intento
     fallaba, el reintento salia con el precio nuevo, distinto del que dijo el
     aviso de 7 dias. Los tres intentos van con el precio del primero."""
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
@@ -298,57 +298,57 @@ def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
     assert datetime.fromisoformat(data["price_change"]["first_charge_at"]) == siguiente - 48 * H
 
     # El aviso de 7 dias dice el precio de hoy.
-    reporte = _correr(db, wompi, vence - 9 * DIA)
+    reporte = _correr(db, pasarela, vence - 9 * DIA)
     [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
     assert "100.000 COP" in aviso_cobro.text
 
     # Primer intento, rechazado, con el precio de hoy.
-    wompi.estado_del_cobro = "DECLINED"
-    assert _correr(db, wompi, vence - 48 * H).charges == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+    pasarela.estado_del_cobro = "DECLINED"
+    assert _correr(db, pasarela, vence - 48 * H).charges == 1
+    assert pasarela.cobros[-1]["amount_cents"] == PRECIO
 
     # Segundo intento: el job ya aplico la subida, pero el reintento sigue con
     # el precio del periodo, y la cuenta lo ve asi.
-    assert _correr(db, wompi, vence - 24 * H).charges == 1
+    assert _correr(db, pasarela, vence - 24 * H).charges == 1
     assert _suscripcion(db, suscripcion.id).price_cents == NUEVO
-    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+    assert pasarela.cobros[-1]["amount_cents"] == PRECIO
     data = client.get("/billing/subscription", headers=auth(token)).json()
     assert (data["status"], data["next_charge_cents"]) == ("past_due", PRECIO)
 
     # Tercer intento, aprobado: tambien con el precio del periodo.
-    wompi.estado_del_cobro = "APPROVED"
-    assert _correr(db, wompi, vence).approved == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+    pasarela.estado_del_cobro = "APPROVED"
+    assert _correr(db, pasarela, vence).approved == 1
+    assert pasarela.cobros[-1]["amount_cents"] == PRECIO
 
     # El periodo siguiente ya va con el nuevo, en su aviso y en su cobro.
     data = client.get("/billing/subscription", headers=auth(token)).json()
     assert data["price_change"] is None and data["next_charge_cents"] == NUEVO
-    reporte = _correr(db, wompi, siguiente - 9 * DIA)
+    reporte = _correr(db, pasarela, siguiente - 9 * DIA)
     [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
     assert "120.000 COP" in aviso_cobro.text
-    assert _correr(db, wompi, siguiente - 48 * H).charges == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == NUEVO
+    assert _correr(db, pasarela, siguiente - 48 * H).charges == 1
+    assert pasarela.cobros[-1]["amount_cents"] == NUEVO
 
 
 def test_una_bajada_entre_dos_intentos_si_alcanza_al_reintento(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    assert _correr(db, wompi, vence - 48 * H).charges == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == PRECIO
+    _, _, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    assert _correr(db, pasarela, vence - 48 * H).charges == 1
+    assert pasarela.cobros[-1]["amount_cents"] == PRECIO
 
     plan = _precio_del_plan(db, MENOR)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
-    assert _correr(db, wompi, vence - 24 * H).charges == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == MENOR
+    assert _correr(db, pasarela, vence - 24 * H).charges == 1
+    assert pasarela.cobros[-1]["amount_cents"] == MENOR
 
 
 def test_en_pago_manual_el_precio_nuevo_corre_para_el_pago_siguiente(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    token, user_id, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
     _avisar(db, datetime.now(UTC))
@@ -369,9 +369,9 @@ def test_en_pago_manual_el_precio_nuevo_corre_para_el_pago_siguiente(
 
 
 def test_una_cancelada_espera_su_aviso_y_si_reanuda_lo_recibe(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    token, _, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, _, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
     assert client.post("/billing/subscription/cancel", headers=auth(token)).status_code == 200
@@ -384,9 +384,9 @@ def test_una_cancelada_espera_su_aviso_y_si_reanuda_lo_recibe(
 
 
 def test_una_subida_de_una_suscripcion_que_vencio_sale_del_traslado(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    _, _, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     r = _trasladar(client, admin_token, plan.id)
     vence = _suscripcion(db, suscripcion.id).current_period_end
@@ -400,9 +400,9 @@ def test_una_subida_de_una_suscripcion_que_vencio_sale_del_traslado(
     assert r.json()["open_change"] is None
 
 
-def test_los_avisos_salen_por_lotes(client, db, wompi, admin_token: str) -> None:
+def test_los_avisos_salen_por_lotes(client, db, pasarela, admin_token: str) -> None:
     for _ in range(3):
-        _suscriptor_manual(client, db, wompi)
+        _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
     ahora = datetime.now(UTC)
@@ -413,8 +413,8 @@ def test_los_avisos_salen_por_lotes(client, db, wompi, admin_token: str) -> None
 # ---------- Bajada ----------
 
 
-def test_una_bajada_aplica_ya_y_avisa(client, db, wompi, admin_token: str) -> None:
-    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+def test_una_bajada_aplica_ya_y_avisa(client, db, pasarela, admin_token: str) -> None:
+    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     plan = _precio_del_plan(db, MENOR)
     r = _trasladar(client, admin_token, plan.id)
     assert r.status_code == 201, r.text
@@ -427,9 +427,9 @@ def test_una_bajada_aplica_ya_y_avisa(client, db, wompi, admin_token: str) -> No
     assert "80.000 COP" in aviso.text
 
     # El proximo cobro ya es con el precio menor.
-    vence = _avisada(db, wompi, suscripcion)
-    assert _correr(db, wompi, vence - 48 * H).charges == 1
-    assert wompi.cobros[-1]["amount_in_cents"] == MENOR
+    vence = _avisada(db, pasarela, suscripcion)
+    assert _correr(db, pasarela, vence - 48 * H).charges == 1
+    assert pasarela.cobros[-1]["amount_cents"] == MENOR
     # Una bajada ya aplicada no deja el traslado en curso.
     r = client.get(f"/admin/plans/{plan.id}/price-transfer", headers=auth(admin_token))
     assert r.json()["open_change"] is None
@@ -439,9 +439,9 @@ def test_una_bajada_aplica_ya_y_avisa(client, db, wompi, admin_token: str) -> No
 
 
 def test_cancelar_un_traslado_conserva_el_precio_y_avisa_a_quien_ya_sabia(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, avisado, suscripcion_a = _suscriptor_automatico(client, db, wompi)
+    _, _, avisado, suscripcion_a = _suscriptor_automatico(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     change = _trasladar(client, admin_token, plan.id).json()
     ahora = datetime.now(UTC)
@@ -466,7 +466,7 @@ def test_cancelar_un_traslado_conserva_el_precio_y_avisa_a_quien_ya_sabia(
     )
     assert _avisar(db, ahora + 2 * H)[1].sent == []
     # Ni con el tiempo cambia el precio.
-    _correr(db, wompi, ahora + 31 * DIA)
+    _correr(db, pasarela, ahora + 31 * DIA)
     assert _suscripcion(db, suscripcion_a.id).price_cents == PRECIO
 
     # No se cancela dos veces, y el plan admite otro traslado.
@@ -479,8 +479,8 @@ def test_cancelar_un_traslado_conserva_el_precio_y_avisa_a_quien_ya_sabia(
     ).status_code == 404
 
 
-def test_cancelar_antes_del_aviso_no_le_escribe_a_nadie(client, db, wompi, admin_token: str) -> None:
-    _suscriptor_manual(client, db, wompi)
+def test_cancelar_antes_del_aviso_no_le_escribe_a_nadie(client, db, pasarela, admin_token: str) -> None:
+    _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     change = _trasladar(client, admin_token, plan.id).json()
     r = client.post(
@@ -492,8 +492,8 @@ def test_cancelar_antes_del_aviso_no_le_escribe_a_nadie(client, db, wompi, admin
     assert _avisar(db, datetime.now(UTC))[1].sent == []
 
 
-def test_el_historial_de_traslados(client, db, wompi, admin_token: str) -> None:
-    _suscriptor_manual(client, db, wompi)
+def test_el_historial_de_traslados(client, db, pasarela, admin_token: str) -> None:
+    _suscriptor_manual(client, db, pasarela)
     plan = _precio_del_plan(db, NUEVO)
     assert _trasladar(client, admin_token, plan.id).status_code == 201
     r = client.get(
@@ -504,8 +504,8 @@ def test_el_historial_de_traslados(client, db, wompi, admin_token: str) -> None:
     assert (item["plan_name"], item["reason"], item["total"]) == ("Acceso Mensual", MOTIVO, 1)
 
 
-def test_el_traslado_no_mueve_ningun_pago(client, db, wompi, admin_token: str) -> None:
-    _, user_id, _, _ = _suscriptor_manual(client, db, wompi)
+def test_el_traslado_no_mueve_ningun_pago(client, db, pasarela, admin_token: str) -> None:
+    _, user_id, _, _ = _suscriptor_manual(client, db, pasarela)
     antes = [(p.id, p.status, p.amount_cents) for p in _pagos(db, user_id)]
     plan = _precio_del_plan(db, MENOR)
     assert _trasladar(client, admin_token, plan.id).status_code == 201

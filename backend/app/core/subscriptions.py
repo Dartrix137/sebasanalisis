@@ -366,7 +366,7 @@ def start_payment(
         plan_id=plan.id,
         coupon_id=coupon_id,
         provider=provider.name,
-        # Una referencia nueva por intento: Wompi rechaza una repetida.
+        # Una referencia nueva por intento: una pasarela puede rechazar una repetida.
         reference=f"SA-{uuid.uuid4().hex}",
         kind=kind,
         amount_cents=quote.total_cents,

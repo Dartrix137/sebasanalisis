@@ -7,8 +7,8 @@
  * y del historial (`GET /billing/payments`), y deja gestionarla: cancelar o
  * reanudar la renovación automática, cambiar el medio de pago guardado y pasar
  * de un modo de pago al otro. Aquí no se calcula ningún precio ni se decide
- * ningún acceso. Un medio de pago se guarda con `PaymentSourceForm`, que manda
- * la tarjeta o el Nequi directo a Wompi.
+ * ningún acceso. Un medio de pago se guarda con `PaymentSourceForm`; sus datos
+ * van directo a la pasarela.
  */
 
 import Link from "next/link";
@@ -26,7 +26,7 @@ import {
 import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import type { TokenizedSource } from "@/lib/tokenize";
+import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
   AcceptanceResponse,
   BillingAvailabilityResponse,

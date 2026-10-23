@@ -282,10 +282,10 @@ test("renovación automática: guarda el medio, entra a la mesa, cancela y reanu
   // Sin aceptar los dos documentos del procesador no se puede guardar el medio.
   const guardar = page.getByRole("button", { name: "Guardar medio de pago y pagar 100.000 COP" });
   await expect(guardar).toBeDisabled();
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de Wompi/ }).check();
+  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
   await expect(guardar).toBeDisabled();
   await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
-  await expect(page.getByText(/solo la referencia que entrega Wompi/)).toBeVisible();
+  await expect(page.getByText(/solo la referencia que entrega la pasarela/)).toBeVisible();
   await guardar.click();
 
   await expect(page).toHaveURL(/\/pago\/[0-9a-f-]+$/);
@@ -339,7 +339,7 @@ test("renovación automática: primer cobro rechazado no da acceso", async ({ pa
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de Wompi/ }).check();
+  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
   await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
 
   // Un medio que la pasarela no deja guardar: se dice aquí mismo y no pasa nada más.

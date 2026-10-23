@@ -89,9 +89,9 @@ def test_solo_se_avisa_de_una_version_que_reemplaza_a_otra(client, admin_token: 
 
 
 def test_una_version_nueva_le_llega_a_quien_tiene_suscripcion_vigente(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, user_id, correo, _ = _suscriptor_automatico(client, db, wompi)
+    _, user_id, correo, _ = _suscriptor_automatico(client, db, pasarela)
     terminos = _publish(client, admin_token, "terms")
 
     sender = FakeEmailSender()
@@ -110,19 +110,19 @@ def test_una_version_nueva_le_llega_a_quien_tiene_suscripcion_vigente(
 
 
 def test_no_le_llega_a_quien_no_tiene_suscripcion_ni_a_correos_sin_verificar(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
     _, _, sin_suscripcion = _cuenta(client, db)
-    _, _, sin_verificar, _ = _suscriptor_automatico(client, db, wompi)
+    _, _, sin_verificar, _ = _suscriptor_automatico(client, db, pasarela)
     db.execute(text("UPDATE users SET email_verified = false WHERE email = :e"), {"e": sin_verificar})
-    _, _, suspendida, _ = _suscriptor_automatico(client, db, wompi)
+    _, _, suspendida, _ = _suscriptor_automatico(client, db, pasarela)
     db.execute(text("UPDATE users SET is_active = false WHERE email = :e"), {"e": suspendida})
-    _, _, vencida, sub = _suscriptor_automatico(client, db, wompi)
+    _, _, vencida, sub = _suscriptor_automatico(client, db, pasarela)
     db.execute(
         text("UPDATE subscriptions SET current_period_end = now() - interval '1 day' WHERE id = :id"),
         {"id": sub.id},
     )
-    _, _, cancelada, sub_cancelada = _suscriptor_automatico(client, db, wompi)
+    _, _, cancelada, sub_cancelada = _suscriptor_automatico(client, db, pasarela)
     db.execute(
         text("UPDATE subscriptions SET status = 'canceled' WHERE id = :id"), {"id": sub_cancelada.id}
     )
@@ -138,8 +138,8 @@ def test_no_le_llega_a_quien_no_tiene_suscripcion_ni_a_correos_sin_verificar(
     assert "puedes cancelar la renovación" not in mensaje.text
 
 
-def test_no_le_llega_a_quien_ya_acepto_la_version_nueva(client, db, wompi, admin_token: str) -> None:
-    token, _, correo, _ = _suscriptor_automatico(client, db, wompi)
+def test_no_le_llega_a_quien_ya_acepto_la_version_nueva(client, db, pasarela, admin_token: str) -> None:
+    token, _, correo, _ = _suscriptor_automatico(client, db, pasarela)
     terminos = _publish(client, admin_token, "terms")
     _aceptar(client, token, terminos["id"])
 
@@ -152,9 +152,9 @@ def test_no_le_llega_a_quien_ya_acepto_la_version_nueva(client, db, wompi, admin
 
 
 def test_si_el_job_corre_dos_veces_nadie_recibe_el_aviso_dos_veces(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, correo, _ = _suscriptor_automatico(client, db, wompi)
+    _, _, correo, _ = _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
 
     primera, segunda = FakeEmailSender(), FakeEmailSender()
@@ -165,8 +165,8 @@ def test_si_el_job_corre_dos_veces_nadie_recibe_el_aviso_dos_veces(
     assert reporte.sent == 0
 
 
-def test_terminos_y_datos_a_la_vez_van_en_un_solo_correo(client, db, wompi, admin_token: str) -> None:
-    _, user_id, correo, _ = _suscriptor_automatico(client, db, wompi)
+def test_terminos_y_datos_a_la_vez_van_en_un_solo_correo(client, db, pasarela, admin_token: str) -> None:
+    _, user_id, correo, _ = _suscriptor_automatico(client, db, pasarela)
     terminos = _publish(client, admin_token, "terms")
     datos = _publish(client, admin_token, "privacy")
 
@@ -187,9 +187,9 @@ def test_terminos_y_datos_a_la_vez_van_en_un_solo_correo(client, db, wompi, admi
 
 
 def test_dos_versiones_antes_del_aviso_dan_un_solo_correo_de_la_ultima(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, correo, _ = _suscriptor_automatico(client, db, wompi)
+    _, _, correo, _ = _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
     ultima = _publish(client, admin_token, "terms")
 
@@ -200,9 +200,9 @@ def test_dos_versiones_antes_del_aviso_dan_un_solo_correo_de_la_ultima(
 
 
 def test_si_el_correo_no_sale_se_reintenta_en_la_siguiente_corrida(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, user_id, correo, _ = _suscriptor_automatico(client, db, wompi)
+    _, user_id, correo, _ = _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
 
     class Caido:
@@ -218,9 +218,9 @@ def test_si_el_correo_no_sale_se_reintenta_en_la_siguiente_corrida(
     assert len(_correos(sender, correo)) == 1
 
 
-def test_los_avisos_salen_por_tandas_sin_repetir(client, db, wompi, admin_token: str) -> None:
+def test_los_avisos_salen_por_tandas_sin_repetir(client, db, pasarela, admin_token: str) -> None:
     for _ in range(3):
-        _suscriptor_automatico(client, db, wompi)
+        _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
 
     primera = _avisar(db, limit=2)
@@ -232,12 +232,12 @@ def test_los_avisos_salen_por_tandas_sin_repetir(client, db, wompi, admin_token:
     assert NOTICES_PER_RUN == 40
 
 
-def test_el_tope_diario_se_cuenta_en_la_base(client, db, wompi, admin_token: str) -> None:
+def test_el_tope_diario_se_cuenta_en_la_base(client, db, pasarela, admin_token: str) -> None:
     # Un aviso enviado hoy, para que el tope cuente algo.
-    _suscriptor_automatico(client, db, wompi)
+    _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
     _avisar(db)
-    _, _, correo, _ = _suscriptor_automatico(client, db, wompi)
+    _, _, correo, _ = _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
     ahora = datetime.now(UTC)
     ya_enviados = _sent_today(db, ahora)
@@ -254,8 +254,8 @@ def test_el_tope_diario_se_cuenta_en_la_base(client, db, wompi, admin_token: str
     assert len(_correos(sender, correo)) == 1
 
 
-def test_eliminar_la_cuenta_borra_sus_avisos(client, db, wompi, admin_token: str) -> None:
-    token, user_id, _, _ = _suscriptor_automatico(client, db, wompi)
+def test_eliminar_la_cuenta_borra_sus_avisos(client, db, pasarela, admin_token: str) -> None:
+    token, user_id, _, _ = _suscriptor_automatico(client, db, pasarela)
     _publish(client, admin_token, "terms")
     _avisar(db)
     assert _avisos(db, user_id)

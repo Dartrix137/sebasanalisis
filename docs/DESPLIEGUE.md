@@ -54,11 +54,6 @@ SMTP_PASSWORD=<API key de Resend>
 SMTP_FROM=Sebasanálisis <no-responder@correo.sebasanalisis.com>
 SMTP_USE_TLS=true
 EMAIL_DAILY_LIMIT=80
-WOMPI_PUBLIC_KEY=<llave publica de Wompi>
-WOMPI_PRIVATE_KEY=<llave privada de Wompi>
-WOMPI_EVENTS_SECRET=<secreto de eventos de Wompi>
-WOMPI_INTEGRITY_SECRET=<secreto de integridad de Wompi>
-WOMPI_API_BASE_URL=<https://sandbox.wompi.co/v1 o https://production.wompi.co/v1>
 TURNSTILE_SITE_KEY=<llave de sitio del widget de Cloudflare Turnstile>
 TURNSTILE_SECRET_KEY=<llave secreta del mismo widget>
 ```
@@ -67,9 +62,11 @@ Las dos `TURNSTILE_*` van juntas o ninguna: sin ninguna, el registro, el ingreso
 y el olvido de contrasena no piden la verificacion contra bots; con una sola, la
 API no arranca. Como crearlas, en "Antes del lanzamiento comercial", paso 8.
 
-Las cinco `WOMPI_*` se dejan sin poner hasta tener la cuenta de comercio: sin
-ellas la API arranca con el pago apagado. El detalle esta en "Pagos con Wompi"
-abajo.
+Pagos: no hay ninguna variable de la pasarela. `PAYMENT_PROVIDER` no se pone
+(vale `none`): la API arranca con el pago apagado y el acceso se da a mano. Las
+`WOMPI_*` y `PAYMENT_PROVIDER=wompi` salieron con Wompi; con
+`PAYMENT_PROVIDER=wompi` la API ya no arranca. El detalle esta en "Pagos: sin
+pasarela" abajo.
 
 `FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
 (verificar el correo, restablecer la contrasena). Es la direccion **publica del
@@ -123,7 +120,7 @@ navegador, asi que la URL tiene que ser la **publica** de la API — la direccio
 interna de Docker no le sirve al navegador del usuario.
 
 Las dos tambien arman la politica de seguridad del sitio (CSP, `lib/csp.ts`): el
-navegador solo habla con la API, con GlitchTip, con Wompi y con Turnstile. Si
+navegador solo habla con la API, con GlitchTip y con Turnstile. Si
 cambia el dominio de la API o el DSN del frontend, hay que reconstruir; si no,
 el navegador bloquea esas peticiones.
 
@@ -218,7 +215,53 @@ Que pasa al desplegar este paso:
   "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
 - Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
 
+### Pagos: sin pasarela (Fase 5, paso 5.1)
+
+Desde el 2026-10-23 no hay pasarela de pagos: Wompi salio del proyecto y la
+nueva (Tipster Page) entra en el paso 5.3. Mientras tanto:
+
+- `PAYMENT_PROVIDER` no se pone en Dokploy (vale `none`). El arranque de la API
+  dice `Pagos: sin pasarela configurada: el pago esta apagado`.
+- `/planes` muestra el precio y "Suscribirme" deshabilitado. El acceso se da a
+  mano en `/admin/usuarios` (prueba o cortesia).
+- El webhook es `POST /webhooks/payments`. Sin pasarela responde `401` a todo y
+  guarda el evento sin mover nada.
+- El job de renovaciones sigue programado: vence las suscripciones y manda los
+  avisos de las que pagaron a mano. Por eso las suscripciones de sandbox se
+  cancelan antes de desplegar el retiro (abajo).
+- `PAYMENT_PROVIDER=fake` es la pasarela simulada, solo para desarrollo y
+  Playwright. **Nunca en produccion**: aprueba pagos sin cobrar, y desde que
+  salio Wompi la API no tiene como detectarlo.
+
+**Desplegar el retiro de Wompi** (una sola vez, en este orden):
+
+1. En Dokploy, en `Environment` de la API y **con el codigo viejo todavia
+   corriendo**: borrar las cuatro `WOMPI_*` que hay (`WOMPI_PUBLIC_KEY`,
+   `WOMPI_PRIVATE_KEY`, `WOMPI_EVENTS_SECRET`, `WOMPI_INTEGRITY_SECRET`;
+   `WOMPI_API_BASE_URL` era opcional y nunca se puso) y reiniciar la API. El
+   codigo viejo sin llaves apaga el pago, asi que desde ese momento nadie
+   puede pagar en el sandbox. `PAYMENT_PROVIDER` tampoco se puso nunca: el
+   codigo nuevo arranca con `none`. Si algun dia aparece, se borra la linea
+   entera: con `wompi` o vacia, la API nueva no arranca. El job de
+   renovaciones usa las mismas variables: revisar que tampoco tenga
+   `WOMPI_*` por su cuenta.
+2. En `/admin/suscripciones`: cancelar, con motivo, las suscripciones de
+   sandbox que sigan vigentes. Para listarlas, de solo lectura:
+
+   ```sql
+   SELECT s.id, u.email, s.status, s.renewal_mode, s.current_period_end
+   FROM subscriptions s JOIN users u ON u.id = s.user_id
+   WHERE s.provider = 'wompi' AND s.status NOT IN ('canceled', 'expired');
+   ```
+
+3. Mezclar el PR y desplegar backend y frontend desde el mismo commit. No hay
+   migracion.
+4. En el panel de Wompi: desactivar la URL de eventos y, si se quiere, cerrar
+   la cuenta.
+
 ### Pagos con Wompi (Fase 4, paso 5, entrega 1)
+
+> **Historia.** Wompi salio del proyecto el 2026-10-22 y su codigo se retiro el 2026-10-23 (paso 5.1 de la Fase 5, `PLATAFORMA_COMPLETA.md` §3.18). Lo que sigue queda como registro de lo que se construyo y se probo con el; las variables y las rutas que nombra ya no existen. Lo vigente esta en "Pagos: sin pasarela".
 
 Construido contra la documentacion oficial de Wompi consultada el 2026-10-13.
 
@@ -435,6 +478,8 @@ llaves de produccion.
 
 ### Pasar de sandbox a produccion
 
+> **Historia.** Wompi salio del proyecto el 2026-10-22 y su codigo se retiro el 2026-10-23 (paso 5.1 de la Fase 5, `PLATAFORMA_COMPLETA.md` §3.18). Lo que sigue queda como registro de lo que se construyo y se probo con el; las variables y las rutas que nombra ya no existen. Lo vigente esta en "Pagos: sin pasarela".
+
 La URL de la API de Wompi no se configura: sale del prefijo de las llaves. Con
 las cuatro de produccion (`pub_prod_`, `prv_prod_`, `prod_events_`,
 `prod_integrity_`) la API usa `https://production.wompi.co/v1`, y el arranque
@@ -462,10 +507,10 @@ formulario de tarjeta y Nequi recibe la URL de la API de Wompi desde
 
 `PAYMENT_PROVIDER=fake` enciende una pasarela simulada (una pagina de la API
 con "aprobar" y "rechazar") para desarrollo y para los tests de punta a
-punta. **Nunca en produccion**: aprueba pagos sin cobrar. La API se niega a
-arrancar con ella si hay llaves de produccion de Wompi, pero sin llaves no
-tiene como saberlo. En desarrollo va junto con `API_PUBLIC_URL` si la API no
-esta en `http://localhost:8000`.
+punta. **Nunca en produccion**: aprueba pagos sin cobrar, y la API no tiene
+como detectarlo (la proteccion dependia de las llaves de Wompi y vuelve con la
+pasarela nueva). En desarrollo va junto con `API_PUBLIC_URL` si la API no esta
+en `http://localhost:8000`.
 
 ## Comprobacion despues del primer despliegue
 
@@ -798,8 +843,8 @@ de produccion al final, cuando lo demas este hecho.
 
 Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
 legales revisados por el abogado, el responsable del tratamiento, la
-facturacion electronica (decidida: consumidor final con Siigo; sin construir) y lo que exige Wompi, y PCI DSS, con el
-formulario de tarjeta propio (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 15).
+facturacion electronica (decidida: consumidor final con Dataico; sin construir) y lo que exige la pasarela nueva
+en seguridad de pagos (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 16).
 
 ### 1. Respaldos de la base y prueba de restauracion
 
@@ -927,6 +972,9 @@ correr.
 
 ### 5. Formulario de tarjeta y Nequi en el VPS (sandbox)
 
+> **Superado.** El formulario era de Wompi y salio con el el 2026-10-23 (paso
+> 5.1). La prueba equivalente con la pasarela nueva se escribe en el 5.3.
+
 **Probado el 2026-10-19 por el usuario**: el alta con la tarjeta `4242` quedo
 aprobada y el cambio a Nequi funciono. Los pasos, por si hay que repetirlo con
 las llaves de sandbox, desde `https://sebasanalisis.com`:
@@ -943,6 +991,10 @@ las llaves de sandbox, desde `https://sebasanalisis.com`:
 4. Esta cuenta es de prueba: se retira con las demas en el paso 6.
 
 ### 6. Llaves de produccion de Wompi
+
+> **Superado.** Wompi salio del proyecto (paso 5.1). Las llaves de produccion de
+> la pasarela nueva y su URL de eventos se escriben en el 5.3; el webhook ya es
+> `POST /webhooks/payments`.
 
 **Al final**, con lo anterior hecho, Wompi habiendo aprobado el comercio para
 produccion y la respuesta de Wompi sobre PCI DSS (§10 n.º 15). El procedimiento
@@ -1076,9 +1128,9 @@ Nequi en el sandbox.
 2. En el navegador, con la consola de desarrollador abierta (F12), recorrer el
    ingreso, la mesa, Mi cuenta y el admin: no tiene que aparecer ningun error
    que diga `Content Security Policy`.
-3. Repetir en `/cuenta` el cambio a tarjeta `4242` y el cambio a Nequi del paso 5
-   (sandbox): el formulario de tarjeta habla directo con Wompi, y es lo primero
-   que la CSP romperia.
+3. Cuando la pasarela nueva hable con el navegador (paso 5.3), repetir su flujo
+   en `/cuenta`: es lo primero que la CSP romperia si falta su origen en
+   `lib/csp.ts`.
 
 ## Antes del primer despliegue
 

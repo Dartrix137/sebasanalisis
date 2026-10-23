@@ -130,7 +130,7 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
   await expect(fila.getByText("Sin período vigente.")).toBeVisible();
   await expectEmail(email, "Tu suscripción a Sebasanálisis terminó");
 
-  // El pago sigue aprobado: el reembolso se hace en Wompi y aquí se registra.
+  // El pago sigue aprobado: el reembolso se hace en la pasarela y aquí se registra.
   await fila.getByRole("link", { name: /^SA-/ }).click();
   await expect(panel).toHaveURL(/\/admin\/pagos\?query=SA-/);
   const pago = panel.locator("li", { hasText: email });
@@ -138,7 +138,7 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
   await pago.getByRole("button", { name: "Ver" }).click();
   const detalle = panel.getByTestId("detalle-pago");
   await detalle.getByLabel("Monto (COP)").fill("50000");
-  await detalle.getByLabel("Fecha en Wompi").fill(new Date().toISOString().slice(0, 10));
+  await detalle.getByLabel("Fecha en la pasarela").fill(new Date().toISOString().slice(0, 10));
   await detalle.getByLabel("Motivo del reembolso").fill(`Devolución parcial (${email})`);
   await detalle.getByRole("button", { name: "Registrar reembolso" }).click();
   // Queda en la lista de reembolsos y en lo reembolsado del pago.

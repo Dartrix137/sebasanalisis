@@ -1,7 +1,7 @@
 """Usuarios, suscripciones, pagos y eventos del proveedor de pagos.
 
 Modelo de datos de docs/PLATAFORMA_COMPLETA.md §3.2. La logica vive en
-`app/core/subscriptions.py`; antes de tocarla lee "Pagos con Wompi: reglas no
+`app/core/subscriptions.py`; antes de tocarla lee "Pagos: reglas no
 negociables" en CLAUDE.md (firma verificada contra la documentacion oficial
 vigente, el webhook no es fuente de verdad por si solo, idempotencia por
 `provider_event_id`).

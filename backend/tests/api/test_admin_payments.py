@@ -4,8 +4,7 @@ Extender, cancelar al final del periodo y cancelar de inmediato; listas y
 detalle de suscripciones y pagos; reconsultar un pago; registrar un reembolso;
 y el pago aprobado que el proveedor anula despues.
 
-Wompi es el doble de `wompi_double.py` detras del `WompiProvider` de verdad, y
-el job de renovaciones se llama directo con el `now` que cada caso necesita.
+La pasarela es el doble de `pasarela_double.py`, y el job de renovaciones se llama directo con el `now` que cada caso necesita.
 """
 
 import uuid
@@ -57,10 +56,10 @@ def sin_suscripciones_de_otros_tests(db) -> None:
 # ---------- Ayudas ----------
 
 
-def _suscriptor_manual(client, db, wompi) -> tuple[str, str, str, Subscription]:
+def _suscriptor_manual(client, db, pasarela) -> tuple[str, str, str, Subscription]:
     """Una cuenta con el primer pago manual aprobado."""
     token, user_id, correo = _cuenta(client, db)
-    _aprobar(client, wompi, _abrir_pago(client, db, token))
+    _aprobar(client, pasarela, _abrir_pago(client, db, token))
     [suscripcion] = _suscripciones(db, user_id)
     assert suscripcion.status == "active"
     return token, user_id, correo, suscripcion
@@ -115,9 +114,9 @@ _RUTAS = [
 
 @pytest.mark.parametrize(("metodo", "ruta", "cuerpo"), _RUTAS)
 def test_una_cuenta_que_no_es_administradora_recibe_403(
-    client, db, wompi, user_token: str, metodo: str, ruta: str, cuerpo
+    client, db, pasarela, user_token: str, metodo: str, ruta: str, cuerpo
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    _, _, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, str(suscripcion.user_id))
     objetivo = suscripcion.id if "subscriptions" in ruta else pago.id
     url = ruta.replace("{id}", str(objetivo))
@@ -132,7 +131,7 @@ def test_una_cuenta_que_no_es_administradora_recibe_403(
     )) == 0
 
 
-def test_un_administrador_suspendido_tampoco_entra(client, db, wompi, admin_token: str) -> None:
+def test_un_administrador_suspendido_tampoco_entra(client, db, pasarela, admin_token: str) -> None:
     db.execute(text("UPDATE users SET is_active = false WHERE role = 'admin'"))
     db.commit()
     try:
@@ -145,12 +144,12 @@ def test_un_administrador_suspendido_tampoco_entra(client, db, wompi, admin_toke
 # ---------- Lista y detalle de suscripciones ----------
 
 
-def test_la_lista_filtra_por_estado_y_plan_en_el_servidor(client, db, wompi, admin_token: str) -> None:
-    _, _, correo_manual, manual = _suscriptor_manual(client, db, wompi)
-    _, _, _, automatica = _suscriptor_automatico(client, db, wompi)
+def test_la_lista_filtra_por_estado_y_plan_en_el_servidor(client, db, pasarela, admin_token: str) -> None:
+    _, _, correo_manual, manual = _suscriptor_manual(client, db, pasarela)
+    _, _, _, automatica = _suscriptor_automatico(client, db, pasarela)
     bimestral = db.scalar(select(Plan).where(Plan.code == "bimestral"))
     token_b, _, correo_b = _cuenta(client, db)
-    _aprobar(client, wompi, _abrir_pago(client, db, token_b, plan=bimestral))
+    _aprobar(client, pasarela, _abrir_pago(client, db, token_b, plan=bimestral))
     # Un pago abierto y no completado deja una suscripcion `pending`.
     token_p, _, _ = _cuenta(client, db)
     _abrir_pago(client, db, token_p)
@@ -186,9 +185,9 @@ def test_la_lista_filtra_por_estado_y_plan_en_el_servidor(client, db, wompi, adm
 
 
 def test_el_detalle_trae_la_suscripcion_sus_pagos_y_su_bitacora(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, user_id, correo, suscripcion = _suscriptor_manual(client, db, wompi)
+    _, user_id, correo, suscripcion = _suscriptor_manual(client, db, pasarela)
     assert _accion(client, admin_token, suscripcion.id, "extend", days=5).status_code == 200
 
     r = client.get(f"/admin/subscriptions/{suscripcion.id}", headers=auth(admin_token))
@@ -207,9 +206,9 @@ def test_el_detalle_trae_la_suscripcion_sus_pagos_y_su_bitacora(
 
 
 def test_extender_corre_el_vencimiento_deja_fila_con_motivo_y_avisa(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, pasarela)
     vence = suscripcion.current_period_end
     outbox.clear()
 
@@ -243,12 +242,12 @@ def test_extender_corre_el_vencimiento_deja_fila_con_motivo_y_avisa(
 
 
 def test_extender_una_renovacion_automatica_corre_el_cobro_y_el_aviso(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
     """Decidido el 2026-10-14: se corre todo. Lo que el job ya aviso para la
     fecha vieja no cuenta para la nueva."""
-    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
+    _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
     outbox.clear()
 
     r = _accion(client, admin_token, suscripcion.id, "extend", days=10)
@@ -262,23 +261,23 @@ def test_extender_una_renovacion_automatica_corre_el_cobro_y_el_aviso(
 
     # A la hora del cobro viejo no se cobra ni se avisa.
     for cuando in (vence - 48 * H, vence - 24 * H, vence):
-        reporte = _correr(db, wompi, cuando)
+        reporte = _correr(db, pasarela, cuando)
         assert (reporte.charges, reporte.notices, reporte.expired) == (0, 0, 0)
-    assert len(wompi.cobros) == 1  # solo el del alta
+    assert len(pasarela.cobros) == 1  # solo el del alta
 
     # El aviso sale otra vez, para la fecha nueva, y despues el cobro.
-    reporte = _correr(db, wompi, nueva - 48 * H - 7 * DIA)
+    reporte = _correr(db, pasarela, nueva - 48 * H - 7 * DIA)
     assert reporte.notices == 1
-    reporte = _correr(db, wompi, nueva - 48 * H)
+    reporte = _correr(db, pasarela, nueva - 48 * H)
     assert (reporte.charges, reporte.approved) == (1, 1)
     assert _suscripcion(db, suscripcion.id).current_period_end == add_interval(nueva, "month", 1)
 
 
-def test_extender_una_suscripcion_en_mora_la_deja_activa(client, db, wompi, admin_token: str) -> None:
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    assert _correr(db, wompi, vence - 48 * H).failed == 1
+def test_extender_una_suscripcion_en_mora_la_deja_activa(client, db, pasarela, admin_token: str) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    assert _correr(db, pasarela, vence - 48 * H).failed == 1
     assert _suscripcion(db, suscripcion.id).status == "past_due"
 
     assert _accion(client, admin_token, suscripcion.id, "extend", days=3).status_code == 200
@@ -303,9 +302,9 @@ def test_extender_una_suscripcion_en_mora_la_deja_activa(client, db, wompi, admi
     ],
 )
 def test_sin_motivo_o_con_datos_invalidos_se_rechaza_sin_fila(
-    client, db, wompi, admin_token: str, cuerpo: dict
+    client, db, pasarela, admin_token: str, cuerpo: dict
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    _, _, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     r = client.patch(
         f"/admin/subscriptions/{suscripcion.id}", json=cuerpo, headers=auth(admin_token)
     )
@@ -316,9 +315,9 @@ def test_sin_motivo_o_con_datos_invalidos_se_rechaza_sin_fila(
 
 @pytest.mark.parametrize("accion", ["extend", "cancel_at_period_end", "cancel_now"])
 def test_una_suscripcion_sin_periodo_vigente_no_se_toca(
-    client, db, wompi, admin_token: str, accion: str
+    client, db, pasarela, admin_token: str, accion: str
 ) -> None:
-    _, _, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+    _, _, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
     db.execute(
         text("UPDATE subscriptions SET current_period_end = now() - interval '1 day' WHERE id = :id"),
         {"id": suscripcion.id},
@@ -332,11 +331,11 @@ def test_una_suscripcion_sin_periodo_vigente_no_se_toca(
 
 
 @pytest.mark.parametrize("accion", ["extend", "cancel_now"])
-def test_con_un_cobro_en_proceso_se_espera(client, db, wompi, admin_token: str, accion: str) -> None:
-    _, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "PENDING"
-    _correr(db, wompi, vence - 48 * H)
+def test_con_un_cobro_en_proceso_se_espera(client, db, pasarela, admin_token: str, accion: str) -> None:
+    _, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "PENDING"
+    _correr(db, pasarela, vence - 48 * H)
     assert _pagos(db, user_id)[-1].status == "pending"
 
     extra = {"days": 5} if accion == "extend" else {}
@@ -349,9 +348,9 @@ def test_con_un_cobro_en_proceso_se_espera(client, db, wompi, admin_token: str, 
 
 
 def test_cancelar_al_final_conserva_el_acceso_y_no_se_vuelve_a_cobrar(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     outbox.clear()
 
@@ -370,10 +369,10 @@ def test_cancelar_al_final_conserva_el_acceso_y_no_se_vuelve_a_cobrar(
 
     # El job no avisa ni cobra, y al vencer queda vencida.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence - 24 * H, vence - H):
-        reporte = _correr(db, wompi, cuando)
+        reporte = _correr(db, pasarela, cuando)
         assert (reporte.notices, reporte.charges) == (0, 0)
-    assert len(wompi.cobros) == 1
-    assert _correr(db, wompi, vence).expired == 1
+    assert len(pasarela.cobros) == 1
+    assert _correr(db, pasarela, vence).expired == 1
     assert _suscripcion(db, suscripcion.id).status == "expired"
 
     # El cliente todavia la puede reanudar antes del vencimiento: es su decision.
@@ -382,13 +381,13 @@ def test_cancelar_al_final_conserva_el_acceso_y_no_se_vuelve_a_cobrar(
 
 
 def test_cancelar_al_final_no_aplica_al_pago_manual_ni_dos_veces(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, _, _, manual = _suscriptor_manual(client, db, wompi)
+    _, _, _, manual = _suscriptor_manual(client, db, pasarela)
     r = _accion(client, admin_token, manual.id, "cancel_at_period_end")
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "not_automatic")
 
-    _, _, _, automatica = _suscriptor_automatico(client, db, wompi)
+    _, _, _, automatica = _suscriptor_automatico(client, db, pasarela)
     assert _accion(client, admin_token, automatica.id, "cancel_at_period_end").status_code == 200
     r = _accion(client, admin_token, automatica.id, "cancel_at_period_end")
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "already_canceled")
@@ -399,9 +398,9 @@ def test_cancelar_al_final_no_aplica_al_pago_manual_ni_dos_veces(
 
 
 def test_cancelar_de_inmediato_quita_el_acceso_y_no_se_vuelve_a_cobrar(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     assert _tiene_acceso(client, token)
     outbox.clear()
@@ -436,16 +435,16 @@ def test_cancelar_de_inmediato_quita_el_acceso_y_no_se_vuelve_a_cobrar(
 
     # El job no la cobra en ninguna de las horas del cobro.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence - 24 * H, vence):
-        reporte = _correr(db, wompi, cuando)
+        reporte = _correr(db, pasarela, cuando)
         assert (reporte.charges, reporte.notices, _correos(reporte)) == (0, 0, [])
-    assert len(wompi.cobros) == 1
+    assert len(pasarela.cobros) == 1
 
     # Y otra accion sobre ella ya no aplica.
     assert _accion(client, admin_token, suscripcion.id, "cancel_now").status_code == 409
 
 
-def test_cancelar_de_inmediato_una_de_pago_manual(client, db, wompi, admin_token: str, outbox) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, wompi)
+def test_cancelar_de_inmediato_una_de_pago_manual(client, db, pasarela, admin_token: str, outbox) -> None:
+    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, pasarela)
     outbox.clear()
     assert _accion(client, admin_token, suscripcion.id, "cancel_now").status_code == 200
     assert not _tiene_acceso(client, token)
@@ -458,10 +457,10 @@ def test_cancelar_de_inmediato_una_de_pago_manual(client, db, wompi, admin_token
     assert r.status_code == 202, r.text
 
 
-def test_un_administrador_no_se_deja_sin_acceso(client, db, wompi, admin_token: str) -> None:
+def test_un_administrador_no_se_deja_sin_acceso(client, db, pasarela, admin_token: str) -> None:
     """Un administrador entra por su rol: cancelar su propia suscripcion no le
     quita la mesa ni la administracion."""
-    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, pasarela)
     db.execute(text("UPDATE users SET role = 'admin' WHERE id = :id"), {"id": uuid.UUID(user_id)})
     db.commit()
     token = client.post(
@@ -477,11 +476,11 @@ def test_un_administrador_no_se_deja_sin_acceso(client, db, wompi, admin_token: 
 # ---------- Pagos: lista y detalle ----------
 
 
-def test_la_lista_de_pagos_filtra_en_el_servidor(client, db, wompi, admin_token: str) -> None:
-    token, user_id, correo, _ = _suscriptor_manual(client, db, wompi)
+def test_la_lista_de_pagos_filtra_en_el_servidor(client, db, pasarela, admin_token: str) -> None:
+    token, user_id, correo, _ = _suscriptor_manual(client, db, pasarela)
     rechazado = _abrir_pago(client, db, _cuenta(client, db)[0])
-    tx = wompi.transaccion(rechazado, "DECLINED")
-    assert _webhook(client, wompi.evento(tx)).status_code == 200
+    tx = pasarela.transaccion(rechazado, "DECLINED")
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
     abierto = _abrir_pago(client, db, _cuenta(client, db)[0])
 
     def lista(**params) -> dict:
@@ -507,19 +506,19 @@ def test_la_lista_de_pagos_filtra_en_el_servidor(client, db, wompi, admin_token:
 
 
 def test_el_detalle_trae_los_eventos_incluidos_los_de_firma_invalida(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx = wompi.transaccion(pago, "APPROVED")
+    tx = pasarela.transaccion(pago, "APPROVED")
     # Primero uno falsificado: no se asocia al pago ni lo mueve.
-    falso = wompi.evento(tx)
-    falso["signature"]["checksum"] = "0" * 64
+    falso = pasarela.evento(tx)
+    falso["firma"] = "0" * 64
     assert _webhook(client, falso).status_code == 401
-    assert _webhook(client, wompi.evento(tx)).status_code == 200
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
     # Y uno de otro pago, que no debe aparecer.
     otro = _abrir_pago(client, db, _cuenta(client, db)[0])
-    assert _webhook(client, wompi.evento(wompi.transaccion(otro, "DECLINED"))).status_code == 200
+    assert _webhook(client, pasarela.evento(pasarela.transaccion(otro, "DECLINED"))).status_code == 200
 
     r = client.get(f"/admin/payments/{pago.id}", headers=auth(admin_token))
     assert r.status_code == 200, r.text
@@ -536,15 +535,15 @@ def test_el_detalle_trae_los_eventos_incluidos_los_de_firma_invalida(
 
 
 def test_reconsultar_un_pago_pendiente_lo_resuelve_con_la_funcion_del_webhook(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
     """El cliente pago y ni el webhook ni la pantalla de regreso llegaron."""
     token, user_id, correo = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx = wompi.transaccion(pago, "PENDING")
-    assert _webhook(client, wompi.evento(tx)).status_code == 200
+    tx = pasarela.transaccion(pago, "PENDING")
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
     assert not _tiene_acceso(client, token)
-    wompi.resolver(tx, "APPROVED")
+    pasarela.resolver(tx, "APPROVED")
     outbox.clear()
 
     r = client.post(
@@ -568,9 +567,9 @@ def test_reconsultar_un_pago_pendiente_lo_resuelve_con_la_funcion_del_webhook(
 
 
 def test_reconsultar_un_pago_ya_resuelto_no_concede_otro_periodo(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
     vence = suscripcion.current_period_end
     outbox.clear()
@@ -589,16 +588,16 @@ def test_reconsultar_un_pago_ya_resuelto_no_concede_otro_periodo(
 
 
 @pytest.mark.parametrize("cuerpo", [{}, {"reason": ""}, {"reason": "no"}])
-def test_reconsultar_sin_motivo_se_rechaza_sin_fila(client, db, wompi, admin_token: str, cuerpo) -> None:
+def test_reconsultar_sin_motivo_se_rechaza_sin_fila(client, db, pasarela, admin_token: str, cuerpo) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    wompi.transaccion(pago, "APPROVED")
+    pasarela.transaccion(pago, "APPROVED")
     r = client.post(f"/admin/payments/{pago.id}/requery", json=cuerpo, headers=auth(admin_token))
     assert r.status_code == 422
     assert _filas(db, "payment.requery") == []
 
 
-def test_reconsultar_lo_que_no_se_puede(client, db, wompi, admin_token: str) -> None:
+def test_reconsultar_lo_que_no_se_puede(client, db, pasarela, admin_token: str) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
     url = f"/admin/payments/{pago.id}/requery"
@@ -608,12 +607,12 @@ def test_reconsultar_lo_que_no_se_puede(client, db, wompi, admin_token: str) -> 
     r = client.post(url, json=body, headers=auth(admin_token))
     assert r.status_code == 409
 
-    tx = wompi.transaccion(pago, "PENDING")
-    assert _webhook(client, wompi.evento(tx)).status_code == 200
-    wompi.caido = True
+    tx = pasarela.transaccion(pago, "PENDING")
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
+    pasarela.caido = True
     assert client.post(url, json=body, headers=auth(admin_token)).status_code == 502
-    wompi.caido = False
-    del wompi.transactions[tx]
+    pasarela.caido = False
+    del pasarela.transactions[tx]
     assert client.post(url, json=body, headers=auth(admin_token)).status_code == 409
     assert _filas(db, "payment.requery") == []
 
@@ -625,7 +624,7 @@ def test_reconsultar_sin_pasarela(client, db, admin_token: str) -> None:
     db.execute(
         text(
             "INSERT INTO subscriptions (id, user_id, plan_id, provider, status, price_cents, currency) "
-            "VALUES (:s, :u, :p, 'wompi', 'pending', :c, 'COP')"
+            "VALUES (:s, :u, :p, 'pasarela', 'pending', :c, 'COP')"
         ),
         {"s": uuid.uuid4(), "u": uuid.UUID(user_id), "p": plan.id, "c": PRECIO},
     )
@@ -633,7 +632,7 @@ def test_reconsultar_sin_pasarela(client, db, admin_token: str) -> None:
     db.execute(
         text(
             "INSERT INTO payments (id, user_id, plan_id, provider, reference, kind, amount_cents, "
-            "currency, status, provider_transaction_id) VALUES (:id, :u, :p, 'wompi', :r, "
+            "currency, status, provider_transaction_id) VALUES (:id, :u, :p, 'pasarela', :r, "
             "'initial', :c, 'COP', 'pending', 'tx-1')"
         ),
         {"id": pago_id, "u": uuid.UUID(user_id), "p": plan.id, "r": f"SA-{pago_id.hex}", "c": PRECIO},
@@ -649,18 +648,18 @@ def test_reconsultar_sin_pasarela(client, db, admin_token: str) -> None:
 
 
 def test_un_pago_anulado_despues_quita_el_acceso_en_el_acto(
-    client, db, wompi, outbox
+    client, db, pasarela, outbox
 ) -> None:
     """Decidido el 2026-10-14: la anulacion llega como evento, la reconsulta la
     confirma y el periodo que habia comprado se retira."""
     token, user_id, correo = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx = _aprobar(client, wompi, pago)
+    tx = _aprobar(client, pasarela, pago)
     assert _tiene_acceso(client, token)
     outbox.clear()
 
-    wompi.resolver(tx, "VOIDED")
-    assert _webhook(client, wompi.evento(tx, timestamp=1_760_000_500)).status_code == 200
+    pasarela.resolver(tx, "VOIDED")
+    assert _webhook(client, pasarela.evento(tx, timestamp=1_760_000_500)).status_code == 200
 
     assert not _tiene_acceso(client, token)
     assert _acceso(client, token)["reason"] == "expired"
@@ -673,17 +672,17 @@ def test_un_pago_anulado_despues_quita_el_acceso_en_el_acto(
     # La anulacion la hizo el comercio en el panel: no sale correo.
     assert outbox == []
     # El mismo evento otra vez, o reconsultar, no hace nada mas.
-    assert _webhook(client, wompi.evento(tx, timestamp=1_760_000_500)).json()["status"] == "duplicate"
-    assert _webhook(client, wompi.evento(tx, timestamp=1_760_000_900)).status_code == 200
+    assert _webhook(client, pasarela.evento(tx, timestamp=1_760_000_500)).json()["status"] == "duplicate"
+    assert _webhook(client, pasarela.evento(tx, timestamp=1_760_000_900)).status_code == 200
     assert _suscripciones(db, user_id)[0].current_period_end == suscripcion.current_period_end
 
 
 def test_una_anulacion_que_llega_por_reconsultar_deja_fila(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    token, user_id, _, _ = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, _ = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
-    wompi.resolver(pago.provider_transaction_id, "VOIDED")
+    pasarela.resolver(pago.provider_transaction_id, "VOIDED")
 
     r = client.post(
         f"/admin/payments/{pago.id}/requery", json={"reason": MOTIVO}, headers=auth(admin_token)
@@ -701,18 +700,18 @@ def test_una_anulacion_que_llega_por_reconsultar_deja_fila(
     assert [p["id"] for p in r.json()["items"]] == [str(pago.id)]
 
 
-def test_anular_un_pago_con_un_periodo_posterior_no_toca_nada(client, db, wompi) -> None:
+def test_anular_un_pago_con_un_periodo_posterior_no_toca_nada(client, db, pasarela) -> None:
     """El periodo que compro ya no es el ultimo: retirarlo solo dejaria un
     hueco. Queda la nota para revisarlo a mano."""
-    token, user_id, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     primero = _pagos(db, user_id)[0]
     segundo = _abrir_pago(client, db, token)
-    _aprobar(client, wompi, segundo, timestamp=1_760_000_100)
+    _aprobar(client, pasarela, segundo, timestamp=1_760_000_100)
     vence = _suscripcion(db, suscripcion.id).current_period_end
     assert vence == _pagos(db, user_id)[1].period_end
 
-    wompi.resolver(primero.provider_transaction_id, "VOIDED")
-    assert _webhook(client, wompi.evento(primero.provider_transaction_id, timestamp=1_760_000_200)).status_code == 200
+    pasarela.resolver(primero.provider_transaction_id, "VOIDED")
+    assert _webhook(client, pasarela.evento(primero.provider_transaction_id, timestamp=1_760_000_200)).status_code == 200
 
     primero = _pagos(db, user_id)[0]
     assert primero.status == "voided" and "revisarlo a mano" in primero.reversal_note
@@ -720,35 +719,35 @@ def test_anular_un_pago_con_un_periodo_posterior_no_toca_nada(client, db, wompi)
     assert _tiene_acceso(client, token)
 
 
-def test_anular_una_renovacion_cobrada_antes_del_vencimiento(client, db, wompi) -> None:
+def test_anular_una_renovacion_cobrada_antes_del_vencimiento(client, db, pasarela) -> None:
     """El cobro de renovacion sale 48 h antes. Si se anula antes de que empiece
     el periodo que compro, el anterior sigue, y la renovacion se cancela para
     que el job no le vuelva a cobrar sin que alguien lo decida."""
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    assert _correr(db, wompi, vence - 48 * H).approved == 1
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    assert _correr(db, pasarela, vence - 48 * H).approved == 1
     renovacion = _pagos(db, user_id)[1]
     assert renovacion.kind == "renewal"
 
-    wompi.resolver(renovacion.provider_transaction_id, "VOIDED")
-    assert _webhook(client, wompi.evento(renovacion.provider_transaction_id, timestamp=1_760_000_300)).status_code == 200
+    pasarela.resolver(renovacion.provider_transaction_id, "VOIDED")
+    assert _webhook(client, pasarela.evento(renovacion.provider_transaction_id, timestamp=1_760_000_300)).status_code == 200
 
     suscripcion = _suscripcion(db, suscripcion.id)
     assert suscripcion.current_period_end == vence
     assert (suscripcion.status, suscripcion.cancel_at_period_end) == ("canceled", True)
     assert _tiene_acceso(client, token)
     for cuando in (vence - 24 * H, vence - H):
-        assert _correr(db, wompi, cuando).charges == 0
-    assert len(wompi.cobros) == 2
-    assert _correr(db, wompi, vence).expired == 1
+        assert _correr(db, pasarela, cuando).charges == 0
+    assert len(pasarela.cobros) == 2
+    assert _correr(db, pasarela, vence).expired == 1
 
 
-def test_una_anulacion_de_otra_transaccion_no_toca_el_pago(client, db, wompi) -> None:
+def test_una_anulacion_de_otra_transaccion_no_toca_el_pago(client, db, pasarela) -> None:
     """Solo la transaccion que lo aprobo puede anularlo."""
-    token, user_id, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
-    otra = wompi.transaccion(pago, "VOIDED")
-    assert _webhook(client, wompi.evento(otra)).status_code == 200
+    otra = pasarela.transaccion(pago, "VOIDED")
+    assert _webhook(client, pasarela.evento(otra)).status_code == 200
     assert _pagos(db, user_id)[0].status == "approved"
     assert _tiene_acceso(client, token)
 
@@ -768,9 +767,9 @@ def _reembolso(client, admin_token: str, pago_id, **cambios):
 
 
 def test_registrar_un_reembolso_deja_fila_y_no_toca_el_acceso(
-    client, db, wompi, admin_token: str, outbox
+    client, db, pasarela, admin_token: str, outbox
 ) -> None:
-    token, user_id, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
     outbox.clear()
 
@@ -812,16 +811,16 @@ def test_registrar_un_reembolso_deja_fila_y_no_toca_el_acceso(
     ],
 )
 def test_un_reembolso_sin_motivo_o_invalido_se_rechaza_sin_fila(
-    client, db, wompi, admin_token: str, cambios: dict
+    client, db, pasarela, admin_token: str, cambios: dict
 ) -> None:
-    _, user_id, _, _ = _suscriptor_manual(client, db, wompi)
+    _, user_id, _, _ = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
     assert _reembolso(client, admin_token, pago.id, **cambios).status_code == 422
     assert _filas(db, "payment.refund.record") == []
     assert db.scalar(select(func.count()).select_from(PaymentRefund)) == 0
 
 
-def test_solo_se_reembolsa_un_pago_aprobado(client, db, wompi, admin_token: str) -> None:
+def test_solo_se_reembolsa_un_pago_aprobado(client, db, pasarela, admin_token: str) -> None:
     pago = _abrir_pago(client, db, _cuenta(client, db)[0])
     assert _reembolso(client, admin_token, pago.id).status_code == 409
     assert _reembolso(client, admin_token, uuid.uuid4()).status_code == 404
@@ -831,14 +830,14 @@ def test_solo_se_reembolsa_un_pago_aprobado(client, db, wompi, admin_token: str)
 
 
 def test_el_detalle_de_la_cuenta_muestra_las_acciones_sobre_su_suscripcion(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
-    _, user_id, _, suscripcion = _suscriptor_manual(client, db, wompi)
+    _, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
     assert _accion(client, admin_token, suscripcion.id, "extend", days=2).status_code == 200
     assert _reembolso(client, admin_token, pago.id).status_code == 201
     # Una accion sobre otra cuenta no aparece.
-    _, _, _, otra = _suscriptor_manual(client, db, wompi)
+    _, _, _, otra = _suscriptor_manual(client, db, pasarela)
     assert _accion(client, admin_token, otra.id, "extend", days=2).status_code == 200
 
     r = client.get(f"/admin/users/{user_id}", headers=auth(admin_token))
@@ -849,10 +848,10 @@ def test_el_detalle_de_la_cuenta_muestra_las_acciones_sobre_su_suscripcion(
     assert data["subscription"]["id"] == str(suscripcion.id)
 
 
-def test_los_eventos_quedan_aunque_se_elimine_la_cuenta(client, db, wompi, admin_token: str) -> None:
+def test_los_eventos_quedan_aunque_se_elimine_la_cuenta(client, db, pasarela, admin_token: str) -> None:
     """El detalle del pago sigue sirviendo sin la cuenta: sus eventos ya
     vienen reducidos (§3.15)."""
-    token, user_id, _, _ = _suscriptor_manual(client, db, wompi)
+    token, user_id, _, _ = _suscriptor_manual(client, db, pasarela)
     [pago] = _pagos(db, user_id)
     r = client.request(
         "DELETE", "/auth/me", json={"password": "clave-segura-123"}, headers=auth(token)

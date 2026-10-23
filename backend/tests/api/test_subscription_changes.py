@@ -1,7 +1,7 @@
 """Gestion de una suscripcion ya pagada y cierre de la cuenta (§3.6, §3.10 y §5.4 de la Fase 4).
 
 Cambiar el medio de pago, pasar de un modo de pago al otro, y lo que queda de
-los pagos al eliminar la cuenta. Wompi es el doble de `wompi_double.py`; el job
+los pagos al eliminar la cuenta. La pasarela es el doble de `pasarela_double.py`; el job
 de renovaciones se llama directo con el `now` que cada caso necesita.
 """
 
@@ -11,6 +11,14 @@ from sqlalchemy import select, text
 from app.billing.periods import add_interval
 from app.models import Coupon, CouponRedemption, Payment, PaymentEvent
 from tests.api.conftest import auth
+from tests.api.pasarela_double import (
+    ACEPTACION,
+    DATOS_PERSONALES,
+    TOKEN_NEQUI,
+    TOKEN_RECHAZADO,
+    TOKEN_TARJETA,
+    Pasarela,
+)
 from tests.api.test_billing import _cupon, _mensual
 from tests.api.test_renewals import (
     DIA,
@@ -32,14 +40,6 @@ from tests.api.test_subscriptions import (
     _suscripciones,
     _tiene_acceso,
     _webhook,
-)
-from tests.api.wompi_double import (
-    ACEPTACION,
-    DATOS_PERSONALES,
-    TOKEN_NEQUI,
-    TOKEN_RECHAZADO,
-    TOKEN_TARJETA,
-    Wompi,
 )
 
 CLAVE = "clave-segura-123"
@@ -67,9 +67,9 @@ def _guardar_medio(client, token: str | None, **cambios):
     return client.put("/billing/payment-method", json=body, headers=auth(token) if token else {})
 
 
-def _suscriptor_manual(client, db, wompi: Wompi) -> tuple[str, str, str]:
+def _suscriptor_manual(client, db, pasarela: Pasarela) -> tuple[str, str, str]:
     token, user_id, correo = _cuenta(client, db)
-    _aprobar(client, wompi, _abrir_pago(client, db, token))
+    _aprobar(client, pasarela, _abrir_pago(client, db, token))
     return token, user_id, correo
 
 
@@ -81,9 +81,9 @@ def _eliminar(client, token: str):
 
 
 def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
-    client, db, wompi, outbox
+    client, db, pasarela, outbox
 ) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     assert suscripcion.payment_source_id == "3000"
     outbox.clear()
@@ -95,16 +95,16 @@ def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
     assert (data["status"], data["renewal_mode"], data["card_last4"]) == ("active", "automatic", "4242")
     assert data["next_charge_cents"] == PRECIO
 
-    # A Wompi se le pidio guardar el medio nuevo, con los dos contratos, y nada mas:
+    # A la pasarela se le pidio guardar el medio nuevo, con los dos contratos, y nada mas:
     # el periodo vigente ya estaba pagado.
-    assert wompi.fuentes_pedidas[-1] == {
+    assert pasarela.fuentes_pedidas[-1] == {
         "type": "CARD",
         "token": TOKEN_TARJETA,
         "customer_email": correo,
         "acceptance_token": ACEPTACION,
-        "accept_personal_auth": DATOS_PERSONALES,
+        "personal_data_token": DATOS_PERSONALES,
     }
-    assert len(wompi.cobros) == 1
+    assert len(pasarela.cobros) == 1
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.payment_source_id, suscripcion.current_period_end) == ("3001", vence)
     assert suscripcion.next_charge_at == vence - 48 * H
@@ -117,14 +117,14 @@ def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
     assert TOKEN_TARJETA not in correo_cambio.text
 
     # La renovacion se le cobra a la fuente nueva.
-    _avisada(db, wompi, suscripcion)
-    assert _correr(db, wompi, vence - 48 * H).approved == 1
-    assert wompi.cobros[-1]["payment_source_id"] == 3001
+    _avisada(db, pasarela, suscripcion)
+    assert _correr(db, pasarela, vence - 48 * H).approved == 1
+    assert pasarela.cobros[-1]["source_id"] == "3001"
     assert _suscripcion(db, user_id).card_brand == "VISA"
 
 
-def test_cambiar_a_nequi(client, db, wompi) -> None:
-    token, user_id, _, _ = _suscriptor_automatico(client, db, wompi)
+def test_cambiar_a_nequi(client, db, pasarela) -> None:
+    token, user_id, _, _ = _suscriptor_automatico(client, db, pasarela)
     r = _guardar_medio(
         client, token, payment_source_token=TOKEN_NEQUI, payment_source_type="NEQUI"
     )
@@ -137,21 +137,21 @@ def test_cambiar_a_nequi(client, db, wompi) -> None:
     )
 
 
-def test_un_medio_que_wompi_no_acepta_deja_todo_como_estaba(client, db, wompi, outbox) -> None:
-    token, user_id, correo, _ = _suscriptor_automatico(client, db, wompi)
+def test_un_medio_que_pasarela_no_acepta_deja_todo_como_estaba(client, db, pasarela, outbox) -> None:
+    token, user_id, correo, _ = _suscriptor_automatico(client, db, pasarela)
     outbox.clear()
     r = _guardar_medio(client, token, payment_source_token=TOKEN_RECHAZADO)
     assert (r.status_code, r.json()["detail"]["code"]) == (400, "payment_source_rejected")
     assert _suscripcion(db, user_id).payment_source_id == "3000"
     assert _asuntos(outbox, correo) == []
 
-    wompi.caido = True
+    pasarela.caido = True
     r = _guardar_medio(client, token)
     assert (r.status_code, r.json()["detail"]["code"]) == (502, "provider_unavailable")
     assert _suscripcion(db, user_id).payment_source_id == "3000"
 
 
-def test_sin_un_periodo_pagado_no_hay_donde_guardar_el_medio(client, db, wompi) -> None:
+def test_sin_un_periodo_pagado_no_hay_donde_guardar_el_medio(client, db, pasarela) -> None:
     token, _, _ = _cuenta(client, db)
     r = _guardar_medio(client, token)
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "no_subscription")
@@ -159,32 +159,32 @@ def test_sin_un_periodo_pagado_no_hay_donde_guardar_el_medio(client, db, wompi) 
     _abrir_pago(client, db, token)
     r = _guardar_medio(client, token)
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "no_subscription")
-    assert wompi.fuentes_pedidas == []
+    assert pasarela.fuentes_pedidas == []
 
     r = client.delete("/billing/payment-method", headers=auth(token))
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "no_subscription")
 
 
-def test_guardar_un_medio_exige_el_token_y_los_dos_contratos(client, db, wompi) -> None:
-    token, _, _, _ = _suscriptor_automatico(client, db, wompi)
+def test_guardar_un_medio_exige_el_token_y_los_dos_contratos(client, db, pasarela) -> None:
+    token, _, _, _ = _suscriptor_automatico(client, db, pasarela)
     for campo in ("payment_source_token", "acceptance_token", "personal_data_token"):
         assert _guardar_medio(client, token, **{campo: ""}).status_code == 422
     assert _guardar_medio(client, token, payment_source_type="PSE").status_code == 422
-    assert len(wompi.fuentes_pedidas) == 1
+    assert len(pasarela.fuentes_pedidas) == 1
 
 
 # ---------- De pago manual a renovacion automatica ----------
 
 
 def test_de_manual_a_automatica_no_cobra_hoy_y_avisa_antes_del_primer_cobro(
-    client, db, wompi, outbox
+    client, db, pasarela, outbox
 ) -> None:
-    token, user_id, correo = _suscriptor_manual(client, db, wompi)
+    token, user_id, correo = _suscriptor_manual(client, db, pasarela)
     suscripcion = _suscripcion(db, user_id)
     vence = suscripcion.current_period_end
 
     # Ya le habia llegado el aviso de vencimiento del pago manual.
-    reporte = _correr(db, wompi, vence - 6 * DIA)
+    reporte = _correr(db, pasarela, vence - 6 * DIA)
     assert _de(reporte, correo) == ["Tu acceso a Sebasanálisis está por terminar"]
     outbox.clear()
 
@@ -194,7 +194,7 @@ def test_de_manual_a_automatica_no_cobra_hoy_y_avisa_antes_del_primer_cobro(
     assert (data["status"], data["renewal_mode"]) == ("active", "automatic")
     assert (data["next_charge_cents"], data["current_period_end"] is not None) == (PRECIO, True)
     # No se cobro nada: el periodo vigente ya estaba pagado.
-    assert wompi.cobros == []
+    assert pasarela.cobros == []
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.payment_source_id, suscripcion.current_period_end) == ("3000", vence)
     assert suscripcion.next_charge_at == vence - 48 * H
@@ -203,21 +203,21 @@ def test_de_manual_a_automatica_no_cobra_hoy_y_avisa_antes_del_primer_cobro(
 
     # El aviso del pago manual no vale como aviso del cobro: sale el del cobro
     # automatico, y esa corrida no cobra.
-    reporte = _correr(db, wompi, vence - 48 * H)
+    reporte = _correr(db, pasarela, vence - 48 * H)
     assert (reporte.notices, reporte.charges) == (1, 0)
     assert _de(reporte, correo) == ["Aviso: próximo cobro de tu suscripción a Sebasanálisis"]
-    reporte = _correr(db, wompi, vence - 47 * H)
+    reporte = _correr(db, pasarela, vence - 47 * H)
     assert (reporte.charges, reporte.approved) == (1, 1)
-    assert wompi.cobros[-1]["payment_source_id"] == 3000
+    assert pasarela.cobros[-1]["source_id"] == "3000"
     suscripcion = _suscripcion(db, user_id)
     assert suscripcion.current_period_end == add_interval(vence, "month", 1)
     assert _tiene_acceso(client, token)
 
 
-def test_el_alta_no_sirve_para_cambiar_de_modo_con_un_periodo_pagado(client, db, wompi) -> None:
+def test_el_alta_no_sirve_para_cambiar_de_modo_con_un_periodo_pagado(client, db, pasarela) -> None:
     """Abrir un pago con renovacion automatica cobraria un periodo: el cambio
     de modo va por `PUT /billing/payment-method`, sin cobro."""
-    token, _, _ = _suscriptor_manual(client, db, wompi)
+    token, _, _ = _suscriptor_manual(client, db, pasarela)
     r = client.post(
         "/billing/subscriptions",
         json={
@@ -231,15 +231,15 @@ def test_el_alta_no_sirve_para_cambiar_de_modo_con_un_periodo_pagado(client, db,
         headers=auth(token),
     )
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "mode_change_in_account")
-    assert wompi.fuentes_pedidas == []
+    assert pasarela.fuentes_pedidas == []
 
 
 # ---------- De renovacion automatica a pago manual ----------
 
 
-def test_de_automatica_a_manual_deja_de_cobrar_y_olvida_el_medio(client, db, wompi, outbox) -> None:
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
+def test_de_automatica_a_manual_deja_de_cobrar_y_olvida_el_medio(client, db, pasarela, outbox) -> None:
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
     outbox.clear()
 
     assert client.delete("/billing/payment-method").status_code == 401
@@ -270,20 +270,20 @@ def test_de_automatica_a_manual_deja_de_cobrar_y_olvida_el_medio(client, db, wom
 
     # El job ya no cobra: avisa del vencimiento como a cualquier pago manual,
     # aunque el aviso del cobro automatico de este periodo ya hubiera salido.
-    reporte = _correr(db, wompi, vence - 48 * H)
+    reporte = _correr(db, pasarela, vence - 48 * H)
     assert (reporte.charges, reporte.notices) == (0, 1)
     assert _de(reporte, correo) == ["Tu acceso a Sebasanálisis está por terminar"]
-    assert len(wompi.cobros) == 1
+    assert len(pasarela.cobros) == 1
 
     # Y puede pagar a mano el periodo siguiente.
     pago = _abrir_pago(client, db, token)
     assert pago.kind == "renewal"
-    _aprobar(client, wompi, pago, timestamp=1_760_000_500)
+    _aprobar(client, pasarela, pago, timestamp=1_760_000_500)
     assert _suscripcion(db, user_id).current_period_end == add_interval(vence, "month", 1)
 
 
-def test_una_renovacion_cancelada_se_puede_reanudar_con_otro_medio(client, db, wompi) -> None:
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+def test_una_renovacion_cancelada_se_puede_reanudar_con_otro_medio(client, db, pasarela) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     assert client.post("/billing/subscription/cancel", headers=auth(token)).status_code == 200
     # Despues de cancelar abrio un pago manual que no completo.
@@ -297,8 +297,8 @@ def test_una_renovacion_cancelada_se_puede_reanudar_con_otro_medio(client, db, w
     assert (suscripcion.canceled_at, suscripcion.next_charge_at) == (None, vence - 48 * H)
 
 
-def test_una_renovacion_cancelada_tambien_puede_pasar_a_pago_manual(client, db, wompi) -> None:
-    token, user_id, _, _ = _suscriptor_automatico(client, db, wompi)
+def test_una_renovacion_cancelada_tambien_puede_pasar_a_pago_manual(client, db, pasarela) -> None:
+    token, user_id, _, _ = _suscriptor_automatico(client, db, pasarela)
     assert client.post("/billing/subscription/cancel", headers=auth(token)).status_code == 200
     r = client.delete("/billing/payment-method", headers=auth(token))
     assert r.status_code == 200, r.text
@@ -311,17 +311,17 @@ def test_una_renovacion_cancelada_tambien_puede_pasar_a_pago_manual(client, db, 
 
 
 def test_un_pago_cuya_suscripcion_pendiente_se_descarto_extiende_la_vigente(
-    client, db, wompi
+    client, db, pasarela
 ) -> None:
     """Cancelo, abrio un pago manual, reanudo (eso descarta la suscripcion
     pendiente) y despues el pago manual se aprobo: el periodo no se pierde."""
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = suscripcion.current_period_end
     client.post("/billing/subscription/cancel", headers=auth(token))
     pago = _abrir_pago(client, db, token)
     assert client.post("/billing/subscription/resume", headers=auth(token)).status_code == 200
 
-    _aprobar(client, wompi, pago)
+    _aprobar(client, pasarela, pago)
     [suscripcion] = _suscripciones(db, user_id)
     assert suscripcion.status == "active"
     assert suscripcion.current_period_end == add_interval(vence, "month", 1)
@@ -330,24 +330,24 @@ def test_un_pago_cuya_suscripcion_pendiente_se_descarto_extiende_la_vigente(
 # ---------- En mora ----------
 
 
-def test_en_mora_cambiar_el_medio_reintenta_el_cobro_de_inmediato(client, db, wompi, outbox) -> None:
+def test_en_mora_cambiar_el_medio_reintenta_el_cobro_de_inmediato(client, db, pasarela, outbox) -> None:
     """§3.6: no espera a la hora del siguiente intento."""
-    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    assert _correr(db, wompi, vence - 48 * H).failed == 1
+    token, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    assert _correr(db, pasarela, vence - 48 * H).failed == 1
     assert _suscripcion(db, user_id).status == "past_due"
     outbox.clear()
 
-    wompi.estado_del_cobro = "APPROVED"
+    pasarela.estado_del_cobro = "APPROVED"
     r = _guardar_medio(client, token)
     assert r.status_code == 200, r.text
     data = r.json()
     assert (data["status"], data["in_force"]) == ("active", True)
 
     # Un cobro mas, a la fuente nueva, con la referencia del segundo intento.
-    assert len(wompi.cobros) == 3
-    assert wompi.cobros[-1]["payment_source_id"] == 3001
+    assert len(pasarela.cobros) == 3
+    assert pasarela.cobros[-1]["source_id"] == "3001"
     pagos = _pagos(db, user_id)
     assert [(p.kind, p.status) for p in pagos] == [
         ("initial", "approved"),
@@ -364,49 +364,49 @@ def test_en_mora_cambiar_el_medio_reintenta_el_cobro_de_inmediato(client, db, wo
     )
 
     # El job no vuelve a cobrar el periodo que ya se pago.
-    assert _correr(db, wompi, vence - 24 * H).charges == 0
-    assert len(wompi.cobros) == 3
+    assert _correr(db, pasarela, vence - 24 * H).charges == 0
+    assert len(pasarela.cobros) == 3
 
 
-def test_en_mora_los_reintentos_por_cambio_de_medio_no_pasan_de_tres(client, db, wompi) -> None:
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    _correr(db, wompi, vence - 48 * H)
+def test_en_mora_los_reintentos_por_cambio_de_medio_no_pasan_de_tres(client, db, pasarela) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    _correr(db, pasarela, vence - 48 * H)
 
     for _ in range(2):
         r = _guardar_medio(client, token)
         assert (r.status_code, r.json()["status"]) == (200, "past_due")
-    assert len(wompi.cobros) == 4  # el inicial y los tres intentos
+    assert len(pasarela.cobros) == 4  # el inicial y los tres intentos
     # Agotados los tres, guardar otro medio ya no cobra.
     assert _guardar_medio(client, token).status_code == 200
-    assert len(wompi.cobros) == 4
+    assert len(pasarela.cobros) == 4
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.status, suscripcion.current_period_end) == ("past_due", vence)
     assert _tiene_acceso(client, token)
     # Y el job tampoco: vence en su fecha.
-    assert _correr(db, wompi, vence - 24 * H).charges == 0
-    assert _correr(db, wompi, vence).expired == 1
+    assert _correr(db, pasarela, vence - 24 * H).charges == 0
+    assert _correr(db, pasarela, vence).expired == 1
 
 
-def test_en_mora_con_un_cobro_todavia_sin_resolver_no_se_cobra_otra_vez(client, db, wompi) -> None:
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    _correr(db, wompi, vence - 48 * H)
-    wompi.estado_del_cobro = "PENDING"
-    _correr(db, wompi, vence - 24 * H)
-    assert len(wompi.cobros) == 3
+def test_en_mora_con_un_cobro_todavia_sin_resolver_no_se_cobra_otra_vez(client, db, pasarela) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    _correr(db, pasarela, vence - 48 * H)
+    pasarela.estado_del_cobro = "PENDING"
+    _correr(db, pasarela, vence - 24 * H)
+    assert len(pasarela.cobros) == 3
 
     assert _guardar_medio(client, token).status_code == 200
-    assert len(wompi.cobros) == 3
+    assert len(pasarela.cobros) == 3
 
 
-def test_en_mora_se_puede_pasar_a_pago_manual(client, db, wompi) -> None:
-    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, wompi)
-    vence = _avisada(db, wompi, suscripcion)
-    wompi.estado_del_cobro = "DECLINED"
-    _correr(db, wompi, vence - 48 * H)
+def test_en_mora_se_puede_pasar_a_pago_manual(client, db, pasarela) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vence = _avisada(db, pasarela, suscripcion)
+    pasarela.estado_del_cobro = "DECLINED"
+    _correr(db, pasarela, vence - 48 * H)
 
     assert client.delete("/billing/payment-method", headers=auth(token)).status_code == 200
     suscripcion = _suscripcion(db, user_id)
@@ -415,26 +415,26 @@ def test_en_mora_se_puede_pasar_a_pago_manual(client, db, wompi) -> None:
         "manual",
         0,
     )
-    assert _correr(db, wompi, vence - 24 * H).charges == 0
-    assert _correr(db, wompi, vence).expired == 1
+    assert _correr(db, pasarela, vence - 24 * H).charges == 0
+    assert _correr(db, pasarela, vence).expired == 1
 
 
 # ---------- Eliminar la cuenta ----------
 
 
 def test_eliminar_la_cuenta_cancela_la_renovacion_y_conserva_los_pagos_anonimos(
-    client, db, wompi, outbox, admin_token
+    client, db, pasarela, outbox, admin_token
 ) -> None:
     cupon = _cupon(db)
     cupon_id = cupon.id
     token, user_id, correo, suscripcion = _suscriptor_automatico(
-        client, db, wompi, codigo=cupon.code
+        client, db, pasarela, codigo=cupon.code
     )
     vence = suscripcion.current_period_end
     [pago] = _pagos(db, user_id)
     pago_id = pago.id
     # Un evento de ese pago, con los datos personales que manda el proveedor.
-    evento = wompi.evento(pago.provider_transaction_id, timestamp=1_760_000_900)
+    evento = pasarela.evento(pago.provider_transaction_id, timestamp=1_760_000_900)
     assert evento["data"]["transaction"]["customer_email"]
     assert _webhook(client, evento).status_code == 200
     outbox.clear()
@@ -469,12 +469,12 @@ def test_eliminar_la_cuenta_cancela_la_renovacion_y_conserva_los_pagos_anonimos(
 
     # El job no tiene a quien cobrarle.
     for cuando in (vence - 9 * DIA, vence - 48 * H, vence):
-        reporte = _correr(db, wompi, cuando)
+        reporte = _correr(db, pasarela, cuando)
         assert (reporte.notices, reporte.charges, reporte.errors, _correos(reporte)) == (0, 0, 0, [])
-    assert len(wompi.cobros) == 1
+    assert len(pasarela.cobros) == 1
 
 
-def test_eliminar_una_cuenta_sin_suscripcion_no_habla_de_pagos(client, db, wompi, outbox) -> None:
+def test_eliminar_una_cuenta_sin_suscripcion_no_habla_de_pagos(client, db, pasarela, outbox) -> None:
     token, _, correo = _cuenta(client, db)
     outbox.clear()
     assert _eliminar(client, token).status_code == 204
@@ -482,10 +482,10 @@ def test_eliminar_una_cuenta_sin_suscripcion_no_habla_de_pagos(client, db, wompi
     assert "Tu suscripción se eliminó" not in despedida.text and "cobro" not in despedida.text
 
 
-def test_con_un_cobro_en_proceso_la_cuenta_no_se_elimina_todavia(client, db, wompi) -> None:
+def test_con_un_cobro_en_proceso_la_cuenta_no_se_elimina_todavia(client, db, pasarela) -> None:
     """Si se aprobara despues de borrar, quedaria cobrado sin cuenta."""
     token, user_id, _ = _cuenta(client, db)
-    wompi.estado_del_cobro = "PENDING"
+    pasarela.estado_del_cobro = "PENDING"
     r = client.post(
         "/billing/subscriptions",
         json={
@@ -505,13 +505,13 @@ def test_con_un_cobro_en_proceso_la_cuenta_no_se_elimina_todavia(client, db, wom
     assert r.status_code == 409 and "pago en proceso" in r.json()["detail"]
     assert len(_suscripciones(db, user_id)) == 1
 
-    wompi.resolver(pago.provider_transaction_id, "DECLINED")
-    assert _webhook(client, wompi.evento(pago.provider_transaction_id)).status_code == 200
+    pasarela.resolver(pago.provider_transaction_id, "DECLINED")
+    assert _webhook(client, pasarela.evento(pago.provider_transaction_id)).status_code == 200
     assert _eliminar(client, token).status_code == 204
 
 
 def test_un_pago_abierto_sin_completar_no_impide_eliminar_y_su_evento_tardio_queda_anonimo(
-    client, db, wompi
+    client, db, pasarela
 ) -> None:
     token, user_id, correo = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
@@ -519,8 +519,8 @@ def test_un_pago_abierto_sin_completar_no_impide_eliminar_y_su_evento_tardio_que
     assert _eliminar(client, token).status_code == 204
 
     # El cliente si pago en la pagina del proveedor, y el evento llega despues.
-    tx_id = wompi.transaccion(pago, "APPROVED")
-    assert _webhook(client, wompi.evento(tx_id)).status_code == 200
+    tx_id = pasarela.transaccion(pago, "APPROVED")
+    assert _webhook(client, pasarela.evento(tx_id)).status_code == 200
     db.expire_all()
     conservado = db.get(Payment, pago_id)
     # Queda aprobado y sin cuenta: nadie recibe el periodo, y hay que mirarlo a mano.
@@ -533,9 +533,9 @@ def test_un_pago_abierto_sin_completar_no_impide_eliminar_y_su_evento_tardio_que
 # ---------- Exportar ----------
 
 
-def test_exportar_trae_la_suscripcion_y_todos_los_pagos_de_la_cuenta(client, db, wompi) -> None:
-    token, user_id, _, _ = _suscriptor_automatico(client, db, wompi)
-    ajeno, _, _ = _suscriptor_manual(client, db, wompi)
+def test_exportar_trae_la_suscripcion_y_todos_los_pagos_de_la_cuenta(client, db, pasarela) -> None:
+    token, user_id, _, _ = _suscriptor_automatico(client, db, pasarela)
+    ajeno, _, _ = _suscriptor_manual(client, db, pasarela)
 
     datos = client.get("/auth/me/export", headers=auth(token)).json()
     assert (datos["subscription"]["status"], datos["subscription"]["renewal_mode"]) == (

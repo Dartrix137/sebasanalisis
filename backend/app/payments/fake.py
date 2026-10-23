@@ -3,10 +3,9 @@
 Con `PAYMENT_PROVIDER=fake` el boton de pagar lleva a una pagina de la propia
 API (`api/v1/fake_checkout.py`) con dos botones, aprobar y rechazar, que anotan
 el resultado aqui, en memoria. La aplicacion lo lee con `fetch_transaction`,
-igual que reconsulta a Wompi: el resto del flujo es el de verdad.
+igual que reconsulta a una pasarela real: el resto del flujo es el de verdad.
 
-No cobra nada. `build_payment_provider` se niega a usarla si hay llaves de
-produccion de Wompi configuradas.
+No cobra nada.
 """
 
 import json
@@ -20,7 +19,6 @@ from app.payments.base import (
     PaymentSource,
     PaymentSourceRejected,
     PaymentSourceType,
-    PaymentsUnavailable,
     ProviderEvent,
     ProviderTransaction,
     TokenizerInfo,
@@ -122,10 +120,6 @@ class FakePaymentProvider:
 
     def tokenizer(self) -> TokenizerInfo | None:
         return TokenizerInfo(kind="fake")
-
-    def card_encryption_key(self) -> str:
-        # El selector simulado no escribe ni cifra ninguna tarjeta.
-        raise PaymentsUnavailable("La pasarela simulada no cifra tarjetas")
 
     def acceptance(self) -> Acceptance:
         return Acceptance(

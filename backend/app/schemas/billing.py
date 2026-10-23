@@ -17,7 +17,8 @@ from app.schemas.base import ApiModel, Reason
 # Tope de un INTEGER de Postgres.
 _MAX_CENTS = 2_147_483_647
 
-# Wompi opera en pesos colombianos (§3.10): es la unica moneda de cobro.
+# Pesos colombianos (§3.10): la unica moneda de cobro hasta que la pasarela
+# nueva diga en cual cobra (Fase 5, paso 5.3).
 ChargeCurrency = Literal["COP"]
 
 
@@ -129,8 +130,8 @@ class PaymentSourceKind(str, Enum):
 
 
 class TokenizerKind(str, Enum):
-    # Nuestro formulario, que tokeniza contra la API de Wompi (§3.16).
-    wompi_api = "wompi_api"
+    # Selector de la pasarela simulada. La pasarela nueva agrega aqui su forma
+    # de tokenizar (Fase 5, paso 5.3).
     fake = "fake"
 
 
@@ -140,16 +141,6 @@ class BillingAvailabilityResponse(ApiModel):
     # Como pide el navegador el token de un medio de pago. Null = no se ofrece
     # la renovacion automatica.
     tokenizer: TokenizerKind | None = None
-    # Llave PUBLICA del comercio, con la que el navegador tokeniza. Nunca la privada.
-    public_key: str | None = None
-    # La API del procesador a la que el navegador manda la tarjeta o el Nequi.
-    api_base_url: str | None = None
-
-
-class CardEncryptionKeyResponse(ApiModel):
-    """La llave publica (PEM) con la que el navegador cifra la tarjeta antes de
-    mandarla al procesador. No es un secreto."""
-    encryption_key: str
 
 
 class AcceptanceResponse(ApiModel):
@@ -226,6 +217,9 @@ class PaymentListResponse(ApiModel):
 
 class AdminPaymentResponse(PaymentResponse):
     """Un intento de cobro visto por el administrador."""
+    # La pasarela por la que se cobro (`payments.provider`). Las filas de
+    # `wompi` son del sandbox, de antes de que saliera (Fase 5, paso 5.1).
+    provider: str
     # Lo que une el pago con la transaccion en el panel del proveedor.
     reference: str
     provider_transaction_id: str | None = None

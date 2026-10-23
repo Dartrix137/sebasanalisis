@@ -23,7 +23,6 @@ export type PaymentListResponse = S["PaymentListResponse"];
 export type AdminPaymentResponse = S["AdminPaymentResponse"];
 export type SubscriptionResponse = S["SubscriptionResponse"];
 export type AcceptanceResponse = S["AcceptanceResponse"];
-export type CardEncryptionKeyResponse = S["CardEncryptionKeyResponse"];
 export type PaymentSourceKind = S["PaymentSourceKind"];
 export type RenewalMode = S["RenewalMode"];
 export type SubscriptionStatus = S["SubscriptionStatus"];

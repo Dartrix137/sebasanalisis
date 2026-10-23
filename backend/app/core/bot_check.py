@@ -16,7 +16,7 @@ Algoritmo y nombres, de la documentacion oficial vigente de Cloudflare
 - Llaves de prueba: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 
 Sin las dos llaves configuradas la verificacion queda apagada (desarrollo,
-tests de punta a punta), como el pago sin llaves de Wompi. Con una sola, la API
+tests de punta a punta), como el pago sin pasarela. Con una sola, la API
 no arranca: seria un formulario que nunca deja pasar o uno que no protege.
 
 Si Cloudflare no responde, no se deja pasar (falla cerrado): sin Cloudflare el

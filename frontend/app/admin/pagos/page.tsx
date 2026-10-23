@@ -3,8 +3,8 @@
 /**
  * Admin: pagos (§4.3 de la Fase 4). Todos los cobros, también los que no se
  * completaron, con filtros en el servidor; el detalle de cada uno con la cadena
- * de eventos de Wompi (los de firma inválida incluidos), reconsultar en Wompi y
- * registrar un reembolso hecho en el panel de Wompi.
+ * de eventos de la pasarela (los de firma inválida incluidos), reconsultar en la
+ * pasarela y registrar un reembolso hecho en su panel.
  *
  * `?query=` en la dirección abre la página ya filtrada: así enlaza el detalle
  * de la cuenta en `/admin/usuarios`.
@@ -106,8 +106,9 @@ export default function AdminPaymentsPage() {
         <div>
           <h1 className="font-display text-3xl font-semibold leading-none">Pagos</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
-            Cada intento de cobro, con lo que respondió Wompi. Reconsultar un pago usa la misma
-            función del webhook. Los reembolsos se hacen en el panel de Wompi y aquí se registran.
+            Cada intento de cobro, con lo que respondió la pasarela. Reconsultar un pago usa la
+            misma función del webhook. Los reembolsos se hacen en el panel de la pasarela y aquí se
+            registran.
           </p>
         </div>
       </header>
@@ -125,7 +126,7 @@ export default function AdminPaymentsPage() {
         >
           <div className="sm:col-span-2 lg:col-span-3">
             <Field
-              label="Buscar por correo, referencia o transacción de Wompi"
+              label="Buscar por correo, referencia o transacción de la pasarela"
               type="search"
               value={draft.query}
               onChange={(e) => setDraft({ ...draft, query: e.target.value })}

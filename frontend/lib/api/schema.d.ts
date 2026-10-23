@@ -1038,29 +1038,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/billing/card-encryption-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Card Encryption Key
-         * @description La llave con la que el navegador cifra la tarjeta antes de mandarla
-         *     directo al procesador (§3.16). Por aqui pasa solo la llave, nunca la
-         *     tarjeta: el procesador no deja pedirla desde el navegador. Se pide al
-         *     momento: no se guarda.
-         */
-        get: operations["card_encryption_key_billing_card_encryption_key_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/billing/payment-method": {
         parameters: {
             query?: never;
@@ -1876,7 +1853,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/webhooks/wompi": {
+    "/webhooks/payments": {
         parameters: {
             query?: never;
             header?: never;
@@ -1886,11 +1863,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Wompi Webhook
-         * @description Recibe un evento de Wompi. Responde 200 cuando quedo procesado; cualquier
-         *     otra respuesta hace que Wompi lo reintente.
+         * Payments Webhook
+         * @description Recibe un evento de la pasarela. Responde 200 cuando quedo procesado;
+         *     cualquier otra respuesta hace que la pasarela lo reintente. Sin pasarela
+         *     configurada, ningun evento tiene firma valida: se guarda y responde 401.
          */
-        post: operations["wompi_webhook_webhooks_wompi_post"];
+        post: operations["payments_webhook_webhooks_payments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2112,6 +2090,8 @@ export interface components {
             plan_id: string;
             /** Plan Name */
             plan_name: string;
+            /** Provider */
+            provider: string;
             /** Provider Transaction Id */
             provider_transaction_id: string | null;
             /** Reference */
@@ -2243,6 +2223,8 @@ export interface components {
             /** Price Cents */
             price_cents: number;
             price_change: components["schemas"]["UpcomingPriceChange"] | null;
+            /** Provider */
+            provider: string;
             renewal_mode: components["schemas"]["RenewalMode"];
             /** Retry Count */
             retry_count: number;
@@ -2545,12 +2527,8 @@ export interface components {
          * @description Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.
          */
         BillingAvailabilityResponse: {
-            /** Api Base Url */
-            api_base_url: string | null;
             /** Enabled */
             enabled: boolean;
-            /** Public Key */
-            public_key: string | null;
             tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
@@ -2579,15 +2557,6 @@ export interface components {
             created: number;
             /** Spins */
             spins: components["schemas"]["SpinResponse"][];
-        };
-        /**
-         * CardEncryptionKeyResponse
-         * @description La llave publica (PEM) con la que el navegador cifra la tarjeta antes de
-         *     mandarla al procesador. No es un secreto.
-         */
-        CardEncryptionKeyResponse: {
-            /** Encryption Key */
-            encryption_key: string;
         };
         /**
          * CategoryGroup
@@ -4424,7 +4393,7 @@ export interface components {
          * TokenizerKind
          * @enum {string}
          */
-        TokenizerKind: "wompi_api" | "fake";
+        TokenizerKind: "fake";
         /**
          * UpcomingPriceChange
          * @description Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).
@@ -6481,26 +6450,6 @@ export interface operations {
             };
         };
     };
-    card_encryption_key_billing_card_encryption_key_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CardEncryptionKeyResponse"];
-                };
-            };
-        };
-    };
     set_payment_method_billing_payment_method_put: {
         parameters: {
             query?: never;
@@ -7717,7 +7666,7 @@ export interface operations {
             };
         };
     };
-    wompi_webhook_webhooks_wompi_post: {
+    payments_webhook_webhooks_payments_post: {
         parameters: {
             query?: never;
             header?: never;
