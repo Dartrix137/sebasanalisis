@@ -130,6 +130,7 @@ def admin_payment_responses(db: Session, payments: Iterable[Payment]) -> list[Ad
     return [
         AdminPaymentResponse(
             **_payment_fields(p),  # type: ignore[arg-type]
+            provider=p.provider,
             reference=p.reference,
             provider_transaction_id=p.provider_transaction_id,
             failure_reason=p.failure_reason,
@@ -149,6 +150,7 @@ def admin_subscription_response(
 ) -> AdminSubscriptionResponse:
     return AdminSubscriptionResponse(
         **subscription_response(db, subscription, now).model_dump(),
+        provider=subscription.provider,
         user_id=subscription.user_id,
         user_email=subscription.user.email,
         retry_count=subscription.retry_count,

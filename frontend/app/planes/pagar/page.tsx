@@ -5,19 +5,22 @@
  *
  * Muestra lo que se va a cobrar y deja elegir cómo pagar:
  *
- * - **Pago manual**: un pago por período, en la página de Wompi, con cualquier
- *   medio. No se guarda nada.
- * - **Renovación automática**: el cliente guarda una tarjeta o su Nequi con
- *   `PaymentSourceForm`, que los tokeniza directo contra Wompi, y se le cobra
- *   cada período, con un aviso por correo antes.
+ * - **Pago manual**: un pago por período, en la página de la pasarela, con
+ *   cualquier medio. No se guarda nada.
+ * - **Renovación automática**: el cliente guarda un medio de pago con
+ *   `PaymentSourceForm`, y se le cobra cada período, con un aviso por correo
+ *   antes. Solo se ofrece si la pasarela tokeniza (`availability.tokenizer`).
  *
  * Ningún modo entra marcado (decidido el 2026-10-13): nadie queda con cobros
  * automáticos sin haberlo escogido.
  *
  * Aquí no se calcula ningún precio: el total viene del servidor, que lo vuelve
  * a calcular al abrir el pago. Y a nuestro servidor no llega ningún dato de
- * pago: la tarjeta va del formulario directo a Wompi (o se paga en la página de
- * Wompi), y aquí solo vuelve un token.
+ * pago: se paga en la página de la pasarela, o la pasarela tokeniza el medio, y
+ * aquí solo vuelve un token.
+ *
+ * Sin pasarela configurada (paso 5.1 de la Fase 5),
+ * `/planes` no deja llegar aquí con el pago encendido.
  */
 
 import Link from "next/link";
@@ -34,7 +37,7 @@ import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import { CURRENCY_NOTE, formatMoney, intervalLabel, periodLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import type { TokenizedSource } from "@/lib/tokenize";
+import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
   AcceptanceResponse,
   BillingAvailabilityResponse,
@@ -218,14 +221,14 @@ function Checkout() {
         }),
       );
       if (!started.checkout_url) throw new Error("sin página de pago");
-      // A la página de Wompi. De allá vuelve a /pago/:id.
+      // A la página de la pasarela. De allá vuelve a /pago/:id.
       window.location.assign(started.checkout_url);
     } catch (e) {
       handleFailure(e);
     }
   }
 
-  /** Con el token que devolvió Wompi: guarda el medio y hace el primer cobro. */
+  /** Con el token que devolvió la pasarela: guarda el medio y hace el primer cobro. */
   async function subscribeWith(source: TokenizedSource, acceptance: AcceptanceResponse) {
     setError(null);
     setCouponError(null);
@@ -345,7 +348,7 @@ function Checkout() {
                 title="Pago manual"
                 lines={[
                   `Pagas ${period} de acceso ahora.`,
-                  "Eliges el medio en la página de Wompi: tarjeta, PSE, Nequi y otros.",
+                  "Eliges el medio en la página de la pasarela.",
                   "No se guarda tu medio de pago ni se renueva solo. Antes de que venza te avisamos por correo.",
                 ]}
               />
@@ -356,7 +359,7 @@ function Checkout() {
                 title="Renovación automática"
                 lines={[
                   `Se cobra ahora y luego cada ${interval}, hasta que canceles.`,
-                  "Guardas una tarjeta o tu Nequi; sus datos van directo a Wompi.",
+                  "Guardas un medio de pago; sus datos van directo a la pasarela.",
                   "Antes de cada cobro te avisamos por correo con el monto y la fecha. Cancelas cuando quieras desde tu cuenta.",
                 ]}
               />
@@ -396,7 +399,7 @@ function Checkout() {
         <p className="max-w-prose text-xs leading-relaxed text-muted">
           {chosen === "automatic"
             ? null
-            : "Al continuar vas a la página de pagos de Wompi, donde eliges el medio de pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
+            : "Al continuar vas a la página de la pasarela de pagos, donde eliges el medio de pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
           La suscripción da acceso a la plataforma: no cambia el resultado de ningún juego ni la
           ventaja de la casa. Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>

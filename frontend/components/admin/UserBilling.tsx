@@ -6,7 +6,7 @@
  * cancelar al final del período y cancelar de inmediato) y su bitácora viven
  * solo en `/admin/suscripciones`, a donde lleva el enlace (decidido el
  * 2026-10-15, para no tener las mismas acciones en dos sitios). Los eventos de
- * Wompi, reconsultar un pago y registrar un reembolso están en `/admin/pagos`.
+ * la pasarela, reconsultar un pago y registrar un reembolso están en `/admin/pagos`.
  */
 
 import Link from "next/link";
@@ -109,8 +109,8 @@ export function UserBilling({ detail }: { detail: AdminUserDetailResponse }) {
           </ul>
         )}
         <p className="mt-2 text-xs text-muted">
-          Se muestran los últimos 20 intentos. Los eventos de Wompi, reconsultar un pago y registrar
-          un reembolso están en Pagos (el enlace de cada referencia).
+          Se muestran los últimos 20 intentos. Los eventos de la pasarela, reconsultar un pago y
+          registrar un reembolso están en Pagos (el enlace de cada referencia).
         </p>
       </div>
     </section>

@@ -43,7 +43,7 @@ def test_quita_cabeceras_de_autenticacion_y_cookies() -> None:
         "/auth/reset-password",
         "/billing/subscriptions",
         "/billing/payment-method",
-        "/webhooks/wompi",
+        "/webhooks/payments",
     ],
 )
 def test_quita_el_cuerpo_de_las_rutas_sensibles(path: str) -> None:

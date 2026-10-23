@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Dataico desde el 2026-10-23, en §3.17)
+3. [Pagos y suscripciones](#3-pagos-y-suscripciones) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Dataico desde el 2026-10-23, en §3.17; el retiro de Wompi, en §3.18)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -151,16 +151,18 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 
 ---
 
-## 3. Pagos y suscripciones con Wompi
+## 3. Pagos y suscripciones
 
-### 3.1 Reglas no negociables (de `CLAUDE.md`, "Pagos con Wompi")
+> **Wompi salió del proyecto el 2026-10-22** (no admite el modelo de negocio; solo se usó con llaves de sandbox) **y su código se retiró el 2026-10-23**, en el paso 5.1 de la Fase 5 (§3.18). Lo que esta sección dice de Wompi es historia; lo genérico (modelo de datos, precios, cupones, renovaciones, admin) sigue vigente. Hasta que entre la pasarela nueva (Tipster Page, paso 5.3) no hay pasarela: el pago está apagado y el acceso es manual.
+
+### 3.1 Reglas no negociables (de `CLAUDE.md`, "Pagos: reglas no negociables")
 
 Se repiten aquí porque son las que distinguen un flujo que funciona en el caso feliz de uno que aguanta producción:
 
-- **Firma**: la verificación de integridad de la transacción y del checksum del webhook se implementa leyendo la **documentación oficial vigente de Wompi**, nunca de memoria. Un comentario en el código cita la URL y la fecha de consulta. Este documento a propósito **no** describe el algoritmo.
-- **El webhook no es fuente de verdad por sí solo**: tras verificar la firma, el backend **vuelve a consultar la transacción** contra la API de Wompi y solo con esa respuesta mueve `subscriptions.status` o el acceso.
+- **Firma**: la verificación de integridad de la transacción y de la firma del webhook se implementa leyendo la **documentación oficial vigente de la pasarela**, nunca de memoria. Un comentario en el código cita la URL y la fecha de consulta. Este documento a propósito **no** describe el algoritmo.
+- **El webhook no es fuente de verdad por sí solo**: tras verificar la firma, el backend **vuelve a consultar la transacción** contra la API de la pasarela y solo con esa respuesta mueve `subscriptions.status` o el acceso.
 - **Idempotencia** por `payment_events.provider_event_id` (único). Reprocesar el mismo evento no puede otorgar dos períodos.
-- **Montos en centavos** con moneda explícita (Wompi también opera en centavos).
+- **Montos en centavos** con moneda explícita.
 - **Acceso decidido en el servidor**, desde `has_access` (§2).
 - **Copy sin promesas de resultados** en planes, checkout y correos de cobro.
 
@@ -327,7 +329,7 @@ Los cuatro obligatorios de `CLAUDE.md`, más los que cubren lo nuevo de esta fas
 | Los tres intentos de renovación fallan | Acceso cae exactamente en `current_period_end`; estado `expired`. |
 | Evento de una referencia desconocida | Se guarda en `payment_events` sin suscripción y no mueve nada. |
 
-Los tests de API usan un cliente falso de Wompi (inyectado como dependencia); ningún test llama a la red. Las pruebas contra el sandbox real de Wompi se hacen a mano antes de salir a producción y quedan anotadas en `docs/DESPLIEGUE.md`.
+Los tests de API usan un doble de la pasarela inyectado como dependencia; ningún test llama a la red. Desde el retiro de Wompi (§3.18) es `tests/api/pasarela_double.py`, en memoria y con eventos firmados con HMAC, transitorio hasta la pasarela nueva. Las pruebas contra el sandbox real de la pasarela se hacen a mano antes de salir a producción y quedan anotadas en `docs/DESPLIEGUE.md`.
 
 ### 3.10 Monetización: decisiones del 2026-10-08
 
@@ -408,6 +410,8 @@ Paso 4 del orden de §9. Decisiones de implementación que este documento no fij
 - Playwright (`e2e/plans.spec.ts`): una cuenta sin acceso ve `/planes` con el precio; la página se ve sin sesión; el administrador crea, edita y desactiva un plan y un cupón, y los cambios aparecen en la bitácora.
 
 ### 3.12 Wompi, entrega 1: cómo quedó construido (2026-10-13)
+
+> **Historia.** Wompi salió del proyecto el 2026-10-22 y su código se retiró el 2026-10-23 (§3.18). Esta sección describe lo que se construyó con él; lo genérico que sigue vigente está listado en §3.18.
 
 Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook y reconsulta (rama `fase-4-paso-5a-alta-y-webhook`). La tokenización y la renovación automática son de la entrega 2; cancelar, `/cuenta`, el admin de pagos y la prueba en el sandbox, de la 3. **El paso 5 no está cerrado.**
 
@@ -490,6 +494,8 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 
 ### 3.13 Wompi, entrega corta: la suscripción en `/cuenta` y en el admin (2026-10-13)
 
+> **Historia.** Wompi salió del proyecto el 2026-10-22 y su código se retiró el 2026-10-23 (§3.18). Esta sección describe lo que se construyó con él; lo genérico que sigue vigente está listado en §3.18.
+
 Adelantada de la entrega 3 por decisión del usuario, antes de la entrega 2 (rama `fase-4-paso-5a2-suscripcion-en-cuenta-y-admin`). Con la entrega 1 ya desplegada, el administrador veía cuentas con acceso por "Suscripción" sin poder saber qué habían pagado, y el suscriptor no encontraba su suscripción en ninguna parte. **Todo es de solo lectura**: cancelar, reanudar, cambiar el medio de pago y las acciones del admin sobre una suscripción o un pago siguen en la entrega 3.
 
 **Decisión del usuario: el acceso manual sobre un suscriptor queda como está, y se explica.** `has_access` evalúa el acceso manual antes que la suscripción (§2.2), así que:
@@ -520,6 +526,8 @@ Adelantada de la entrega 3 por decisión del usuario, antes de la entrega 2 (ram
 **Lo que seguía pendiente** y dónde quedó: cancelar y reanudar (§3.14); cambiar el medio de pago y el modo, la sección de pagos de la exportación de datos y el borrado de la cuenta con pagos (§3.15). Las acciones del admin (extender, cancelar, reconsultar) y los reembolsos en el admin son del paso 6.
 
 ### 3.14 Wompi, entrega 2: tokenización y renovación automática (2026-10-13)
+
+> **Historia.** Wompi salió del proyecto el 2026-10-22 y su código se retiró el 2026-10-23 (§3.18). Esta sección describe lo que se construyó con él; lo genérico que sigue vigente está listado en §3.18.
 
 Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El paso 5 no está cerrado**: falta la entrega 3.
 
@@ -607,6 +615,8 @@ Segunda de las tres entregas del paso 5 (rama `fase-4-paso-5b-renovacion`). **El
 
 ### 3.15 Wompi, entrega 3: gestión de la suscripción y cierre de la cuenta (2026-10-13)
 
+> **Historia.** Wompi salió del proyecto el 2026-10-22 y su código se retiró el 2026-10-23 (§3.18). Esta sección describe lo que se construyó con él; lo genérico que sigue vigente está listado en §3.18.
+
 Tercera y última entrega del paso 5 (rama `fase-4-paso-5c-cuenta-y-cierre`). **Con ella el usuario dio el paso 5 por cerrado el 2026-10-13**, después de desplegarla y probarla en el VPS con llaves de sandbox. Cancelar y reanudar, el apartado de suscripción de `/cuenta`, el historial de pagos, la suscripción en el detalle del admin y su filtro ya habían entrado en las entregas anteriores (§3.13 y §3.14); aquí está lo que faltaba.
 
 **Qué NO entra** (es del paso 6, como decía el encargo del paso 5): las acciones del admin sobre una suscripción o un pago (extender, cancelar, reconsultar) y `/admin/suscripciones` y `/admin/pagos`. Tampoco los reembolsos por API.
@@ -673,6 +683,8 @@ Y el usuario, en `/cuenta`, con la ventana de Wompi de verdad (desde `http://loc
 - Acciones del admin sobre suscripciones y pagos, y que un pago anulado o reembolsado quite el acceso: paso 6. **Hechas en la entrega 1 del paso 6** (§4.8).
 
 ### 3.16 Tokenización con un formulario propio (decidida y construida el 2026-10-19)
+
+> **Historia.** Wompi salió del proyecto el 2026-10-22 y su código se retiró el 2026-10-23 (§3.18). Esta sección describe lo que se construyó con él; lo genérico que sigue vigente está listado en §3.18.
 
 **Decisión del usuario (2026-10-19)**: el widget de Wompi en modo tokenización se reemplaza por un formulario nuestro que tokeniza contra la API de Wompi, como lo describe su documentación. Reemplaza la decisión del 2026-10-13 de escribir la tarjeta en el widget (§3.14). Motivos: en la ventana del widget los medios de pago se ven deshabilitados aunque funcionan, y eso no se puede corregir desde nuestra página; además, abrirlo en modo tokenización por JavaScript no está en la documentación, que solo lo muestra como botón dentro de un `<form>` (§3.14, "Lo que queda sin probar o sin hacer").
 
@@ -808,6 +820,43 @@ El usuario preguntó si el servicio cumple los requisitos de la DIAN y el MinTIC
 | Servicio medido | Parcial | Se mide el uso por cuenta y las suscripciones activas, pero el cobro es una tarifa fija, no por consumo. |
 
 Si el servicio cuenta como computación en la nube es una calificación tributaria, no técnica: la decide el contador. Para él se redactó una descripción técnica del servicio, un documento de Claude Docs, privado, en la cuenta del usuario ("Descripción técnica del servicio Sebasanálisis"). Si hace falta reforzar la elasticidad, el cambio concreto es mover el limitador a Postgres; no se hace sin que el usuario lo pida.
+
+### 3.18 Retiro de Wompi (Fase 5, paso 5.1; construido el 2026-10-23)
+
+**Por qué.** Wompi no admite el modelo de negocio (2026-10-22). Nunca se cobró dinero real: en el VPS solo hubo llaves de sandbox, así que no hay clientes que migrar. Lo reemplaza Tipster Page (paso 5.3), que todavía no ha mandado su documentación: por eso aquí no se diseña nada de la pasarela nueva, ni se rediseña la interfaz de proveedor. El plan salió del documento "Cambio de pasarela: de Wompi a Tipster Page" (Claude Docs, 2026-10-22). Rama `fase-5-retiro-wompi`.
+
+**Qué se borró** (solo existía por Wompi):
+
+| Parte | Qué |
+|---|---|
+| Proveedor | `backend/app/payments/wompi.py`: firma de integridad, checksum de eventos, prefijos y ambientes de las llaves, llave de cifrado |
+| Configuración | `WOMPI_PUBLIC_KEY`, `WOMPI_PRIVATE_KEY`, `WOMPI_EVENTS_SECRET`, `WOMPI_INTEGRITY_SECRET`, `WOMPI_API_BASE_URL` |
+| API | `GET /billing/card-encryption-key` y `CardEncryptionKeyResponse`; `card_encryption_key()` de `PaymentProvider`; `tokenizer: "wompi_api"`, `public_key` y `api_base_url` de `GET /billing/availability` |
+| Arranque | Las dos protecciones de `app/main.py` que dependían de detectar llaves de producción de Wompi: la pasarela simulada y `EMAIL_BACKEND=file` en producción. **Se reponen con la pasarela nueva (5.3)**. Mientras tanto, `PAYMENT_PROVIDER=fake` en producción daría acceso sin cobrar: no se pone |
+| Frontend | El formulario de tarjeta y Nequi (`lib/tokenize.ts`, `lib/card-input.ts`), la librería `jose`, los orígenes de Wompi en la CSP (`lib/csp.ts`), el filtro de migas de su API de tokens (`lib/monitoring.ts`) y `allowedDevOrigins: ["localtest.me"]` de `next.config.ts` |
+| Tests | `tests/payments/test_wompi.py`, `tests/api/wompi_double.py`, `e2e/payment-source-form.spec.ts`, `e2e/card-input.spec.ts`, y los casos de la llave de cifrado y de la forma del Web Checkout |
+
+**Qué se generalizó:**
+
+- `PAYMENT_PROVIDER` acepta `none` (por defecto) o `fake`. Con `none`, `UnconfiguredPaymentProvider` (`name = "none"`) apaga el pago: `/billing/availability` responde `{enabled: false, tokenizer: null}`, `/planes` muestra "Suscribirme" deshabilitado, abrir un pago responde 503 y el acceso se da a mano desde `/admin/usuarios`. Un `PAYMENT_PROVIDER=wompi` que haya quedado en el entorno hace que la API no arranque.
+- El webhook pasa de `POST /webhooks/wompi` a **`POST /webhooks/payments`**, con la misma lógica: guarda todo evento, rechaza sin firma válida (401), detecta el duplicado, reconsulta y aplica con `apply_transaction`. Sin pasarela, ningún evento tiene firma válida: se guarda y no mueve nada.
+- `PaymentSourceForm` queda con los dos contratos de la pasarela y el selector de la pasarela simulada; sin pasarela no se muestra.
+- Los textos visibles y los comentarios dicen "la pasarela". En el admin, el detalle de un pago y el de una suscripción muestran su pasarela (`provider`, campo nuevo de `AdminPaymentResponse` y `AdminSubscriptionResponse`), y las filas viejas se leen "Wompi (sandbox)" (`providerLabel`, `frontend/lib/admin.ts`).
+
+**Qué se conservó intacto:** `PaymentProvider` (salvo `card_encryption_key`), `apply_transaction` como único camino que mueve pagos y suscripciones, `core/renewals.py` con su candado, `billing/` (precios, cupones, calendario, traslado de precios), el admin de pagos y suscripciones, `core/payment_privacy.py` y la pasarela simulada. También quedan sin tocar, porque tienen forma de Wompi pero se deciden con la documentación de Tipster Page en el 5.3 (§10 n.º 16): `PaymentSourceType` (`CARD`/`NEQUI`), `acceptance()` con sus dos contratos, `ChargeCurrency = "COP"` y la lista de campos que `payment_privacy` conserva de un evento.
+
+**Tests.** `tests/api/pasarela_double.py` es una pasarela en memoria que cumple `PaymentProvider`: eventos firmados con HMAC-SHA256 sobre su contenido, un id de evento estable entre reintentos, reconsulta contada y una caída simulable. Ofrece los mismos ayudantes que el doble de Wompi, así que los tests cambiaron de forma mecánica. Los doce casos de §3.9 y los cuatro obligatorios de `CLAUDE.md` siguen en verde sobre él. **Es transitorio**: con la pasarela nueva vuelve la regla de usar su proveedor real con un transporte HTTP simulado, y el doble se borra.
+
+**Base de datos.** No hizo falta migración: `subscriptions.provider` y `payments.provider` son texto libre, sin `CHECK`. Las filas del sandbox (`provider = 'wompi'`) quedan como historia. Antes de desplegar se cancelan a mano, desde `/admin/suscripciones`, las suscripciones de sandbox vigentes: sin pasarela, el job las procesaría como pago manual y les mandaría "tu período está por vencer" sin forma de pagar. Los pagos pendientes del sandbox se quedan `pending`; las referencias de fuentes de pago guardadas no tienen datos de tarjeta y no se usan.
+
+**Textos legales.** La versión 1 nombra a Wompi y no se edita (una versión publicada no se edita). La versión 2 (paso 5.5) nombra a la pasarela nueva; mientras tanto el pago está apagado.
+
+**Orden de despliegue:**
+
+1. En Dokploy, con el código viejo corriendo: borrar las cuatro `WOMPI_*` que había (la pública, la privada, la de eventos y la de integridad; `WOMPI_API_BASE_URL` era opcional y no se puso) y reiniciar. El código viejo sin llaves apaga el pago. `PAYMENT_PROVIDER` no estaba puesta, así que el código nuevo arranca con `none`; si apareciera con `wompi` o vacía, no arrancaría.
+2. En `/admin/suscripciones`: cancelar las suscripciones de sandbox, con motivo.
+3. Desplegar backend y frontend desde el mismo commit.
+4. En el panel de Wompi: desactivar la URL de eventos y, si se quiere, cerrar la cuenta.
 
 ---
 
@@ -1661,7 +1710,8 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. **El 2026-10-19 el usuario puso las cabeceras de seguridad y la protección de las cookies de sesión en la lista del paso 9**: las cabeceras se construyen en ese paso; el refresh token en cookie se decide ahí, porque hoy no hay cookies de sesión (los tokens viven en `localStorage`). **Resuelta (2026-10-20):** las cabeceras se construyeron, con una CSP con nonce (`frontend/proxy.ts`, `lib/csp.ts`). El refresh token **no** pasa a una cookie: los tokens siguen en `localStorage`, y lo que los protege es que la CSP no deja correr un script inyectado. Una cookie exigiría CORS con credenciales y protección CSRF, porque la API está en otro dominio. Los tests de frontend ya están decididos (§13.3). |
 | 13 | Deportes: proveedor de calendario, resultados y cuotas, y presupuesto mensual (§8.3 n.º 1) | No se elige hasta que se vaya a construir deportes. Requisito: confirmación por escrito de que la licencia permite el uso comercial en un producto de pago; sus cuotas, solo para el backtest interno salvo que la licencia permita mostrarlas. Ver §8.4. Bloquea construir deportes, no el lanzamiento de la ruleta. |
 | 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
-| 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | Preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
+| 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | **Superada (2026-10-23):** Wompi salió y el formulario propio con él (§3.18). La pregunta pasa a la pasarela nueva (n.º 16). Lo que decía: preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
+| 16 | Pasarela nueva: las respuestas de Tipster Page al anexo técnico (medios y monedas, cobro por un monto propio, página alojada, tokenización o recurrencia suya, firma de los webhooks, id de evento, reconsulta, reembolsos, contracargos, sandbox, seguridad de pagos) | Pendiente de Tipster Page (anexo enviado el 2026-10-22). Decide el diseño del paso 5.3: si se conserva el calendario de cobros propio, la moneda de cobro, la forma de `PaymentSourceType` y `acceptance()`, sus orígenes en la CSP y las protecciones de arranque que salieron con Wompi (§3.18). Bloquea vender (5.3). |
 
 ---
 
@@ -1682,8 +1732,7 @@ Legal:     GET  /legal/:kind                 (última versión publicada, públi
 Billing:   GET  /plans                       (pública)
            POST /billing/quote               {plan_id, coupon_code?}   (con sesión)
            GET  /billing/availability        (pública: si hay pasarela configurada)
-           GET  /billing/acceptance          (acceptance token y enlace de términos de Wompi)
-           GET  /billing/card-encryption-key (con sesión: la llave RSA de Wompi para cifrar la tarjeta, §3.16)
+           GET  /billing/acceptance          (los contratos de la pasarela que se aceptan al guardar un medio)
            POST /billing/subscriptions       {plan_id, coupon_code?, renewal_mode?, payment_source_token?,
                                               payment_source_type?, acceptance_token?, personal_data_token?}
            GET  /billing/subscription
@@ -1694,7 +1743,7 @@ Billing:   GET  /plans                       (pública)
            DELETE /billing/payment-method    (pasa a pago manual)
            GET  /billing/payments            GET /billing/payments/:id
 
-Webhooks:  POST /webhooks/wompi              (sin JWT; autenticado por firma)
+Webhooks:  POST /webhooks/payments           (sin JWT; autenticado por firma. Era /webhooks/wompi hasta §3.18)
 
 Admin:     GET  /admin/overview
            GET  /admin/users?query&filters&cursor     GET /admin/users/:id
@@ -1737,18 +1786,13 @@ Se agregan a `backend/.env.example` (solo nombres) y a la sección de variables 
 | `SMTP_USE_TLS` | `true` en producción. |
 | `EMAIL_BACKEND` | `smtp` \| `console` \| `file` (solo tests de punta a punta). |
 | `EMAIL_FILE_DIR` | Carpeta donde `FileEmailSender` escribe los correos. Solo con `EMAIL_BACKEND=file`. |
-| `WOMPI_PUBLIC_KEY` | Llave pública (también va al frontend como build argument `NEXT_PUBLIC_WOMPI_PUBLIC_KEY`). |
-| `WOMPI_PRIVATE_KEY` | Llave privada: crear fuentes de pago, cobrar, reconsultar transacciones. |
-| `WOMPI_EVENTS_SECRET` | Verificación del checksum de los webhooks. |
-| `WOMPI_INTEGRITY_SECRET` | Firma de integridad de las transacciones. |
-| `WOMPI_API_BASE_URL` | Sandbox o producción. Opcional: se deduce de las llaves; si se pone, debe ser la de su ambiente. |
-| `PAYMENT_PROVIDER` | `wompi` (por defecto) \| `fake`, una pasarela simulada solo para desarrollo y tests de punta a punta (§3.12). |
+| `PAYMENT_PROVIDER` | `none` (por defecto: sin pasarela, el pago apagado) \| `fake`, una pasarela simulada solo para desarrollo y tests de punta a punta (§3.12). Las `WOMPI_*` salieron con Wompi (§3.18); la pasarela nueva trae las suyas en el 5.3. |
 | `API_PUBLIC_URL` | Solo con `PAYMENT_PROVIDER=fake`: dónde responde la API, para el enlace de la pasarela simulada. |
 | `FORWARDED_ALLOW_IPS` | Direcciones del proxy de Dokploy de las que uvicorn acepta `X-Forwarded-For` (§13.1). |
 | `SENTRY_DSN` | DSN del proyecto de la API en GlitchTip (§13.6). Vacío = desactivado (desarrollo y tests). |
 | `NEXT_PUBLIC_SENTRY_DSN` | DSN del proyecto del frontend en GlitchTip. Va como build argument, igual que `NEXT_PUBLIC_API_BASE_URL`. |
 
-Las llaves de sandbox y de producción de Wompi son distintas; un despliegue nunca debe quedar con llaves de sandbox en producción. El arranque de la API registra en el log (sin mostrar la llave) contra qué ambiente de Wompi quedó configurada.
+Un despliegue nunca debe quedar con llaves de sandbox de la pasarela en producción. El arranque de la API registra en el log (sin mostrar ninguna llave) con qué pasarela quedó configurada.
 
 ---
 

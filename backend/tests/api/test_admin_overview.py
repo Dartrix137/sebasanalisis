@@ -1,6 +1,6 @@
 """Resumen del admin y acciones sobre la cuenta (§4.2 y §4.7; paso 6, entrega 2).
 
-Las suscripciones y los pagos salen del doble de Wompi, como en
+Las suscripciones y los pagos salen del doble de la pasarela, como en
 `test_admin_payments.py`. Las fechas de los pagos que caen en el mes anterior
 se mueven a mano en la base.
 """
@@ -68,17 +68,17 @@ def test_el_resumen_dice_que_periodos_compara(client, admin_token: str) -> None:
 
 
 def test_el_resumen_cuenta_suscripciones_recurrente_y_cobrado(
-    client, db, wompi, admin_token: str
+    client, db, pasarela, admin_token: str
 ) -> None:
     # Una manual mensual, una automatica mensual y una manual bimestral.
-    _, _, _, manual = _suscriptor_manual(client, db, wompi)
-    _, _, _, automatica = _suscriptor_automatico(client, db, wompi)
+    _, _, _, manual = _suscriptor_manual(client, db, pasarela)
+    _, _, _, automatica = _suscriptor_automatico(client, db, pasarela)
     bimestral = db.scalar(select(Plan).where(Plan.code == "bimestral"))
     token_b, _, _ = _cuenta(client, db)
-    _aprobar(client, wompi, _abrir_pago(client, db, token_b, plan=bimestral))
+    _aprobar(client, pasarela, _abrir_pago(client, db, token_b, plan=bimestral))
     # Un pago rechazado y uno abierto sin completar.
     rechazado = _abrir_pago(client, db, _cuenta(client, db)[0])
-    assert _webhook(client, wompi.evento(wompi.transaccion(rechazado, "DECLINED"))).status_code == 200
+    assert _webhook(client, pasarela.evento(pasarela.transaccion(rechazado, "DECLINED"))).status_code == 200
     _abrir_pago(client, db, _cuenta(client, db)[0])
 
     data = _resumen(client, admin_token)
@@ -115,9 +115,9 @@ def test_el_resumen_cuenta_suscripciones_recurrente_y_cobrado(
     assert data["cancellation_rate"]["current_bp"] is None
 
 
-def test_el_mes_anterior_se_compara_con_el_mismo_tramo(client, db, wompi, admin_token: str) -> None:
-    _, _, _, manual = _suscriptor_manual(client, db, wompi)
-    _, _, _, otra = _suscriptor_manual(client, db, wompi)
+def test_el_mes_anterior_se_compara_con_el_mismo_tramo(client, db, pasarela, admin_token: str) -> None:
+    _, _, _, manual = _suscriptor_manual(client, db, pasarela)
+    _, _, _, otra = _suscriptor_manual(client, db, pasarela)
     p = periods(datetime.now(UTC))
     mitad_anterior = p.previous.start + (p.previous.end - p.previous.start) / 2
     # El pago de una cae en el tramo anterior, y su periodo cubria el inicio de

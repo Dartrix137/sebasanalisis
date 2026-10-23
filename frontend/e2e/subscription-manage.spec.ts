@@ -30,7 +30,7 @@ async function subscribeManually(page: Page): Promise<void> {
 }
 
 async function acceptProcessorTerms(page: Page): Promise<void> {
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de Wompi/ }).check();
+  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
   await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
 }
 

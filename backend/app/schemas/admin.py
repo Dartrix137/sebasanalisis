@@ -103,6 +103,8 @@ class AdminUserDetailResponse(ApiModel):
 
 class AdminSubscriptionResponse(SubscriptionResponse):
     """Una suscripcion vista por el administrador."""
+    # La pasarela de la suscripcion. Las de `wompi` son del sandbox (paso 5.1).
+    provider: str
     user_id: UUID
     user_email: str
     # Intentos de cobro fallidos del periodo en curso (renovacion automatica).

@@ -12,13 +12,11 @@
  * - Estilos: `unsafe-inline`. React y `next/image` escriben atributos `style`,
  *   que un nonce no cubre; inyectar estilos es mucho menos grave que inyectar
  *   scripts.
- * - Conexiones: la API, Wompi (el formulario de tarjeta tokeniza directo contra
- *   su API, §3.16) y el monitoreo (GlitchTip).
+ * - Conexiones: la API y el monitoreo (GlitchTip). Si la pasarela nueva tokeniza
+ *   desde el navegador, su API va aquí (paso 5.3 de la Fase 5).
  * - Marcos: solo el widget de Turnstile. Nadie puede meter el sitio en un marco.
  */
 
-/** Las dos API de Wompi: cuál se usa lo dice el backend (`/billing/availability`). */
-const WOMPI_ORIGINS = ["https://production.wompi.co", "https://sandbox.wompi.co"];
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
 function originOf(url: string | undefined): string | null {
@@ -43,7 +41,7 @@ export function buildCsp({
 }): string {
   const api = originOf(apiBaseUrl);
   const monitoring = originOf(sentryDsn);
-  const connect = ["'self'", api, ...WOMPI_ORIGINS, monitoring].filter(Boolean);
+  const connect = ["'self'", api, monitoring].filter(Boolean);
   const directives = [
     "default-src 'self'",
     // En desarrollo React usa eval para reconstruir los errores del servidor.

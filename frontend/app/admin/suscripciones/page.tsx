@@ -25,7 +25,7 @@ import { SubscriptionActions } from "@/components/admin/SubscriptionActions";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
-import { actionLabel, describeChange, formatDateTime } from "@/lib/admin";
+import { actionLabel, describeChange, formatDateTime, providerLabel } from "@/lib/admin";
 import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_STATUS_TONE,
@@ -303,6 +303,7 @@ function SubscriptionDetail({
       <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <Data label="Estado" value={`${SUBSCRIPTION_STATUS_LABEL[s.status]}${s.in_force ? ", vigente" : ", sin período vigente"}`} />
         <Data label="Modo" value={RENEWAL_MODE_LABEL[s.renewal_mode]} />
+        <Data label="Pasarela" value={providerLabel(s.provider)} />
         <Data
           label="Precio congelado"
           value={`${formatMoney(s.price_cents, s.currency)} / ${intervalLabel(s.plan.interval, s.plan.interval_count)}`}
@@ -367,8 +368,8 @@ function SubscriptionDetail({
           </ul>
         )}
         <p className="mt-2 text-xs text-muted">
-          Los eventos de Wompi, reconsultar un pago y registrar un reembolso están en Pagos (el
-          enlace de cada referencia).
+          Los eventos de la pasarela, reconsultar un pago y registrar un reembolso están en Pagos
+          (el enlace de cada referencia).
         </p>
       </section>
 

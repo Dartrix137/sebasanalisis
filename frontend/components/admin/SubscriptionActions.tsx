@@ -80,7 +80,7 @@ export function SubscriptionActions({
         subscriptionId={subscription.id}
         action="cancel_now"
         title="Cancelar de inmediato"
-        subtitle="La cuenta pierde el acceso ahora y no se le vuelve a cobrar. No se devuelve nada: si corresponde, el reembolso se hace en el panel de Wompi y se registra en Pagos."
+        subtitle="La cuenta pierde el acceso ahora y no se le vuelve a cobrar. No se devuelve nada: si corresponde, el reembolso se hace en el panel de la pasarela y se registra en Pagos."
         button="Cancelar de inmediato"
         confirm="Entiendo que la cuenta pierde el acceso ahora, aunque haya pagado el período."
         danger

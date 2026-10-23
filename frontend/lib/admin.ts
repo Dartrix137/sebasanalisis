@@ -35,7 +35,7 @@ const ACTION_LABEL: Record<string, string> = {
   "subscription.extend": "Extendió la suscripción",
   "subscription.cancel_at_period_end": "Canceló la renovación al final del período",
   "subscription.cancel_now": "Canceló la suscripción de inmediato",
-  "payment.requery": "Reconsultó un pago en Wompi",
+  "payment.requery": "Reconsultó un pago en la pasarela",
   "payment.refund.record": "Registró un reembolso",
   "user.password.force_reset": "Forzó el restablecimiento de la contraseña",
   "user.verification.resend": "Reenvió el correo de confirmación",
@@ -48,6 +48,20 @@ const ACTION_LABEL: Record<string, string> = {
 
 export function actionLabel(entry: AuditLogEntry): string {
   return ACTION_LABEL[entry.action] ?? entry.action;
+}
+
+/**
+ * La pasarela de un pago o una suscripción (`provider`). Wompi salió del
+ * proyecto el 2026-10-22 sin cobrar dinero real: sus filas son del sandbox
+ * (paso 5.1 de la Fase 5).
+ */
+const PROVIDER_LABEL: Record<string, string> = {
+  wompi: "Wompi (sandbox)",
+  fake: "Pasarela simulada",
+};
+
+export function providerLabel(provider: string): string {
+  return PROVIDER_LABEL[provider] ?? provider;
 }
 
 export function formatDateTime(iso: string): string {

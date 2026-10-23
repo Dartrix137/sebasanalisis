@@ -47,7 +47,7 @@ def _suscripcion(db, user_id: str, status: str, period_end: datetime) -> None:
         text(
             "INSERT INTO subscriptions "
             "(id, user_id, plan_id, provider, status, price_cents, currency, current_period_end) "
-            "SELECT :id, :u, p.id, 'wompi', :s, p.price_cents, p.currency, :e "
+            "SELECT :id, :u, p.id, 'pasarela', :s, p.price_cents, p.currency, :e "
             "FROM plans p WHERE p.code = 'mensual'"
         ),
         {"id": str(uuid.uuid4()), "u": user_id, "s": status, "e": period_end},

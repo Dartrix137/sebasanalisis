@@ -2,14 +2,16 @@
 
 /**
  * Un pago visto por el administrador (§4.3 de la Fase 4): sus datos, la cadena de
- * eventos de Wompi (incluidos los que llegaron con la firma inválida), los
+ * eventos de la pasarela (incluidos los que llegaron con la firma inválida), los
  * reembolsos registrados, y dos acciones:
  *
- * - Reconsultar en Wompi: la misma función del webhook. Un pago resuelto no se
- *   vuelve a resolver; lo único que cambia uno aprobado es que Wompi lo reporte
- *   anulado.
- * - Registrar un reembolso hecho en el panel de Wompi. Es un registro: no
+ * - Reconsultar en la pasarela: la misma función del webhook. Un pago resuelto
+ *   no se vuelve a resolver; lo único que cambia uno aprobado es que la pasarela
+ *   lo reporte anulado.
+ * - Registrar un reembolso hecho en el panel de la pasarela. Es un registro: no
  *   cambia el pago ni el acceso.
+ *
+ * La pasarela de cada pago se muestra con `providerLabel` (`lib/admin.ts`).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -17,7 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
-import { actionLabel, describeChange, formatDateTime } from "@/lib/admin";
+import { actionLabel, describeChange, formatDateTime, providerLabel } from "@/lib/admin";
 import { PAYMENT_KIND_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/billing";
 import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, parseMoneyToCents } from "@/lib/money";
@@ -77,8 +79,9 @@ export function PaymentDetail({
           }
         />
         <Data label="Estado" value={PAYMENT_STATUS_LABEL[p.status]} />
+        <Data label="Pasarela" value={providerLabel(p.provider)} />
         <Data label="Referencia" value={p.reference} />
-        <Data label="Transacción en Wompi" value={p.provider_transaction_id ?? "Sin transacción"} />
+        <Data label="Transacción en la pasarela" value={p.provider_transaction_id ?? "Sin transacción"} />
         <Data label="Abierto" value={formatDateTime(p.created_at)} />
         <Data label="Resuelto" value={p.resolved_at ? formatDateTime(p.resolved_at) : "—"} />
         {p.period_start && p.period_end ? (
@@ -87,7 +90,7 @@ export function PaymentDetail({
             value={`Del ${formatLegalDate(p.period_start)} al ${formatLegalDate(p.period_end)}`}
           />
         ) : null}
-        {p.failure_reason ? <Data label="Lo que dijo Wompi" value={p.failure_reason} /> : null}
+        {p.failure_reason ? <Data label="Lo que dijo la pasarela" value={p.failure_reason} /> : null}
         {p.refunded_cents > 0 ? (
           <Data label="Reembolsado" value={formatMoney(p.refunded_cents, p.currency)} />
         ) : null}
@@ -99,14 +102,14 @@ export function PaymentDetail({
           className="rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-3 text-sm leading-relaxed text-white"
         >
           <span className="font-bold">
-            Wompi lo anuló después de aprobado ({formatDateTime(p.reversed_at)}).
+            La pasarela lo anuló después de aprobado ({formatDateTime(p.reversed_at)}).
           </span>{" "}
           {p.reversal_note}
         </p>
       ) : null}
 
       <section>
-        <h3 className="text-sm font-bold text-white">Eventos de Wompi</h3>
+        <h3 className="text-sm font-bold text-white">Eventos de la pasarela</h3>
         {detail.events.length === 0 ? (
           <p className="mt-1 text-sm text-muted">No ha llegado ningún evento de este pago.</p>
         ) : (
@@ -128,7 +131,7 @@ export function PaymentDetail({
               <li key={r.id} className="text-white">
                 <span className="font-bold">{formatMoney(r.amount_cents, r.currency)}</span> el{" "}
                 {formatLegalDate(r.refunded_at)}
-                {r.provider_refund_id ? ` · en Wompi: ${r.provider_refund_id}` : ""}
+                {r.provider_refund_id ? ` · en la pasarela: ${r.provider_refund_id}` : ""}
                 <span className="block text-xs text-muted">
                   {r.admin_email} · {r.reason}
                 </span>
@@ -142,9 +145,9 @@ export function PaymentDetail({
         <RequeryForm paymentId={p.id} onDone={applied} />
       ) : (
         <p className="rounded-lg border border-edge p-3.5 text-sm text-muted">
-          <span className="font-bold text-white">Sin transacción en Wompi.</span> Este pago no llegó
-          a Wompi o todavía no se sabe su transacción, así que no hay qué reconsultar. Si el cliente
-          pagó, el evento de Wompi lo resolverá.
+          <span className="font-bold text-white">Sin transacción en la pasarela.</span> Este pago no
+          llegó a la pasarela o todavía no se sabe su transacción, así que no hay qué reconsultar. Si
+          el cliente pagó, el evento de la pasarela lo resolverá.
         </p>
       )}
       {p.status === "approved" && p.refunded_cents < p.amount_cents ? (
@@ -251,8 +254,8 @@ function RequeryForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-edge p-3.5">
       <CardHeader
-        title="Reconsultar en Wompi"
-        subtitle="Le pregunta a Wompi por la transacción y aplica lo que responda, igual que el webhook. Un pago ya resuelto no da otro período; si Wompi lo reporta anulado, se retira el período que pagó."
+        title="Reconsultar en la pasarela"
+        subtitle="Le pregunta a la pasarela por la transacción y aplica lo que responda, igual que el webhook. Un pago ya resuelto no da otro período; si la pasarela lo reporta anulado, se retira el período que pagó."
       />
       <Field
         label="Motivo de la reconsulta"
@@ -265,7 +268,7 @@ function RequeryForm({
       {error ? <ErrorBox message={error} /> : null}
       {saved ? <SuccessBox message="Reconsultado. El resultado quedó en la bitácora." /> : null}
       <Button type="submit" variant="ghost" disabled={pending}>
-        {pending ? "Consultando…" : "Reconsultar en Wompi"}
+        {pending ? "Consultando…" : "Reconsultar en la pasarela"}
       </Button>
     </form>
   );
@@ -284,7 +287,7 @@ function RefundForm({
 }) {
   const { withToken } = useSession();
   const [amount, setAmount] = useState("");
-  // Fecha local (AAAA-MM-DD) en que se hizo en Wompi.
+  // Fecha local (AAAA-MM-DD) en que se hizo en la pasarela.
   const [date, setDate] = useState("");
   const [providerId, setProviderId] = useState("");
   const [reason, setReason] = useState("");
@@ -329,7 +332,7 @@ function RefundForm({
     <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-edge p-3.5">
       <CardHeader
         title="Registrar un reembolso"
-        subtitle={`El reembolso se hace en el panel de Wompi; aquí solo se registra. No cambia el pago ni el acceso: para quitar el acceso, cancela la suscripción de inmediato. Queda por reembolsar como máximo ${formatMoney(remainingCents, currency)}.`}
+        subtitle={`El reembolso se hace en el panel de la pasarela; aquí solo se registra. No cambia el pago ni el acceso: para quitar el acceso, cancela la suscripción de inmediato. Queda por reembolsar como máximo ${formatMoney(remainingCents, currency)}.`}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         <Field
@@ -340,14 +343,14 @@ function RefundForm({
           onChange={(e) => setAmount(e.target.value)}
         />
         <Field
-          label="Fecha en Wompi"
+          label="Fecha en la pasarela"
           type="date"
           required
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
         <Field
-          label="Id en Wompi (opcional)"
+          label="Id en la pasarela (opcional)"
           maxLength={255}
           value={providerId}
           onChange={(e) => setProviderId(e.target.value)}

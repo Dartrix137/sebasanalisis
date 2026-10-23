@@ -439,8 +439,9 @@ Backend:   FastAPI (Python) — motor estadístico puro en engine/, sin efectos 
 Frontend:  Next.js (React + TypeScript)
 DB:        PostgreSQL
 Auth:      JWT (access + refresh), hash de contraseñas con argon2
-Pagos:     Wompi (Colombia) — se construye en la Fase 4 (docs/PLATAFORMA_COMPLETA.md §3);
-           tablas preparadas desde el MVP, sin lógica
+Pagos:     detrás de `PaymentProvider` (docs/PLATAFORMA_COMPLETA.md §3). Se construyó con
+           Wompi en la Fase 4; Wompi salió el 2026-10-22 (§3.18) y la pasarela nueva,
+           Tipster Page, entra en la Fase 5
 ```
 
 Lo que la Fase 4 suma al stack (generador de tipos, CI, Playwright, correo SMTP, monitoreo) está en `docs/PLATAFORMA_COMPLETA.md` §13.

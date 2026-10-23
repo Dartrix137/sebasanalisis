@@ -27,7 +27,6 @@ from app.core.monitoring import init_monitoring
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.validation_errors import validation_exception_handler
 from app.payments.base import get_payment_provider
-from app.payments.wompi import has_production_keys
 
 settings = get_settings()
 
@@ -41,13 +40,11 @@ if not _app_logger.handlers:
     _app_logger.addHandler(_handler)
     _app_logger.setLevel(logging.INFO)
 
-# Falla aqui, al arrancar, si las llaves de la pasarela estan incompletas o
-# mezclan ambientes; y deja dicho contra cual quedo, sin mostrar ninguna llave
-# (docs/PLATAFORMA_COMPLETA.md §12).
+# Deja dicho con que pasarela quedo, sin mostrar ninguna llave
+# (docs/PLATAFORMA_COMPLETA.md §12). Las protecciones de arranque contra la
+# pasarela simulada y el correo a archivo en produccion dependian de las llaves
+# de Wompi y salieron con el (§3.18); vuelven con la pasarela nueva.
 _app_logger.info("Pagos: %s", get_payment_provider().describe())
-# `file` deja cada correo en disco y es solo para los tests de punta a punta.
-if settings.email_backend == "file" and has_production_keys(settings):
-    raise RuntimeError("EMAIL_BACKEND=file no se usa con llaves de produccion de Wompi")
 
 # Igual con la verificacion contra bots: una sola de sus dos llaves es un error
 # de configuracion, y se dice aqui y no en el primer registro.

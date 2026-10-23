@@ -67,8 +67,8 @@ def _store_event(db: DbSession, event: ProviderEvent) -> PaymentEvent:
     return row
 
 
-@router.post("/wompi")
-def wompi_webhook(
+@router.post("/payments")
+def payments_webhook(
     request: Request,
     body: Annotated[bytes, Depends(_raw_body)],
     db: DbSession,
@@ -76,8 +76,9 @@ def wompi_webhook(
     sender: EmailSenderDep,
     provider: PaymentProviderDep,
 ) -> dict[str, str]:
-    """Recibe un evento de Wompi. Responde 200 cuando quedo procesado; cualquier
-    otra respuesta hace que Wompi lo reintente."""
+    """Recibe un evento de la pasarela. Responde 200 cuando quedo procesado;
+    cualquier otra respuesta hace que la pasarela lo reintente. Sin pasarela
+    configurada, ningun evento tiene firma valida: se guarda y responde 401."""
     event = provider.parse_event(body, request.headers)
     row = _store_event(db, event)
 

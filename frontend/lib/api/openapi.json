@@ -534,6 +534,10 @@
             "title": "Plan Name",
             "type": "string"
           },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
           "provider_transaction_id": {
             "anyOf": [
               {
@@ -640,6 +644,7 @@
           "period_end",
           "created_at",
           "resolved_at",
+          "provider",
           "reference",
           "provider_transaction_id",
           "failure_reason",
@@ -968,6 +973,10 @@
               }
             ]
           },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
           "renewal_mode": {
             "$ref": "#/components/schemas/RenewalMode"
           },
@@ -1005,6 +1014,7 @@
           "next_charge_at",
           "next_charge_cents",
           "price_change",
+          "provider",
           "user_id",
           "user_email",
           "retry_count",
@@ -1725,31 +1735,9 @@
       "BillingAvailabilityResponse": {
         "description": "Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.",
         "properties": {
-          "api_base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Api Base Url"
-          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
-          },
-          "public_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Public Key"
           },
           "tokenizer": {
             "anyOf": [
@@ -1764,9 +1752,7 @@
         },
         "required": [
           "enabled",
-          "tokenizer",
-          "public_key",
-          "api_base_url"
+          "tokenizer"
         ],
         "title": "BillingAvailabilityResponse",
         "type": "object"
@@ -1833,20 +1819,6 @@
           "spins"
         ],
         "title": "BulkSpinsResponse",
-        "type": "object"
-      },
-      "CardEncryptionKeyResponse": {
-        "description": "La llave publica (PEM) con la que el navegador cifra la tarjeta antes de\nmandarla al procesador. No es un secreto.",
-        "properties": {
-          "encryption_key": {
-            "title": "Encryption Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "encryption_key"
-        ],
-        "title": "CardEncryptionKeyResponse",
         "type": "object"
       },
       "CategoryGroup-Input": {
@@ -6042,7 +6014,6 @@
       },
       "TokenizerKind": {
         "enum": [
-          "wompi_api",
           "fake"
         ],
         "title": "TokenizerKind",
@@ -10233,33 +10204,6 @@
         ]
       }
     },
-    "/billing/card-encryption-key": {
-      "get": {
-        "description": "La llave con la que el navegador cifra la tarjeta antes de mandarla\ndirecto al procesador (§3.16). Por aqui pasa solo la llave, nunca la\ntarjeta: el procesador no deja pedirla desde el navegador. Se pide al\nmomento: no se guarda.",
-        "operationId": "card_encryption_key_billing_card_encryption_key_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CardEncryptionKeyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Card Encryption Key",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
     "/billing/payment-method": {
       "delete": {
         "description": "Pasa la renovacion automatica a pago manual: deja de guardarse el medio\nde pago y no se cobra mas. La cuenta conserva el acceso hasta que termine\nel periodo que ya pago, y paga el siguiente cuando quiera.",
@@ -12249,10 +12193,10 @@
         ]
       }
     },
-    "/webhooks/wompi": {
+    "/webhooks/payments": {
       "post": {
-        "description": "Recibe un evento de Wompi. Responde 200 cuando quedo procesado; cualquier\notra respuesta hace que Wompi lo reintente.",
-        "operationId": "wompi_webhook_webhooks_wompi_post",
+        "description": "Recibe un evento de la pasarela. Responde 200 cuando quedo procesado;\ncualquier otra respuesta hace que la pasarela lo reintente. Sin pasarela\nconfigurada, ningun evento tiene firma valida: se guarda y responde 401.",
+        "operationId": "payments_webhook_webhooks_payments_post",
         "responses": {
           "200": {
             "content": {
@@ -12261,7 +12205,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Wompi Webhook Webhooks Wompi Post",
+                  "title": "Response Payments Webhook Webhooks Payments Post",
                   "type": "object"
                 }
               }
@@ -12269,7 +12213,7 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Wompi Webhook",
+        "summary": "Payments Webhook",
         "tags": [
           "webhooks"
         ]

@@ -37,12 +37,6 @@ const env = {
   // No cobra nada ni sale a la red.
   PAYMENT_PROVIDER: "fake",
   API_PUBLIC_URL: `http://127.0.0.1:${process.env.E2E_API_PORT}`,
-  // Que no se cuelen las llaves del .env local.
-  WOMPI_PUBLIC_KEY: "",
-  WOMPI_PRIVATE_KEY: "",
-  WOMPI_EVENTS_SECRET: "",
-  WOMPI_INTEGRITY_SECRET: "",
-  WOMPI_API_BASE_URL: "",
   SEED_ADMIN_EMAIL: "admin-e2e@ejemplo.com",
   SEED_ADMIN_PASSWORD: "clave-del-admin-e2e-789",
 };

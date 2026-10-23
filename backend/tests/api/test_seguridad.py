@@ -198,16 +198,6 @@ def test_la_api_manda_sus_cabeceras_de_seguridad(client: TestClient) -> None:
     assert docs.headers["x-frame-options"] == "DENY"
 
 
-def test_la_llave_de_cifrado_de_tarjetas_tiene_limite(client: TestClient, user_token: str) -> None:
-    # Cada pedido sale a Wompi. Sin pasarela responde 503, pero cuenta igual.
-    estados = [
-        client.get("/billing/card-encryption-key", headers=auth(user_token)).status_code
-        for _ in range(21)
-    ]
-    assert 429 not in estados[:20]
-    assert estados[20] == 429
-
-
 def test_la_busqueda_de_juegos_toma_los_comodines_literales(
     client: TestClient, admin_token: str
 ) -> None:

@@ -119,7 +119,7 @@ def _suscriptor(client: TestClient, db, plan_id: str) -> str:
         text(
             "INSERT INTO subscriptions "
             "(id, user_id, plan_id, provider, status, price_cents, currency, current_period_end) "
-            "SELECT :id, :u, p.id, 'wompi', 'active', p.price_cents, p.currency, :e "
+            "SELECT :id, :u, p.id, 'pasarela', 'active', p.price_cents, p.currency, :e "
             "FROM plans p WHERE p.id = :p"
         ),
         {
@@ -506,7 +506,7 @@ def test_el_acceso_manual_y_el_administrador_incluyen_todos_los_juegos(
         text(
             "INSERT INTO subscriptions "
             "(id, user_id, plan_id, provider, status, price_cents, currency, current_period_end) "
-            "VALUES (:id, :u, :p, 'wompi', 'active', 100, 'COP', :e)"
+            "VALUES (:id, :u, :p, 'pasarela', 'active', 100, 'COP', :e)"
         ),
         {"id": str(uuid.uuid4()), "u": user_id, "p": plan["id"], "e": datetime.now(UTC) + timedelta(days=5)},
     )

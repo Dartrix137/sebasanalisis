@@ -1,13 +1,14 @@
 """Proveedor de pagos (docs/PLATAFORMA_COMPLETA.md §3.10, "Pasarela").
 
-El resto de la aplicacion habla con `PaymentProvider`, nunca con Wompi: una
-segunda pasarela es otra implementacion, no una reescritura. Es el mismo patron
-de `core/email.EmailSender`.
+El resto de la aplicacion habla con `PaymentProvider`, nunca con una pasarela
+concreta: una pasarela nueva es otra implementacion, no una reescritura. Es el
+mismo patron de `core/email.EmailSender`.
 
 Cual implementacion se usa es configuracion (`PAYMENT_PROVIDER`):
 
-- `wompi`: produccion y sandbox (`payments/wompi.py`). Sin llaves, el pago queda
-  apagado (`UnconfiguredPaymentProvider`).
+- `none` (por defecto): sin pasarela, el pago esta apagado
+  (`UnconfiguredPaymentProvider`). Es lo que corre desde que Wompi salio del
+  proyecto (Fase 5, paso 5.1) hasta que se integre la pasarela nueva (5.3).
 - `fake`: pasarela simulada para desarrollo y tests de punta a punta
   (`payments/fake.py`). Nunca en produccion.
 
@@ -93,13 +94,9 @@ class ProviderTransaction:
 class TokenizerInfo:
     """Lo que el frontend necesita para pedirle al proveedor un token."""
 
-    #: `wompi_api`: nuestro formulario, que tokeniza contra la API de Wompi
-    #: desde el navegador (§3.16). `fake`: selector de la pasarela simulada.
-    kind: Literal["wompi_api", "fake"]
-    #: Llave PUBLICA del comercio. Nunca la privada.
-    public_key: str | None = None
-    #: La API del proveedor a la que el navegador manda la tarjeta o el Nequi.
-    api_base_url: str | None = None
+    #: `fake`: selector de la pasarela simulada. La pasarela nueva agrega aqui
+    #: su forma de tokenizar (Fase 5, paso 5.3).
+    kind: Literal["fake"]
 
 
 @dataclass(frozen=True)
@@ -154,13 +151,6 @@ class PaymentProvider(Protocol):
         se pueden guardar medios de pago."""
         ...
 
-    def card_encryption_key(self) -> str:
-        """La llave publica (PEM) con la que el navegador cifra la tarjeta antes
-        de mandarla al proveedor. No es un secreto, y por aqui no pasa ningun
-        dato de tarjeta: solo la llave. Lanza `PaymentsUnavailable` si el
-        proveedor no tokeniza tarjetas cifradas."""
-        ...
-
     def acceptance(self) -> Acceptance:
         """Los contratos del proveedor que el cliente debe aceptar."""
         ...
@@ -206,13 +196,13 @@ def unverified_event(provider: str, body: bytes, payload: dict[str, Any] | None)
 
 
 class UnconfiguredPaymentProvider:
-    """`PAYMENT_PROVIDER=wompi` sin llaves: el pago esta apagado."""
+    """Sin pasarela configurada: el pago esta apagado."""
 
-    name = "wompi"
+    name = "none"
     enabled = False
 
     def describe(self) -> str:
-        return "sin configurar (faltan las llaves): el pago esta apagado"
+        return "sin pasarela configurada: el pago esta apagado"
 
     def checkout_url(
         self,
@@ -234,9 +224,6 @@ class UnconfiguredPaymentProvider:
 
     def tokenizer(self) -> TokenizerInfo | None:
         return None
-
-    def card_encryption_key(self) -> str:
-        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 
     def acceptance(self) -> Acceptance:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")
@@ -265,20 +252,12 @@ class UnconfiguredPaymentProvider:
 
 
 def build_payment_provider(settings: Settings) -> PaymentProvider:
-    # Imports aqui: `wompi` y `fake` importan este modulo.
+    # Import aqui: `fake` importa este modulo.
     from app.payments.fake import FakePaymentProvider
-    from app.payments.wompi import WompiProvider, has_production_keys, wompi_keys_present
 
     if settings.payment_provider == "fake":
-        if has_production_keys(settings):
-            raise ValueError(
-                "PAYMENT_PROVIDER=fake con llaves de produccion de Wompi: la pasarela "
-                "simulada aprueba pagos sin cobrar. Usa PAYMENT_PROVIDER=wompi."
-            )
         return FakePaymentProvider(api_base_url=settings.api_public_url)
-    if not wompi_keys_present(settings):
-        return UnconfiguredPaymentProvider()
-    return WompiProvider.from_settings(settings)
+    return UnconfiguredPaymentProvider()
 
 
 @lru_cache

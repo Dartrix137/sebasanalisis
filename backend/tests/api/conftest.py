@@ -96,8 +96,8 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     # Sin pasarela, tenga lo que tenga el `.env` local: ningun test depende de
-    # las llaves de quien lo corre ni puede llegar a Wompi. El test que necesita
-    # un proveedor lo pone encima (fixture `wompi` de test_subscriptions).
+    # la configuracion de quien lo corre. El test que necesita un proveedor lo
+    # pone encima (fixture `pasarela`).
     app.dependency_overrides[get_payment_provider] = UnconfiguredPaymentProvider
     # Igual con la verificacion contra bots: apagada, salvo en el test que la
     # prueba (test_bot_check.py).
@@ -114,13 +114,13 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def wompi(client: TestClient) -> Iterator[object]:
-    """Wompi de mentira detras del `WompiProvider` de verdad (`wompi_double.py`)."""
+def pasarela(client: TestClient) -> Iterator[object]:
+    """La pasarela de pruebas en memoria (`pasarela_double.py`)."""
     from app.main import app
     from app.payments.base import get_payment_provider
-    from tests.api.wompi_double import Wompi
+    from tests.api.pasarela_double import Pasarela
 
-    double = Wompi()
+    double = Pasarela()
     anterior = app.dependency_overrides.get(get_payment_provider)
     app.dependency_overrides[get_payment_provider] = lambda: double.provider
     yield double

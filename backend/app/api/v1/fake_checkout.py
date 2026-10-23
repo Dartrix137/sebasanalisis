@@ -1,8 +1,8 @@
 """Pagina de la pasarela simulada. Solo responde con `PAYMENT_PROVIDER=fake`.
 
-Hace de "pagina de Wompi" en desarrollo y en los tests de punta a punta: dos
-botones, aprobar y rechazar. Anota el resultado en `FakePaymentProvider` y
-devuelve al cliente a la aplicacion con `?id=`, como hace Wompi. La aplicacion
+Hace de "pagina de la pasarela" en desarrollo y en los tests de punta a punta:
+dos botones, aprobar y rechazar. Anota el resultado en `FakePaymentProvider` y
+devuelve al cliente a la aplicacion con `?id=`, como haria una pasarela. La aplicacion
 se entera igual que en produccion: reconsultando.
 
 Con cualquier otro proveedor estas rutas responden 404, y no aparecen en el

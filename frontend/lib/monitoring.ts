@@ -30,23 +30,11 @@ export function stripQuery(url: string): string {
 }
 
 /**
- * Una llamada del navegador a la API de tokens de Wompi (`lib/tokenize.ts`):
- * la ruta de la consulta de Nequi lleva el token. Sus migas no se envían. El
- * cuerpo, con la tarjeta cifrada, nunca llega a una miga: Sentry no los guarda.
- */
-function isTokenizerCall(url: unknown): boolean {
-  return typeof url === "string" && /\/v1\/tokens\//.test(url);
-}
-
-/**
  * `beforeSend`: quita lo que no debe salir de la aplicación. Ni cabeceras de
  * autenticación, ni cuerpos de petición, ni cookies, ni los parámetros de
  * ninguna URL llegan al monitoreo.
  */
 export function scrubEvent(event: ErrorEvent): ErrorEvent {
-  if (event.breadcrumbs) {
-    event.breadcrumbs = event.breadcrumbs.filter((b) => !isTokenizerCall(b.data?.url));
-  }
   for (const breadcrumb of event.breadcrumbs ?? []) {
     const data = breadcrumb.data;
     if (!data) continue;

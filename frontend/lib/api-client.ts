@@ -52,7 +52,6 @@ import type {
   AdminPlanListResponse,
   AdminPlanResponse,
   BillingAvailabilityResponse,
-  CardEncryptionKeyResponse,
   CouponRedemptionListResponse,
   CreateCouponRequest,
   CreatePlanRequest,
@@ -354,13 +353,6 @@ export const billingApi = {
    * un medio de pago, con los tokens que viajan de vuelta al suscribirse.
    */
   acceptance: (token: string) => apiFetch<AcceptanceResponse>("/billing/acceptance", { token }),
-
-  /**
-   * La llave pública con la que el navegador cifra la tarjeta antes de mandarla
-   * directo a Wompi (§3.16). Por nuestro servidor pasa solo la llave.
-   */
-  cardEncryptionKey: (token: string) =>
-    apiFetch<CardEncryptionKeyResponse>("/billing/card-encryption-key", { token }),
 
   /** Detiene la renovación automática. Conserva el acceso hasta el fin del período. */
   cancelSubscription: (token: string) =>
@@ -939,7 +931,7 @@ export const adminApi = {
   getPayment: (token: string, paymentId: UUID) =>
     apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}`, { token }),
 
-  /** Vuelve a preguntarle a Wompi. Es la misma función del webhook. */
+  /** Vuelve a preguntarle a la pasarela. Es la misma función del webhook. */
   requeryPayment: (token: string, paymentId: UUID, body: RequeryPaymentRequest) =>
     apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/requery`, {
       method: "POST",
@@ -947,7 +939,7 @@ export const adminApi = {
       token,
     }),
 
-  /** Registra un reembolso hecho en el panel de Wompi. No mueve el pago ni el acceso. */
+  /** Registra un reembolso hecho en el panel de la pasarela. No mueve el pago ni el acceso. */
   recordRefund: (token: string, paymentId: UUID, body: RecordRefundRequest) =>
     apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/refunds`, {
       method: "POST",
