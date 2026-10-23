@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica con Siigo, en §3.17)
+3. [Pagos y suscripciones con Wompi](#3-pagos-y-suscripciones-con-wompi) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Dataico desde el 2026-10-23, en §3.17)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -423,7 +423,7 @@ Paso 5 del orden de §9, primera de tres entregas: alta con pago manual, webhook
 - **La nota de la tasa de cambio se repite** en la pantalla de pago y en el recibo, mientras el abogado decide.
 - **Al eliminar una cuenta se conservan los pagos anonimizados**: las filas de `payments` y `payment_events` quedan sin usuario; la suscripción se borra. Las llaves foráneas ya quedaron así; el flujo completo (cancelar la renovación antes de borrar) es de la entrega 3.
 - **`/planes` con sesión**: un administrador o una cuenta con acceso manual (`full`, `invited`) ve los planes sin botón de pago; un suscriptor ve su plan marcado "Tu plan actual", con la fecha hasta la que tiene acceso y el botón de pagar el período siguiente solo en ese plan.
-- De §10 no cambia nada más: no hay facturación electrónica (n.º 4; resuelta el 2026-10-20: consumidor final con Siigo), el precio no se traslada a las suscripciones vigentes (n.º 5) y los reembolsos son manuales en el panel de Wompi (n.º 7).
+- De §10 no cambia nada más: no hay facturación electrónica (n.º 4; resuelta el 2026-10-20: consumidor final, con Dataico desde el 2026-10-23), el precio no se traslada a las suscripciones vigentes (n.º 5) y los reembolsos son manuales en el panel de Wompi (n.º 7).
 
 **Proveedor de pagos (`backend/app/payments/`)**
 
@@ -750,9 +750,26 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
 
-### 3.17 Facturación electrónica con Siigo (decidida el 2026-10-20, sin construir)
+### 3.17 Facturación electrónica (decidida el 2026-10-20, con Dataico desde el 2026-10-23, sin construir)
 
-Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la propuesta de diseño, para retomarla cuando estén resueltos los pendientes del final.
+Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la propuesta de diseño, para retomarla cuando estén resueltos los pendientes del final. Se construye en la Fase 5: la base sin proveedor en el paso 5.2 y la emisión con Dataico en el 5.4 (`HOJA_DE_RUTA.md` §5).
+
+**Cambios del 2026-10-23.** Dos decisiones cambian esta sección. Donde el texto de abajo dice Siigo, se lee Dataico. Donde dice Wompi, se lee la pasarela.
+
+- **Dataico reemplaza a Siigo.** Su API se lee de la documentación oficial vigente (portal de ayuda de Dataico, "Integración API", y `app.dataico.com/api-docs`, que pide sesión) y se cita en el módulo. Lo leído el 2026-10-23:
+  - para crear una factura, `POST https://api.dataico.com/direct/dataico_api/v2/invoices`, con la cabecera `Auth-token` y en el cuerpo `dataico_account_id` y `env` (`PRUEBAS` o `PRODUCCION`);
+  - la numeración, con `numbering.flexible`;
+  - endpoints para consultar una factura, crear una nota crédito y vincular la resolución.
+
+  El esquema completo (consumidor final, el correo del comprador, la respuesta con el CUFE) no se pudo leer sin sesión.
+- **Tipster Page reemplaza a Wompi y cobra en euros.** Una factura que no está en COP exige en Dataico `currency_exchange_rate` (la tasa, como número) y `currency_exchange_rate_date` (`dd/MM/yyyy`), al nivel de la factura. Sin cualquiera de los dos, la rechaza (artículo "Error API: falta la tasa de cambio en una factura en moneda extranjera").
+  - La factura se expresa en la moneda funcional, el peso. Puede mostrar además el valor en euros (Res. DIAN 42 de 2020, art. 73, y Oficio DIAN 903436 de 2020; que siga vigente lo confirma el contador).
+  - La conversión sigue el Decreto 1625 de 2016, art. 1.1.3 par. 1: de euros a dólares con la tasa del día de la operación, y de dólares a pesos con la TRM de esa fecha.
+  - El día de la operación es el día en que se aprobó el pago, **en hora de Colombia**.
+  - La TRM se busca por su vigencia, porque un sábado, un domingo o un festivo usa la del día hábil anterior.
+  - La tasa y su fecha se guardan en la factura antes del primer envío, y los reintentos mandan las mismas.
+  - Lo que Tipster Page liquida a la empresa (menos su comisión, con su propia tasa) no cambia la factura: la diferencia es contable. Lo confirma el contador.
+- **No se vende hasta integrar Tipster Page y Dataico** (2026-10-23), así que no hay ventas por fuera de la aplicación que facturar a mano.
 
 **Lo decidido por el usuario**
 
@@ -772,6 +789,7 @@ Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la 
 
 **Pendiente antes de construir**
 
+0. **Contador (2026-10-23)**: si la factura va en euros con la tasa o directamente en pesos; de dónde sale la tasa de euros a dólares y cómo se redondea; si la comisión de Tipster Page cambia la base de la factura; si una anulación o un reembolso piden nota crédito en Dataico.
 1. **IVA**: si la suscripción lleva IVA del 19 % y si los 100.000 y 150.000 COP ya lo incluyen (va con el precio en pantalla de §3.11). Lo responde el contador. Una vía en estudio es la exclusión de IVA de los servicios de computación en la nube; ver abajo.
 2. **Cómo le llega la factura al cliente**: con el consumidor final genérico, Siigo no tiene el correo del comprador. Hay dos salidas: poner en cada factura el correo de la cuenta, si la API lo permite, o bajar el PDF por la API y adjuntarlo al recibo. Depende de la documentación de Siigo.
 3. **La documentación oficial vigente de la API de Siigo**, leída al construir y citada en un comentario, igual que la de Wompi: nunca de memoria ni de código de terceros. El 2026-10-20 no se pudo leer la oficial (la página de Apiary no cargó); solo apareció código de terceros que usa `POST /v1/invoices`, que no sirve como base.
@@ -1619,7 +1637,7 @@ Trámites con tiempo de espera externo, que se inician al empezar la Fase 0 y no
 - Abogado para los textos de §6 (bloquea el lanzamiento, no la construcción: se construye con textos de borrador).
 - Compra del dominio, proveedor SMTP y registros DNS (bloquea el cierre del paso 1; mientras tanto se trabaja con `ConsoleEmailSender`).
 
-Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, que un abogado haya revisado los textos de §6, y el aviso por correo de versiones nuevas de los documentos legales (§6.7). El estado de cada punto está en `HOJA_DE_RUTA.md` §5 (paso 9) y los pasos a mano en `DESPLIEGUE.md`, "Antes del lanzamiento comercial". El 2026-10-19 el usuario sumó a la lista el acabado del frontend (404, metadatos, `robots.txt`, `sitemap.xml`, móvil, estados de carga y errores de formulario) y una revisión de seguridad (llaves en los registros, aislamiento por cuenta, autenticación, manipulación de campos, cookies de sesión, rate limiting, bots, consultas, validación, cabeceras, HTTPS y dependencias).
+Antes del lanzamiento comercial, además: probar el flujo completo en el sandbox de Wompi, configurar SPF/DKIM/DMARC del dominio remitente, programar el cron de renovaciones en Dokploy, restaurar un respaldo de la base en un entorno de prueba para confirmar que sirve, que un abogado haya revisado los textos de §6, y el aviso por correo de versiones nuevas de los documentos legales (§6.7). El estado de cada punto está en `HOJA_DE_RUTA.md` §5 (paso 5.6, desde el 2026-10-23; la historia del paso 9 en §6) y los pasos a mano en `DESPLIEGUE.md`, "Antes del lanzamiento comercial". El 2026-10-19 el usuario sumó a la lista el acabado del frontend (404, metadatos, `robots.txt`, `sitemap.xml`, móvil, estados de carga y errores de formulario) y una revisión de seguridad (llaves en los registros, aislamiento por cuenta, autenticación, manipulación de campos, cookies de sesión, rate limiting, bots, consultas, validación, cabeceras, HTTPS y dependencias).
 
 ---
 
@@ -1632,7 +1650,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
-| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica a **consumidor final**, sin el nombre ni la cédula del comprador, emitida con **Siigo** por su API. El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, la cuenta de Siigo) están en §3.17. Bloquea el lanzamiento. |
+| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica a **consumidor final**, sin el nombre ni la cédula del comprador, emitida con **Dataico** por su API (desde el 2026-10-23; antes Siigo). Un pago en euros se factura en pesos con la tasa del día del pago (§3.17). El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, la cuenta de Siigo) están en §3.17. Bloquea el lanzamiento. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción** (construida ese día, §4.10), en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |

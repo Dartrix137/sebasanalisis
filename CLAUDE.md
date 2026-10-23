@@ -17,9 +17,10 @@ La recomendación sale de reglas estadísticas sobre resultados ya registrados. 
 | MVP (pasos 1-8) | Analizador estadístico de ruleta: schema, auth, admin básico, mesa, motor estadístico, bankroll, carga inicial. | Construido |
 | Fase 2 | Reglas de pagos con Wompi. | Reglas vigentes; la construcción pasó a la Fase 4 |
 | Fase 3 | Motor de recomendación. | Construido |
-| **Fase 4** | **Plataforma comercial: acceso, pagos, correo, legal, admin completo, multijuego.** | **En curso** |
+| Fase 4 | Plataforma comercial: acceso, pagos, correo, legal, admin completo, multijuego. | Construida; cerrada el 2026-10-23. El cobro con Wompi se probó solo en sandbox y sale |
+| **Fase 5** | **Salida al mercado: retiro de Wompi, Tipster Page, facturación con Dataico, textos legales v2, lanzamiento.** | **En curso** |
 
-El detalle de cada etapa, la tabla de decisiones que cambiaron y el avance paso a paso de la Fase 4 están en `docs/HOJA_DE_RUTA.md`. **Actualiza ese documento cuando cierres un paso o cuando el usuario tome una decisión de rumbo.**
+El detalle de cada etapa, la tabla de decisiones que cambiaron y el avance paso a paso de las Fases 4 y 5 están en `docs/HOJA_DE_RUTA.md`. **Actualiza ese documento cuando cierres un paso o cuando el usuario tome una decisión de rumbo.**
 
 ## Documentos
 
@@ -165,7 +166,12 @@ Estas reglas se fijaron el 2026-09-17 (la antigua "Fase 2") y siguen vigentes ta
 - **Cómo está construido** (paso 5, entrega 1; §3.12 del documento de la Fase 4): la aplicación habla con `PaymentProvider` (`backend/app/payments/`), nunca con Wompi directamente. **Un pago y su suscripción solo los mueve `core/subscriptions.apply_transaction`**, con una transacción que salió de `fetch_transaction` (la reconsulta); la usan el webhook y `GET /billing/payments/:id`. No escribas otro camino que cambie `payments.status` o `subscriptions.status`. `users.access_type` no se toca al pagar: el acceso sale de la suscripción. Los tests de API usan el `WompiProvider` real con un transporte HTTP simulado (`tests/api/wompi_double.py`); `PAYMENT_PROVIDER=fake` es solo para desarrollo y Playwright.
 - **Renovación automática** (paso 5, entrega 2; §3.14): cuándo se avisa, se cobra y se vence lo decide `billing/schedule.py` (puro); lo ejecuta `core/renewals.py`, que corre `scripts/run_renewals.py` cada hora. La idempotencia del job son dos cosas y no se quita ninguna: el candado de Postgres y la referencia por (suscripción, período, intento), con el pago confirmado en la base **antes** de cobrar. El aviso por correo sale siempre antes del cobro. Nunca se guarda el token ni un dato de tarjeta: solo la referencia de la fuente de pago, la marca y los últimos cuatro. Se pueden guardar tarjetas y Nequi. **Desde el 2026-10-19 la tarjeta se escribe en un formulario nuestro**, que la tokeniza contra la API de Wompi (cifrada, con la llave pública) en lugar del widget (§3.16 del documento de la Fase 4); Nequi también se tokeniza por la API. Los datos de la tarjeta van del navegador directo a Wompi: nunca pasan por nuestro backend, ni por un log, ni por GlitchTip, ni por `localStorage`, y se borran del formulario al terminar. Si hiciera falta pasarlos por el servidor, se para y se pregunta. Lo único que pasa por el backend es la llave RSA de cifrado (`GET /billing/card-encryption-key`), porque Wompi no deja pedirla desde el navegador (decidido el 2026-10-19). La tokenización vive en `frontend/lib/tokenize.ts`, con `jose` para el JWE.
 - **Gestión de la suscripción y cierre de la cuenta** (paso 5, entrega 3; §3.15): cambiar el medio de pago y pasar de un modo al otro es `PUT`/`DELETE /billing/payment-method`, sobre la misma suscripción y **sin cobrar nada**; el único cobro que disparan es el reintento de una suscripción en mora (`core/renewals.retry_now`), que cuenta como uno de los tres intentos del período. En el frontend un medio de pago solo se guarda con `components/billing/PaymentSourceForm.tsx`. Al eliminar una cuenta la suscripción se borra y los pagos quedan anonimizados: lo que se conserva y lo que se reduce está en `core/payment_privacy.py`, y un evento de un pago sin cuenta se guarda ya reducido.
-- **Facturación electrónica** (decidida el 2026-10-20, **sin construir**; §3.17 del documento de la Fase 4): cada pago aprobado lleva una factura electrónica a consumidor final, sin nombre ni cédula, emitida con Siigo por su API. El recibo por correo sigue siendo una constancia de pago y nunca se presenta como factura. La API de Siigo se lee de su documentación oficial vigente, como la de Wompi, y no se construye hasta resolver el IVA y la cuenta de Siigo.
+- **Facturación electrónica** (decidida el 2026-10-20, con **Dataico** desde el 2026-10-23, **sin construir**; §3.17 del documento de la Fase 4, pasos 5.2 y 5.4 de la Fase 5):
+  - Cada pago aprobado lleva una factura electrónica a consumidor final, sin nombre ni cédula, emitida con Dataico por su API.
+  - Un pago en otra moneda se factura en pesos con la tasa del día del pago, contado en hora de Colombia. Para el euro: de euros a dólares con la tasa del día, y de dólares a pesos con la TRM de esa fecha. Las tasas van en `Decimal`, nunca en `float`, y quedan congeladas en la factura antes del primer envío.
+  - El recibo por correo sigue siendo una constancia de pago y nunca se presenta como factura.
+  - La API de Dataico se lee de su documentación oficial vigente, como la de la pasarela.
+  - La emisión no se construye hasta resolver con el contador la moneda de la factura, el IVA y la tasa, y tener la cuenta de Dataico.
 - **Suscripciones y pagos en el admin** (paso 6, entrega 1; §4.8): extender y cancelar viven en `core/subscription_admin.py` y no tocan ningún pago. "Reconsultar" en el admin es `apply_transaction` con `before_commit`, para que su fila de bitácora vaya en la misma transacción. Un pago aprobado solo vuelve a cambiar si Wompi lo reporta anulado: entonces pierde el período que compró. Un reembolso se registra (`payment_refunds`) y no mueve ni el pago ni el acceso.
 
 El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que distinguen "funciona con el caso feliz" de "aguanta producción" (la lista completa de doce está en §3.9 del documento de la Fase 4):
@@ -194,6 +200,14 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 ### Decisiones pendientes
 
 Las decisiones pendientes de §10 de ese documento no se resuelven en silencio: se pregunta al usuario.
+
+## Fase 5 — salida al mercado (trabajo en curso)
+
+Decidida el 2026-10-23. El detalle, lo que bloquea cada paso y la lista del lanzamiento están en `docs/HOJA_DE_RUTA.md` §5.
+
+- **Wompi sale del proyecto** (2026-10-22): no admite el modelo de negocio. Nunca se cobró dinero real, solo se probó con su sandbox. Lo reemplaza **Tipster Page**, que cobra en euros. Hasta el paso 5.1 el código de Wompi sigue en el repositorio. Las reglas de "Pagos con Wompi" de este archivo (firma, reconsulta, idempotencia, centavos, secretos, `apply_transaction` como único camino) valen igual para cualquier pasarela.
+- **No se vende hasta tener Tipster Page y Dataico integrados.** Mientras tanto, el acceso es solo manual (prueba o cortesía).
+- Orden: 5.1 retiro de Wompi → 5.2 base de la facturación sin proveedor → 5.3 Tipster Page → 5.4 emisión con Dataico → 5.5 textos legales v2 → 5.6 lanzamiento. Los pasos 5.3, 5.4 y 5.5 esperan a terceros: Tipster Page, el contador, Dataico y el abogado. No se diseña la integración de Tipster Page antes de leer su respuesta y su documentación: hacerlo antes sería adivinar.
 
 ## Convenciones de código
 
