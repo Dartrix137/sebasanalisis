@@ -40,6 +40,7 @@ def sin_suscripciones_de_otros_tests(db) -> None:
     """El job recorre todas las suscripciones de la base: cada test empieza sin
     las de los demas, ni sus filas de bitacora."""
     for tabla in (
+        "invoices",
         "payment_refunds",
         "payment_events",
         "payments",

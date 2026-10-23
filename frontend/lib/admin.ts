@@ -1,6 +1,6 @@
 /** Textos y formato compartidos por las páginas de administración. */
 
-import type { AuditLogEntry } from "./types/admin";
+import type { AuditLogEntry, InvoiceStatus } from "./types/admin";
 import type { AccessReason, AccessType } from "./types/auth";
 import type { GameIcon, GameModule, GameStatus } from "./types/games";
 
@@ -73,6 +73,25 @@ export function formatDateTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/**
+ * Una fecha sin hora (`2026-10-23`), como el día de la operación de una factura.
+ * `new Date("2026-10-23")` es la medianoche UTC, que en Colombia todavía es el
+ * día anterior: se lee y se escribe en UTC para que no se corra.
+ */
+export function formatCalendarDate(isoDate: string): string {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("es-CO", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** La factura electrónica de un pago (§3.17). La emisión con Dataico es del paso 5.4. */
+export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
+  pending: "Pendiente de emitir",
+};
 
 /** `{a: 1, b: null}` → `a: 1 · b: —`, para leer un antes/después de un vistazo. */
 export function describeChange(value: AuditLogEntry["before"]): string {

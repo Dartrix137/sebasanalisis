@@ -15,6 +15,9 @@ Operaciones:
 - `cancel` y `resume`: detener y reanudar la renovacion automatica.
 - Un pago aprobado que el proveedor anula despues pierde su periodo
   (`_reverse_period`), dentro de `apply_transaction`.
+- Un pago que se aprueba deja su factura pendiente (`core/invoices`), en la
+  misma transaccion. Una anulacion posterior no la toca: que hacer con ella lo
+  decide el paso 5.4.
 - `set_payment_source` y `switch_to_manual`: cambiar el medio de pago guardado
   y pasar de un modo de pago al otro, sobre la misma suscripcion.
 
@@ -36,7 +39,7 @@ from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
 from app.billing.schedule import first_charge_at
-from app.core import legal, price_changes
+from app.core import invoices, legal, price_changes
 from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
 from app.models.user import LIVE_SUBSCRIPTION_STATUSES
@@ -576,6 +579,8 @@ def apply_transaction(
         payment.status = "approved"
         payment.failure_reason = None
         activated = _grant_period(db, payment, now)
+        # Su factura nace aqui, en la misma transaccion (§3.17, paso 5.2).
+        invoices.create_pending(db, payment)
     _note_card_brand(db, payment, transaction)
     _commit(db, payment, before_commit)
     return Settlement(

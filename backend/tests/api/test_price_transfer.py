@@ -40,6 +40,7 @@ def limpio(db) -> Iterator[None]:
     for tabla in (
         "subscription_price_changes",
         "price_changes",
+        "invoices",
         "payment_refunds",
         "payment_events",
         "payments",

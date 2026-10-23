@@ -1,4 +1,4 @@
-"""Planes y cupones (docs/PLATAFORMA_COMPLETA.md §3.2 y §3.10).
+"""Planes, cupones y facturas (docs/PLATAFORMA_COMPLETA.md §3.2, §3.10 y §3.17).
 
 Montos en centavos enteros, con la moneda explicita. El precio se calcula en
 `app/billing/pricing.py`; aqui solo se guardan los datos.
@@ -8,12 +8,13 @@ apuntan a un plan o a un cupon son RESTRICT.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -277,3 +278,31 @@ class SubscriptionPriceChange(Base):
     created_at: Mapped[datetime] = created_at_col()
 
     price_change: Mapped[PriceChange] = relationship()
+
+
+class Invoice(Base):
+    """La factura electronica de un pago aprobado (§3.17; Fase 5, paso 5.2).
+
+    Nace `pending` en la misma transaccion en que `apply_transaction` aprueba el
+    pago (`core/invoices.create_pending`), y es unica por pago: un webhook
+    repetido no deja dos. La emision con Dataico es del paso 5.4; hasta
+    entonces ninguna sale de `pending`.
+
+    No guarda datos del comprador: a quien va la factura (consumidor final, o
+    con nombre e identificacion) esta por definir. Es un documento tributario:
+    no se borra al eliminar la cuenta, y por eso la llave al pago es RESTRICT
+    (los pagos tampoco se borran).
+    """
+
+    __tablename__ = "invoices"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    payment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("payments.id", ondelete="RESTRICT"), unique=True, nullable=False
+    )
+    # Hoy solo `pending`. Los estados de la emision entran en el paso 5.4.
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # El dia de la aprobacion del pago en hora de Colombia (`billing/fx`),
+    # congelado al crear la fila.
+    operation_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = created_at_col()

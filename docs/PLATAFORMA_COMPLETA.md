@@ -762,9 +762,9 @@ Rama `fase-4-tokenizacion-formulario-propio`. No toca el pago manual, el cobro n
 - PCI DSS con el formulario en nuestra página: sigue en §10 n.º 15. Las cabeceras CSP de §13.4 no se agregaron.
 - Tarjetas con 3D Secure y el evento `nequi_token.updated`: como en §3.15.
 
-### 3.17 Facturación electrónica (decidida el 2026-10-20, con Dataico desde el 2026-10-23, sin construir)
+### 3.17 Facturación electrónica (decidida el 2026-10-20, con Dataico desde el 2026-10-23; base construida el 2026-10-23, sin emisión)
 
-Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la propuesta de diseño, para retomarla cuando estén resueltos los pendientes del final. Se construye en la Fase 5: la base sin proveedor en el paso 5.2 y la emisión con Dataico en el 5.4 (`HOJA_DE_RUTA.md` §5).
+Cierra §10 n.º 4. La base (paso 5.2) está construida: ver "Paso 5.2: cómo quedó construido" al final de esta sección. La emisión no: lo demás es lo decidido y la propuesta de diseño, para retomarla cuando estén resueltos los pendientes del final. Se construye en la Fase 5: la base sin proveedor en el paso 5.2 y la emisión con Dataico en el 5.4 (`HOJA_DE_RUTA.md` §5).
 
 **Cambios del 2026-10-23.** Dos decisiones cambian esta sección. Donde el texto de abajo dice Siigo, se lee Dataico. Donde dice Wompi, se lee la pasarela.
 
@@ -786,7 +786,7 @@ Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la 
 **Lo decidido por el usuario**
 
 - **Hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica ante la DIAN.
-- **A consumidor final**, sin el nombre ni la cédula del comprador: el registro no los pide y no se agregan.
+- ~~**A consumidor final**, sin el nombre ni la cédula del comprador: el registro no los pide y no se agregan.~~ **Por definir (corrección del usuario, 2026-10-23)**: podría hacer falta pedirle al cliente su nombre y su identificación. Ver "Pendiente antes de construir", n.º 5.
 - **Proveedor: Siigo**, por su API. Siigo valida la factura con la DIAN.
 - **El recibo por correo no cambia**: sigue siendo una constancia de pago y lo dice ("no una factura"). Un correo propio no puede ser factura electrónica: la factura es un XML UBL 2.1 firmado, con numeración autorizada por la DIAN, CUFE, código QR y validación previa de la DIAN antes de entregarse.
 
@@ -795,7 +795,7 @@ Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la 
 - Cuando `core/subscriptions.apply_transaction` aprueba un pago, en la misma transacción se crea una fila en una tabla `invoices`, en estado pendiente y **única por pago**. Así un webhook repetido no genera dos facturas.
 - La llamada a Siigo **no va dentro del pago**: si Siigo está caído, el cobro no puede fallar. Las facturas pendientes las emite el job que ya corre cada hora (`scripts/run_renewals.py`), con reintentos y sin cola (§13.5).
 - Siigo queda detrás de una interfaz, como `PaymentProvider` y `EmailSender`; los tests de API usan el proveedor real con un transporte HTTP simulado.
-- Las facturas no se borran al eliminar una cuenta: son documentos tributarios. Como son a consumidor final, no guardan datos personales (encaja con `core/payment_privacy.py`).
+- Las facturas no se borran al eliminar una cuenta: son documentos tributarios. Hoy no guardan datos del comprador; si se decide pedir nombre e identificación, hay que decidir también qué pasa con ellos al eliminar la cuenta (`core/payment_privacy.py`).
 - Una anulación de Wompi, o un reembolso, probablemente pida una nota crédito en Siigo. Por confirmar con el contador.
 - Credenciales de Siigo solo por variable de entorno, como las de Wompi.
 
@@ -806,6 +806,7 @@ Cierra §10 n.º 4. Nada de esta sección está construido: es lo decidido y la 
 2. **Cómo le llega la factura al cliente**: con el consumidor final genérico, Siigo no tiene el correo del comprador. Hay dos salidas: poner en cada factura el correo de la cuenta, si la API lo permite, o bajar el PDF por la API y adjuntarlo al recibo. Depende de la documentación de Siigo.
 3. **La documentación oficial vigente de la API de Siigo**, leída al construir y citada en un comentario, igual que la de Wompi: nunca de memoria ni de código de terceros. El 2026-10-20 no se pudo leer la oficial (la página de Apiary no cargó); solo apareció código de terceros que usa `POST /v1/invoices`, que no sirve como base.
 4. **Operativo (usuario)**: un plan de Siigo Nube con acceso a la API, sus credenciales, la resolución de facturación de la DIAN configurada en Siigo y el producto o servicio "suscripción" creado allá.
+5. **A quién va la factura (2026-10-23)**: a consumidor final, o con el nombre y la identificación del cliente. Si es lo segundo: un formulario para pedirlos (¿al registrarse, al pagar?), columnas nuevas, la versión 2 de la política de datos (5.5) y qué se conserva al eliminar la cuenta. Lo responde el contador; los textos, el abogado. §10 n.º 17.
 
 **Computación en la nube y la exclusión de IVA (consulta del 2026-10-20)**
 
@@ -820,6 +821,23 @@ El usuario preguntó si el servicio cumple los requisitos de la DIAN y el MinTIC
 | Servicio medido | Parcial | Se mide el uso por cuenta y las suscripciones activas, pero el cobro es una tarifa fija, no por consumo. |
 
 Si el servicio cuenta como computación en la nube es una calificación tributaria, no técnica: la decide el contador. Para él se redactó una descripción técnica del servicio, un documento de Claude Docs, privado, en la cuenta del usuario ("Descripción técnica del servicio Sebasanálisis"). Si hace falta reforzar la elasticidad, el cambio concreto es mover el limitador a Postgres; no se hace sin que el usuario lo pida.
+
+**Paso 5.2: cómo quedó construido (2026-10-23)**
+
+Rama `fase-5-facturacion-base`. La base de la facturación, sin proveedor: **la emisión queda apagada** y nada sale de la aplicación.
+
+- **`backend/app/billing/fx.py`** (puro, con mypy estricto y `tests/billing/test_fx.py`):
+  - `operation_date(approved_at)`: el día de la aprobación en hora de Colombia (desfase fijo de -5 h; Colombia no tiene horario de verano). Rechaza una hora sin zona.
+  - `Rates(eur_usd, usd_cop)`: tasas solo en `Decimal`, finitas y mayores que cero; un `float` o un `int` se rechazan.
+  - `to_cop_cents(amount_cents, currency, rates)`: `COP` tal cual; `USD` × TRM; `EUR` × (EUR→USD) × TRM. Otra moneda, o falta la tasa: error.
+  - **Provisional hasta el contador**: se redondea una sola vez, al final y al centavo, con `ROUND_HALF_UP` (constante `ROUNDING`). No hay redondeo intermedio en dólares.
+  - No entra todavía (5.4): buscar la TRM por su vigencia, el formato de fecha de Dataico y guardar las tasas con su fuente.
+- **Tabla `invoices`** (migración `5dc9670480c1`, solo DDL): `id`, `payment_id` (único, llave a `payments` con `RESTRICT`), `status` (hoy solo `pending`), `operation_date` y `created_at`. Sin datos del comprador (a quién va la factura está por definir, pendiente n.º 5 de arriba) y sin tasas ni monto en pesos: entran en el 5.4 con su propia migración. **Sin backfill**: los pagos aprobados que había eran del sandbox de Wompi y no se facturan.
+- **Dónde nace**: `core/invoices.create_pending(db, payment)`, que no hace commit, se llama solo desde la rama de aprobación de `core/subscriptions.apply_transaction`. Cubre todos los caminos que aprueban: webhook, `GET /billing/payments/:id`, cobro de la renovación automática y "Reconsultar" en el admin. Idempotencia: `apply_transaction` aprueba un pago una vez, la fila del pago está bloqueada mientras se aplica, y la base no admite dos facturas por pago.
+- Un pago declinado, en error o pendiente no deja factura. **Un pago anulado después de aprobado conserva su factura pendiente**: si se emite con nota crédito o no se emite lo decide el contador (5.4).
+- La factura sobrevive a la eliminación de la cuenta: el pago queda sin cuenta y la factura sigue.
+- **Admin**: el detalle de un pago trae `invoice` (`status`, `operation_date`, `created_at`; null si no hay) y lo muestra como "Factura electrónica: Pendiente de emitir: la emisión todavía no está encendida" y "Día de la operación". La fecha se formatea en UTC (`formatCalendarDate`, `frontend/lib/admin.ts`) para que no se corra un día. El cliente no ve nada nuevo: el recibo sigue diciendo que no es una factura.
+- **Tests**: `tests/api/test_invoices.py` (15 casos: aprobado, día en hora de Colombia, webhook repetido, webhook más consulta, pasarela simulada, declinado, error y pendiente, monto distinto, renovación, anulación, cuenta eliminada, unicidad en la base, llave al pago, detalle del admin), y en Playwright, `e2e/admin-billing.spec.ts` ve "Pendiente de emitir". Los fixtures que vacían `payments` entre tests vacían antes `invoices`.
 
 ### 3.18 Retiro de Wompi (Fase 5, paso 5.1; construido y desplegado el 2026-10-23)
 
@@ -1701,7 +1719,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
-| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica a **consumidor final**, sin el nombre ni la cédula del comprador, emitida con **Dataico** por su API (desde el 2026-10-23; antes Siigo). Un pago en euros se factura en pesos con la tasa del día del pago (§3.17). El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, la cuenta de Siigo) están en §3.17. Bloquea el lanzamiento. |
+| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica (a quién va, por definir desde el 2026-10-23: n.º 17), emitida con **Dataico** por su API (desde el 2026-10-23; antes Siigo). Un pago en euros se factura en pesos con la tasa del día del pago (§3.17). El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo, la cuenta de Siigo) están en §3.17. Bloquea el lanzamiento. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción** (construida ese día, §4.10), en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |
@@ -1714,6 +1732,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
 | 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | **Superada (2026-10-23):** Wompi salió y el formulario propio con él (§3.18). La pregunta pasa a la pasarela nueva (n.º 16). Lo que decía: preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
 | 16 | Pasarela nueva: las respuestas de Tipster Page al anexo técnico (medios y monedas, cobro por un monto propio, página alojada, tokenización o recurrencia suya, firma de los webhooks, id de evento, reconsulta, reembolsos, contracargos, sandbox, seguridad de pagos) | Pendiente de Tipster Page (anexo enviado el 2026-10-22). Decide el diseño del paso 5.3: si se conserva el calendario de cobros propio, la moneda de cobro, la forma de `PaymentSourceType` y `acceptance()`, sus orígenes en la CSP y las protecciones de arranque que salieron con Wompi (§3.18). Bloquea vender (5.3). |
+| 17 | A quién va la factura electrónica: a consumidor final, o con el nombre y la identificación del cliente | **Abierta (2026-10-23, corrección del usuario).** Antes figuraba como decidido "a consumidor final, sin nombre ni cédula". Lo responde el contador; si hay que pedir datos nuevos, cambian el registro o el pago, la política de datos (5.5) y lo que se conserva al eliminar la cuenta. La tabla `invoices` del paso 5.2 no guarda datos del comprador, así que no depende de esto. Bloquea la emisión (5.4). |
 
 ---
 
