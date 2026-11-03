@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-10-23 (Fase 5: cambio de pasarela, facturación con Dataico y lanzamiento).
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-11-03 (Fase 5: respuesta y documentación de Tipster Page, decisiones del paso 5.3, evaluación de PremiumPay).
 
 ---
 
@@ -12,7 +12,7 @@ Sebasanálisis es una plataforma web por suscripción. El usuario registra a man
 
 La recomendación sale de reglas estadísticas sobre los resultados registrados. **No es una predicción**: cada giro es independiente y ninguna gestión de banca cambia la ventaja de la casa. Esa regla de lenguaje es la más importante del proyecto (`ARQUITECTURA_Y_ESTADISTICA.md` §0).
 
-**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. La Fase 4 (acceso, pagos, correo, legal, admin completo, multijuego) quedó construida. El cobro se construyó con Wompi y **solo se probó contra su sandbox: nunca se cobró dinero real y no hay clientes que migrar**. El 2026-10-22 Wompi salió del proyecto porque no admite el modelo de negocio, y lo reemplaza **Tipster Page**. El correo con el anexo técnico ya se le envió. Hasta integrarlo, la única vía de acceso es la manual del administrador, y **no se vende**.
+**Dónde está:** el núcleo (motor, mesa de ruleta, admin básico) está construido y aprobado. La Fase 4 (acceso, pagos, correo, legal, admin completo, multijuego) quedó construida. El cobro se construyó con Wompi y **solo se probó contra su sandbox: nunca se cobró dinero real y no hay clientes que migrar**. El 2026-10-22 Wompi salió del proyecto porque no admite el modelo de negocio, y lo reemplaza **Tipster Page**, que respondió el anexo técnico y mandó su documentación (2026-11-03, §5, "Paso 5.3"). Hasta integrarlo, la única vía de acceso es la manual del administrador, y **no se vende**.
 
 **Hacia dónde va:** la Fase 5 (§5) deja la aplicación lista para vender:
 - retirar Wompi;
@@ -117,6 +117,9 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Se cobra y se muestra un solo precio, en COP. | Tipster Page cobra en **euros**. La factura va en pesos, convertida con la tasa del día del pago (hora de Colombia): de euros a dólares con la tasa del día, y de dólares a pesos con la TRM (Decreto 1625 de 2016). El precio en pantalla y los planes se redefinen al integrar Tipster Page (paso 5.3). | 2026-10-23 |
 | El lanzamiento era el paso 9 de la Fase 4. | La Fase 4 se da por cerrada en lo construido. Lo que faltaba del paso 9 pasa a la Fase 5, junto con el cambio de pasarela y la facturación. | 2026-10-23 |
 | Sin pasarela, el acceso manual del admin era una vía provisional mientras llegaba el cobro. | **No se vende hasta integrar Tipster Page y Dataico.** Mientras tanto solo hay accesos manuales de prueba o de cortesía, y no hay ventas que facturar. | 2026-10-23 |
+| Dos planes en pesos: 100.000 COP el mensual y 150.000 COP el de dos meses. | Precios fijos en euros: **32 EUR el mensual y 46 EUR el de dos meses**. Se muestra y se cobra ese precio. Con tarjeta o Bizum el cliente paga en euros; con un medio local de EBANX paga el equivalente en su moneda, convertido por Tipster Page. Los planes se cambian con una migración de datos en el paso 5.3. | 2026-11-03 |
+| Dos modos de cobro: renovación automática con fuente tokenizada y pago manual por período. | Con Tipster Page **solo pago manual por período**: su recurrencia está en desarrollo. El código de la renovación automática se conserva, apagado, para cuando una pasarela la ofrezca. | 2026-11-03 |
+| PremiumPay descartada como base del cobro porque no se le veía API ni webhooks (2026-10-08). | Ya tiene API, con cobros recurrentes por token, pero sigue sin servir: sus avisos no van firmados, no hay forma de consultar un pago y no reintenta los avisos (§5, "Evaluación de PremiumPay"). | 2026-11-03 |
 
 ---
 
@@ -135,7 +138,7 @@ No se avanza a un paso de código sin que el anterior tenga tests o una verifica
 |---|---|---|---|---|---|
 | 5.1 | **Retiro de Wompi** | Se borra lo que solo existe por Wompi: el proveedor, sus variables, la llave de cifrado, el formulario de tarjeta y Nequi, `jose`, sus orígenes en la CSP y sus tests de firma. Se conserva el núcleo: `PaymentProvider`, `apply_transaction`, renovaciones, precios, cupones, traslado de precios, admin de pagos y pasarela simulada. El webhook pasa a `POST /webhooks/payments`, genérico. Un doble de pruebas nuevo, `tests/api/pasarela_double.py`. Las reglas de pagos de `CLAUDE.md` quedan para cualquier pasarela. Detalle en `PLATAFORMA_COMPLETA.md` §3.18 (salió del documento "Cambio de pasarela: de Wompi a Tipster Page", Claude Docs, 2026-10-22) | Nada: se puede empezar ya | Los doce casos de §3.9 en verde sobre el doble nuevo. En local sin pasarela, el pago se ve apagado y el acceso manual funciona. Desplegado en el orden del documento, con las suscripciones de sandbox canceladas en el admin | **Cerrado (2026-10-23)** en la rama `fase-5-retiro-wompi`: los doce casos de §3.9 y los cuatro obligatorios en verde sobre el doble nuevo, sin migración (las filas del sandbox quedan como historia). **Desplegado el 2026-10-23** (PR #41): el usuario quitó las cuatro `WOMPI_*` en Dokploy, canceló las suscripciones de sandbox y desactivó la URL de eventos en el panel de Wompi. En producción, `/billing/availability` responde `{enabled: false, tokenizer: null}` y `/billing/card-encryption-key` ya no existe |
 | 5.2 | **Base de la facturación, sin proveedor** | `billing/fx.py` (puro y con tests): la fecha de la operación en hora de Colombia, la conversión de euros a dólares a pesos con `Decimal` y los montos en centavos. La tabla `invoices`, única por pago. La fila pendiente que crea `apply_transaction` al aprobar un pago, en la misma transacción. El estado de la factura en el detalle del pago del admin. La emisión queda apagada | 5.1 (los tests van sobre el doble nuevo). El redondeo lo confirma el contador, pero no frena la construcción | Tests en verde. Un pago aprobado con la pasarela simulada deja una factura pendiente, y un webhook repetido no deja dos | **Cerrado (2026-10-23)** en la rama `fase-5-facturacion-base`: tests de `fx.py` y de las facturas en verde (`tests/billing/test_fx.py`, `tests/api/test_invoices.py`), y el detalle del pago del admin muestra "Pendiente de emitir". El redondeo es provisional hasta el contador. Detalle en `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.2" |
-| 5.3 | **Integración de Tipster Page** | Un `TipsterPageProvider` detrás de `PaymentProvider`, con la firma, la reconsulta y la idempotencia leídas de su documentación oficial. Si se conserva nuestro calendario de cobros o se usa su recurrencia: preguntas 6 y 7 del anexo. Los precios de los planes en la moneda que cobra Tipster Page (migración de datos), con la regla del precio en pantalla reescrita. Sus orígenes en la CSP. Los tests de API con el proveedor real sobre transporte simulado; el doble de 5.1 se retira | Las respuestas de Tipster Page al anexo y su sandbox | Los doce casos de §3.9 y los cuatro obligatorios de `CLAUDE.md` en verde con el proveedor real. Flujo completo en el sandbox de Tipster Page en el VPS: alta, renovación si aplica, cancelación, anulación | Esperando a Tipster Page |
+| 5.3 | **Integración de Tipster Page** | Un `TipsterPageProvider` detrás de `PaymentProvider`, con la firma, la reconsulta y la idempotencia leídas de su documentación oficial. Si se conserva nuestro calendario de cobros o se usa su recurrencia: preguntas 6 y 7 del anexo. Los precios de los planes en la moneda que cobra Tipster Page (migración de datos), con la regla del precio en pantalla reescrita. Sus orígenes en la CSP. Los tests de API con el proveedor real sobre transporte simulado; el doble de 5.1 se retira | Las respuestas de Tipster Page al anexo y su sandbox | Los doce casos de §3.9 y los cuatro obligatorios de `CLAUDE.md` en verde con el proveedor real. Flujo completo en el sandbox de Tipster Page en el VPS: alta, renovación si aplica, cancelación, anulación | **Documentación recibida y decisiones tomadas (2026-11-03)**: ver "Paso 5.3" abajo. Se puede empezar el código con el transporte simulado; para probar contra el sandbox faltan sus credenciales |
 | 5.4 | **Emisión con Dataico** | `InvoiceIssuer` con `DataicoIssuer` (y uno simulado). Las tasas de cambio: la TRM de la Superfinanciera y la tasa de euros a dólares que diga el contador, guardadas en la base con su fuente. La emisión desde el job de cada hora, con reintentos y la tasa congelada en la factura. "Reintentar emisión" en el admin, con motivo y bitácora. La nota crédito, si el contador la pide. Todo leído de la documentación oficial de Dataico y citado | 5.2. Las respuestas del contador. La cuenta de Dataico con API, la resolución de la DIAN vinculada y la documentación de `app.dataico.com/api-docs` | Una factura de un pago en euros emitida en el ambiente `PRUEBAS` con la tasa y la fecha correctas, visible en el portal de Dataico y en el admin. Habilitación ante la DIAN completa | Esperando al contador y a Dataico |
 | 5.5 | **Textos legales, versión 2** | Una sola versión nueva de términos, datos, reembolsos y cookies, que reúne tres cosas: el texto del abogado, Tipster Page como pasarela y la facturación. Los datos del responsable dejan de ser `[PENDIENTE]`. Se publica una vez para no pedir dos veces la aceptación (§6.7 envía el aviso) | Abogado. Que Tipster Page confirme las condiciones (5.3) | Publicada en producción, con el aviso enviado a las cuentas que correspondan | Esperando al abogado |
 | 5.6 | **Lanzamiento** | Lo que quedaba del paso 9 de la Fase 4, más la pasarela y la facturación en producción: ver la lista abajo | 5.3, 5.4 y 5.5 | La lista de abajo completa, con un pago real de punta a punta | Pendiente |
@@ -155,11 +158,93 @@ No se avanza a un paso de código sin que el anterior tenga tests o una verifica
 | **Un pago real de punta a punta**, hecho por el usuario: cobro, acceso, factura validada por la DIAN y recibo. Después, su anulación o reembolso, con la nota crédito si aplica | Al final | Operativo (usuario) |
 | Ya hecho en el paso 9: SPF, DKIM y DMARC; job de renovaciones en Dokploy; UptimeRobot; acabado del frontend; seguridad; diseño móvil; aviso de versiones legales | Hecho (ver §6, "Paso 9: estado") | — |
 
+### Paso 5.3: lo que respondió Tipster Page y lo decidido (2026-11-03)
+
+La respuesta al anexo y los dos manuales están en `docs/docs tipsterpage/`: `Anexo Requisitos y Preguntas.pdf` (lo que se preguntó), `Respuesta Sebastian API.pdf` (lo que respondieron), `MANUAL_INTEGRACION_API_PAGOS_TSPAY_LANDING.pdf` (v16.2, con su página de pago) y `MANUAL_INTEGRACION_API_PAGOS_TSPAY_V2_NO_LANDING.pdf` (v2.0, del 2026-10-29, con el formulario de pago propio).
+
+**Lo que respondieron:**
+
+| Tema | Respuesta |
+|---|---|
+| Integración | Dos formas: con su página de pago (landing) o con un formulario de pago nuestro (V2) |
+| Renovación automática | "Está actualmente en desarrollo" |
+| Avisos de pago | Las dos formas avisan a la URL que indiquemos. Solo la V2 tiene un endpoint para consultar el estado de una orden |
+| Reembolsos, anulaciones y contracargos | A mano, por tickets de correo. Por la URL de avisos solo llegan los cambios de estado que reporte cada procesador |
+| Pruebas | Sandbox y producción separados, sin límites de uso de la API |
+| Datos de tarjeta | Nunca pasan por ellos ni por nosotros: el cliente los escribe en la página de cada procesador |
+| Datos para empezar | Solo un correo, al que mandan las credenciales del sandbox |
+
+**Lo que dice el manual V2:**
+- El monto va siempre **en euros**, con dos decimales.
+- Con Redsys (tarjeta, Bizum) se cobra en euros sin conversión. Con EBANX (medios locales de Colombia, México, Brasil y otros) se cobra en moneda local, convertida por la plataforma desde los euros.
+- El catálogo de medios se pide por país (`GET /payment-methods`). Cada medio dice qué datos del comprador necesita: nombre, apellidos, documento o teléfono.
+- La orden se crea desde el backend (`POST /create-order-tspay`), con firma HMAC-SHA256. La respuesta es una página HTML que lleva al cliente al procesador.
+- El aviso de pago (`notification_url`) va firmado con HMAC-SHA256 sobre el estado, la orden y el monto tal como llega. Se reintenta si no respondemos 2xx. No trae un id de evento propio.
+- La consulta de estado es `GET /order-status/{orderId}`, con los estados `pending`, `paid`, `error`, `error_and_refund_payment`, `expired` y `fraud`. Ojo: un `error` puede pasar a `paid` si el comprador reintenta la misma operación.
+
+**Decidido:**
+
+| Decisión | Por qué |
+|---|---|
+| **Integración V2, sin landing** | La de landing no tiene cómo consultar una orden, y sin reconsulta no se concede acceso (regla de pagos de `CLAUDE.md`) |
+| **Solo pago manual por período** | No hay recurrencia. El código de la renovación automática se conserva apagado |
+| **Precios fijos en euros: 32 EUR mensual, 46 EUR dos meses** | Tipster Page solo recibe euros. Un solo precio, el que se cobra |
+| **Todos los medios del catálogo** | Los datos que pida cada medio (nombre, documento, teléfono) se mandan a Tipster Page y no se guardan en la base ni en los registros. Son datos personales nuevos: entran en los textos legales v2 (paso 5.5) |
+| **El país lo elige el cliente** en la pantalla de pago | No depende de la IP ni de un proxy, y el cliente lo puede corregir |
+| `order_id` = la referencia del pago; `product_id` = el código del plan (`plans.code`) | Los dos son identificadores nuestros. Al reconsultar se comparan el monto y el plan |
+| Idempotencia del aviso por (orden, resultado) | El aviso no trae un id propio |
+| Un pago rechazado puede pasar a aprobado si la reconsulta lo dice | Por el `error` que pasa a `paid`: si no, alguien pagaría y se quedaría sin acceso |
+| La página de pago se entrega desde la API con un enlace de un solo uso | La respuesta de la orden es HTML y la sesión del navegador no viaja en una navegación a la API |
+
+**Preguntas abiertas para Tipster Page, con lo que dijo el usuario el 2026-11-03:**
+
+| # | Pregunta | Estado | Cómo queda el código |
+|---|---|---|---|
+| 1 | Credenciales del sandbox (`MERCHANT_CODE`, `AUTH_BEARER`, `SECRET_KEY`) y del Swagger (`apiekans.tipster.page/tspayv2/docs`) | Llegan el 2026-11-04 | Van solo en variables de entorno |
+| 2 | ¿Se puede repetir un `order_id` (el cliente recarga la página de pago)? | Se prueba en el sandbox | No depende de la respuesta: la orden se crea una vez por pago y el enlace de la página de pago es de un solo uso |
+| 3 | ¿El monto del aviso y de la consulta va siempre en euros? | **En euros** | La reconsulta compara el monto en euros contra el del pago. No se sabe cuánto pagó el cliente en su moneda local, y no se muestra |
+| 4 | ¿Cuántas veces reintentan el aviso, y por cuánto tiempo? | No lo dicen | No se depende de los reintentos: el job de cada hora también reconsulta los pagos manuales que sigan `pending`, para que un aviso perdido no deje a un cliente pagado y sin acceso |
+| 5 | ¿`product_id` es libre? | **Sí, es nuestro** | `product_id` = `plans.code` |
+| 6 | ¿Con qué codificación firman los textos con tildes? | **Se mandan sin tildes** | `product_name` y `product_description` van sin tildes ni caracteres fuera de ASCII. Los nombres de los planes ("Acceso Mensual", "Acceso Bimestral") ya no llevan |
+| 7 | ¿Qué es `error_and_refund_payment`, y un `paid` puede cambiar después (anulación o contracargo)? | Se prueba después | Mientras tanto, `error_and_refund_payment` cuenta como no aprobado y no concede acceso, y `paid` se trata como definitivo, como dice el manual. Una anulación o un contracargo se registran a mano en el admin |
+| 8 | Liquidación: en qué moneda y cada cuánto pagan a la empresa, qué comisión cobran, si emiten un documento por ella | Pendiente | No cambia el 5.3: es la base de la factura del 5.4, con el contador. Es información comercial: no se puede probar en el sandbox |
+
+En el sandbox, Bizum aprueba solo hasta 12 €: los planes de 32 y 46 EUR se prueban con las tarjetas de prueba de Redsys (§11 del manual V2).
+
+### Evaluación de PremiumPay (2026-11-03)
+
+El usuario la propuso como posible segunda pasarela. Se revisaron la guía comercial (`premiumpay-api-guide.netlify.app`), el portal para desarrolladores (`developers.premiumpay.pro`), su OpenAPI (v1.1.1) y el PDF de la API de pagos.
+
+**Qué ofrece:**
+- Crear un cobro (`POST /api/v1/makepayment`) con monto, moneda ISO, número de pedido nuestro, correo e IP del cliente (la IP decide el país). Devuelve un enlace a su página de pago.
+- Medios por país y monto (`POST /available_methods`): Stripe, tarjeta, Bizum, AstroPay, Payretailers, PayU, PayPal y Coinbase.
+- **Cobros recurrentes**: con `tokenizer: true` el aviso del primer pago devuelve un token, y los cobros siguientes se hacen con ese token sin el cliente. Es lo que necesita nuestra renovación automática.
+
+**Por qué no sirve hoy:**
+
+| Regla de pagos | PremiumPay |
+|---|---|
+| Aviso firmado, con el algoritmo documentado | No hay firma: el aviso trae en la cabecera la misma llave de API que usamos nosotros, y eso no protege su contenido |
+| Reconsulta antes de conceder acceso | No hay endpoint para consultar el estado de un pago |
+| Reintentos del aviso | No hay: "no se esperará un resultado satisfactorio de la llamada" |
+| Reembolsos | No documentados |
+
+Sin firma y sin reconsulta, la aplicación tendría que creerle al aviso tal como llega: un aviso falso daría acceso gratis. Sin reintentos, un aviso perdido deja a un cliente con el pago hecho y sin acceso. El propio PDF dice que es la base para construir la API.
+
+**Para volver a evaluarla, le falta:**
+1. Un endpoint de estado del pago por `paymentId` o por nuestro `clientOrderId`.
+2. Avisos firmados con HMAC sobre su contenido.
+3. Reintentos del aviso.
+4. Saber qué monedas acepta además del euro, cómo maneja 3-D Secure en un cobro por token, si se puede borrar un token, y confirmar la comisión (7 % a 11 %) y la retención de saldos de hasta 180 días vistas el 2026-10-08 (`PLATAFORMA_COMPLETA.md` §3.10).
+
+Mientras tanto, el paso 5.3 deja lista la entrada de una segunda pasarela: cada aviso queda guardado con su pasarela, y no se procesa dos veces el mismo aviso de una misma pasarela.
+
 **Lo que se puede hacer ya, en paralelo:**
-- **Código**: nada por ahora. 5.1 y 5.2 cerrados el 2026-10-23; 5.3 y 5.4 esperan a terceros.
+- **Código**: el paso 5.3 contra el transporte simulado. Incluye el proveedor, la migración de los planes a euros, el formulario de pago por país y medio, la página de pago de un solo uso y los tests. Las pruebas contra el sandbox esperan a las credenciales.
 - **Usuario con Tipster Page**:
-  - seguir la respuesta al anexo;
-  - mandar un segundo correo con cuatro preguntas que el anexo no hizo: en qué moneda y cada cuánto liquidan a la empresa, qué comisión cobran, si emiten un documento por esa comisión, y si el cliente ve el cobro en euros o en su moneda.
+  - recibir las credenciales del sandbox y del Swagger (2026-11-04);
+  - preguntar lo de la liquidación y la comisión (pregunta 8 de "Paso 5.3"), que hace falta para el 5.4.
+- **Usuario con PremiumPay** (si quiere mantenerla como opción): las preguntas de "Evaluación de PremiumPay".
 - **Usuario con Dataico**: abrir la cuenta con API, vincular la resolución de facturación de la DIAN, hacer la habilitación y dar acceso a la documentación de la API.
 - **Contador**:
   - factura en euros con la tasa o directamente en pesos;
@@ -174,8 +259,9 @@ No se avanza a un paso de código sin que el anterior tenga tests o una verifica
 
 | Quién | Qué | Bloquea |
 |---|---|---|
-| Tipster Page | Las 18 preguntas del anexo (enviado el 2026-10-22), la documentación de la API y el sandbox | 5.3 |
-| Tipster Page | Moneda y frecuencia de la liquidación, comisión, documento por la comisión, moneda que ve el cliente | 5.3 y 5.4 (base de la factura) |
+| Tipster Page | ~~Las 18 preguntas del anexo y la documentación de la API~~ (respondidas el 2026-11-03). Las credenciales del sandbox y del Swagger llegan el 2026-11-04. Las preguntas 2 y 7 de "Paso 5.3" se resuelven probando en el sandbox | Las pruebas contra el sandbox del 5.3 |
+| Tipster Page | Moneda y frecuencia de la liquidación, comisión, documento por la comisión (la moneda que ve el cliente ya la contesta el manual V2) | 5.4 (base de la factura) |
+| PremiumPay (opcional) | Endpoint de estado, avisos firmados, reintentos, monedas, 3-D Secure, borrado de tokens, comisión y retención ("Evaluación de PremiumPay") | Nada: solo si se quiere como segunda pasarela |
 | Contador | Moneda de la factura, fuente de la tasa de euros a dólares y redondeo, IVA (incluida la exclusión por computación en la nube, `PLATAFORMA_COMPLETA.md` §3.17), comisión, nota crédito (también la de un pago anulado que ya tiene factura pendiente) y a quién va la factura: consumidor final, o con nombre e identificación (§10 n.º 17) | 5.4 |
 | Usuario con Dataico | Cuenta con API, llave y `dataico_account_id`, resolución de la DIAN vinculada, habilitación, acceso a `app.dataico.com/api-docs` | 5.4 |
 | Abogado | Textos legales revisados, datos del responsable del tratamiento, precio en pantalla, frase de "apostar el mínimo" | 5.5 y 5.6 |
