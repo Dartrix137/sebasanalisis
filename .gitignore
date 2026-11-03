@@ -23,3 +23,6 @@ Thumbs.db
 .DS_Store
 .idea/
 .vscode/
+
+# Documentacion privada de terceros (pasarelas): solo en el equipo, el repo es publico
+docs/docs tipsterpage/
