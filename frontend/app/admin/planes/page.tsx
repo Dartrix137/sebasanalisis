@@ -86,7 +86,7 @@ function fieldsOf(draft: PlanDraft) {
 }
 
 /**
- * En una frase, qué cobra el plan y qué da cada pago: `Se cobran 150.000 COP
+ * En una frase, qué cobra el plan y qué da cada pago: `Se cobran 46 EUR
  * cada 2 meses. Cada pago da 2 meses de acceso.` Null mientras el formulario
  * esté incompleto.
  */
@@ -97,7 +97,7 @@ function billingSummary(draft: PlanDraft): string | null {
   const period = intervalLabel(draft.interval, count);
   const every = count === 1 ? (draft.interval === "month" ? "cada mes" : "cada año") : `cada ${period}`;
   const access = count === 1 ? (draft.interval === "month" ? "un mes" : "un año") : period;
-  return `Se cobran ${formatMoney(cents, "COP")} ${every}. Cada pago da ${access} de acceso.`;
+  return `Se cobran ${formatMoney(cents, "EUR")} ${every}. Cada pago da ${access} de acceso.`;
 }
 
 export default function AdminPlansPage() {
@@ -257,7 +257,7 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
             adminApi.createPlan(t, {
               ...fields,
               code: draft.code.trim(),
-              currency: "COP",
+              currency: "EUR",
               active: true,
               reason,
             }),
@@ -315,14 +315,14 @@ function PlanForm({ plan, onDone }: { plan?: AdminPlanResponse; onDone: () => Pr
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Field
-          label="Precio que se cobra (COP)"
+          label="Precio que se cobra (EUR)"
           required
           inputMode="decimal"
           placeholder="100000"
           hint={
             plan
               ? "Un precio nuevo aplica a suscripciones nuevas. Las vigentes conservan el suyo hasta que lo trasladas (abajo)."
-              : "En pesos, sin puntos de miles. Es el único monto que se cobra."
+              : "En euros, con punto o coma para los centavos (32 o 32,50). Es el único monto que se cobra."
           }
           value={draft.price}
           onChange={(e) => set("price", e.target.value)}

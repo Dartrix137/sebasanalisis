@@ -6,7 +6,7 @@
 
 import type { PlanInterval } from "./types/billing";
 
-/** `10000000, "COP"` → `100.000 COP`; `3050, "USD"` → `30,50 USD`. */
+/** `3200, "EUR"` → `32 EUR`; `2560, "EUR"` → `25,60 EUR`; `10000000, "COP"` → `100.000 COP`. */
 export function formatMoney(cents: number, currency: string): string {
   const units = Math.trunc(cents / 100);
   const rest = Math.abs(cents % 100);
@@ -45,8 +45,11 @@ export function periodLabel(interval: PlanInterval, count: number): string {
 }
 
 /**
- * La nota que acompaña al precio en /planes, en la pantalla de pago y en el
- * recibo (decidido el 2026-10-13). Pendiente de la revisión del abogado.
+ * La nota que acompaña al precio en /planes, en la pantalla de pago y en los
+ * correos de cobro (decidido el 2026-10-13; reescrita para Tipster Page el
+ * 2026-11-04). Con EBANX la pasarela cobra en moneda local con su tasa y un
+ * recargo por la conversión (OpenAPI de Tipster Page, flujo EBANX). Pendiente
+ * de la revisión del abogado.
  */
 export const CURRENCY_NOTE =
-  "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.";
+  "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.";

@@ -27,8 +27,8 @@ from tests.api.test_billing import _cupon, _mensual
 from tests.api.test_renewals import _avisada, _correos, _correr, _suscriptor_automatico
 from tests.api.test_subscriptions import PRECIO, _pagos, _suscribir
 
-NUEVO = 12_000_000  # 120.000 COP
-MENOR = 8_000_000  # 80.000 COP
+NUEVO = 4_000  # 40 EUR
+MENOR = 2_500  # 25 EUR
 H = timedelta(hours=1)
 DIA = timedelta(days=1)
 
@@ -199,7 +199,7 @@ def test_el_aviso_de_una_subida_fija_la_fecha_treinta_dias_despues(
     [aviso] = sender.sent
     assert aviso.to == correo
     assert aviso.subject == "Aviso: cambia el precio de tu suscripción a Sebasanálisis"
-    assert "100.000 COP" in aviso.text and "120.000 COP" in aviso.text
+    assert "32 EUR" in aviso.text and "40 EUR" in aviso.text
     assert "cancelar la renovación" in aviso.text
     [fila] = _filas(db)
     assert fila.notice_sent_at == ahora and fila.effective_at == ahora + 30 * DIA
@@ -267,7 +267,7 @@ def test_la_subida_se_cobra_desde_su_fecha_y_el_cupon_sigue_descontando(
         vence = suscripcion.current_period_end
         reporte = _correr(db, pasarela, vence - 9 * DIA)
         [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
-        assert "96.000 COP" in aviso_cobro.text
+        assert "32 EUR" in aviso_cobro.text
         assert _correr(db, pasarela, vence - 48 * H).charges == 1
         assert pasarela.cobros[-1]["amount_cents"] == NUEVO * 80 // 100
     assert _suscripcion(db, suscripcion.id).price_cents == NUEVO
@@ -301,7 +301,7 @@ def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
     # El aviso de 7 dias dice el precio de hoy.
     reporte = _correr(db, pasarela, vence - 9 * DIA)
     [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
-    assert "100.000 COP" in aviso_cobro.text
+    assert "32 EUR" in aviso_cobro.text
 
     # Primer intento, rechazado, con el precio de hoy.
     pasarela.estado_del_cobro = "DECLINED"
@@ -326,7 +326,7 @@ def test_una_subida_que_corre_entre_dos_intentos_no_cambia_el_monto_del_periodo(
     assert data["price_change"] is None and data["next_charge_cents"] == NUEVO
     reporte = _correr(db, pasarela, siguiente - 9 * DIA)
     [aviso_cobro] = [m for m in _correos(reporte) if m.to == correo]
-    assert "120.000 COP" in aviso_cobro.text
+    assert "40 EUR" in aviso_cobro.text
     assert _correr(db, pasarela, siguiente - 48 * H).charges == 1
     assert pasarela.cobros[-1]["amount_cents"] == NUEVO
 
@@ -425,7 +425,7 @@ def test_una_bajada_aplica_ya_y_avisa(client, db, pasarela, admin_token: str) ->
     reporte, sender = _avisar(db, datetime.now(UTC))
     [aviso] = sender.sent
     assert aviso.subject == "Bajó el precio de tu suscripción a Sebasanálisis"
-    assert "80.000 COP" in aviso.text
+    assert "25 EUR" in aviso.text
 
     # El proximo cobro ya es con el precio menor.
     vence = _avisada(db, pasarela, suscripcion)

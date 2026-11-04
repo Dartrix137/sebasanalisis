@@ -32,6 +32,15 @@ MAX_ATTEMPTS = len(ATTEMPT_OFFSETS)
 #: Dias de anticipacion del correo de aviso.
 NOTICE_DAYS = 7
 
+#: Hasta cuando un pago pendiente cuenta como un cobro en proceso (decidido el
+#: 2026-11-04). Con Tipster Page la orden existe desde que se abre el pago; si
+#: el cliente la abandona, sigue pendiente hasta que la pasarela la venza. Pasado
+#: este plazo se da por abandonada: el job deja de reconsultarla, y ya no impide
+#: eliminar la cuenta ni las acciones del administrador sobre la suscripcion.
+#: Si la pasarela la resuelve despues, lo trae su aviso.
+PENDING_PAYMENT_WINDOW = timedelta(days=7)
+
+
 
 def attempt_time(period_end: datetime, attempt: int) -> datetime:
     """Cuando toca el intento `attempt` (1, 2 o 3) del periodo que vence en `period_end`."""

@@ -22,9 +22,7 @@ def frontend_url(path: str) -> str:
 
 
 def source_label(subscription: Subscription) -> str:
-    """El medio de pago como se le nombra al cliente: `Visa •••• 4242`, `Nequi`."""
-    if subscription.payment_source_type == "NEQUI":
-        return "tu cuenta Nequi"
+    """El medio de pago como se le nombra al cliente: `tu tarjeta Visa terminada en 4242`."""
     if subscription.card_last4:
         # La marca llega con el primer cobro aprobado: una tarjeta recien
         # guardada todavia no la tiene.

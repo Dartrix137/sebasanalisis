@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  chooseFakeCard,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   confirmEmail,
@@ -45,11 +46,11 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
 
   // El total lo dice el servidor, en la moneda en que se cobra y solo en esa.
   const total = page.getByTestId("total-a-pagar");
-  await expect(total).toHaveText("100.000 COP");
+  await expect(total).toHaveText("32 EUR");
   await expect(page.getByText(/USD/)).toHaveCount(0);
   await expect(
     page.getByText(
-      "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.",
+      "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
     ),
   ).toBeVisible();
   await expect(page.getByText(/no cambia el resultado de ningún juego/)).toBeVisible();
@@ -58,34 +59,35 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await page.getByLabel("Cupón (opcional)").fill("NO-EXISTE");
   await page.getByRole("button", { name: "Aplicar" }).click();
   await expect(page.getByText("Ese código no existe.")).toBeVisible();
-  await expect(total).toHaveText("100.000 COP");
+  await expect(total).toHaveText("32 EUR");
 
   // El cupón de verdad: 20 % menos.
   await page.getByLabel("Cupón (opcional)").fill(cupon.toLowerCase());
   await page.getByRole("button", { name: "Aplicar" }).click();
   await expect(page.getByText(`Cupón ${cupon} aplicado.`)).toBeVisible();
-  await expect(total).toHaveText("80.000 COP");
+  await expect(total).toHaveText("25,60 EUR");
   const resumen = page.getByTestId("resumen-pago");
-  await expect(resumen.getByText("100.000 COP")).toBeVisible();
-  await expect(resumen.getByText("− 20.000 COP")).toBeVisible();
+  await expect(resumen.getByText("32 EUR")).toBeVisible();
+  await expect(resumen.getByText("− 6,40 EUR")).toBeVisible();
 
   // Ningún modo entra marcado: hasta elegir, no se puede pagar.
-  await expect(page.getByRole("button", { name: "Ir a pagar 80.000 COP" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Ir a pagar 25,60 EUR" })).toBeDisabled();
   await expect(page.getByText("Elige cómo quieres pagar para continuar.")).toBeVisible();
   await expect(page.getByRole("radio", { name: "Pago manual" })).not.toBeChecked();
   await expect(page.getByRole("radio", { name: "Renovación automática" })).not.toBeChecked();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 80.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 25,60 EUR" }).click();
 
   // La pasarela simulada recibe el monto del servidor, no uno del navegador.
   await expect(page.getByRole("heading", { name: "Pasarela simulada" })).toBeVisible();
-  await expect(page.getByText("Monto: 8000000 centavos COP")).toBeVisible();
+  await expect(page.getByText("Monto: 25.60 EUR")).toBeVisible();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
 
   // De vuelta: la pantalla espera a que el servidor confirme.
   await expect(page).toHaveURL(/\/pago\/[0-9a-f-]+\?id=fake-/);
   await expect(page.getByText("Pago aprobado")).toBeVisible();
-  await expect(page.getByText("80.000 COP")).toBeVisible();
+  await expect(page.getByText("25,60 EUR")).toBeVisible();
   await expect(page.getByText("Acceso hasta")).toBeVisible();
 
   await page.getByRole("link", { name: "Ir a la mesa" }).click();
@@ -112,9 +114,12 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await mensual.getByRole("link", { name: "Pagar el siguiente período" }).click();
   await expect(page.getByText(/El período nuevo empieza ese día/)).toBeVisible();
   await expect(page.getByLabel("Cupón (opcional)")).toHaveCount(0);
-  await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("32 EUR");
   await expect(page.getByRole("radio", { name: "Renovación automática" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Ir a pagar 100.000 COP" })).toBeEnabled();
+  // Con pago manual, hasta elegir el país y el medio no se puede pagar.
+  await expect(page.getByRole("button", { name: "Ir a pagar 32 EUR" })).toBeDisabled();
+  await chooseFakeCard(page);
+  await expect(page.getByRole("button", { name: "Ir a pagar 32 EUR" })).toBeEnabled();
 
   // Mi cuenta: la suscripción y el pago que acaba de hacer.
   await page.goto("/cuenta");
@@ -123,11 +128,11 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
   await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
   await expect(suscripcion.getByText("Acceso hasta")).toBeVisible();
   // El precio congelado es el del plan, no el del primer cobro con cupón.
-  await expect(suscripcion.getByText("100.000 COP / mes")).toBeVisible();
+  await expect(suscripcion.getByText("32 EUR / mes")).toBeVisible();
   await expect(suscripcion.getByText("Pago manual: no se renueva solo")).toBeVisible();
   await expect(suscripcion.getByRole("link", { name: "paga el siguiente período" })).toBeVisible();
   const historial = page.getByTestId("historial-de-pagos");
-  await expect(historial.getByText("80.000 COP · Acceso Mensual")).toBeVisible();
+  await expect(historial.getByText("25,60 EUR · Acceso Mensual")).toBeVisible();
   await expect(historial.getByText("Aprobado", { exact: true })).toBeVisible();
 
   // El administrador la encuentra por su suscripción y ve qué pagó.
@@ -147,7 +152,7 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
 
   const cobros = admin.getByTestId("suscripcion-y-pagos");
   await expect(cobros.getByText(/Acceso Mensual · activa · vigente, hasta el/)).toBeVisible();
-  await expect(cobros.getByText(/con descuento de 20\.000 COP/)).toBeVisible();
+  await expect(cobros.getByText(/con descuento de 6,40 EUR/)).toBeVisible();
   await expect(cobros.getByText("Aprobado", { exact: true })).toBeVisible();
   await expect(cobros.getByText(/referencia SA-/)).toBeVisible();
   await expect(cobros.getByText(/transacción fake-/)).toBeVisible();
@@ -170,7 +175,8 @@ test("suscriptor con acceso manual: /planes no le ofrece un pago que se rechazar
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 
@@ -215,9 +221,10 @@ test("pago rechazado: no hay acceso y se puede volver a intentar", async ({ page
     .getByRole("article", { name: "Acceso Bimestral" })
     .getByRole("link", { name: "Suscribirme" })
     .click();
-  await expect(page.getByTestId("total-a-pagar")).toHaveText("150.000 COP");
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("46 EUR");
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 150.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 46 EUR" }).click();
   await page.getByRole("button", { name: "Rechazar el pago" }).click();
 
   await expect(page.getByText("El pago no se completó")).toBeVisible();
@@ -231,6 +238,40 @@ test("pago rechazado: no hay acceso y se puede volver a intentar", async ({ page
   ).toBeVisible();
 });
 
+test("medio local: pide el nombre, y la página de pago se abre una sola vez", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await confirmEmail(request, email);
+  await loginViaUi(page, email);
+  await page
+    .getByRole("article", { name: "Acceso Mensual" })
+    .getByRole("link", { name: "Suscribirme" })
+    .click();
+  await page.getByRole("radio", { name: "Pago manual" }).check();
+  const pagar = page.getByRole("button", { name: "Ir a pagar 32 EUR" });
+
+  // Sin país no hay medios; con Colombia aparece el medio local.
+  await expect(page.getByRole("radio", { name: "Medio local simulado" })).toHaveCount(0);
+  await page.getByLabel("País desde el que pagas").selectOption("CO");
+  await page.getByRole("radio", { name: "Medio local simulado" }).check();
+  await expect(page.getByText(/Sebasanálisis no los guarda/)).toBeVisible();
+  await expect(pagar).toBeDisabled();
+  await page.getByLabel("Nombre").fill("Ana");
+  await expect(pagar).toBeEnabled();
+  await pagar.click();
+
+  await expect(page.getByRole("heading", { name: "Pasarela simulada" })).toBeVisible();
+  await expect(page.getByText("Medio: fakelocal")).toBeVisible();
+  // Una recarga no vuelve a abrir la página de pago ni crea otro pago.
+  await page.reload();
+  await expect(page.getByText("Este enlace de pago ya se usó o venció")).toBeVisible();
+  await page.getByRole("link", { name: "Volver a los planes" }).click();
+  await expect(page).toHaveURL(/\/planes/);
+});
+
 test("sin correo confirmado no se puede pagar", async ({ page, request }) => {
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
@@ -241,7 +282,7 @@ test("sin correo confirmado no se puede pagar", async ({ page, request }) => {
     .getByRole("article", { name: "Acceso Mensual" })
     .getByRole("link", { name: "Suscribirme" })
     .click();
-  await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("32 EUR");
   await expect(page.getByRole("button", { name: /Ir a pagar/ })).toBeDisabled();
   await expect(page.getByText("Confirma tu correo para poder pagar.")).toBeVisible();
 });
@@ -257,7 +298,7 @@ test("el administrador ve los planes sin la opción de suscribirse", async ({ pa
   await expect(page.getByRole("heading", { level: 1, name: "Planes" })).toBeVisible();
   await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toHaveCount(0);
   const mensual = page.getByRole("article", { name: "Acceso Mensual" });
-  await expect(mensual.getByText("100.000 COP", { exact: true })).toBeVisible();
+  await expect(mensual.getByText("32 EUR", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
@@ -275,16 +316,11 @@ test("renovación automática: guarda el medio, entra a la mesa, cancela y reanu
     .getByRole("article", { name: "Acceso Mensual" })
     .getByRole("link", { name: "Suscribirme" })
     .click();
-  await expect(page.getByTestId("total-a-pagar")).toHaveText("100.000 COP");
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("32 EUR");
 
   await page.getByRole("radio", { name: "Renovación automática" }).check();
   await expect(page.getByText(/Antes de cada cobro te avisamos por correo/)).toBeVisible();
-  // Sin aceptar los dos documentos del procesador no se puede guardar el medio.
-  const guardar = page.getByRole("button", { name: "Guardar medio de pago y pagar 100.000 COP" });
-  await expect(guardar).toBeDisabled();
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
-  await expect(guardar).toBeDisabled();
-  await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
+  const guardar = page.getByRole("button", { name: "Guardar medio de pago y pagar 32 EUR" });
   await expect(page.getByText(/solo la referencia que entrega la pasarela/)).toBeVisible();
   await guardar.click();
 
@@ -306,7 +342,7 @@ test("renovación automática: guarda el medio, entra a la mesa, cancela y reanu
   const suscripcion = page.getByTestId("suscripcion");
   await expect(suscripcion.getByText("Renovación automática", { exact: true })).toBeVisible();
   await expect(suscripcion.getByText("Visa •••• 4242")).toBeVisible();
-  await expect(suscripcion.getByText(/100\.000 COP, a partir del/)).toBeVisible();
+  await expect(suscripcion.getByText(/32 EUR, a partir del/)).toBeVisible();
 
   await suscripcion.getByRole("button", { name: "Cancelar la renovación" }).click();
   // Pide confirmar, y se puede arrepentir.
@@ -339,8 +375,6 @@ test("renovación automática: primer cobro rechazado no da acceso", async ({ pa
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
-  await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
 
   // Un medio que la pasarela no deja guardar: se dice aquí mismo y no pasa nada más.
   await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-rejected");

@@ -28,7 +28,6 @@ import { formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
-  AcceptanceResponse,
   BillingAvailabilityResponse,
   PaymentListResponse,
   SubscriptionResponse,
@@ -114,15 +113,13 @@ export function SubscriptionCard() {
     return false;
   }
 
-  async function saveSource(source: TokenizedSource, acceptance: AcceptanceResponse) {
+  async function saveSource(source: TokenizedSource) {
     const before = subscription;
     const saved = await run(
       (t) =>
         billingApi.setPaymentMethod(t, {
           payment_source_token: source.token,
           payment_source_type: source.type,
-          acceptance_token: acceptance.acceptance_token,
-          personal_data_token: acceptance.personal_data_token,
         }),
       (next) => {
         const label = sourceLabel(next) ?? "tu medio de pago";

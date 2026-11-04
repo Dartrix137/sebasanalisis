@@ -15,11 +15,13 @@ contable, y la suscripcion se borra con la cuenta.
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.billing.schedule import PENDING_PAYMENT_WINDOW
 from app.models import Payment, PaymentEvent, Subscription
 
 # Lo unico que se conserva de la transaccion de un evento. Nada de esto
@@ -35,7 +37,22 @@ _KEPT_TRANSACTION_FIELDS = (
     "created_at",
     "finalized_at",
 )
-_KEPT_EVENT_FIELDS = ("event", "environment", "timestamp", "sent_at")
+#: Del cuerpo del evento. Las cuatro primeras son de los eventos de Wompi que
+#: quedaron del sandbox; las tres siguientes, todo el aviso de Tipster Page
+#: menos su firma (manual V2 §9), que no trae datos de la persona; las ultimas,
+#: las de la pasarela simulada.
+_KEPT_EVENT_FIELDS = (
+    "event",
+    "environment",
+    "timestamp",
+    "sent_at",
+    "paid_status",
+    "order_id",
+    "amount",
+    "id",
+    "transaction_id",
+    "status",
+)
 
 
 def scrub_event_payload(payload: Any) -> dict[str, Any] | None:
@@ -56,9 +73,11 @@ def scrub_event_payload(payload: Any) -> dict[str, Any] | None:
     return scrubbed
 
 
-def payment_in_flight(db: Session, user_id: uuid.UUID) -> bool:
+def payment_in_flight(db: Session, user_id: uuid.UUID, now: datetime | None = None) -> bool:
     """La cuenta tiene un cobro que el proveedor ya recibio y todavia no
-    resuelve. Un pago abierto que nunca llego al proveedor no cuenta."""
+    resuelve. Un pago abierto que nunca llego al proveedor no cuenta, ni uno
+    pendiente de hace mas de `PENDING_PAYMENT_WINDOW`: es una orden abandonada."""
+    moment = now or datetime.now(UTC)
     return (
         db.scalar(
             select(Payment.id)
@@ -66,6 +85,7 @@ def payment_in_flight(db: Session, user_id: uuid.UUID) -> bool:
                 Payment.user_id == user_id,
                 Payment.status == "pending",
                 Payment.provider_transaction_id.is_not(None),
+                Payment.created_at > moment - PENDING_PAYMENT_WINDOW,
             )
             .limit(1)
         )

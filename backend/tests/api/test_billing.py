@@ -13,7 +13,7 @@ from sqlalchemy import select
 from app.models import Coupon, CouponRedemption, Plan, User
 from tests.api.conftest import auth, register_raw
 
-PRECIO = 10_000_000  # 100.000 COP en centavos
+PRECIO = 3_200  # 32 EUR en centavos (desde el paso 5.3 de la Fase 5)
 
 
 def _mensual(db) -> Plan:
@@ -25,8 +25,8 @@ def _plan(db, **campos) -> Plan:
         "code": f"plan-{uuid.uuid4().hex[:10]}",
         "name": "Plan de prueba",
         "description": "Solo para tests.",
-        "price_cents": 5_000_000,
-        "currency": "COP",
+        "price_cents": 2_000,
+        "currency": "EUR",
         "interval": "month",
         "interval_count": 1,
         "active": True,
@@ -83,7 +83,7 @@ def test_los_planes_son_publicos_y_traen_el_plan_mensual(client: TestClient) -> 
     assert r.status_code == 200
     mensual = next(p for p in r.json() if p["code"] == "mensual")
     assert mensual["name"] == "Acceso Mensual"
-    assert (mensual["price_cents"], mensual["currency"]) == (10_000_000, "COP")
+    assert (mensual["price_cents"], mensual["currency"]) == (PRECIO, "EUR")
     # Un solo precio: no hay un precio de referencia en otra moneda.
     assert not [campo for campo in mensual if campo.startswith("display")]
     assert (mensual["interval"], mensual["interval_count"]) == ("month", 1)
@@ -95,11 +95,11 @@ def test_un_plan_desactivado_no_se_ofrece(client: TestClient, db) -> None:
 
 
 def test_el_plan_de_dos_meses_es_un_plan_aparte(client: TestClient, user_token: str) -> None:
-    """Un solo cobro de 150.000 COP cada dos meses. No es un cupon."""
+    """Un solo cobro de 46 EUR cada dos meses. No es un cupon."""
     planes = {p["code"]: p for p in client.get("/plans").json()}
     bimestral = planes["bimestral"]
     assert bimestral["name"] == "Acceso Bimestral"
-    assert (bimestral["price_cents"], bimestral["currency"]) == (15_000_000, "COP")
+    assert (bimestral["price_cents"], bimestral["currency"]) == (4_600, "EUR")
     assert (bimestral["interval"], bimestral["interval_count"]) == ("month", 2)
     # El mensual va primero.
     codigos = [p["code"] for p in client.get("/plans").json()]
@@ -107,9 +107,9 @@ def test_el_plan_de_dos_meses_es_un_plan_aparte(client: TestClient, user_token: 
 
     data = _cotizar(client, user_token, bimestral["id"]).json()
     assert (data["subtotal_cents"], data["discount_cents"], data["total_cents"]) == (
-        15_000_000,
+        4_600,
         0,
-        15_000_000,
+        4_600,
     )
 
 
@@ -142,7 +142,7 @@ def test_cotiza_una_cuenta_sin_acceso(client: TestClient, db) -> None:
         "subtotal_cents": PRECIO,
         "discount_cents": 0,
         "total_cents": PRECIO,
-        "currency": "COP",
+        "currency": "EUR",
         "coupon": None,
     }
 
@@ -152,17 +152,17 @@ def test_cupon_de_porcentaje(client: TestClient, user_token: str, db) -> None:
     data = _cotizar(client, user_token, _mensual(db).id, cupon.code).json()
     assert (data["subtotal_cents"], data["discount_cents"], data["total_cents"]) == (
         PRECIO,
-        1_500_000,
-        8_500_000,
+        480,
+        2_720,
     )
-    assert data["currency"] == "COP"
+    assert data["currency"] == "EUR"
     assert data["coupon"] == {"code": cupon.code, "applied": True, "reason": None, "message": None}
 
 
 def test_cupon_de_monto_fijo(client: TestClient, user_token: str, db) -> None:
-    cupon = _cupon(db, kind="fixed_cents", value=2_000_000, currency="COP")
+    cupon = _cupon(db, kind="fixed_cents", value=640, currency="EUR")
     data = _cotizar(client, user_token, _mensual(db).id, cupon.code).json()
-    assert (data["discount_cents"], data["total_cents"]) == (2_000_000, 8_000_000)
+    assert (data["discount_cents"], data["total_cents"]) == (640, 2_560)
 
 
 def test_el_porcentaje_redondea_hacia_abajo(client: TestClient, user_token: str, db) -> None:
@@ -205,10 +205,10 @@ def test_un_monto_enviado_por_el_cliente_se_ignora(client: TestClient, user_toke
     data = r.json()
     assert (data["subtotal_cents"], data["discount_cents"], data["total_cents"]) == (
         PRECIO,
-        1_000_000,
-        9_000_000,
+        320,
+        2_880,
     )
-    assert data["currency"] == "COP"
+    assert data["currency"] == "EUR"
 
 
 def test_cupon_vencido(client: TestClient, user_token: str, db) -> None:
@@ -233,7 +233,7 @@ def test_cupon_de_otro_plan(client: TestClient, user_token: str, db) -> None:
     # En su plan si aplica.
     data = _cotizar(client, user_token, otro.id, cupon.code).json()
     assert data["coupon"]["applied"] is True
-    assert data["discount_cents"] == 1_000_000
+    assert data["discount_cents"] == 400
 
 
 def test_cupon_ya_usado_por_el_usuario(client: TestClient, db) -> None:
@@ -282,9 +282,9 @@ def test_un_cupon_que_cubre_todo_el_precio_no_aplica(
     client: TestClient, user_token: str, db
 ) -> None:
     """El total nunca queda en cero (§10 n.º 6)."""
-    cupon = _cupon(db, kind="fixed_cents", value=PRECIO, currency="COP")
+    cupon = _cupon(db, kind="fixed_cents", value=PRECIO, currency="EUR")
     _rechazado(client, user_token, db, cupon, "covers_total")
-    mayor = _cupon(db, kind="fixed_cents", value=PRECIO * 3, currency="COP")
+    mayor = _cupon(db, kind="fixed_cents", value=PRECIO * 3, currency="EUR")
     _rechazado(client, user_token, db, mayor, "covers_total")
 
 

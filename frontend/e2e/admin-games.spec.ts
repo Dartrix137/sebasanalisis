@@ -105,7 +105,7 @@ test("el administrador elige los juegos de un plan y queda en la bitácora", asy
       code,
       name: `Plan juegos ${sufijo}`,
       description: "Plan de los juegos incluidos (e2e).",
-      price_cents: 10_000_000,
+      price_cents: 3_200,
       interval: "month",
       active: false,
       reason: "Plan para probar los juegos incluidos",

@@ -46,7 +46,7 @@ import type {
   UUID,
 } from "./types/auth";
 import type {
-  AcceptanceResponse,
+  CheckoutMethodResponse,
   AdminCouponListResponse,
   AdminCouponResponse,
   AdminPlanListResponse,
@@ -326,8 +326,9 @@ export const billingApi = {
   availability: () => apiFetch<BillingAvailabilityResponse>("/billing/availability"),
 
   /**
-   * Abre el pago de un período y devuelve a dónde ir a pagarlo. Solo viajan el
-   * plan y el código: el monto lo calcula el servidor.
+   * Abre el pago de un período y devuelve el enlace de un solo uso de la
+   * página de pago. Viajan el plan, el código, el medio elegido, el país y los
+   * datos que pide ese medio; el monto lo calcula el servidor.
    */
   subscribe: (token: string, body: SubscribeRequest) =>
     apiFetch<SubscribeResponse>("/billing/subscriptions", {
@@ -349,10 +350,14 @@ export const billingApi = {
     ),
 
   /**
-   * Los dos contratos del procesador de pagos que se aceptan antes de guardar
-   * un medio de pago, con los tokens que viajan de vuelta al suscribirse.
+   * Los medios de pago que ofrece la pasarela en un país (ISO de dos letras).
+   * Sin país, los que no dependen del país.
    */
-  acceptance: (token: string) => apiFetch<AcceptanceResponse>("/billing/acceptance", { token }),
+  paymentMethods: (token: string, country: string | null) =>
+    apiFetch<CheckoutMethodResponse[]>(
+      `/billing/payment-methods${country ? `?country=${encodeURIComponent(country)}` : ""}`,
+      { token },
+    ),
 
   /** Detiene la renovación automática. Conserva el acceso hasta el fin del período. */
   cancelSubscription: (token: string) =>

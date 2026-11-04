@@ -8,7 +8,8 @@ Sin JWT: lo autentica la firma del evento. Tres reglas, en este orden:
    transaccion reconsultar. Lo que se aplica es la respuesta de la API del
    proveedor, con `core/subscriptions.apply_transaction`.
 
-Idempotencia por `provider_event_id`: un evento ya procesado no se repite.
+Idempotencia por (pasarela, `provider_event_id`): un evento ya procesado no se
+repite, y el id de una pasarela no choca con el de otra.
 """
 
 import logging
@@ -41,14 +42,21 @@ async def _raw_body(request: Request) -> bytes:
     return body
 
 
-def _store_event(db: DbSession, event: ProviderEvent) -> PaymentEvent:
-    """Guarda el evento, o devuelve la fila si ya habia llegado."""
-    existing = db.scalar(
-        select(PaymentEvent).where(PaymentEvent.provider_event_id == event.event_id)
+def _find_event(db: DbSession, provider: str, event_id: str) -> PaymentEvent | None:
+    return db.scalar(
+        select(PaymentEvent).where(
+            PaymentEvent.provider == provider, PaymentEvent.provider_event_id == event_id
+        )
     )
+
+
+def _store_event(db: DbSession, provider: str, event: ProviderEvent) -> PaymentEvent:
+    """Guarda el evento, o devuelve la fila si ya habia llegado."""
+    existing = _find_event(db, provider, event.event_id)
     if existing is not None:
         return existing
     row = PaymentEvent(
+        provider=provider,
         provider_event_id=event.event_id,
         event_type=event.event_type[:100],
         status=event.status[:50],
@@ -61,9 +69,9 @@ def _store_event(db: DbSession, event: ProviderEvent) -> PaymentEvent:
     except IntegrityError:
         # Dos entregas del mismo evento a la vez: gana la que guardo primero.
         db.rollback()
-        return db.scalars(
-            select(PaymentEvent).where(PaymentEvent.provider_event_id == event.event_id)
-        ).one()
+        found = _find_event(db, provider, event.event_id)
+        assert found is not None
+        return found
     return row
 
 
@@ -80,7 +88,7 @@ def payments_webhook(
     cualquier otra respuesta hace que la pasarela lo reintente. Sin pasarela
     configurada, ningun evento tiene firma valida: se guarda y responde 401."""
     event = provider.parse_event(body, request.headers)
-    row = _store_event(db, event)
+    row = _store_event(db, provider.name, event)
 
     if not event.signature_verified:
         # Queda guardado para auditar; el acceso no cambia.

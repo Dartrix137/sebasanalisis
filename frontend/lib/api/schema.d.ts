@@ -996,27 +996,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/billing/acceptance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Acceptance
-         * @description Los contratos del procesador de pagos que hay que aceptar antes de
-         *     guardar un medio de pago (§3.4). Se piden al momento: no se guardan.
-         */
-        get: operations["acceptance_billing_acceptance_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/billing/availability": {
         parameters: {
             query?: never;
@@ -1049,7 +1028,7 @@ export interface paths {
         /**
          * Set Payment Method
          * @description Guarda un medio de pago en la suscripcion vigente, que queda renovandose
-         *     sola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion
+         *     sola con el: cambia el medio guardado, pasa de pago manual a renovacion
          *     automatica, o reanuda una renovacion cancelada con otro medio.
          *
          *     No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
@@ -1065,6 +1044,28 @@ export interface paths {
          *     el periodo que ya pago, y paga el siguiente cuando quiera.
          */
         delete: operations["remove_payment_method_billing_payment_method_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Payment Methods
+         * @description Los medios de pago que ofrece la pasarela en un pais, para la pantalla
+         *     de pago. Sin pais, los que no dependen del pais. Exige sesion: la consulta
+         *     sale con las llaves de la pasarela, y no se le presta a cualquiera.
+         */
+        get: operations["payment_methods_billing_payment_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1218,8 +1219,10 @@ export interface paths {
          * Subscribe
          * @description Abre el pago de un periodo.
          *
-         *     Pago manual (`renewal_mode: manual`): devuelve la pagina del proveedor
-         *     donde el cliente paga. No se tokeniza nada.
+         *     Pago manual (`renewal_mode: manual`): crea la orden en la pasarela con el
+         *     medio, el pais y los datos del comprador que mando el cliente, y devuelve
+         *     el enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos
+         *     del comprador van a la pasarela y no se guardan. No se tokeniza nada.
          *
          *     Renovacion automatica (`automatic`): recibe el token que el procesador le
          *     dio al navegador, guarda el medio de pago en el proveedor y le hace el
@@ -1890,21 +1893,6 @@ export interface components {
             legal_document_ids?: string[];
         };
         /**
-         * AcceptanceResponse
-         * @description Los dos contratos del procesador de pagos que el cliente acepta antes
-         *     de guardar un medio de pago. Los tokens se devuelven al suscribirse.
-         */
-        AcceptanceResponse: {
-            /** Acceptance Token */
-            acceptance_token: string;
-            /** Personal Data Token */
-            personal_data_token: string;
-            /** Personal Data Url */
-            personal_data_url: string;
-            /** Terms Url */
-            terms_url: string;
-        };
-        /**
          * AccessInfo
          * @description La decision de acceso, para que el cliente sepa que pantalla mostrar.
          *
@@ -2219,7 +2207,8 @@ export interface components {
             next_charge_at: string | null;
             /** Next Charge Cents */
             next_charge_cents: number | null;
-            payment_source_type: components["schemas"]["PaymentSourceKind"] | null;
+            /** Payment Source Type */
+            payment_source_type: string | null;
             plan: components["schemas"]["PlanResponse"];
             /** Price Cents */
             price_cents: number;
@@ -2560,6 +2549,27 @@ export interface components {
             spins: components["schemas"]["SpinResponse"][];
         };
         /**
+         * BuyerData
+         * @description Los datos que pide el medio de pago elegido. Se mandan a la pasarela
+         *     y no se guardan: ni en la base, ni en los registros, ni en el monitoreo.
+         */
+        BuyerData: {
+            /** First Name */
+            first_name?: string | null;
+            /** Last Name */
+            last_name?: string | null;
+            /** Personal Id */
+            personal_id?: string | null;
+            /** Phone */
+            phone?: string | null;
+        };
+        /**
+         * BuyerFieldName
+         * @description Los datos del comprador que puede pedir un medio de pago.
+         * @enum {string}
+         */
+        BuyerFieldName: "first_name" | "last_name" | "personal_id" | "phone";
+        /**
          * CategoryGroup
          * @description Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.
          */
@@ -2617,6 +2627,26 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * CheckoutMethodResponse
+         * @description Un medio de pago que ofrece la pasarela en un pais.
+         */
+        CheckoutMethodResponse: {
+            /** Currency */
+            currency: string;
+            /** Fields */
+            fields: components["schemas"]["BuyerFieldName"][];
+            /** Key */
+            key: string;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Max Cents */
+            max_cents: number;
+            /** Min Cents */
+            min_cents: number;
+            /** Name */
+            name: string;
         };
         /**
          * Comparison
@@ -2723,7 +2753,7 @@ export interface components {
             /** Code */
             code: string;
             /** Currency */
-            currency?: "COP" | null;
+            currency?: "EUR" | null;
             duration: components["schemas"]["CouponDuration"];
             /** Duration Periods */
             duration_periods?: number | null;
@@ -2823,10 +2853,10 @@ export interface components {
             code: string;
             /**
              * Currency
-             * @default COP
+             * @default EUR
              * @constant
              */
-            currency: "COP";
+            currency: "EUR";
             /** Description */
             description: string;
             interval: components["schemas"]["PlanInterval"];
@@ -3483,13 +3513,10 @@ export interface components {
          *     la ventana del procesador. No son datos de tarjeta.
          */
         PaymentMethodRequest: {
-            /** Acceptance Token */
-            acceptance_token: string;
             /** Payment Source Token */
             payment_source_token: string;
-            payment_source_type: components["schemas"]["PaymentSourceKind"];
-            /** Personal Data Token */
-            personal_data_token: string;
+            /** Payment Source Type */
+            payment_source_type: string;
         };
         /**
          * PaymentRefundResponse
@@ -3556,12 +3583,6 @@ export interface components {
             resolved_at: string | null;
             status: components["schemas"]["PaymentStatus"];
         };
-        /**
-         * PaymentSourceKind
-         * @description Medios que se pueden guardar para la renovacion automatica.
-         * @enum {string}
-         */
-        PaymentSourceKind: "CARD" | "NEQUI";
         /**
          * PaymentStatus
          * @enum {string}
@@ -4282,15 +4303,17 @@ export interface components {
          *     cliente se ignora.
          */
         SubscribeRequest: {
-            /** Acceptance Token */
-            acceptance_token?: string | null;
+            buyer?: components["schemas"]["BuyerData"] | null;
+            /** Country */
+            country?: string | null;
             /** Coupon Code */
             coupon_code?: string | null;
+            /** Payment Method */
+            payment_method?: string | null;
             /** Payment Source Token */
             payment_source_token?: string | null;
-            payment_source_type?: components["schemas"]["PaymentSourceKind"] | null;
-            /** Personal Data Token */
-            personal_data_token?: string | null;
+            /** Payment Source Type */
+            payment_source_type?: string | null;
             /**
              * Plan Id
              * Format: uuid
@@ -4378,7 +4401,8 @@ export interface components {
             next_charge_at: string | null;
             /** Next Charge Cents */
             next_charge_cents: number | null;
-            payment_source_type: components["schemas"]["PaymentSourceKind"] | null;
+            /** Payment Source Type */
+            payment_source_type: string | null;
             plan: components["schemas"]["PlanResponse"];
             /** Price Cents */
             price_cents: number;
@@ -4443,7 +4467,7 @@ export interface components {
             /** Active */
             active?: boolean | null;
             /** Currency */
-            currency?: "COP" | null;
+            currency?: "EUR" | null;
             duration?: components["schemas"]["CouponDuration"] | null;
             /** Duration Periods */
             duration_periods?: number | null;
@@ -6433,26 +6457,6 @@ export interface operations {
             };
         };
     };
-    acceptance_billing_acceptance_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AcceptanceResponse"];
-                };
-            };
-        };
-    };
     availability_billing_availability_get: {
         parameters: {
             query?: never;
@@ -6522,6 +6526,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+        };
+    };
+    payment_methods_billing_payment_methods_get: {
+        parameters: {
+            query?: {
+                country?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutMethodResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

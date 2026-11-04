@@ -321,7 +321,7 @@ function RefundForm({
     event.preventDefault();
     const cents = parseMoneyToCents(amount);
     if (cents === null || cents <= 0) {
-      setError("Escribe el monto en pesos, por ejemplo 50000");
+      setError("Escribe el monto, por ejemplo 32 o 12,50");
       return;
     }
     // Mediodía de ese día, hora del equipo del admin, para no caer en el día

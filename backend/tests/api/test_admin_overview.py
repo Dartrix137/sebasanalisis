@@ -85,18 +85,18 @@ def test_el_resumen_cuenta_suscripciones_recurrente_y_cobrado(
     subs = data["subscriptions"]
     assert (subs["active"], subs["pending"], subs["in_force"], subs["canceled"]) == (3, 2, 3, 0)
     [recurrente] = data["recurring"]
-    # El bimestral cuenta la mitad: 150.000 COP cada dos meses son 75.000 al mes.
+    # El bimestral cuenta la mitad: 46 EUR cada dos meses son 23 al mes.
     assert recurrente == {
-        "currency": "COP",
-        "total_cents": PRECIO + PRECIO + 7_500_000,
+        "currency": "EUR",
+        "total_cents": PRECIO + PRECIO + 2_300,
         "automatic_cents": PRECIO,
-        "manual_cents": PRECIO + 7_500_000,
+        "manual_cents": PRECIO + 2_300,
         "subscriptions": 3,
     }
     assert data["new_subscriptions"]["current"] == 3
     assert data["failed_charges"]["current"] == 1
     [cobrado] = data["collected"]
-    assert (cobrado["currency"], cobrado["current_cents"]) == ("COP", 2 * PRECIO + 15_000_000)
+    assert (cobrado["currency"], cobrado["current_cents"]) == ("EUR", 2 * PRECIO + 4_600)
     assert data["cancellations"]["current"] == 0
 
     # Un reembolso registrado descuenta de lo cobrado; una cancelacion sale del
@@ -106,7 +106,7 @@ def test_el_resumen_cuenta_suscripciones_recurrente_y_cobrado(
     assert _accion(client, admin_token, automatica.id, "cancel_at_period_end").status_code == 200
 
     data = _resumen(client, admin_token)
-    assert data["collected"][0]["current_cents"] == 2 * PRECIO + 15_000_000 - 4_000_000
+    assert data["collected"][0]["current_cents"] == 2 * PRECIO + 4_600 - 1_000
     assert data["cancellations"]["current"] == 1
     assert data["subscriptions"]["canceled"] == 1
     assert data["recurring"][0]["automatic_cents"] == 0
@@ -140,7 +140,7 @@ def test_el_mes_anterior_se_compara_con_el_mismo_tramo(client, db, pasarela, adm
     data = _resumen(client, admin_token)
     assert data["new_subscriptions"] == {"current": 1, "previous": 1}
     assert data["collected"][0] == {
-        "currency": "COP",
+        "currency": "EUR",
         "current_cents": PRECIO,
         "previous_cents": PRECIO,
     }

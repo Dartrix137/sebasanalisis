@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import {
+  chooseFakeCard,
   PASSWORD,
   confirmEmail,
   expectEmail,
@@ -24,14 +25,10 @@ async function subscribeManually(page: Page): Promise<void> {
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
-}
-
-async function acceptProcessorTerms(page: Page): Promise<void> {
-  await page.getByRole("checkbox", { name: /Acepto los términos de uso de la pasarela/ }).check();
-  await page.getByRole("checkbox", { name: /tratamiento de mis datos personales/ }).check();
 }
 
 test("de pago manual a renovación automática, cambio de medio y vuelta a pago manual", async ({
@@ -56,12 +53,10 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   await expect(suscripcion.getByText("Pago manual: no se renueva solo")).toBeVisible();
   await expect(suscripcion.getByText("Próximo cobro")).toHaveCount(0);
 
-  // De manual a automática: sin aceptar los dos documentos no se puede guardar.
+  // De manual a automática: se guarda el medio y no se cobra nada hoy.
   await suscripcion.getByRole("button", { name: "Activar la renovación automática" }).click();
   await expect(suscripcion.getByText(/Hoy no se te cobra nada: ya pagaste hasta el/)).toBeVisible();
   const guardar = suscripcion.getByRole("button", { name: "Guardar medio de pago" });
-  await expect(guardar).toBeDisabled();
-  await acceptProcessorTerms(page);
   await guardar.click();
   await expect(
     suscripcion.getByText(
@@ -69,7 +64,7 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
     ),
   ).toBeVisible();
   await expect(suscripcion.getByText("Renovación automática", { exact: true })).toBeVisible();
-  await expect(suscripcion.getByText(/100\.000 COP, a partir del/)).toBeVisible();
+  await expect(suscripcion.getByText(/32 EUR, a partir del/)).toBeVisible();
   await expectEmail(email, "Cambió el medio de pago de tu suscripción");
 
   // El historial sigue con un solo pago: activar la renovación no cobró nada.
@@ -78,7 +73,6 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   // Un medio que la pasarela no deja guardar: lo dice y todo queda como estaba.
   await suscripcion.getByRole("button", { name: "Cambiar el medio de pago" }).click();
   await expect(suscripcion.getByText(/El medio nuevo reemplaza al que tienes guardado/)).toBeVisible();
-  await acceptProcessorTerms(page);
   await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-rejected");
   await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
   await expect(page.getByText(/no aceptó ese medio de pago/)).toBeVisible();
@@ -120,7 +114,6 @@ test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, 
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await acceptProcessorTerms(page);
   await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 
@@ -131,7 +124,6 @@ test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, 
   await expect(suscripcion.getByText("Renovación cancelada", { exact: true })).toBeVisible();
 
   await suscripcion.getByRole("button", { name: "Reanudar con otro medio de pago" }).click();
-  await acceptProcessorTerms(page);
   await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
   await expect(
     suscripcion.getByText(
@@ -155,7 +147,6 @@ test("eliminar la cuenta con renovación automática: avisa qué pasa con la sus
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await acceptProcessorTerms(page);
   await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 

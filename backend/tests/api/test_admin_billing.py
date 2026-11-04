@@ -19,7 +19,7 @@ def _plan_body(**cambios) -> dict:
         "name": "Acceso de prueba",
         "description": "Acceso a la plataforma durante un mes.",
         "price_cents": 8_000_000,
-        "currency": "COP",
+        "currency": "EUR",
         "interval": "month",
         "interval_count": 1,
         "reason": MOTIVO,
@@ -103,7 +103,7 @@ def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
 ) -> None:
     plan = _crear_plan(client, admin_token, sort_order=7)
     assert plan["active"] is True
-    assert (plan["price_cents"], plan["currency"]) == (8_000_000, "COP")
+    assert (plan["price_cents"], plan["currency"]) == (8_000_000, "EUR")
 
     assert plan["code"] in [p["code"] for p in client.get("/plans").json()]
     listado = client.get("/admin/plans", headers=auth(admin_token)).json()
@@ -114,7 +114,7 @@ def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
     assert fila.action == "plan.create"
     assert fila.before is None
     assert fila.after["price_cents"] == 8_000_000
-    assert fila.after["currency"] == "COP"
+    assert fila.after["currency"] == "EUR"
     assert fila.reason == MOTIVO
     assert fila.admin_email.startswith("admin-")
 
@@ -123,7 +123,8 @@ def test_crear_un_plan_lo_ofrece_y_deja_fila_en_la_bitacora(
     "cambios",
     [
         {"reason": ""},
-        {"currency": "USD"},  # solo se cobra en COP
+        {"currency": "USD"},  # solo se cobra en EUR
+        {"currency": "COP"},  # desde el paso 5.3 de la Fase 5, tampoco en pesos
         {"price_cents": 0},
         {"price_cents": 80_000.5},  # nunca float
         {"interval": "week"},
@@ -201,7 +202,7 @@ def test_un_plan_no_guarda_un_precio_de_referencia(
     plan = _crear_plan(client, admin_token, display_price_cents=3_000, display_currency="USD")
     assert "display_price_cents" not in plan and "display_currency" not in plan
     data = _cotizar(client, user_token, plan["id"]).json()
-    assert (data["total_cents"], data["currency"]) == (8_000_000, "COP")
+    assert (data["total_cents"], data["currency"]) == (8_000_000, "EUR")
 
 
 def test_un_cambio_de_plan_rechazado_no_deja_fila(client: TestClient, admin_token: str, db) -> None:
@@ -230,7 +231,7 @@ def test_el_codigo_y_la_moneda_de_un_plan_no_se_editan(client: TestClient, admin
         headers=auth(admin_token),
     )
     assert r.status_code == 200
-    assert (r.json()["code"], r.json()["currency"]) == (plan["code"], "COP")
+    assert (r.json()["code"], r.json()["currency"]) == (plan["code"], "EUR")
     assert r.json()["name"] == "Otro nombre"
 
 
@@ -282,9 +283,9 @@ def test_ningun_codigo_de_cupon_promete_resultados(
         {"value": 150},
         {"value": 0},
         {"value": 10.5},
-        {"currency": "COP"},  # un porcentaje no lleva moneda
+        {"currency": "EUR"},  # un porcentaje no lleva moneda
         {"kind": "fixed_cents", "value": 500_000},  # monto fijo sin moneda
-        {"kind": "fixed_cents", "value": 500_000, "currency": "USD"},  # solo COP
+        {"kind": "fixed_cents", "value": 500_000, "currency": "USD"},  # solo EUR
         {"duration": "repeating"},  # sin periodos
         {"duration": "once", "duration_periods": 3},
         {"duration": "forever", "duration_periods": 3},
@@ -312,13 +313,13 @@ def test_cupon_que_se_repite_y_de_monto_fijo(client: TestClient, admin_token: st
         admin_token,
         kind="fixed_cents",
         value=1_000_000,
-        currency="COP",
+        currency="EUR",
         duration="repeating",
         duration_periods=3,
         max_redemptions=50,
         valid_until=(datetime.now(UTC) + timedelta(days=30)).isoformat(),
     )
-    assert (cupon["kind"], cupon["currency"], cupon["duration_periods"]) == ("fixed_cents", "COP", 3)
+    assert (cupon["kind"], cupon["currency"], cupon["duration_periods"]) == ("fixed_cents", "EUR", 3)
     assert cupon["max_redemptions"] == 50
 
 
@@ -423,7 +424,7 @@ def test_un_cupon_usado_no_cambia_su_descuento_pero_si_se_desactiva(
     h = auth(admin_token)
     ruta = f"/admin/coupons/{cupon['id']}"
 
-    for cambio in ({"value": 50}, {"kind": "fixed_cents", "value": 1_000, "currency": "COP"},
+    for cambio in ({"value": 50}, {"kind": "fixed_cents", "value": 1_000, "currency": "EUR"},
                    {"duration": "forever"}):
         r = client.patch(ruta, json={**cambio, "reason": MOTIVO}, headers=h)
         assert r.status_code == 409, r.text

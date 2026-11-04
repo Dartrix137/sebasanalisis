@@ -28,7 +28,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.billing.schedule import first_charge_at
+from app.billing.schedule import PENDING_PAYMENT_WINDOW, first_charge_at
 from app.core import audit, subscriptions
 from app.core.subscriptions import SubscribeError
 from app.models import Payment, Subscription, User
@@ -61,9 +61,10 @@ def _snapshot(subscription: Subscription) -> dict[str, Any]:
     }
 
 
-def _charge_in_flight(db: Session, subscription: Subscription) -> bool:
+def _charge_in_flight(db: Session, subscription: Subscription, now: datetime) -> bool:
     """Un cobro que el proveedor ya recibio y no ha resuelto. Si se aprobara
-    despues de la accion, daria un periodo que el administrador no vio."""
+    despues de la accion, daria un periodo que el administrador no vio. Uno
+    pendiente de hace mas de `PENDING_PAYMENT_WINDOW` es una orden abandonada."""
     return (
         db.scalar(
             select(Payment.id)
@@ -71,6 +72,7 @@ def _charge_in_flight(db: Session, subscription: Subscription) -> bool:
                 Payment.user_id == subscription.user_id,
                 Payment.status == "pending",
                 Payment.provider_transaction_id.is_not(None),
+                Payment.created_at > now - PENDING_PAYMENT_WINDOW,
             )
             .limit(1)
         )
@@ -102,7 +104,7 @@ def apply(
             "La suscripción no tiene un período vigente. Para darle acceso a esa cuenta, usa el "
             "acceso manual.",
         )
-    if _charge_in_flight(db, subscription):
+    if _charge_in_flight(db, subscription, now):
         raise SubscribeError(
             409,
             "charge_in_progress",

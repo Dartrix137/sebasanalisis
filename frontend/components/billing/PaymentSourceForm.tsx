@@ -7,33 +7,24 @@
  * (cambiar el medio de pago, o pasar de pago manual a renovación automática).
  * Es el único lugar del frontend donde se guarda un medio de pago.
  *
- * Muestra los dos contratos de la pasarela, que hay que aceptar antes, y pide
- * el token del medio de pago. Hoy solo existe el selector de la pasarela
- * simulada: el formulario de tarjeta y Nequi era de la pasarela anterior y
- * salió con ella (paso 5.1 de la Fase 5). La pasarela nueva trae aquí su forma
- * de tokenizar (5.3); sin pasarela, quien lo usa no lo muestra.
+ * Hoy solo existe el selector de la pasarela simulada. Tipster Page no tiene
+ * cobros recurrentes (2026-11-03): con ella `availability.tokenizer` es null y
+ * quien usa este formulario no lo muestra. Los dos contratos de aceptación eran
+ * de Wompi y salieron en el paso 5.3 de la Fase 5.
  *
- * El token se entrega a `onSource` junto con los tokens de aceptación. Qué se
- * hace con él lo decide quien lo usa.
+ * El token se entrega a `onSource`. Qué se hace con él lo decide quien lo usa.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { Button, Checkbox, ErrorBox } from "@/components/ui";
-import { ApiError, billingApi } from "@/lib/api-client";
-import { useSession } from "@/lib/session";
-import type {
-  AcceptanceResponse,
-  BillingAvailabilityResponse,
-  PaymentSourceKind,
-} from "@/lib/types/billing";
-
-const LINK = "font-bold text-gold hover:text-gold-soft";
+import { Button } from "@/components/ui";
+import type { BillingAvailabilityResponse } from "@/lib/types/billing";
 
 /** Lo que la pasarela le entrega al navegador por un medio de pago. No son datos de tarjeta. */
 export interface TokenizedSource {
   token: string;
-  type: PaymentSourceKind;
+  /** El tipo de medio, en el vocabulario de la pasarela. */
+  type: string;
 }
 
 /** Los "medios de pago" de la pasarela simulada (solo desarrollo y pruebas). */
@@ -57,105 +48,36 @@ export function PaymentSourceForm({
   /** Quien lo usa está enviando el medio al servidor. */
   busy: boolean;
   disabled?: boolean;
-  onSource: (source: TokenizedSource, acceptance: AcceptanceResponse) => void;
+  onSource: (source: TokenizedSource) => void;
 }) {
-  const { withToken } = useSession();
-  const [acceptance, setAcceptance] = useState<AcceptanceResponse | null>(null);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [dataAccepted, setDataAccepted] = useState(false);
   const [fakeToken, setFakeToken] = useState(FAKE_SOURCES[0][0]);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    withToken((t) => billingApi.acceptance(t))
-      .then((found) => {
-        if (!cancelled) setAcceptance(found);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(
-            e instanceof ApiError ? e.message : "No se pudo consultar al procesador de pagos",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [withToken]);
-
-  const fake = availability.tokenizer === "fake";
-  const ready = !!acceptance && termsAccepted && dataAccepted;
-
-  function saveFake() {
-    if (!acceptance) return;
-    setError(null);
-    onSource({ token: fakeToken, type: "CARD" }, acceptance);
-  }
+  if (availability.tokenizer !== "fake") return null;
 
   return (
     <div className="space-y-3">
-      <p className="text-sm leading-relaxed text-muted">
-        Para guardar tu medio de pago, la pasarela (el procesador de pagos) pide que aceptes sus
-        dos documentos:
-      </p>
-      {acceptance ? (
-        <>
-          <Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)}>
-            Acepto los{" "}
-            <a
-              href={acceptance.terms_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={LINK}
-            >
-              términos de uso de la pasarela
-            </a>
-            .
-          </Checkbox>
-          <Checkbox checked={dataAccepted} onChange={(e) => setDataAccepted(e.target.checked)}>
-            Autorizo a la pasarela el{" "}
-            <a
-              href={acceptance.personal_data_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={LINK}
-            >
-              tratamiento de mis datos personales
-            </a>
-            .
-          </Checkbox>
-        </>
-      ) : error ? null : (
-        <p className="text-sm text-muted">Consultando a la pasarela…</p>
-      )}
-
-      {fake ? (
-        <>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-bold text-white">
-              Medio de pago simulado (solo pruebas)
-            </span>
-            <select
-              value={fakeToken}
-              onChange={(e) => setFakeToken(e.target.value)}
-              className="w-full rounded-lg border border-edge bg-ink-sunken px-3 py-2.5 text-sm text-white outline-none focus:border-gold/60"
-            >
-              {FAKE_SOURCES.map(([value, text]) => (
-                <option key={value} value={value}>
-                  {text}
-                </option>
-              ))}
-            </select>
-          </label>
-          {error ? <ErrorBox message={error} /> : null}
-          <Button onClick={saveFake} disabled={disabled || busy || !ready}>
-            {busy ? busyLabel : submitLabel}
-          </Button>
-        </>
-      ) : error ? (
-        <ErrorBox message={error} />
-      ) : null}
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-bold text-white">
+          Medio de pago simulado (solo pruebas)
+        </span>
+        <select
+          value={fakeToken}
+          onChange={(e) => setFakeToken(e.target.value)}
+          className="w-full rounded-lg border border-edge bg-ink-sunken px-3 py-2.5 text-sm text-white outline-none focus:border-gold/60"
+        >
+          {FAKE_SOURCES.map(([value, text]) => (
+            <option key={value} value={value}>
+              {text}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        onClick={() => onSource({ token: fakeToken, type: "CARD" })}
+        disabled={disabled || busy}
+      >
+        {busy ? busyLabel : submitLabel}
+      </Button>
 
       <p className="text-xs leading-relaxed text-muted">
         Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta: solo la

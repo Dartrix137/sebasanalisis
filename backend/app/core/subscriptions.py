@@ -34,7 +34,7 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.billing import pricing
+from app.billing import checkout_text, pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
@@ -44,12 +44,16 @@ from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
 from app.models.user import LIVE_SUBSCRIPTION_STATUSES
 from app.payments.base import (
-    PAYMENT_SOURCE_TYPES,
+    BUYER_FIELDS,
+    BuyerField,
+    CheckoutOrder,
+    CheckoutPage,
+    CheckoutRejected,
+    PaymentMethodOption,
     PaymentProvider,
     PaymentProviderError,
     PaymentSource,
     PaymentSourceRejected,
-    PaymentSourceType,
     ProviderTransaction,
 )
 
@@ -85,13 +89,39 @@ class SubscribeError(Exception):
 
 @dataclass(frozen=True)
 class SourceInput:
-    """El medio de pago que el cliente tokenizo en su navegador, con los dos
-    contratos del proveedor que acepto. Nunca trae datos de tarjeta."""
+    """El medio de pago que el cliente tokenizo en su navegador. Nunca trae
+    datos de tarjeta."""
 
     type: str
     token: str
-    acceptance_token: str
-    personal_data_token: str
+
+
+#: Lo que se le dice al cliente cuando la pasarela no crea la orden.
+CHECKOUT_FAILED = "No se pudo crear la orden en la pasarela"
+
+#: Largo maximo de cada dato del comprador. El manual de Tipster Page no fija
+#: uno; estos alcanzan para un nombre, un documento o un telefono.
+BUYER_FIELD_MAX = {"firstName": 80, "lastName": 80, "personalId": 40, "phone": 30}
+
+
+@dataclass(frozen=True)
+class CheckoutChoice:
+    """El medio de pago que el cliente eligio en la pantalla de pago, con el
+    pais y los datos que pide ese medio. Los datos viajan a la pasarela y no
+    se guardan (decidido el 2026-11-03)."""
+
+    method: str
+    country: str | None
+    buyer: dict[BuyerField, str]
+
+
+@dataclass(frozen=True)
+class CheckoutUrls:
+    """A donde vuelve el navegador y a donde avisa la pasarela."""
+
+    url_ok: str
+    url_ko: str
+    notification_url: str
 
 
 @dataclass(frozen=True)
@@ -115,6 +145,9 @@ class StartedPayment:
     subtotal_cents: int
     #: Solo en el alta con medio de pago guardado: lo que respondio el cobro.
     settlement: Settlement | None = None
+    #: Solo en el pago manual: la pagina con la que el navegador sigue a la
+    #: pasarela. Se le entrega una sola vez (`core/checkout_pages`).
+    checkout: CheckoutPage | None = None
 
 
 def live_subscription(db: Session, user_id: uuid.UUID) -> Subscription | None:
@@ -221,19 +254,118 @@ def _check_source(provider: PaymentProvider, source: SourceInput | None) -> Sour
         raise SubscribeError(
             400, "payment_source_required", "Falta el medio de pago para la renovación automática."
         )
-    if source.type not in PAYMENT_SOURCE_TYPES:
+    if not source.type.strip() or len(source.type) > 16:
         raise SubscribeError(
             400,
             "payment_source_type_not_supported",
             "Ese medio de pago no se puede guardar para la renovación automática.",
         )
-    if not source.acceptance_token.strip() or not source.personal_data_token.strip():
-        raise SubscribeError(
-            400,
-            "acceptance_required",
-            "Debes aceptar los términos del procesador de pagos para guardar tu medio de pago.",
-        )
     return source
+
+
+def checkout_method(
+    provider: PaymentProvider, choice: CheckoutChoice | None, amount_cents: int, currency: str
+) -> PaymentMethodOption:
+    """Valida el medio que eligio el cliente contra el catalogo de la pasarela.
+
+    Se llama antes de escribir nada. El catalogo se vuelve a pedir aqui: lo que
+    mando el navegador solo dice que se eligio. Revisa que el medio exista
+    para ese pais, que admita el monto (la pasarela rechaza uno fuera de su
+    rango) y que vengan los datos que pide, y ninguno mas.
+    """
+    if choice is None or not choice.method:
+        raise SubscribeError(400, "payment_method_required", "Elige un medio de pago.")
+    try:
+        methods = provider.payment_methods(choice.country)
+    except PaymentProviderError as exc:
+        raise SubscribeError(
+            502,
+            "provider_unavailable",
+            "No pudimos consultar los medios de pago. Intenta de nuevo en unos minutos.",
+        ) from exc
+    method = next((m for m in methods if m.key == choice.method), None)
+    if method is None or (method.countries and choice.country not in method.countries):
+        raise SubscribeError(
+            400, "payment_method_unavailable", "Ese medio de pago no está disponible en tu país."
+        )
+    if method.currency != currency or not method.min_cents <= amount_cents <= method.max_cents:
+        raise SubscribeError(
+            400, "amount_out_of_range", "Ese medio de pago no admite el monto de este pago."
+        )
+    for name in BUYER_FIELDS:
+        value = choice.buyer.get(name, "").strip()
+        if name in method.fields and not value:
+            raise SubscribeError(
+                400, "buyer_field_required", "Completa los datos que pide el medio de pago."
+            )
+        if len(value) > BUYER_FIELD_MAX[name]:
+            raise SubscribeError(
+                400, "buyer_field_too_long", "Uno de los datos del medio de pago es demasiado largo."
+            )
+    return method
+
+
+def _buyer_for(method: PaymentMethodOption, choice: CheckoutChoice) -> dict[BuyerField, str]:
+    """Solo los datos que pide el medio: lo demas que mando el navegador no sale."""
+    return {name: choice.buyer[name].strip() for name in method.fields}
+
+
+def _open_checkout(
+    db: Session,
+    provider: PaymentProvider,
+    payment: Payment,
+    plan: Plan,
+    method: PaymentMethodOption,
+    choice: CheckoutChoice,
+    urls: CheckoutUrls,
+    now: datetime,
+) -> CheckoutPage:
+    """Crea la orden en la pasarela, una sola vez por pago (decidido el
+    2026-11-03). El pago ya esta confirmado en la base.
+
+    Si la pasarela no la crea, el pago queda en `error` sin transaccion: no se
+    cobro nada, y si del lado de ella si quedo una orden (EBANX sin redireccion,
+    manual V2 §7.2), su aviso todavia lo puede resolver.
+    """
+    order = CheckoutOrder(
+        reference=payment.reference,
+        amount_cents=payment.amount_cents,
+        currency=payment.currency,
+        product_code=plan.code,
+        product_name=checkout_text.product_name(plan.name),
+        product_description=checkout_text.product_description(plan.interval, plan.interval_count),
+        method=method.key,
+        country=choice.country,
+        url_ok=urls.url_ok,
+        url_ko=urls.url_ko,
+        notification_url=urls.notification_url,
+        buyer=_buyer_for(method, choice),
+    )
+    try:
+        page = provider.start_checkout(order)
+    except PaymentProviderError as exc:
+        payment.status = "error"
+        payment.failure_reason = CHECKOUT_FAILED
+        payment.resolved_at = now
+        db.commit()
+        if isinstance(exc, CheckoutRejected):
+            raise SubscribeError(
+                400,
+                "checkout_rejected",
+                "La pasarela no aceptó el pago con esos datos. Revísalos o elige otro medio.",
+            ) from None
+        raise SubscribeError(
+            502,
+            "provider_unavailable",
+            "No pudimos abrir el pago. Intenta de nuevo en unos minutos.",
+        ) from None
+    if provider.lookup_by_reference:
+        # La orden ya existe en la pasarela, con nuestra referencia como id: es
+        # lo que se reconsulta (tambien desde el admin), y el pago cuenta como
+        # un cobro en proceso mientras siga pendiente.
+        payment.provider_transaction_id = payment.reference
+        db.commit()
+    return page
 
 
 def start_payment(
@@ -246,13 +378,17 @@ def start_payment(
     now: datetime,
     renewal_mode: str = "manual",
     source: SourceInput | None = None,
+    choice: CheckoutChoice | None = None,
+    urls: Callable[[Payment], CheckoutUrls] | None = None,
 ) -> StartedPayment:
     """Abre el pago de un periodo y lo confirma en la base.
 
     Sin una suscripcion vigente es el alta: precio del plan menos el cupon, si
     aplica. Con `renewal_mode="automatic"` guarda el medio de pago en el
-    proveedor y le hace el primer cobro; con `manual`, el cliente paga en la
-    pagina del proveedor.
+    proveedor y le hace el primer cobro; con `manual`, crea la orden en la
+    pasarela con el medio que eligio el cliente (`choice`) y devuelve la pagina
+    con la que el navegador sigue a pagar. `urls` dice, para el pago ya creado,
+    a donde vuelve el navegador y a donde avisa la pasarela.
 
     Con una suscripcion vigente de pago manual, es el pago del periodo
     siguiente del mismo plan: precio congelado, con el descuento que todavia
@@ -264,6 +400,8 @@ def start_payment(
     automatic = renewal_mode == "automatic"
     if automatic:
         source = _check_source(provider, source)
+    elif urls is None:
+        raise ValueError("El pago manual necesita las URL de regreso y de aviso")
 
     # Serializa los intentos simultaneos de la misma cuenta.
     db.execute(select(User.id).where(User.id == user.id).with_for_update())
@@ -321,6 +459,7 @@ def start_payment(
             subscription.price_cents, subscription.currency, renewal_discount(db, subscription)
         )
         coupon_id = subscription.coupon_id if quote.discount_cents > 0 else None
+        method = checkout_method(provider, choice, quote.total_cents, quote.currency)
     else:
         found = db.get(Plan, plan_id)
         # Un plan desactivado ya no se ofrece: para quien paga, no existe.
@@ -341,6 +480,9 @@ def start_payment(
         if quote.coupon_rejection is not None:
             raise _coupon_rejected(quote.coupon_rejection)
         coupon_id = coupon.id if coupon is not None else None
+        method = (
+            None if automatic else checkout_method(provider, choice, quote.total_cents, quote.currency)
+        )
 
         if automatic and source is not None:
             # Antes de escribir nada: si el proveedor no acepta el medio de
@@ -382,6 +524,7 @@ def start_payment(
     db.refresh(payment)
 
     settlement: Settlement | None = None
+    checkout: CheckoutPage | None = None
     if stored is not None:
         settlement = charge_payment(db, provider, payment, stored, user.email, now)
         if settlement is None:
@@ -391,19 +534,22 @@ def start_payment(
                 "No pudimos iniciar el cobro. Intenta de nuevo en unos minutos.",
             )
         payment = settlement.payment
+    elif method is not None and choice is not None and urls is not None:
+        checkout = _open_checkout(db, provider, payment, plan, method, choice, urls(payment), now)
     return StartedPayment(
-        payment=payment, subtotal_cents=quote.subtotal_cents, settlement=settlement
+        payment=payment,
+        subtotal_cents=quote.subtotal_cents,
+        settlement=settlement,
+        checkout=checkout,
     )
 
 
 def _store_source(provider: PaymentProvider, source: SourceInput, user: User) -> PaymentSource:
     try:
         return provider.create_payment_source(
-            source_type=_source_type(source.type),
+            source_type=source.type.strip(),
             token=source.token.strip(),
             customer_email=user.email,
-            acceptance_token=source.acceptance_token.strip(),
-            personal_data_token=source.personal_data_token.strip(),
         )
     except PaymentSourceRejected as exc:
         raise SubscribeError(
@@ -419,20 +565,13 @@ def _store_source(provider: PaymentProvider, source: SourceInput, user: User) ->
         ) from exc
 
 
-def _source_type(value: str) -> PaymentSourceType:
-    for known in PAYMENT_SOURCE_TYPES:
-        if value == known:
-            return known
-    raise ValueError(f"Medio de pago no soportado: {value}")
-
-
 def source_of(subscription: Subscription) -> PaymentSource | None:
     """El medio de pago guardado de la suscripcion, como lo espera el proveedor."""
     if subscription.payment_source_id is None or subscription.payment_source_type is None:
         return None
     return PaymentSource(
         id=subscription.payment_source_id,
-        type=_source_type(subscription.payment_source_type),
+        type=subscription.payment_source_type,
         brand=subscription.card_brand,
         last4=subscription.card_last4,
     )
@@ -488,14 +627,21 @@ COUPON_MESSAGES: dict[CouponRejection, str] = {
 }
 
 
-def _resolvable(payment: Payment) -> bool:
+def _resolvable(payment: Payment, transaction: ProviderTransaction) -> bool:
     """Un pago que todavia admite la respuesta del proveedor.
 
-    El que quedo en `error` porque el proveedor no contesto al cobrar tambien:
-    si el cobro si llego a hacerse, su evento lo dira despues.
+    - El pendiente.
+    - El que quedo en `error` porque el proveedor no contesto al cobrar o al
+      crear la orden: si el cobro si llego a hacerse, su evento lo dira despues.
+    - El rechazado, solo para aprobarlo: en Tipster Page un pago en `error`
+      pasa a `paid` si el comprador reintenta la misma operacion (manual V2
+      §10). La reconsulta es la fuente de verdad: si dice aprobado, el dinero
+      salio y el periodo se concede. Un rechazo no se vuelve a rechazar.
     """
-    return payment.status == "pending" or (
-        payment.status == "error" and payment.provider_transaction_id is None
+    return (
+        payment.status == "pending"
+        or (payment.status == "error" and payment.provider_transaction_id is None)
+        or (payment.status == "declined" and transaction.status == "approved")
     )
 
 
@@ -541,7 +687,7 @@ def apply_transaction(
         _commit(db, payment, before_commit)
         return Settlement(payment=payment, changed=True, reversed=True)
     # Idempotencia: un pago resuelto no se vuelve a tocar.
-    if not _resolvable(payment):
+    if not _resolvable(payment, transaction):
         if before_commit is None:
             db.rollback()
         else:
@@ -575,6 +721,17 @@ def apply_transaction(
             f"se esperaban {payment.amount_cents} {payment.currency}"
         )
         logger.error("Pago %s: monto o moneda no coinciden con la transaccion", payment.id)
+    elif transaction.product_code is not None and transaction.product_code != _plan_code(
+        db, payment
+    ):
+        # Aprobada, pero por otro producto: tampoco se concede nada (decidido
+        # el 2026-11-03: la reconsulta compara el monto y el plan).
+        payment.status = "error"
+        payment.failure_reason = (
+            f"El proveedor reporta el producto {transaction.product_code[:50]}; "
+            "no es el plan de este pago"
+        )
+        logger.error("Pago %s: el producto no coincide con el plan", payment.id)
     else:
         payment.status = "approved"
         payment.failure_reason = None
@@ -586,6 +743,11 @@ def apply_transaction(
     return Settlement(
         payment=payment, changed=True, activated=activated, renewal_failed=renewal_failed
     )
+
+
+def _plan_code(db: Session, payment: Payment) -> str | None:
+    plan = db.get(Plan, payment.plan_id) if payment.plan_id is not None else None
+    return plan.code if plan is not None else None
 
 
 def _commit(db: Session, payment: Payment, before_commit: Callable[[Payment], None] | None) -> None:
@@ -944,7 +1106,7 @@ def set_payment_source(
     Sirve para tres cosas, y en las tres la suscripcion queda renovandose sola
     con el medio nuevo:
 
-    - cambiar la tarjeta o el Nequi de una renovacion automatica;
+    - cambiar el medio guardado de una renovacion automatica;
     - pasar de pago manual a renovacion automatica;
     - reanudar una renovacion cancelada con otro medio de pago.
 

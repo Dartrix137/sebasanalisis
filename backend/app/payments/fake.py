@@ -1,9 +1,13 @@
 """Pasarela simulada: desarrollo y tests de punta a punta. Nunca en produccion.
 
-Con `PAYMENT_PROVIDER=fake` el boton de pagar lleva a una pagina de la propia
-API (`api/v1/fake_checkout.py`) con dos botones, aprobar y rechazar, que anotan
-el resultado aqui, en memoria. La aplicacion lo lee con `fetch_transaction`,
-igual que reconsulta a una pasarela real: el resto del flujo es el de verdad.
+Con `PAYMENT_PROVIDER=fake` la pagina de pago es un formulario de la propia API
+con dos botones, aprobar y rechazar (`api/v1/fake_checkout.py`), que anotan el
+resultado aqui, en memoria. La aplicacion lo lee con `fetch_transaction`, igual
+que reconsulta a una pasarela real: el resto del flujo es el de verdad, incluido
+el enlace de un solo uso con el que el navegador abre la pagina.
+
+Tambien guarda medios de pago y les cobra al instante: es la unica pasarela que
+tokeniza, y con ella corren la renovacion automatica en desarrollo y sus tests.
 
 No cobra nada.
 """
@@ -12,10 +16,12 @@ import json
 import threading
 import uuid
 from collections.abc import Mapping
-from urllib.parse import urlencode
+from html import escape
 
 from app.payments.base import (
-    Acceptance,
+    CheckoutOrder,
+    CheckoutPage,
+    PaymentMethodOption,
     PaymentSource,
     PaymentSourceRejected,
     PaymentSourceType,
@@ -32,17 +38,39 @@ from app.payments.base import (
 FAKE_TOKEN_OK = "fake-token-ok"
 FAKE_TOKEN_DECLINED = "fake-token-declined"
 FAKE_TOKEN_REJECTED = "fake-token-rejected"
-FAKE_ACCEPTANCE = "fake-acceptance"
-FAKE_PERSONAL_DATA = "fake-personal-data"
 
 # Cabecera con la que un test marca un webhook simulado como autentico.
 FAKE_SIGNATURE_HEADER = "x-fake-signature"
 FAKE_SIGNATURE = "valida"
 
+#: El catalogo simulado: un medio sin datos del comprador y uno que pide el
+#: nombre, como los medios locales de Tipster Page, solo en Colombia.
+FAKE_METHODS = (
+    PaymentMethodOption(
+        key="fakecard",
+        name="Tarjeta simulada",
+        logo_url=None,
+        min_cents=100,
+        max_cents=40_000,
+        currency="EUR",
+    ),
+    PaymentMethodOption(
+        key="fakelocal",
+        name="Medio local simulado",
+        logo_url=None,
+        min_cents=100,
+        max_cents=40_000,
+        currency="EUR",
+        countries=("CO",),
+        fields=("firstName",),
+    ),
+)
+
 
 class FakePaymentProvider:
     name = "fake"
     enabled = True
+    lookup_by_reference = False
 
     def __init__(self, api_base_url: str = "http://localhost:8000") -> None:
         self.api_base_url = api_base_url.rstrip("/")
@@ -52,22 +80,35 @@ class FakePaymentProvider:
     def describe(self) -> str:
         return "pasarela SIMULADA (PAYMENT_PROVIDER=fake): no cobra nada"
 
-    def checkout_url(
-        self,
-        *,
-        reference: str,
-        amount_cents: int,
-        currency: str,
-        redirect_url: str,
-        customer_email: str,
-    ) -> str:
-        params = {
-            "reference": reference,
-            "amount_cents": str(amount_cents),
-            "currency": currency,
-            "redirect_url": redirect_url,
-        }
-        return f"{self.api_base_url}/dev/fake-checkout?{urlencode(params)}"
+    def payment_methods(self, country: str | None) -> list[PaymentMethodOption]:
+        return [m for m in FAKE_METHODS if not m.countries or (country in m.countries)]
+
+    def start_checkout(self, order: CheckoutOrder) -> CheckoutPage:
+        hidden = "".join(
+            f'<input type="hidden" name="{name}" value="{escape(str(value), quote=True)}">'
+            for name, value in (
+                ("reference", order.reference),
+                ("amount_cents", order.amount_cents),
+                ("currency", order.currency),
+                ("url_ok", order.url_ok),
+                ("url_ko", order.url_ko),
+            )
+        )
+        amount = f"{order.amount_cents // 100}.{order.amount_cents % 100:02d}"
+        return CheckoutPage(
+            html=f"""<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Pasarela simulada</title></head>
+<body style="font-family:sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;">
+<h1>Pasarela simulada</h1>
+<p><strong>Solo desarrollo y pruebas. Aquí no se cobra nada.</strong></p>
+<p>Referencia: {escape(order.reference)}<br>Medio: {escape(order.method)}<br>
+Monto: {amount} {escape(order.currency)}</p>
+<form method="post" action="{escape(self.api_base_url, quote=True)}/dev/fake-checkout">{hidden}
+<button name="outcome" value="approved">Aprobar el pago</button>
+<button name="outcome" value="declined">Rechazar el pago</button>
+</form>
+</body></html>"""
+        )
 
     def resolve(
         self,
@@ -121,25 +162,9 @@ class FakePaymentProvider:
     def tokenizer(self) -> TokenizerInfo | None:
         return TokenizerInfo(kind="fake")
 
-    def acceptance(self) -> Acceptance:
-        return Acceptance(
-            acceptance_token=FAKE_ACCEPTANCE,
-            terms_url=f"{self.api_base_url}/dev/fake-checkout/terminos",
-            personal_data_token=FAKE_PERSONAL_DATA,
-            personal_data_url=f"{self.api_base_url}/dev/fake-checkout/datos",
-        )
-
     def create_payment_source(
-        self,
-        *,
-        source_type: PaymentSourceType,
-        token: str,
-        customer_email: str,
-        acceptance_token: str,
-        personal_data_token: str,
+        self, *, source_type: PaymentSourceType, token: str, customer_email: str
     ) -> PaymentSource:
-        if (acceptance_token, personal_data_token) != (FAKE_ACCEPTANCE, FAKE_PERSONAL_DATA):
-            raise PaymentSourceRejected("Faltan los contratos aceptados")
         if token not in (FAKE_TOKEN_OK, FAKE_TOKEN_DECLINED):
             raise PaymentSourceRejected("La pasarela simulada no acepta ese medio de pago")
         suffix = "ok" if token == FAKE_TOKEN_OK else "declined"

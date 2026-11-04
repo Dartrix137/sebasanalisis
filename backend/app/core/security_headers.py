@@ -8,8 +8,10 @@ dominio va siempre por HTTPS (Traefik ya redirige `http://` con un 301).
 HSTS va sin `includeSubDomains` ni `preload`: un subdominio sin HTTPS quedaria
 inalcanzable, y salir de la lista de precarga tarda meses.
 
-La CSP estricta va solo en las respuestas JSON: `/docs` y la pasarela simulada
-de desarrollo (`/dev`) son HTML que carga sus propios recursos.
+La CSP estricta va solo en las respuestas JSON: `/docs` es HTML que carga sus
+propios recursos, y la pagina de pago de un solo uso (`GET /billing/checkout/:token`)
+trae la suya, que deja correr solo los scripts de la pagina que mando la
+pasarela (`core/checkout_pages.page_csp`).
 """
 
 from starlette.datastructures import MutableHeaders

@@ -12,12 +12,19 @@
  * - Estilos: `unsafe-inline`. React y `next/image` escriben atributos `style`,
  *   que un nonce no cubre; inyectar estilos es mucho menos grave que inyectar
  *   scripts.
- * - Conexiones: la API y el monitoreo (GlitchTip). Si la pasarela nueva tokeniza
- *   desde el navegador, su API va aquí (paso 5.3 de la Fase 5).
+ * - Imágenes: las propias y los logos de los medios de pago, que Tipster Page
+ *   sirve desde su CDN (`logoUrl` del catálogo, manual V2 §5).
+ * - Conexiones: la API y el monitoreo (GlitchTip). Tipster Page no tokeniza
+ *   desde el navegador: el navegador no le habla a su API.
+ * - Formularios: solo a este sitio. El envío al procesador de pagos (Redsys,
+ *   EBANX) sale de la página de pago que sirve la API, con su propia CSP
+ *   (`backend/app/core/checkout_pages.py`); al frontend no le hace falta.
  * - Marcos: solo el widget de Turnstile. Nadie puede meter el sitio en un marco.
  */
 
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+/** El CDN de los logos de los medios de pago de Tipster Page. */
+const PAYMENT_LOGOS_ORIGIN = "https://cdntpfiles86236.tipsterpage.com";
 
 function originOf(url: string | undefined): string | null {
   if (!url) return null;
@@ -47,7 +54,7 @@ export function buildCsp({
     // En desarrollo React usa eval para reconstruir los errores del servidor.
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data:",
+    `img-src 'self' blob: data: ${PAYMENT_LOGOS_ORIGIN}`,
     "font-src 'self'",
     `connect-src ${connect.join(" ")}`,
     `frame-src ${TURNSTILE_ORIGIN}`,
