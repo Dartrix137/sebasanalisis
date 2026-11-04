@@ -62,11 +62,13 @@ Las dos `TURNSTILE_*` van juntas o ninguna: sin ninguna, el registro, el ingreso
 y el olvido de contrasena no piden la verificacion contra bots; con una sola, la
 API no arranca. Como crearlas, en "Antes del lanzamiento comercial", paso 8.
 
-Pagos: no hay ninguna variable de la pasarela. `PAYMENT_PROVIDER` no se pone
-(vale `none`): la API arranca con el pago apagado y el acceso se da a mano. Las
+Pagos: sin `PAYMENT_PROVIDER` (vale `none`) la API arranca con el pago apagado
+y el acceso se da a mano. Con `PAYMENT_PROVIDER=tipsterpage` cobra con Tipster
+Page y pide `TSPAY_API_BASE_URL`, `TSPAY_MERCHANT_CODE`, `TSPAY_AUTH_BEARER` y
+`TSPAY_SECRET_KEY`, y `API_PUBLIC_URL` (la URL publica de la API: ahi llegan
+los avisos de pago). El detalle esta en "Pagos con Tipster Page" abajo. Las
 `WOMPI_*` y `PAYMENT_PROVIDER=wompi` salieron con Wompi; con
-`PAYMENT_PROVIDER=wompi` la API ya no arranca. El detalle esta en "Pagos: sin
-pasarela" abajo.
+`PAYMENT_PROVIDER=wompi` la API ya no arranca.
 
 `FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
 (verificar el correo, restablecer la contrasena). Es la direccion **publica del
@@ -215,10 +217,93 @@ Que pasa al desplegar este paso:
   "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
 - Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
 
+### Pagos con Tipster Page (Fase 5, paso 5.3)
+
+Integracion V2 de Tipster Page, sin su landing: el cliente elige su pais y el
+medio de pago en `/planes/pagar`, la API crea la orden firmada y le entrega al
+navegador la pagina que lo lleva al procesador (Redsys para tarjeta y Bizum,
+EBANX para los medios locales). Como quedo construido:
+`PLATAFORMA_COMPLETA.md` §3.19. Solo pago manual por periodo: Tipster Page no
+tiene cobros recurrentes, asi que la renovacion automatica no se ofrece.
+
+**Variables** (en `Environment` de la API y del job de renovaciones, que
+reconsulta los pagos pendientes):
+
+| Variable | Valor |
+|---|---|
+| `PAYMENT_PROVIDER` | `tipsterpage` |
+| `TSPAY_API_BASE_URL` | Sandbox: `https://sandboxv2.ttpgpay.com/tspayv2`. Produccion: `https://paymentsv2.ttpgpay.com/tspayv2`. Otra URL no arranca |
+| `TSPAY_MERCHANT_CODE` | El `MERCHANT_CODE` que da Tipster Page (va en la cabecera `X-TSPAY-USER`) |
+| `TSPAY_AUTH_BEARER` | El `AUTH_BEARER` |
+| `TSPAY_SECRET_KEY` | El `SECRET_KEY` (la clave HMAC de las firmas). Copiarlo tal cual, sin espacios al final; en un `.env` local, entre comillas simples |
+| `API_PUBLIC_URL` | La URL publica de la API, por HTTPS (`https://api.<dominio>`). De ella salen la URL de los avisos (`/webhooks/payments`) y el enlace de la pagina de pago |
+
+Son distintas por ambiente (sandbox y produccion). La API dice al arrancar
+contra cual quedo: `Pagos: Tipster Page (sandbox)` o `Pagos: Tipster Page
+(PRODUCCION)`. Con la URL de produccion **no arranca** si queda
+`PAYMENT_PROVIDER=fake`, `EMAIL_BACKEND=file`, o `API_PUBLIC_URL` o
+`FRONTEND_BASE_URL` sin HTTPS: el manual exige HTTPS en las URL de regreso y de
+aviso. Si falta una de las cuatro `TSPAY_*`, tampoco arranca, y el error dice
+cual.
+
+**La URL de avisos no se configura en el panel de Tipster Page**: viaja en cada
+orden (`notification_url`), armada con `API_PUBLIC_URL`. Desde un equipo local
+el sandbox no puede avisar a `localhost`: en local los pagos se resuelven con
+la reconsulta (la pantalla `/pago/:id` y el job). El aviso de verdad se prueba
+en el VPS.
+
+**El job de renovaciones** reconsulta cada hora los pagos manuales pendientes de
+la ultima semana: si un aviso no llega, el pago se resuelve igual en la
+corrida siguiente.
+
+**Una orden abierta cuenta como un cobro en proceso durante 7 dias**
+(`PENDING_PAYMENT_WINDOW`, `billing/schedule.py`): mientras tanto la cuenta no se
+puede eliminar y el admin no extiende ni cancela su suscripcion. Pasada una
+semana se da por abandonada: deja de bloquear y el job deja de reconsultarla.
+Si Tipster Page la resuelve despues, lo trae su aviso.
+
+**Precios**: la migracion `22780db115af` pasa los planes a 32 EUR (mensual) y
+46 EUR (dos meses). Se detiene si hay suscripciones activas o en mora en COP, o
+traslados de precio en COP sin aplicar. Los cupones de monto fijo en COP dejan
+de aplicar: desactivarlos en `/admin/descuentos`.
+
+**Desplegar** (en este orden):
+
+1. Mezclar el PR y desplegar backend y frontend desde el mismo commit. Corren
+   cuatro migraciones: tres de `payment_events` (la pasarela de cada evento, y
+   la idempotencia por pasarela) y la de los precios.
+2. En Dokploy, en la API y en el job: `PAYMENT_PROVIDER=tipsterpage`, las cuatro
+   `TSPAY_*` del sandbox y `API_PUBLIC_URL`. Reiniciar y revisar la linea de
+   arranque.
+3. Probar en el sandbox lo de "Pruebas en el sandbox de Tipster Page", abajo.
+4. Las llaves de produccion van al final, con Dataico y los textos legales v2
+   (`HOJA_DE_RUTA.md` §5). Mientras el VPS tenga las del sandbox, cualquier
+   cuenta obtiene acceso pagando con una tarjeta de prueba.
+
+#### Pruebas en el sandbox de Tipster Page
+
+Con las tarjetas de prueba de Redsys del manual V2 §11 (caducidad 12/34). Bizum
+aprueba solo hasta 12 EUR en el sandbox, asi que los planes se prueban con
+tarjeta.
+
+| Caso | Resultado |
+|---|---|
+| Catalogo de medios por pais (`GET /payment-methods`, 2026-11-04) | **Responde.** Colombia: tarjeta (Redsys) y 6 medios de EBANX, todos piden el nombre; Espana: tarjeta y Bizum (el sandbox no le pide datos a Bizum, aunque el manual dice que nombre, apellidos y documento); Mexico: tarjeta y 4 de EBANX. Todos de 1 a 400 EUR. Logos en `cdntpfiles86236.tipsterpage.com`. Las cabeceras de autenticacion funcionan |
+| Orden de un pais o un `order_id` que no existen (`GET /order-status`) | `404 Order not found` |
+| Crear una orden (`POST /create-order-tspay`, 2026-11-04) | **Bloqueado del lado de Tipster Page.** El sandbox responde `400 Invalid signature` a la firma del manual §7.1, tambien con el `SECRET_KEY` copiado otra vez del documento (es el mismo, caracter por caracter). Tampoco pasan una de control en ceros ni lecturas alternativas (clave y mensaje invertidos, base64, SHA-256 sin HMAC, el comercio dentro de la cadena, cuerpo en form-urlencoded). Hay que pedirle a Tipster Page que confirme el `SECRET_KEY` de nuestro comercio en el sandbox y un vector de ejemplo (la cadena `S` y la firma que esperan) |
+| El HTML de la pagina de pago (scripts, a donde envia el formulario) | Pendiente: sale de la orden |
+| Pago aceptado (4548 8120 4940 0004, CVV 123) | Pendiente |
+| Pago denegado | Pendiente |
+| Con desafio 3DS (4548 8172 1249 3017, CVV 123, aceptado tras el desafio) | Pendiente |
+| Recargar la pagina de pago | Pendiente. Del lado nuestro el enlace es de un solo uso: la recarga muestra "Este enlace de pago ya se uso" y no crea otra orden |
+| Repetir un `order_id` | Pendiente (pregunta 2 de "Paso 5.3") |
+| `error_and_refund_payment`, si se puede provocar | Pendiente (pregunta 7) |
+| Aviso de pago (`notification_url`) en el VPS | Pendiente |
+
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 
-Desde el 2026-10-23 no hay pasarela de pagos: Wompi salio del proyecto y la
-nueva (Tipster Page) entra en el paso 5.3. Mientras tanto:
+Desde el 2026-10-23 hasta que se encienda Tipster Page (arriba) no hay pasarela
+de pagos: Wompi salio del proyecto. Mientras tanto:
 
 - `PAYMENT_PROVIDER` no se pone en Dokploy (vale `none`). El arranque de la API
   dice `Pagos: sin pasarela configurada: el pago esta apagado`.
@@ -230,8 +315,9 @@ nueva (Tipster Page) entra en el paso 5.3. Mientras tanto:
   avisos de las que pagaron a mano. Por eso las suscripciones de sandbox se
   cancelan antes de desplegar el retiro (abajo).
 - `PAYMENT_PROVIDER=fake` es la pasarela simulada, solo para desarrollo y
-  Playwright. **Nunca en produccion**: aprueba pagos sin cobrar, y desde que
-  salio Wompi la API no tiene como detectarlo.
+  Playwright. **Nunca en produccion**: aprueba pagos sin cobrar. Con las llaves
+  de produccion de Tipster Page la API no arranca con ella (paso 5.3); sin
+  ellas no tiene como detectarlo.
 
 **Desplegar el retiro de Wompi** (una sola vez, en este orden):
 
