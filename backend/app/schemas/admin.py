@@ -182,7 +182,7 @@ class AdminPaymentListResponse(ApiModel):
 
 
 class InvoiceStatus(str, Enum):
-    # Hoy solo `pending`: la emision con Dataico es del paso 5.4.
+    # Hoy solo `pending`: la emision con Siigo es del paso 5.4.
     pending = "pending"
 
 

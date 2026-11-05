@@ -88,7 +88,7 @@ export function formatCalendarDate(isoDate: string): string {
   });
 }
 
-/** La factura electrónica de un pago (§3.17). La emisión con Dataico es del paso 5.4. */
+/** La factura electrónica de un pago (§3.17). La emisión con Siigo es del paso 5.4. */
 export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: "Pendiente de emitir",
 };
