@@ -441,6 +441,27 @@ def test_con_llaves_de_produccion_no_arranca_una_configuracion_de_desarrollo(cam
         check_startup(_ajustes(tspay_api_base_url=PRODUCTION_BASE_URL, **cambios))
 
 
+@pytest.mark.parametrize(
+    ("cambios", "mensaje"),
+    [
+        ({"api_public_url": "api.sebasanalisis.com"}, "API_PUBLIC_URL"),
+        ({"frontend_base_url": "sebasanalisis.com"}, "FRONTEND_BASE_URL"),
+        ({"api_public_url": ""}, "API_PUBLIC_URL"),
+    ],
+)
+def test_con_tipster_page_una_url_publica_sin_esquema_no_arranca(cambios, mensaje) -> None:
+    """Tambien en el sandbox: sin el esquema, Tipster Page rechaza cada orden
+    con "Invalid request data" (VPS, 2026-11-05)."""
+    with pytest.raises(ProviderMisconfigured, match=mensaje):
+        check_startup(_ajustes(**cambios))
+
+
+def test_en_el_sandbox_las_url_locales_por_http_si_arrancan() -> None:
+    check_startup(
+        _ajustes(api_public_url="http://127.0.0.1:8000", frontend_base_url="http://localhost:3000")
+    )
+
+
 def test_con_las_del_sandbox_la_pasarela_simulada_y_el_correo_a_archivo_si_arrancan() -> None:
     check_startup(_ajustes(payment_provider="fake", email_backend="file", api_public_url="http://x"))
 
