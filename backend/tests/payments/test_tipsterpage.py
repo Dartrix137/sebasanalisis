@@ -56,6 +56,34 @@ def test_la_firma_de_la_orden_con_un_vector_calculado_aparte() -> None:
     )
 
 
+# La orden de ejemplo que mando Tipster Page el 2026-11-05 (`orderexample.json`,
+# con su script de referencia `sign-tspay-order.js`, en
+# `docs/docs tipsterpage/`, fuera del repositorio). El monto va sin decimales y
+# el pais en minusculas: se firman tal como se envian.
+EJEMPLO_TIPSTER_PAGE = {
+    "order_id": "8dca39a8-36ea-40ca-a28a-7cd0032f8b61-17399945368027",
+    "product_id": "96",
+    "product_name": "Gorgeous Wooden Bike EBANX ECUADOR",
+    "product_description": "Suscripción a Gorgeous Wooden Bike EBANX ECUADOR",
+    "amount": "3",
+    "country": "es",
+    "payment_method": "cardtpv",
+    "url_ok": "https://molina.korvusinc.com/compra_ok.php",
+    "url_ko": "https://molina.korvusinc.com/compra_error.php",
+    "notification_url": "https://molina.korvusinc.com/notificacion.php",
+}
+
+
+def test_la_firma_coincide_con_el_script_de_referencia_de_tipster_page() -> None:
+    """El vector sale de su script (`node sign-tspay-order.js --secret
+    clave-de-prueba --signature-only`), no de este codigo. El JSON trae los
+    campos en otro orden (`country` antes de `payment_method`): la firma sigue
+    el orden fijo, no el del cuerpo. Lleva una tilde: se firma en UTF-8."""
+    assert order_signature(CLAVE, EJEMPLO_TIPSTER_PAGE) == (
+        "56a637d4a6411a344c626c8f247ea11403ebe2e34a586710e4e28f32ee246096"
+    )
+
+
 def test_un_campo_ausente_aporta_la_cadena_vacia() -> None:
     """§7.1: sin `notification_url` ni `country`."""
     sin = {k: v for k, v in EJEMPLO.items() if k not in ("notification_url", "country")}

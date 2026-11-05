@@ -284,21 +284,32 @@ de aplicar: desactivarlos en `/admin/descuentos`.
 
 Con las tarjetas de prueba de Redsys del manual V2 §11 (caducidad 12/34). Bizum
 aprueba solo hasta 12 EUR en el sandbox, asi que los planes se prueban con
-tarjeta.
+tarjeta. Las del 2026-11-05 se hicieron en local: la API con
+`PAYMENT_PROVIDER=tipsterpage` y las llaves del sandbox, sobre una base
+desechable (`sebasanalisis_sandbox_e2e`, armada con `prepare_e2e_db.py`), y el
+frontend apuntando a ella, en Chrome.
 
 | Caso | Resultado |
 |---|---|
 | Catalogo de medios por pais (`GET /payment-methods`, 2026-11-04) | **Responde.** Colombia: tarjeta (Redsys) y 6 medios de EBANX, todos piden el nombre; Espana: tarjeta y Bizum (el sandbox no le pide datos a Bizum, aunque el manual dice que nombre, apellidos y documento); Mexico: tarjeta y 4 de EBANX. Todos de 1 a 400 EUR. Logos en `cdntpfiles86236.tipsterpage.com`. Las cabeceras de autenticacion funcionan |
 | Orden de un pais o un `order_id` que no existen (`GET /order-status`) | `404 Order not found` |
-| Crear una orden (`POST /create-order-tspay`, 2026-11-04) | **Bloqueado del lado de Tipster Page.** El sandbox responde `400 Invalid signature` a la firma del manual §7.1, tambien con el `SECRET_KEY` copiado otra vez del documento (es el mismo, caracter por caracter). Tampoco pasan una de control en ceros ni lecturas alternativas (clave y mensaje invertidos, base64, SHA-256 sin HMAC, el comercio dentro de la cadena, cuerpo en form-urlencoded). Hay que pedirle a Tipster Page que confirme el `SECRET_KEY` de nuestro comercio en el sandbox y un vector de ejemplo (la cadena `S` y la firma que esperan) |
-| El HTML de la pagina de pago (scripts, a donde envia el formulario) | Pendiente: sale de la orden |
-| Pago aceptado (4548 8120 4940 0004, CVV 123) | Pendiente |
-| Pago denegado | Pendiente |
-| Con desafio 3DS (4548 8172 1249 3017, CVV 123, aceptado tras el desafio) | Pendiente |
-| Recargar la pagina de pago | Pendiente. Del lado nuestro el enlace es de un solo uso: la recarga muestra "Este enlace de pago ya se uso" y no crea otra orden |
-| Repetir un `order_id` | Pendiente (pregunta 2 de "Paso 5.3") |
-| `error_and_refund_payment`, si se puede provocar | Pendiente (pregunta 7) |
-| Aviso de pago (`notification_url`) en el VPS | Pendiente |
+| Crear una orden (`POST /create-order-tspay`) | **Responde (2026-11-05).** El 2026-11-04 daba `400 Invalid signature`: el `SECRET_KEY` del sandbox estaba mal del lado de Tipster Page, que lo cambio en su documento compartido. El algoritmo no cambio: nuestra firma coincide con su script de referencia (`sign-tspay-order.js`) sobre su orden de ejemplo (`tests/payments/test_tipsterpage.py`). Acepta `url_ok`, `url_ko` y `notification_url` por `http://localhost`, asi que el flujo se prueba en local |
+| El HTML de la pagina de pago | **Visto (2026-11-05).** Con tarjeta: una pagina sin `<script>`, con `<body onload="document.getElementById('form').submit()">` y un formulario `POST` a `https://sis-t.redsys.es:25443/sis/realizarPago` (`Ds_SignatureVersion`, `Ds_MerchantParameters`, `Ds_Signature`). La CSP de `/billing/checkout/{token}` deja correr solo ese `onload` (`'unsafe-hashes'` con su huella) y enviar a Redsys y al frontend: en Chrome el formulario se envio solo y llego a Redsys. En produccion el origen del TPV sera otro: lo saca la API de la pagina, no hay que configurarlo |
+| Pago aceptado (4548 8120 4940 0004, 12/34, CVV 123) | **Aprobado (2026-11-05).** El sandbox le pide el desafio 3DS tambien a esta tarjeta ("Autenticacion con exito" en el simulador de `sis-d.redsys.es`). Redsys devuelve al navegador a `url_ok` (`/pago/:id`), que reconsulta: pago `approved`, suscripcion `active` por un mes, factura `pending` y los dos correos. La pantalla de Redsys muestra como comercio a "GGBAMARKETING SOLUTIONS S.L. (SPAIN)" (ver "Lo que ve el cliente", abajo) |
+| Pago denegado (4548 8144 7972 7229, CVV 999) | **Denegado en Redsys (2026-11-05)**, con "el emisor de su tarjeta requiere autenticacion del titular... el comercio no tiene activada esta funcion". Redsys deja al comprador en su pagina para probar otra tarjeta con la misma orden: la orden sigue `pending` |
+| Con desafio 3DS, autenticacion fallida (4548 8172 1249 3017, CVV 123, "Denegar autenticacion") | **Denegado (2026-11-05)**: "Error de Autenticacion", y otra vez la pagina para reintentar; la orden sigue `pending` |
+| Cancelar en Redsys | **Rechazado (2026-11-05)**: "A peticion del usuario, se ha cancelado el pago (SIS9915)". Con "Continuar" vuelve a `url_ko` (`/pago/:id`): la reconsulta da `error`, el pago queda `declined`, sin acceso ni factura, y la pantalla dice "El pago no se completo" con el boton de volver a los planes |
+| Con desafio 3DS, aceptado (4548 8172 1249 3017, CVV 123, "Autenticacion con exito") | **Aprobado (2026-11-05)**, con la misma cuenta del rechazo anterior (un pago nuevo). Sin pulsar "Continuar" en Redsys (el comprador cierra la pestaña): el job de renovaciones lo resolvio en la corrida siguiente (`reconsultas=1 aprobados=1 correos=2`), con la factura `pending` |
+| Recargar la pagina de pago | **Probado (2026-11-05).** El enlace de la API ya usado responde 410 "Este enlace de pago ya se uso o vencio" y no crea otra orden |
+| Repetir un `order_id` | **Se acepta (2026-11-05)**: responde 201 con una pagina nueva, y la orden queda con los datos de la ultima creacion, **monto incluido** (de 1,00 a 2,00 EUR en la reconsulta). No nos afecta: la referencia es una por pago y la orden se crea una vez. El transporte simulado de los tests hace lo mismo |
+| `error_and_refund_payment` | **No se pudo provocar** con las tarjetas de Redsys del sandbox. Queda como no aprobado (sin acceso); hay que preguntarle a Tipster Page como provocarlo (pregunta 7) |
+| Bizum, medios de EBANX | Sin probar. Bizum aprueba hasta 12 EUR en el sandbox, y los planes son de 32 y 46 |
+| El webhook en local, con avisos armados como los del manual §9 y firmados con la llave del sandbox (2026-11-05) | Firma mala: 401, guardado sin verificar. Firma buena: `processed`; el mismo aviso otra vez: `duplicate`. Un `ok` bien firmado de la orden que Tipster Page da por `error`: se reconsulta y el pago sigue `declined`, sin factura. El monto reformateado (`32.00` firmado como `32`): 401 |
+| Aviso de pago real de Tipster Page (`notification_url`) en el VPS | Pendiente: desde un equipo local no llega. Falta ver el formato real del `amount` y que lo resuelva antes que la reconsulta de `/pago/:id` |
+
+**Lo que ve el cliente en Redsys.** El comercio que aparece en la pagina de pago (y, presumiblemente, en el extracto de la tarjeta) es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", con "Url Comercio: https://www.tipsterpage.com", no Sebasanalisis. Un cliente que no lo reconozca puede pedir un contracargo. Hay que confirmarlo con Tipster Page, y decirlo en la pantalla de pago, el recibo y los textos legales v2 (paso 5.5).
+
+**El regreso de Redsys trae parametros.** Redsys devuelve al navegador a `url_ok`/`url_ko` con `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature` en la URL. No llevan el numero de la tarjeta, ni el titular ni el CVV, pero si la marca, el pais y el tipo de la tarjeta, el codigo de autorizacion y el codigo de comercio de Redsys. La pagina `/pago/:id` no los usa: es la reconsulta la que decide.
 
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 

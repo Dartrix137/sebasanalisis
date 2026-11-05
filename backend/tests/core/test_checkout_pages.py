@@ -69,6 +69,22 @@ def test_los_manejadores_en_linea_van_con_su_huella() -> None:
     assert "form-action 'self' https://pay.ebanx.com" in csp
 
 
+def test_la_csp_de_la_pagina_real_del_sandbox() -> None:
+    """La pagina que devolvio el sandbox de Tipster Page con tarjeta el
+    2026-11-05 (`tests/api/tipster_sandbox.PAGINA_REDSYS`). En Chrome, con esta
+    CSP, el `onload` corrio y el formulario llego a Redsys."""
+    from tests.api.tipster_sandbox import PAGINA_REDSYS
+
+    csp = checkout_pages.page_csp(PAGINA_REDSYS, form_origins=("http://localhost:3000",))
+    directivas = dict(d.strip().split(" ", 1) for d in csp.split(";"))
+    assert directivas["script-src"] == "'unsafe-hashes' " + _huella(
+        "document.getElementById('form').submit()"
+    )
+    assert directivas["form-action"] == (
+        "'self' http://localhost:3000 https://sis-t.redsys.es:25443"
+    )
+
+
 def test_un_script_externo_por_https_entra_por_su_origen() -> None:
     csp = checkout_pages.page_csp('<script src="https://cdn.ebanx.com/js/x.js"></script>')
     assert "script-src https://cdn.ebanx.com" in csp

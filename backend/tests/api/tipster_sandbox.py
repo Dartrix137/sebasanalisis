@@ -12,8 +12,9 @@ Lo que se comporta como dice el manual V2 de Tipster Page:
 - `POST /create-order-tspay` verifica `tspay_signature` con su propio calculo
   (§7.1, escrito aqui aparte del de la aplicacion), exige los datos del
   comprador que pide el medio y el pais de un medio local, y responde HTML
-  (§7.2). Un `order_id` repetido se rechaza: si se puede repetir o no se prueba
-  en el sandbox.
+  (§7.2). Un `order_id` repetido se acepta y la orden queda con los datos
+  nuevos, monto incluido, como en el sandbox (probado el 2026-11-05). La
+  aplicacion no repite referencias: una por pago.
 - `GET /order-status/{orderId}` responde el monto como un numero JSON, como lo
   serializa JavaScript (§10), o 404.
 - `aviso()` arma el cuerpo de la notificacion firmado con §9.1 sobre el monto
@@ -49,13 +50,22 @@ ORDER_FIELDS = (
     "country",
 )
 
-#: Una pagina como la de Redsys: un formulario firmado que se envia solo.
-PAGINA_REDSYS = """<!DOCTYPE html><html><head><meta charset="utf-8"></head>
-<body><form id="tpv" action="https://sis-t.redsys.es:25443/sis/realizarPago" method="POST">
+#: La pagina que devuelve el sandbox con tarjeta (vista el 2026-11-05), con los
+#: valores firmados de Redsys cambiados: un formulario que se envia solo desde
+#: un `onload` en linea, sin `<script>`.
+PAGINA_REDSYS = """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Processing</title></head>
+<body onload="document.getElementById('form').submit()">
+<p>Loading payment gateway. Please wait, you will be redirected to the bank to complete the payment.</p>
+<form action="https://sis-t.redsys.es:25443/sis/realizarPago" method="post" id="form">
 <input type="hidden" name="Ds_SignatureVersion" value="HMAC_SHA256_V1">
 <input type="hidden" name="Ds_MerchantParameters" value="eyJvcmRlciI6IjEifQ==">
 <input type="hidden" name="Ds_Signature" value="abc">
-</form><script>document.getElementById('tpv').submit();</script></body></html>"""
+<noscript><input type="submit" value="Pay"></noscript>
+</form>
+</body>
+</html>"""
 
 CATALOGO: list[dict[str, Any]] = [
     {
@@ -200,8 +210,8 @@ class TipsterSandbox:
         monto = Decimal(body["amount"])
         if not Decimal(metodo["priceMin"]) <= monto <= Decimal(metodo["priceMax"]):
             return self._error("Amount out of range")
-        if body["order_id"] in self.ordenes:
-            return self._error("Duplicated order")
+        # Como el sandbox (2026-11-05): un `order_id` repetido no se rechaza,
+        # la orden se vuelve a crear con los datos nuevos (el monto tambien).
         self.ordenes[body["order_id"]] = {
             "amount": int(monto * 100),
             "paid_order_status": "pending",

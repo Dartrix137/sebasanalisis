@@ -373,7 +373,10 @@ def test_la_csp_de_la_pagina_deja_correr_solo_sus_scripts(client, db, tipster) -
     csp = client.get(_enlace(client, db, token)).headers["content-security-policy"]
     directivas = dict(d.strip().split(" ", 1) for d in csp.split(";"))
     assert directivas["default-src"] == "'none'"
-    assert directivas["script-src"].startswith("'sha256-") and "unsafe-inline" not in directivas["script-src"]
+    # La pagina del sandbox se envia desde un `onload`: solo ese manejador, por su huella.
+    fuentes = directivas["script-src"].split()
+    assert fuentes[0] == "'unsafe-hashes'" and len(fuentes) == 2 and fuentes[1].startswith("'sha256-")
+    assert "unsafe-inline" not in directivas["script-src"]
     # El TPV del formulario y el frontend, a donde puede redirigir la respuesta.
     frontend = get_settings().frontend_base_url.rstrip("/")
     assert set(directivas["form-action"].split()) == {"'self'", "https://sis-t.redsys.es:25443", frontend}
