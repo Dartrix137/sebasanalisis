@@ -992,12 +992,25 @@ Diseño escrito sobre la documentación oficial de la API de Siigo, leída el 20
 - **Se piden al pagar, no al registrarse.** Solo los da quien compra, el registro no gana pasos y se guardan menos datos personales. Es el primer bloque de `/planes/pagar` la primera vez. Quedan guardados y se pueden cambiar en "Mi cuenta".
 - **Los campos son:** nombres, apellidos, país, tipo y número de identificación, dirección y ciudad. La dirección y la ciudad las da el cliente (respuesta de la contadora). El correo es el de la cuenta, que ya está confirmado.
 - **El tipo de identificación**: la documentación de Siigo trae la lista de tipos (`id_type`) y sus formatos, pero ninguna regla por país.
-  - **Propuesta**: el tipo por defecto es el que decidió el usuario, cédula de ciudadanía (`13`) para Colombia y NIT de otro país (`50`) para los demás. El cliente lo puede cambiar por otro tipo válido en su país:
+  - **Aprobado por el usuario (2026-11-05)**: el tipo por defecto es el que decidió el usuario, cédula de ciudadanía (`13`) para Colombia y NIT de otro país (`50`) para los demás. El cliente lo puede cambiar por otro tipo válido en su país:
     - en Colombia, cédula de extranjería (`22`);
     - fuera, pasaporte (`41`) o documento de identificación extranjero (`42`). Es lo que suele tener una persona de fuera, que casi nunca tiene NIT.
-  - Lo confirma el usuario.
+  - Si la contadora prefiere otra cosa, se cambia la lista.
   - **La ciudad, para Colombia**: una lista con los códigos de Siigo, en el código y no escrita a mano, porque Siigo rechaza un código que no existe.
-  - **Fuera de Colombia**: Siigo pide también un código de estado y de ciudad (su ejemplo es Nueva York, `US` / `01` / `0101`). No se sabe si su lista cubre cualquier ciudad del mundo (pendiente n.º 5).
+  - **Fuera de Colombia**: Siigo pide también un código de estado y de ciudad, de la misma lista. La lista no tiene todas las ciudades (ver abajo y el pendiente n.º 5).
+- **La lista de ciudades de Siigo** (`Lista-de-ciudades.xlsx`, enlazada en su documentación de clientes, revisada el 2026-11-05):
+  - **Tamaño**: 4.605 ciudades de 220 países, con las columnas `CityCode`, `CityName`, `StateCode`, `StateName`, `CountryCode` y `CountryName`.
+  - **El código de ciudad no es único**: `0101` es Madrid en España y Lisboa en Portugal. Lo que identifica una ciudad es el trío (país, estado, ciudad), que no se repite.
+  - **Colombia está completa**: 1.123 municipios, con su código DANE.
+  - **Fuera de Colombia hay pocas ciudades por país**, casi siempre las capitales y algunas grandes: España 63, Estados Unidos 61, México 32, Argentina 21 y Chile 15. 42 países tienen entre una y tres.
+  - **Faltan ciudades grandes**: Nueva York (justo el ejemplo de la documentación), Los Ángeles, Houston, Buenos Aires (Argentina), Santiago de Chile y Ciudad de Panamá.
+  - **Hay errores**: Quito aparece en Pastaza, no en Pichincha. Algunas filas son estados y no ciudades ("California", "Cataluña", "Massachusetts").
+  - Las ciudades que sí están (Madrid, Barcelona, Ciudad de México, Lima, Londres, París, Toronto…) se pueden elegir.
+- **Formulario propuesto**:
+  - En Colombia, departamento y municipio, de la lista.
+  - Fuera, país y ciudad de la lista. Si su ciudad no está, el cliente escribe la real en la dirección. Qué ciudad de la lista se manda en ese caso lo dice Siigo (pendiente n.º 5).
+  - La lista va en el código como datos, no consultada en vivo: Siigo no tiene un endpoint de ciudades.
+  - La fuente buena es el reporte de la empresa en Siigo Nube ("Reportes > Carteras/Proveedores > Reportes de sistema > Países-Departamentos-Ciudades"), porque el archivo público puede estar desactualizado.
 - **Validación en el servidor**, con las reglas de Siigo:
   - La cédula es numérica, de 3 a 13 dígitos. Las identificaciones de fuera son alfanuméricas, de 1 a 20 caracteres.
   - Cada nombre tiene hasta 100 caracteres y la dirección hasta 256.
@@ -1090,8 +1103,8 @@ Resuelto con la contadora el 2026-11-05: el IVA (excluido, art. 476 num. 21 E.T.
 1. ~~IVA~~ (excluido).
 2. **La fuente de la tasa de euros a dólares**: la serie del Banco de la República o la del Banco Central Europeo ("Tasas de cambio"). Y el redondeo: hoy es una sola vez, al centavo, hacia arriba en la mitad exacta (`fx.ROUNDING`).
 3. ~~La fecha~~ (está bien).
-4. **El tipo de identificación de un cliente de fuera**: la propuesta de "Datos de facturación del cliente". Lo confirma el usuario; si la contadora prefiere otra cosa, se cambia la lista.
-5. ~~La dirección y la ciudad~~ (las da el cliente). Queda por ver si la lista de ciudades de Siigo (`Lista-de-ciudades.xlsx`, enlazada en su documentación de clientes) cubre las ciudades de fuera de Colombia. Si no, se pregunta a Siigo.
+4. ~~El tipo de identificación de un cliente de fuera~~ (aprobada la propuesta por el usuario el 2026-11-05: cédula o cédula de extranjería en Colombia; NIT de otro país, pasaporte o documento extranjero fuera).
+5. ~~La dirección y la ciudad~~ (las da el cliente). **La lista de ciudades de Siigo no cubre muchas ciudades de fuera de Colombia** ("Datos de facturación del cliente"). Se le pregunta a Siigo: qué se manda cuando la ciudad del cliente no está, y si el reporte de la empresa en Siigo Nube trae más ciudades que el archivo público.
 6. **El motivo de la nota crédito** (total y parcial) y si la anulación de la pasarela cuenta como reembolso.
 7. ~~El valor en euros~~ (va en la factura).
 
