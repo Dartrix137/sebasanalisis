@@ -285,7 +285,7 @@ class Invoice(Base):
 
     Nace `pending` en la misma transaccion en que `apply_transaction` aprueba el
     pago (`core/invoices.create_pending`), y es unica por pago: un webhook
-    repetido no deja dos. La emision con Dataico es del paso 5.4; hasta
+    repetido no deja dos. La emision con Siigo es del paso 5.4; hasta
     entonces ninguna sale de `pending`.
 
     No guarda datos del comprador: a quien va la factura (consumidor final, o

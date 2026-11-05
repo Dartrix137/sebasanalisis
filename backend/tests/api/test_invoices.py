@@ -2,7 +2,7 @@
 Fase 5, paso 5.2).
 
 Nace en la misma transaccion en que `apply_transaction` aprueba el pago, es
-unica por pago y se queda en `pending`: la emision con Dataico es del paso 5.4.
+unica por pago y se queda en `pending`: la emision con Siigo es del paso 5.4.
 La pasarela es el doble de `pasarela_double.py`, salvo en el caso de la pasarela
 simulada.
 """

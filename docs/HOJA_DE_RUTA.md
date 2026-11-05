@@ -17,7 +17,7 @@ La recomendación sale de reglas estadísticas sobre los resultados registrados.
 **Hacia dónde va:** la Fase 5 (§5) deja la aplicación lista para vender:
 - retirar Wompi;
 - integrar Tipster Page, que cobra en euros;
-- facturar cada pago con Dataico, convertido a pesos con la tasa del día;
+- facturar cada pago con Siigo, convertido a pesos con la tasa del día;
 - publicar los textos legales revisados;
 - lanzar.
 
@@ -30,7 +30,7 @@ La recomendación sale de reglas estadísticas sobre los resultados registrados.
 | `CLAUDE.md` | Reglas de trabajo vigentes: lenguaje, stack, convenciones, qué no hacer. | Siempre, antes de escribir código. |
 | `docs/HOJA_DE_RUTA.md` (este) | Estado, historia y rumbo. | Para ubicarse. |
 | `docs/ARQUITECTURA_Y_ESTADISTICA.md` | Filosofía y terminología (§0), motor estadístico y de recomendación (§2), arquitectura y modelo de datos del núcleo (§3), alcance por etapas (§4). | Al tocar el motor, la mesa o el modelo de juego. |
-| `docs/PLATAFORMA_COMPLETA.md` | Especificación de la Fase 4: acceso, pagos, admin, auth, legal, multijuego, preparación del stack. La Fase 5 la sigue usando: el núcleo de cobro se conserva, y la facturación con Dataico está en §3.17. | Al tocar cualquiera de esas áreas. |
+| `docs/PLATAFORMA_COMPLETA.md` | Especificación de la Fase 4: acceso, pagos, admin, auth, legal, multijuego, preparación del stack. La Fase 5 la sigue usando: el núcleo de cobro se conserva, y la facturación con Siigo está en §3.17. | Al tocar cualquiera de esas áreas. |
 | `docs/DESPLIEGUE.md` | Despliegue en el VPS con Dokploy, variables de entorno, dominios. | Al desplegar o agregar una variable. |
 | `docs/design/` | Mockups de login, registro y mesa. | Al construir o cambiar esas pantallas. |
 | `docs/reference/` | Insumos que no se modifican: estrategia verificada por un analista, boceto estadístico previo, comparativo que originó la Fase 3. | Como fuente; nunca como especificación vigente. |
@@ -113,10 +113,11 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | La tarjeta se escribía en el widget de Wompi, en modo tokenización. | Se escribe en un formulario propio que la tokeniza contra la API de Wompi, cifrada, desde el navegador. Nequi se tokeniza por la API. La llave de cifrado la pide el backend, porque Wompi no deja pedirla desde el navegador. Construido y probado a mano contra el sandbox el 2026-10-19. **Retirado con Wompi el 2026-10-23 (paso 5.1).** | 2026-10-19 |
 | Wompi como pasarela, con el sandbox probado y las llaves de producción como último paso del lanzamiento. | **Tipster Page** reemplaza a Wompi: Wompi no admite el modelo de negocio. Se retira el código propio de Wompi y se conserva el núcleo de cobro. Nunca se cobró dinero real, así que no hay clientes que migrar. **Retirado el 2026-10-23 (paso 5.1)**: sin pasarela configurada (`PAYMENT_PROVIDER=none`, el valor por defecto) el pago está apagado; el webhook es `POST /webhooks/payments`. | 2026-10-22 |
 | Facturación electrónica con Siigo. | Con **Dataico**, por su API. Una factura por pago aprobado. | 2026-10-23 |
+| Facturación electrónica con Dataico. | **De nuevo con Siigo** (Siigo Nube), por su API. Dataico queda descartado por completo; no se le había escrito código. Ya hay cuenta de Siigo, y las credenciales de la API son de una aplicación de Desarrollo propio, subcategoría Facturación de ventas. | 2026-11-05 |
 | Factura a consumidor final, sin nombre ni cédula. | **Por definir**: podría hacer falta pedirle al cliente su nombre y su identificación. Lo responde el contador (`PLATAFORMA_COMPLETA.md` §10 n.º 17). | 2026-10-23 |
 | Se cobra y se muestra un solo precio, en COP. | Tipster Page cobra en **euros**. La factura va en pesos, convertida con la tasa del día del pago (hora de Colombia): de euros a dólares con la tasa del día, y de dólares a pesos con la TRM (Decreto 1625 de 2016). El precio en pantalla y los planes se redefinen al integrar Tipster Page (paso 5.3). | 2026-10-23 |
 | El lanzamiento era el paso 9 de la Fase 4. | La Fase 4 se da por cerrada en lo construido. Lo que faltaba del paso 9 pasa a la Fase 5, junto con el cambio de pasarela y la facturación. | 2026-10-23 |
-| Sin pasarela, el acceso manual del admin era una vía provisional mientras llegaba el cobro. | **No se vende hasta integrar Tipster Page y Dataico.** Mientras tanto solo hay accesos manuales de prueba o de cortesía, y no hay ventas que facturar. | 2026-10-23 |
+| Sin pasarela, el acceso manual del admin era una vía provisional mientras llegaba el cobro. | **No se vende hasta integrar Tipster Page y la facturación electrónica** (Siigo desde el 2026-11-05). Mientras tanto solo hay accesos manuales de prueba o de cortesía, y no hay ventas que facturar. | 2026-10-23 |
 | Dos planes en pesos: 100.000 COP el mensual y 150.000 COP el de dos meses. | Precios fijos en euros: **32 EUR el mensual y 46 EUR el de dos meses**. Se muestra y se cobra ese precio. Con tarjeta o Bizum el cliente paga en euros; con un medio local de EBANX paga el equivalente en su moneda, convertido por Tipster Page. Los planes se cambian con una migración de datos en el paso 5.3. | 2026-11-03 |
 | Dos modos de cobro: renovación automática con fuente tokenizada y pago manual por período. | Con Tipster Page **solo pago manual por período**: su recurrencia está en desarrollo. El código de la renovación automática se conserva, apagado, para cuando una pasarela la ofrezca. | 2026-11-03 |
 | PremiumPay descartada como base del cobro porque no se le veía API ni webhooks (2026-10-08). | Ya tiene API, con cobros recurrentes por token, pero sigue sin servir: sus avisos no van firmados, no hay forma de consultar un pago y no reintenta los avisos (§5, "Evaluación de PremiumPay"). | 2026-11-03 |
@@ -128,18 +129,18 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 Decidida el 2026-10-23. Deja la aplicación lista para vender. No toca el motor. Parte de tres hechos:
 - Wompi salió (2026-10-22). Se probó solo contra su sandbox, nunca con dinero real.
 - Tipster Page lo reemplaza y cobra en euros.
-- Cada pago aprobado lleva una factura electrónica emitida con Dataico.
+- Cada pago aprobado lleva una factura electrónica emitida con Siigo (desde el 2026-11-05; Dataico quedó descartado).
 
 **Regla de la fase: no se vende hasta tener los pasos 5.3 y 5.4.** Mientras tanto, el acceso es solo manual y de prueba o de cortesía, y por eso no hay ventas que facturar a mano.
 
-No se avanza a un paso de código sin que el anterior tenga tests o una verificación manual funcionando. Las fechas las ponen los terceros: Tipster Page, el contador, Dataico y el abogado. Por eso cada paso dice qué lo bloquea, y lo que no está bloqueado se hace en paralelo.
+No se avanza a un paso de código sin que el anterior tenga tests o una verificación manual funcionando. Las fechas las ponen los terceros: Tipster Page, el contador y el abogado. Por eso cada paso dice qué lo bloquea, y lo que no está bloqueado se hace en paralelo.
 
 | # | Paso | Qué entrega | Bloqueado por | Se cierra cuando | Estado |
 |---|---|---|---|---|---|
 | 5.1 | **Retiro de Wompi** | Se borra lo que solo existe por Wompi: el proveedor, sus variables, la llave de cifrado, el formulario de tarjeta y Nequi, `jose`, sus orígenes en la CSP y sus tests de firma. Se conserva el núcleo: `PaymentProvider`, `apply_transaction`, renovaciones, precios, cupones, traslado de precios, admin de pagos y pasarela simulada. El webhook pasa a `POST /webhooks/payments`, genérico. Un doble de pruebas nuevo, `tests/api/pasarela_double.py`. Las reglas de pagos de `CLAUDE.md` quedan para cualquier pasarela. Detalle en `PLATAFORMA_COMPLETA.md` §3.18 (salió del documento "Cambio de pasarela: de Wompi a Tipster Page", Claude Docs, 2026-10-22) | Nada: se puede empezar ya | Los doce casos de §3.9 en verde sobre el doble nuevo. En local sin pasarela, el pago se ve apagado y el acceso manual funciona. Desplegado en el orden del documento, con las suscripciones de sandbox canceladas en el admin | **Cerrado (2026-10-23)** en la rama `fase-5-retiro-wompi`: los doce casos de §3.9 y los cuatro obligatorios en verde sobre el doble nuevo, sin migración (las filas del sandbox quedan como historia). **Desplegado el 2026-10-23** (PR #41): el usuario quitó las cuatro `WOMPI_*` en Dokploy, canceló las suscripciones de sandbox y desactivó la URL de eventos en el panel de Wompi. En producción, `/billing/availability` responde `{enabled: false, tokenizer: null}` y `/billing/card-encryption-key` ya no existe |
 | 5.2 | **Base de la facturación, sin proveedor** | `billing/fx.py` (puro y con tests): la fecha de la operación en hora de Colombia, la conversión de euros a dólares a pesos con `Decimal` y los montos en centavos. La tabla `invoices`, única por pago. La fila pendiente que crea `apply_transaction` al aprobar un pago, en la misma transacción. El estado de la factura en el detalle del pago del admin. La emisión queda apagada | 5.1 (los tests van sobre el doble nuevo). El redondeo lo confirma el contador, pero no frena la construcción | Tests en verde. Un pago aprobado con la pasarela simulada deja una factura pendiente, y un webhook repetido no deja dos | **Cerrado (2026-10-23)** en la rama `fase-5-facturacion-base`: tests de `fx.py` y de las facturas en verde (`tests/billing/test_fx.py`, `tests/api/test_invoices.py`), y el detalle del pago del admin muestra "Pendiente de emitir". El redondeo es provisional hasta el contador. Detalle en `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.2" |
 | 5.3 | **Integración de Tipster Page** | Un `TipsterPageProvider` detrás de `PaymentProvider`, con la firma, la reconsulta y la idempotencia leídas de su documentación oficial. Si se conserva nuestro calendario de cobros o se usa su recurrencia: preguntas 6 y 7 del anexo. Los precios de los planes en la moneda que cobra Tipster Page (migración de datos), con la regla del precio en pantalla reescrita. Sus orígenes en la CSP. Los tests de API con el proveedor real sobre transporte simulado; el doble de 5.1 se retira | Las respuestas de Tipster Page al anexo y su sandbox | Los doce casos de §3.9 y los cuatro obligatorios de `CLAUDE.md` en verde con el proveedor real. Flujo completo en el sandbox de Tipster Page en el VPS: alta, renovación si aplica, cancelación, anulación | **Documentación recibida y decisiones tomadas (2026-11-03)**: ver "Paso 5.3" abajo. Se puede empezar el código con el transporte simulado; para probar contra el sandbox faltan sus credenciales |
-| 5.4 | **Emisión con Dataico** | `InvoiceIssuer` con `DataicoIssuer` (y uno simulado). Las tasas de cambio: la TRM de la Superfinanciera y la tasa de euros a dólares que diga el contador, guardadas en la base con su fuente. La emisión desde el job de cada hora, con reintentos y la tasa congelada en la factura. "Reintentar emisión" en el admin, con motivo y bitácora. La nota crédito, si el contador la pide. Todo leído de la documentación oficial de Dataico y citado | 5.2. Las respuestas del contador. La cuenta de Dataico con API, la resolución de la DIAN vinculada y la documentación de `app.dataico.com/api-docs` | Una factura de un pago en euros emitida en el ambiente `PRUEBAS` con la tasa y la fecha correctas, visible en el portal de Dataico y en el admin. Habilitación ante la DIAN completa | Esperando al contador y a Dataico |
+| 5.4 | **Emisión con Siigo** | `InvoiceIssuer` con `SiigoIssuer` (y uno simulado). Las tasas de cambio: la TRM de la Superfinanciera y la tasa de euros a dólares que diga el contador, guardadas en la base con su fuente. La emisión desde el job de cada hora, con reintentos y la tasa congelada en la factura. "Reintentar emisión" en el admin, con motivo y bitácora. La nota crédito, si el contador la pide. Todo leído de la documentación oficial de la API de Siigo y citado | 5.2. Las respuestas del contador. Las credenciales de la API de Siigo y la resolución de la DIAN configurada allá (la cuenta existe desde el 2026-11-05) | Una factura de un pago en euros emitida con la tasa y la fecha correctas, aceptada por la DIAN, visible en Siigo Nube y en el admin. Si Siigo no tiene ambiente de pruebas, cómo se prueba sin emitir una factura real se decide al leer su documentación | Dataico descartado el 2026-11-05; Siigo con cuenta. Esperando al contador y las credenciales de la API |
 | 5.5 | **Textos legales, versión 2** | Una sola versión nueva de términos, datos, reembolsos y cookies, que reúne tres cosas: el texto del abogado, Tipster Page como pasarela y la facturación. Los datos del responsable dejan de ser `[PENDIENTE]`. Se publica una vez para no pedir dos veces la aceptación (§6.7 envía el aviso) | Abogado. Que Tipster Page confirme las condiciones (5.3) | Publicada en producción, con el aviso enviado a las cuentas que correspondan | Esperando al abogado |
 | 5.6 | **Lanzamiento** | Lo que quedaba del paso 9 de la Fase 4, más la pasarela y la facturación en producción: ver la lista abajo | 5.3, 5.4 y 5.5 | La lista de abajo completa, con un pago real de punta a punta | Pendiente |
 
@@ -154,7 +155,7 @@ No se avanza a un paso de código sin que el anterior tenga tests o una verifica
 | La frase de "apostar el mínimo" del formulario de mesa nueva | Pendiente | Abogado |
 | Qué exige Tipster Page en seguridad de pagos (antes era la pregunta de PCI DSS a Wompi, §10 n.º 15) | Depende de cómo se cobre: con una página suya, la tarjeta no pasa por la nuestra | Tipster Page |
 | Llaves de producción de Tipster Page en Dokploy y su URL de eventos | Al final, con lo demás hecho | Operativo (usuario) |
-| Dataico en `PRODUCCION` | Al final, con la habilitación ante la DIAN completa | Operativo (usuario) |
+| Siigo emitiendo en producción | Al final, con la resolución de la DIAN configurada en Siigo | Operativo (usuario) |
 | **Un pago real de punta a punta**, hecho por el usuario: cobro, acceso, factura validada por la DIAN y recibo. Después, su anulación o reembolso, con la nota crédito si aplica | Al final | Operativo (usuario) |
 | Ya hecho en el paso 9: SPF, DKIM y DMARC; job de renovaciones en Dokploy; UptimeRobot; acabado del frontend; seguridad; diseño móvil; aviso de versiones legales | Hecho (ver §6, "Paso 9: estado") | — |
 
@@ -245,7 +246,8 @@ Mientras tanto, el paso 5.3 deja lista la entrada de una segunda pasarela: cada 
   - recibir las credenciales del sandbox y del Swagger (2026-11-04);
   - preguntar lo de la liquidación y la comisión (pregunta 8 de "Paso 5.3"), que hace falta para el 5.4.
 - **Usuario con PremiumPay** (si quiere mantenerla como opción): las preguntas de "Evaluación de PremiumPay".
-- **Usuario con Dataico**: abrir la cuenta con API, vincular la resolución de facturación de la DIAN, hacer la habilitación y dar acceso a la documentación de la API.
+- **Usuario con Siigo** (la cuenta ya existe, 2026-11-05): confirmar que el plan incluye la API, crear las credenciales (Desarrollo propio, Facturación de ventas), configurar la resolución de facturación de la DIAN y crear el producto o servicio "suscripción".
+- **Código**: leer la documentación oficial de la API de Siigo y escribir el diseño del 5.4 sobre ella (sin construir la emisión hasta el contador).
 - **Contador**:
   - factura en euros con la tasa o directamente en pesos;
   - de dónde sale la tasa de euros a dólares y cómo se redondea;
@@ -263,7 +265,7 @@ Mientras tanto, el paso 5.3 deja lista la entrada de una segunda pasarela: cada 
 | Tipster Page | Moneda y frecuencia de la liquidación, comisión, documento por la comisión (la moneda que ve el cliente ya la contesta el manual V2) | 5.4 (base de la factura) |
 | PremiumPay (opcional) | Endpoint de estado, avisos firmados, reintentos, monedas, 3-D Secure, borrado de tokens, comisión y retención ("Evaluación de PremiumPay") | Nada: solo si se quiere como segunda pasarela |
 | Contador | Moneda de la factura, fuente de la tasa de euros a dólares y redondeo, IVA (incluida la exclusión por computación en la nube, `PLATAFORMA_COMPLETA.md` §3.17), comisión, nota crédito (también la de un pago anulado que ya tiene factura pendiente) y a quién va la factura: consumidor final, o con nombre e identificación (§10 n.º 17) | 5.4 |
-| Usuario con Dataico | Cuenta con API, llave y `dataico_account_id`, resolución de la DIAN vinculada, habilitación, acceso a `app.dataico.com/api-docs` | 5.4 |
+| Usuario con Siigo | ~~La cuenta~~ (existe desde el 2026-11-05). Plan con API, credenciales de la API (Desarrollo propio, Facturación de ventas), resolución de la DIAN configurada en Siigo, el producto "suscripción" | 5.4 |
 | Abogado | Textos legales revisados, datos del responsable del tratamiento, precio en pantalla, frase de "apostar el mínimo" | 5.5 y 5.6 |
 | Usuario | Respaldos con Cloudflare R2 y su prueba de restauración, Resend Pro | 5.6 |
 
@@ -425,7 +427,7 @@ Mezclada y desplegada el 2026-10-13 (PR #14); el usuario la probó en el VPS y d
 
 ### Paso 9: estado (2026-10-19)
 
-> Historia. Desde el 2026-10-23, lo que quedó sin hacer está en la lista del paso 5.6 (§5). Las filas que nombran a Wompi o a Siigo describen lo que se decidió entonces.
+> Historia. Desde el 2026-10-23, lo que quedó sin hacer está en la lista del paso 5.6 (§5). Las filas que nombran a Wompi o a Siigo describen lo que se decidió entonces (Siigo volvió a ser el proveedor de la factura el 2026-11-05; lo vigente está en §5).
 
 La lista "Antes del lanzamiento comercial" (`PLATAFORMA_COMPLETA.md` §9), con el estado comprobado en el repositorio y en los documentos. Los pasos a mano de cada punto operativo y su comprobación están en `DESPLIEGUE.md`, "Antes del lanzamiento comercial".
 
@@ -540,7 +542,7 @@ Tests en `e2e/diseno.spec.ts`. Las dos líneas de la tarjeta de recomendación, 
 
 ### Pendiente del usuario (Fase 4, historia)
 
-> Superada el 2026-10-23 por "Pendiente de terceros y del usuario (Fase 5)" (§5). Las filas de Wompi y de Siigo ya no aplican.
+> Superada el 2026-10-23 por "Pendiente de terceros y del usuario (Fase 5)" (§5). Las filas de Wompi ya no aplican. Las de Siigo se reemplazan por las de §5: Siigo volvió el 2026-11-05.
 
 La lista completa, con la propuesta por defecto de cada una, está en `PLATAFORMA_COMPLETA.md` §10. Las que bloquean un paso:
 
