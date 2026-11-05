@@ -37,7 +37,7 @@ import time
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -513,7 +513,22 @@ def check_startup(settings: Settings) -> None:
     - `EMAIL_BACKEND=file` deja los correos en disco en vez de enviarlos.
     - Con `tipsterpage`, el manual §2 exige HTTPS en `url_ok`, `url_ko` y
       `notification_url`: la API y el frontend publicos tienen que ir por HTTPS.
+
+    En cualquier ambiente, con `tipsterpage` esas dos URL tienen que ser
+    absolutas: sin el esquema (`api.sebasanalisis.com`), Tipster Page rechaza
+    cada orden con un 400 "Invalid request data" (visto en el VPS el
+    2026-11-05), y la API arrancaba igual.
     """
+    if settings.payment_provider == "tipsterpage":
+        for name, url in (
+            ("API_PUBLIC_URL", settings.api_public_url),
+            ("FRONTEND_BASE_URL", settings.frontend_base_url),
+        ):
+            parts = urlsplit(url.strip())
+            if parts.scheme not in ("http", "https") or not parts.netloc:
+                raise ProviderMisconfigured(
+                    f"{name} tiene que ser una URL completa, con https:// (vale {url!r})"
+                )
     if not has_production_keys(settings):
         return
     if settings.payment_provider == "fake":

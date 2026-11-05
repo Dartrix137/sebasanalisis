@@ -55,6 +55,22 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(page).toHaveURL(/\/planes/);
 });
 
+test("sin renovación automática (Tipster Page) el botón dice Pagar", async ({ page, request }) => {
+  // La pasarela simulada ofrece los dos modos; Tipster Page responde así.
+  await page.route("**/billing/availability", (route) =>
+    route.fulfill({ json: { enabled: true, tokenizer: null } }),
+  );
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await loginViaUi(page, email);
+  await expect(page).toHaveURL(/\/planes/);
+
+  const plan = page.getByRole("article", { name: "Acceso Mensual" });
+  await expect(plan.getByRole("link", { name: "Pagar", exact: true })).toBeVisible();
+  await expect(plan.getByText("Pago único: no se renueva solo.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Suscribirme" })).toHaveCount(0);
+});
+
 test("/planes es pública: se ve sin sesión", async ({ page }) => {
   await page.goto("/planes");
   const plan = page.getByRole("article", { name: "Acceso Mensual" });

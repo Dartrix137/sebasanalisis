@@ -19,7 +19,8 @@
  *   con hasta cuándo tiene acceso y el botón de pagar el período siguiente.
  *   Los demás planes no llevan botón.
  *   Si esa suscripción se renueva sola, no hay botón: se gestiona en la cuenta.
- * - Sin acceso: "Suscribirme".
+ * - Sin acceso: "Suscribirme" si la pasarela ofrece la renovación automática;
+ *   si no (Tipster Page, o sin pasarela), "Pagar": es un pago único por período.
  */
 
 import Link from "next/link";
@@ -41,6 +42,7 @@ export function PlansView() {
   const { user, loading, withToken } = useSession();
   const [plans, setPlans] = useState<PlanResponse[] | null>(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [automaticOffered, setAutomaticOffered] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const userId = user?.id ?? null;
@@ -53,7 +55,10 @@ export function PlansView() {
     // Si no se sabe, el botón queda apagado: es el estado conservador.
     billingApi
       .availability()
-      .then((a) => setPaymentsEnabled(a.enabled))
+      .then((a) => {
+        setPaymentsEnabled(a.enabled);
+        setAutomaticOffered(a.enabled && a.tokenizer !== null);
+      })
       .catch(() => setPaymentsEnabled(false));
   }, []);
 
@@ -80,6 +85,7 @@ export function PlansView() {
           key={plan.id}
           plan={plan}
           paymentsEnabled={paymentsEnabled}
+          automaticOffered={automaticOffered}
           current={current}
         />
       ))}
@@ -90,10 +96,12 @@ export function PlansView() {
 function PlanCard({
   plan,
   paymentsEnabled,
+  automaticOffered,
   current,
 }: {
   plan: PlanResponse;
   paymentsEnabled: boolean;
+  automaticOffered: boolean;
   current: SubscriptionResponse | null;
 }) {
   const price = formatMoney(plan.price_cents, plan.currency);
@@ -147,6 +155,7 @@ function PlanCard({
         <PlanAction
           plan={plan}
           paymentsEnabled={paymentsEnabled}
+          automaticOffered={automaticOffered}
           current={current}
           isCurrent={isCurrent}
         />
@@ -158,15 +167,19 @@ function PlanCard({
 function PlanAction({
   plan,
   paymentsEnabled,
+  automaticOffered,
   current,
   isCurrent,
 }: {
   plan: PlanResponse;
   paymentsEnabled: boolean;
+  automaticOffered: boolean;
   current: SubscriptionResponse | null;
   isCurrent: boolean;
 }) {
   const { user } = useSession();
+  // Sin renovación automática no hay suscripción que se renueve: es un pago por período.
+  const payLabel = automaticOffered ? "Suscribirme" : "Pagar";
   const row = "mt-auto flex flex-wrap items-center gap-3 pt-5";
   const note = "text-xs text-muted";
 
@@ -179,7 +192,7 @@ function PlanAction({
           aria-describedby={`pago-${plan.id}`}
           className={`${PAY_LINK} cursor-not-allowed opacity-60`}
         >
-          Suscribirme
+          {payLabel}
         </button>
         <p id={`pago-${plan.id}`} className={note}>
           El pago estará disponible pronto.
@@ -256,8 +269,11 @@ function PlanAction({
   return (
     <div className={row}>
       <Link href={`/planes/pagar?plan=${plan.id}`} className={PAY_LINK}>
-        Suscribirme
+        {payLabel}
       </Link>
+      {automaticOffered ? null : (
+        <p className={note}>Pago único: no se renueva solo.</p>
+      )}
     </div>
   );
 }

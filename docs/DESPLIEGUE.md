@@ -246,6 +246,12 @@ contra cual quedo: `Pagos: Tipster Page (sandbox)` o `Pagos: Tipster Page
 aviso. Si falta una de las cuatro `TSPAY_*`, tampoco arranca, y el error dice
 cual.
 
+En cualquier ambiente, `API_PUBLIC_URL` y `FRONTEND_BASE_URL` van completas,
+con `https://` (`https://api.sebasanalisis.com`, no `api.sebasanalisis.com`).
+Sin el esquema, Tipster Page rechaza cada orden con `HTTP 400 Invalid request
+data` y el cliente ve "La pasarela no acepto el pago con esos datos" (paso en
+el VPS el 2026-11-05); desde entonces la API no arranca asi.
+
 **La URL de avisos no se configura en el panel de Tipster Page**: viaja en cada
 orden (`notification_url`), armada con `API_PUBLIC_URL`. Desde un equipo local
 el sandbox no puede avisar a `localhost`: en local los pagos se resuelven con
