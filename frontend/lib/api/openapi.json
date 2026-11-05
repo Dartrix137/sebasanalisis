@@ -21,35 +21,6 @@
         "title": "AcceptLegalRequest",
         "type": "object"
       },
-      "AcceptanceResponse": {
-        "description": "Los dos contratos del procesador de pagos que el cliente acepta antes\nde guardar un medio de pago. Los tokens se devuelven al suscribirse.",
-        "properties": {
-          "acceptance_token": {
-            "title": "Acceptance Token",
-            "type": "string"
-          },
-          "personal_data_token": {
-            "title": "Personal Data Token",
-            "type": "string"
-          },
-          "personal_data_url": {
-            "title": "Personal Data Url",
-            "type": "string"
-          },
-          "terms_url": {
-            "title": "Terms Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "acceptance_token",
-          "terms_url",
-          "personal_data_token",
-          "personal_data_url"
-        ],
-        "title": "AcceptanceResponse",
-        "type": "object"
-      },
       "AccessInfo": {
         "description": "La decision de acceso, para que el cliente sepa que pantalla mostrar.\n\nEs informativa: el servidor vuelve a decidir en cada llamada a un endpoint\nde juego (§2.1 de la Fase 4).",
         "properties": {
@@ -960,12 +931,13 @@
           "payment_source_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PaymentSourceKind"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Payment Source Type"
           },
           "plan": {
             "$ref": "#/components/schemas/PlanResponse"
@@ -1832,6 +1804,72 @@
         "title": "BulkSpinsResponse",
         "type": "object"
       },
+      "BuyerData": {
+        "description": "Los datos que pide el medio de pago elegido. Se mandan a la pasarela\ny no se guardan: ni en la base, ni en los registros, ni en el monitoreo.",
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "personal_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "title": "BuyerData",
+        "type": "object"
+      },
+      "BuyerFieldName": {
+        "description": "Los datos del comprador que puede pedir un medio de pago.",
+        "enum": [
+          "first_name",
+          "last_name",
+          "personal_id",
+          "phone"
+        ],
+        "title": "BuyerFieldName",
+        "type": "string"
+      },
       "CategoryGroup-Input": {
         "description": "Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.",
         "properties": {
@@ -1953,6 +1991,60 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "CheckoutMethodResponse": {
+        "description": "Un medio de pago que ofrece la pasarela en un pais.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/BuyerFieldName"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "max_cents": {
+            "title": "Max Cents",
+            "type": "integer"
+          },
+          "min_cents": {
+            "title": "Min Cents",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "logo_url",
+          "min_cents",
+          "max_cents",
+          "currency",
+          "fields"
+        ],
+        "title": "CheckoutMethodResponse",
         "type": "object"
       },
       "Comparison": {
@@ -2192,7 +2284,7 @@
           "currency": {
             "anyOf": [
               {
-                "const": "COP",
+                "const": "EUR",
                 "type": "string"
               },
               {
@@ -2456,8 +2548,8 @@
             "type": "string"
           },
           "currency": {
-            "const": "COP",
-            "default": "COP",
+            "const": "EUR",
+            "default": "EUR",
             "title": "Currency",
             "type": "string"
           },
@@ -3840,12 +3932,6 @@
       "PaymentMethodRequest": {
         "description": "PUT /billing/payment-method: el medio de pago que el cliente tokenizo en\nla ventana del procesador. No son datos de tarjeta.",
         "properties": {
-          "acceptance_token": {
-            "maxLength": 5000,
-            "minLength": 1,
-            "title": "Acceptance Token",
-            "type": "string"
-          },
           "payment_source_token": {
             "maxLength": 500,
             "minLength": 1,
@@ -3853,20 +3939,15 @@
             "type": "string"
           },
           "payment_source_type": {
-            "$ref": "#/components/schemas/PaymentSourceKind"
-          },
-          "personal_data_token": {
-            "maxLength": 5000,
+            "maxLength": 16,
             "minLength": 1,
-            "title": "Personal Data Token",
+            "title": "Payment Source Type",
             "type": "string"
           }
         },
         "required": [
           "payment_source_token",
-          "payment_source_type",
-          "acceptance_token",
-          "personal_data_token"
+          "payment_source_type"
         ],
         "title": "PaymentMethodRequest",
         "type": "object"
@@ -4022,15 +4103,6 @@
         ],
         "title": "PaymentResponse",
         "type": "object"
-      },
-      "PaymentSourceKind": {
-        "description": "Medios que se pueden guardar para la renovacion automatica.",
-        "enum": [
-          "CARD",
-          "NEQUI"
-        ],
-        "title": "PaymentSourceKind",
-        "type": "string"
       },
       "PaymentStatus": {
         "enum": [
@@ -5677,17 +5749,27 @@
       "SubscribeRequest": {
         "description": "POST /billing/subscriptions. No lleva montos: un monto que mande el\ncliente se ignora.",
         "properties": {
-          "acceptance_token": {
+          "buyer": {
             "anyOf": [
               {
-                "maxLength": 5000,
+                "$ref": "#/components/schemas/BuyerData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{2}$",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Acceptance Token"
+            "title": "Country"
           },
           "coupon_code": {
             "anyOf": [
@@ -5700,6 +5782,19 @@
               }
             ],
             "title": "Coupon Code"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
           },
           "payment_source_token": {
             "anyOf": [
@@ -5716,24 +5811,14 @@
           "payment_source_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PaymentSourceKind"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "personal_data_token": {
-            "anyOf": [
-              {
-                "maxLength": 5000,
+                "maxLength": 16,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Personal Data Token"
+            "title": "Payment Source Type"
           },
           "plan_id": {
             "format": "uuid",
@@ -5948,12 +6033,13 @@
           "payment_source_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PaymentSourceKind"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Payment Source Type"
           },
           "plan": {
             "$ref": "#/components/schemas/PlanResponse"
@@ -6112,7 +6198,7 @@
           "currency": {
             "anyOf": [
               {
-                "const": "COP",
+                "const": "EUR",
                 "type": "string"
               },
               {
@@ -10198,33 +10284,6 @@
         ]
       }
     },
-    "/billing/acceptance": {
-      "get": {
-        "description": "Los contratos del procesador de pagos que hay que aceptar antes de\nguardar un medio de pago (§3.4). Se piden al momento: no se guardan.",
-        "operationId": "acceptance_billing_acceptance_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AcceptanceResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Acceptance",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
     "/billing/availability": {
       "get": {
         "description": "Si se puede pagar, y como se guarda un medio de pago. Publico: /planes\nlo usa para encender el boton.",
@@ -10274,7 +10333,7 @@
         ]
       },
       "put": {
-        "description": "Guarda un medio de pago en la suscripcion vigente, que queda renovandose\nsola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion\nautomatica, o reanuda una renovacion cancelada con otro medio.\n\nNo cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene\nun cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca\npasan datos de tarjeta: solo el token que el procesador le dio al navegador.",
+        "description": "Guarda un medio de pago en la suscripcion vigente, que queda renovandose\nsola con el: cambia el medio guardado, pasa de pago manual a renovacion\nautomatica, o reanuda una renovacion cancelada con otro medio.\n\nNo cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene\nun cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca\npasan datos de tarjeta: solo el token que el procesador le dio al navegador.",
         "operationId": "set_payment_method_billing_payment_method_put",
         "requestBody": {
           "content": {
@@ -10314,6 +10373,66 @@
           }
         ],
         "summary": "Set Payment Method",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/payment-methods": {
+      "get": {
+        "description": "Los medios de pago que ofrece la pasarela en un pais, para la pantalla\nde pago. Sin pais, los que no dependen del pais. Exige sesion: la consulta\nsale con las llaves de la pasarela, y no se le presta a cualquiera.",
+        "operationId": "payment_methods_billing_payment_methods_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Z]{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CheckoutMethodResponse"
+                  },
+                  "title": "Response Payment Methods Billing Payment Methods Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Payment Methods",
         "tags": [
           "billing"
         ]
@@ -10585,7 +10704,7 @@
     },
     "/billing/subscriptions": {
       "post": {
-        "description": "Abre el pago de un periodo.\n\nPago manual (`renewal_mode: manual`): devuelve la pagina del proveedor\ndonde el cliente paga. No se tokeniza nada.\n\nRenovacion automatica (`automatic`): recibe el token que el procesador le\ndio al navegador, guarda el medio de pago en el proveedor y le hace el\nprimer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la\nreferencia del proveedor, la marca y los ultimos cuatro digitos.\n\nEn los dos casos exige correo confirmado y documentos legales aceptados, y\nel total sale de `billing/pricing`: cualquier monto que mande el cliente se\nignora. Responde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
+        "description": "Abre el pago de un periodo.\n\nPago manual (`renewal_mode: manual`): crea la orden en la pasarela con el\nmedio, el pais y los datos del comprador que mando el cliente, y devuelve\nel enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos\ndel comprador van a la pasarela y no se guardan. No se tokeniza nada.\n\nRenovacion automatica (`automatic`): recibe el token que el procesador le\ndio al navegador, guarda el medio de pago en el proveedor y le hace el\nprimer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la\nreferencia del proveedor, la marca y los ultimos cuatro digitos.\n\nEn los dos casos exige correo confirmado y documentos legales aceptados, y\nel total sale de `billing/pricing`: cualquier monto que mande el cliente se\nignora. Responde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
         "operationId": "subscribe_billing_subscriptions_post",
         "requestBody": {
           "content": {

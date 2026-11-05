@@ -61,6 +61,22 @@ def test_quita_el_cuerpo_de_las_rutas_sensibles(path: str) -> None:
     assert "un-solo-uso" not in str(event)
 
 
+def test_quita_los_datos_del_comprador_al_abrir_un_pago() -> None:
+    event = scrub_event(
+        _event(
+            "https://api.ejemplo.com/billing/subscriptions",
+            {"payment_method": "ebanxyapeperu", "buyer": {"first_name": "Ana", "phone": "+51 999"}},
+        )
+    )
+    assert "Ana" not in str(event) and "+51 999" not in str(event)
+
+
+def test_quita_el_token_del_enlace_de_la_pagina_de_pago() -> None:
+    event = scrub_event(_event("https://api.ejemplo.com/billing/checkout/tok-secreto-123?x=1"))
+    assert event["request"]["url"] == f"https://api.ejemplo.com/billing/checkout/{FILTERED}"
+    assert "tok-secreto-123" not in str(event)
+
+
 def test_conserva_el_cuerpo_de_las_rutas_de_juego() -> None:
     event = scrub_event(_event("https://api.ejemplo.com/sessions/abc/spins", {"result_value": "17"}))
     assert event["request"]["data"] == {"result_value": "17"}

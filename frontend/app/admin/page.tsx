@@ -96,7 +96,7 @@ export default function AdminOverviewPage() {
               <Card>
                 <p className="text-sm text-muted">Ingreso recurrente mensual</p>
                 <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums text-white">
-                  {formatMoney(0, "COP")}
+                  {formatMoney(0, "EUR")}
                 </p>
                 <p className="mt-1 text-sm text-muted">Ninguna suscripción vigente que siga.</p>
               </Card>
@@ -140,7 +140,7 @@ export default function AdminOverviewPage() {
                   value={0}
                   delta={{ current: 0, previous: 0 }}
                   direction="up_is_good"
-                  format={(n) => formatMoney(n, "COP")}
+                  format={(n) => formatMoney(n, "EUR")}
                 />
               ) : (
                 data.collected.map((c) => (

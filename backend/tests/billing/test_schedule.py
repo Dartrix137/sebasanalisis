@@ -173,3 +173,4 @@ def test_cada_renovacion_aprobada_gasta_un_periodo_con_descuento() -> None:
 def test_un_precio_que_no_es_positivo_es_un_error() -> None:
     with pytest.raises(ValueError):
         renewal_quote(0, "COP", None)
+

@@ -2,7 +2,8 @@
 
 El alta va por la API; el job de renovaciones se llama directo
 (`core/renewals.run_renewals`) con el `now` que cada test necesita: el tiempo no
-se espera, se pasa. La pasarela es el doble de `pasarela_double.py`.
+se espera, se pasa. La pasarela es la simulada (`pasarela_simulada.py`):
+Tipster Page no tiene cobros recurrentes.
 """
 
 import uuid
@@ -16,15 +17,12 @@ from app.core.email import EmailMessage, FakeEmailSender
 from app.core.renewals import advisory_lock, renewal_reference, run_renewals
 from app.models import Payment, Plan, Subscription
 from tests.api.conftest import auth
-from tests.api.pasarela_double import (
-    ACEPTACION,
-    DATOS_PERSONALES,
-    SECRETO_DE_EVENTOS,
-    TOKEN_NEQUI,
+from tests.api.pasarela_simulada import (
+    TOKEN_OTRO_MEDIO,
     TOKEN_RECHAZADO,
     TOKEN_TARJETA,
-    Pasarela,
 )
+from tests.api.pasarela_simulada import PasarelaSimulada as Pasarela
 from tests.api.test_billing import _cupon, _mensual
 from tests.api.test_subscriptions import (
     PRECIO,
@@ -60,8 +58,6 @@ def _alta_automatica(client, token: str, plan_id, *, codigo=None, **cambios):
         "renewal_mode": "automatic",
         "payment_source_token": TOKEN_TARJETA,
         "payment_source_type": "CARD",
-        "acceptance_token": ACEPTACION,
-        "personal_data_token": DATOS_PERSONALES,
         **cambios,
     }
     if codigo is not None:
@@ -103,39 +99,21 @@ def _de(reporte, correo: str) -> list[str]:
 
 
 def test_disponibilidad_dice_como_se_guarda_un_medio_de_pago(client, pasarela) -> None:
-    data = client.get("/billing/availability").json()
-    assert data == {"enabled": True, "tokenizer": "fake"}
-    assert SECRETO_DE_EVENTOS not in str(data)
+    assert client.get("/billing/availability").json() == {"enabled": True, "tokenizer": "fake"}
 
 
 def test_sin_pasarela_no_se_ofrece_la_renovacion_automatica(client, db) -> None:
     assert client.get("/billing/availability").json() == {"enabled": False, "tokenizer": None}
+
+
+def test_los_contratos_y_la_llave_de_cifrado_de_wompi_ya_no_existen(client, db, pasarela) -> None:
+    """La llave del formulario de tarjeta propio (§3.16) salio en el paso 5.1 y
+    los dos contratos del procesador en el 5.3 de la Fase 5: eran de Wompi."""
     token, _, _ = _cuenta(client, db)
-    r = client.get("/billing/acceptance", headers=auth(token))
-    assert (r.status_code, r.json()["detail"]["code"]) == (503, "automatic_unavailable")
-
-
-def test_la_llave_de_cifrado_de_tarjetas_ya_no_existe(client, db) -> None:
-    """La del formulario de tarjeta propio (§3.16) salio en el paso 5.1 de la Fase 5."""
-    token, _, _ = _cuenta(client, db)
-    assert client.get("/billing/card-encryption-key", headers=auth(token)).status_code == 404
-    assert "/billing/card-encryption-key" not in client.get("/openapi.json").json()["paths"]
-
-
-def test_los_contratos_del_procesador(client, db, pasarela) -> None:
-    token, _, _ = _cuenta(client, db)
-    assert client.get("/billing/acceptance").status_code == 401
-    r = client.get("/billing/acceptance", headers=auth(token))
-    assert r.status_code == 200, r.text
-    assert r.json() == {
-        "acceptance_token": ACEPTACION,
-        "terms_url": "https://pasarela.test/terminos.pdf",
-        "personal_data_token": DATOS_PERSONALES,
-        "personal_data_url": "https://pasarela.test/datos.pdf",
-    }
-    pasarela.caido = True
-    r = client.get("/billing/acceptance", headers=auth(token))
-    assert (r.status_code, r.json()["detail"]["code"]) == (502, "provider_unavailable")
+    rutas = client.get("/openapi.json").json()["paths"]
+    for ruta in ("/billing/card-encryption-key", "/billing/acceptance"):
+        assert client.get(ruta, headers=auth(token)).status_code == 404
+        assert ruta not in rutas
 
 
 # ---------- Alta con medio de pago guardado ----------
@@ -149,24 +127,18 @@ def test_alta_automatica_guarda_el_medio_y_hace_el_primer_cobro(client, db, pasa
     data = r.json()
     # No hay pagina a donde ir: el cobro ya se envio.
     assert data["checkout_url"] is None
-    assert (data["total_cents"], data["currency"]) == (PRECIO, "COP")
+    assert (data["total_cents"], data["currency"]) == (PRECIO, "EUR")
 
-    # A la pasarela se le pidio guardar el medio con el token y los dos contratos.
+    # A la pasarela se le pidio guardar el medio con el token.
     [fuente] = pasarela.fuentes_pedidas
-    assert fuente == {
-        "type": "CARD",
-        "token": TOKEN_TARJETA,
-        "customer_email": correo,
-        "acceptance_token": ACEPTACION,
-        "personal_data_token": DATOS_PERSONALES,
-    }
+    assert fuente == {"type": "CARD", "token": TOKEN_TARJETA, "customer_email": correo}
     # Y se le cobro a esa fuente, con el monto del servidor.
     [cobro] = pasarela.cobros
     [pago] = _pagos(db, user_id)
     assert cobro == {
         "reference": pago.reference,
         "amount_cents": PRECIO,
-        "currency": "COP",
+        "currency": "EUR",
         "customer_email": correo,
         "source_id": "3000",
         "source_type": "CARD",
@@ -207,17 +179,18 @@ def test_alta_automatica_guarda_el_medio_y_hace_el_primer_cobro(client, db, pasa
     assert visto["next_charge_at"] is not None and visto["next_charge_cents"] == PRECIO
 
 
-def test_alta_con_nequi(client, db, pasarela) -> None:
+def test_alta_con_un_medio_que_no_es_tarjeta(client, db, pasarela) -> None:
+    """El tipo del medio lo define la pasarela: la aplicacion lo guarda tal cual."""
     token, user_id, _ = _cuenta(client, db)
     r = _alta_automatica(
-        client, token, _mensual(db).id, payment_source_token=TOKEN_NEQUI, payment_source_type="NEQUI"
+        client, token, _mensual(db).id, payment_source_token=TOKEN_OTRO_MEDIO, payment_source_type="WALLET"
     )
     assert r.status_code == 202, r.text
-    assert pasarela.fuentes_pedidas[0]["type"] == "NEQUI"
-    assert pasarela.cobros[0]["source_type"] == "NEQUI"
+    assert pasarela.fuentes_pedidas[0]["type"] == "WALLET"
+    assert pasarela.cobros[0]["source_type"] == "WALLET"
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.payment_source_type, suscripcion.card_brand, suscripcion.card_last4) == (
-        "NEQUI",
+        "WALLET",
         None,
         None,
     )
@@ -272,11 +245,10 @@ def test_medio_de_pago_que_pasarela_no_acepta(client, db, pasarela) -> None:
         ({"payment_source_token": None}, "payment_source_required"),
         ({"payment_source_token": "  "}, "payment_source_required"),
         ({"payment_source_type": None}, "payment_source_type_not_supported"),
-        ({"acceptance_token": None}, "acceptance_required"),
-        ({"personal_data_token": ""}, "acceptance_required"),
+        ({"payment_source_type": " "}, "payment_source_type_not_supported"),
     ],
 )
-def test_la_renovacion_automatica_exige_el_medio_y_los_contratos(
+def test_la_renovacion_automatica_exige_el_medio(
     client, db, pasarela, cambios, codigo
 ) -> None:
     token, user_id, _ = _cuenta(client, db)
@@ -285,9 +257,9 @@ def test_la_renovacion_automatica_exige_el_medio_y_los_contratos(
     assert _pagos(db, user_id) == [] and pasarela.fuentes_pedidas == []
 
 
-def test_un_medio_que_no_es_tarjeta_ni_nequi_no_se_acepta(client, db, pasarela) -> None:
+def test_un_tipo_de_medio_demasiado_largo_no_se_acepta(client, db, pasarela) -> None:
     token, _, _ = _cuenta(client, db)
-    r = _alta_automatica(client, token, _mensual(db).id, payment_source_type="PSE")
+    r = _alta_automatica(client, token, _mensual(db).id, payment_source_type="X" * 17)
     assert r.status_code == 422
 
 
@@ -341,7 +313,7 @@ def test_el_aviso_sale_siete_dias_antes_del_primer_intento_y_una_sola_vez(client
     [aviso] = [m for m in _correos(reporte) if m.to == correo]
     assert aviso.subject == "Aviso: próximo cobro de tu suscripción a Sebasanálisis"
     # Que plan, cuanto, en que moneda, a que medio y como gestionarlo.
-    assert "Acceso Mensual" in aviso.text and "100.000 COP" in aviso.text
+    assert "Acceso Mensual" in aviso.text and "32 EUR" in aviso.text
     assert "tu tarjeta Visa terminada en 4242" in aviso.text
     assert "/cuenta" in aviso.text and "cancela la renovación" in aviso.text
 
@@ -463,11 +435,11 @@ def test_un_intento_que_otra_corrida_ya_creo_no_se_cobra_dos_veces(client, db, p
             subscription_id=suscripcion.id,
             user_id=uuid.UUID(user_id),
             plan_id=suscripcion.plan_id,
-            provider="pasarela",
+            provider="fake",
             reference=renewal_reference(suscripcion, vence, 1),
             kind="renewal",
             amount_cents=PRECIO,
-            currency="COP",
+            currency="EUR",
             status="pending",
             created_at=cuando,
         )
@@ -482,11 +454,11 @@ def test_un_intento_que_otra_corrida_ya_creo_no_se_cobra_dos_veces(client, db, p
         Payment(
             user_id=uuid.UUID(user_id),
             plan_id=suscripcion.plan_id,
-            provider="pasarela",
+            provider="fake",
             reference=renewal_reference(suscripcion, vence, 1),
             kind="renewal",
             amount_cents=PRECIO,
-            currency="COP",
+            currency="EUR",
             status="pending",
         )
     )
@@ -546,7 +518,7 @@ def test_los_tres_intentos_fallan_y_vence_exactamente_en_el_vencimiento(client, 
     assert _tiene_acceso(client, token)
     [fallido] = [m for m in _correos(reporte) if m.to == correo]
     assert fallido.subject == "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis"
-    assert "100.000 COP" in fallido.text and "conservas el acceso" in fallido.text
+    assert "32 EUR" in fallido.text and "conservas el acceso" in fallido.text
 
     # Entre intentos no se cobra.
     assert _correr(db, pasarela, vence - 30 * H).charges == 0
@@ -636,12 +608,12 @@ def test_el_cambio_de_precio_del_plan_no_toca_la_renovacion(client, db, pasarela
     """§3.9: las suscripciones vigentes renuevan con su precio congelado."""
     _, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
     vence = _avisada(db, pasarela, suscripcion)
-    db.execute(text("UPDATE plans SET price_cents = 13000000 WHERE code = 'mensual'"))
+    db.execute(text("UPDATE plans SET price_cents = 4000 WHERE code = 'mensual'"))
     db.commit()
     try:
         assert _correr(db, pasarela, vence - 48 * H).approved == 1
     finally:
-        db.execute(text("UPDATE plans SET price_cents = 10000000 WHERE code = 'mensual'"))
+        db.execute(text("UPDATE plans SET price_cents = 3200 WHERE code = 'mensual'"))
         db.commit()
     assert pasarela.cobros[-1]["amount_cents"] == PRECIO
     assert _suscripcion(db, user_id).price_cents == PRECIO
@@ -651,16 +623,16 @@ def test_cupon_repeating_descuenta_un_periodo_en_cada_renovacion(client, db, pas
     """Tres periodos con 20 %: el alta y dos renovaciones; la tercera, completa."""
     cupon = _cupon(db, value=20, duration="repeating", duration_periods=3)
     _, user_id, correo, suscripcion = _suscriptor_automatico(client, db, pasarela, codigo=cupon.code)
-    assert pasarela.cobros[0]["amount_cents"] == 8_000_000
+    assert pasarela.cobros[0]["amount_cents"] == 2_560
     assert (suscripcion.price_cents, suscripcion.discount_periods_remaining) == (PRECIO, 2)
 
-    esperados = [(8_000_000, 1), (8_000_000, 0), (PRECIO, 0)]
+    esperados = [(2_560, 1), (2_560, 0), (PRECIO, 0)]
     for monto, quedan in esperados:
         suscripcion = _suscripcion(db, user_id)
         vence = suscripcion.current_period_end
         aviso = _correr(db, pasarela, vence - 9 * DIA)
         # El aviso anuncia lo que de verdad se va a cobrar.
-        esperado = "80.000 COP" if monto == 8_000_000 else "100.000 COP"
+        esperado = "25,60 EUR" if monto == 2_560 else "32 EUR"
         assert esperado in _correos(aviso)[0].text
         assert _correr(db, pasarela, vence - 48 * H).approved == 1
         assert pasarela.cobros[-1]["amount_cents"] == monto
@@ -677,8 +649,8 @@ def test_el_pago_manual_del_siguiente_periodo_tambien_lleva_el_descuento(client,
     siguiente = _abrir_pago(client, db, token)
     assert (siguiente.kind, siguiente.amount_cents, siguiente.discount_cents) == (
         "renewal",
-        8_000_000,
-        2_000_000,
+        2_560,
+        640,
     )
 
 
@@ -798,7 +770,7 @@ def test_pago_manual_aviso_de_vencimiento_y_vencimiento_sin_ningun_cobro(client,
     assert reporte.notices == 1
     [aviso] = [m for m in _correos(reporte) if m.to == correo]
     assert aviso.subject == "Tu acceso a Sebasanálisis está por terminar"
-    assert "no te vamos a hacer ningún cobro" in aviso.text and "100.000 COP" in aviso.text
+    assert "no te vamos a hacer ningún cobro" in aviso.text and "32 EUR" in aviso.text
     assert f"/planes/pagar?plan={suscripcion.plan_id}" in aviso.text
     # Una vez por periodo.
     assert _correos(_correr(db, pasarela, vence - 3 * DIA)) == []
@@ -879,7 +851,7 @@ def test_pagar_a_mano_despues_del_aviso_renueva_y_vuelve_a_avisar_el_periodo_sig
     vence = _suscripcion(db, user_id).current_period_end
     assert _correr(db, pasarela, vence - 7 * DIA).notices == 1
 
-    _aprobar(client, pasarela, _abrir_pago(client, db, token), timestamp=1_760_000_777)
+    _aprobar(client, pasarela, _abrir_pago(client, db, token))
     nuevo = _suscripcion(db, user_id).current_period_end
     assert nuevo == add_interval(vence, "month", 1)
     # El vencimiento viejo ya no vence nada.
@@ -910,5 +882,5 @@ def test_el_plan_de_dos_meses_renueva_dos_meses(client, db, pasarela) -> None:
     suscripcion = _suscripcion(db, user_id)
     vence = _avisada(db, pasarela, suscripcion)
     assert _correr(db, pasarela, vence - 48 * H).approved == 1
-    assert pasarela.cobros[-1]["amount_cents"] == 15_000_000
+    assert pasarela.cobros[-1]["amount_cents"] == 4_600
     assert _suscripcion(db, user_id).current_period_end == add_interval(vence, "month", 2)

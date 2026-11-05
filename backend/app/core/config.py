@@ -49,13 +49,20 @@ class Settings(BaseSettings):
     # Solo con EMAIL_BACKEND=file (tests de punta a punta).
     email_file_dir: str = ""
 
-    # Pagos (docs/PLATAFORMA_COMPLETA.md §3 y §3.18). `none` deja el pago
-    # apagado: /planes muestra el precio y no deja suscribirse. `fake` es una
-    # pasarela simulada, solo para desarrollo y tests de punta a punta.
-    payment_provider: Literal["none", "fake"] = "none"
-    # Solo con PAYMENT_PROVIDER=fake: donde responde esta API, para armar el
-    # enlace de la pasarela simulada.
+    # Pagos (docs/PLATAFORMA_COMPLETA.md §3, §3.18 y §3.19). `none` deja el
+    # pago apagado: /planes muestra el precio y no deja suscribirse.
+    # `tipsterpage` cobra con Tipster Page. `fake` es una pasarela simulada,
+    # solo para desarrollo y tests de punta a punta.
+    payment_provider: Literal["none", "fake", "tipsterpage"] = "none"
+    # Donde responde esta API, vista desde fuera: el enlace de un solo uso de
+    # la pagina de pago y la URL a la que la pasarela manda sus avisos.
     api_public_url: str = "http://localhost:8000"
+    # Tipster Page (payments/tipsterpage.py). Las cuatro, o ninguna. La URL
+    # base dice el ambiente: la del sandbox o la de produccion.
+    tspay_api_base_url: str = ""
+    tspay_merchant_code: str = ""
+    tspay_auth_bearer: str = ""
+    tspay_secret_key: str = ""
 
     # Verificacion contra bots con Cloudflare Turnstile (core/bot_check.py). Van
     # las dos o ninguna; sin ninguna, la verificacion queda apagada.

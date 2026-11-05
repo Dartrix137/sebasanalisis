@@ -194,3 +194,12 @@ export async function expectEmail(to: string, subjectPart: string): Promise<void
     )
     .toBe(true);
 }
+
+/**
+ * En la pantalla de pago, con la pasarela simulada: "Otro país" y la tarjeta
+ * simulada, que no pide datos del comprador (paso 5.3 de la Fase 5).
+ */
+export async function chooseFakeCard(page: Page): Promise<void> {
+  await page.getByLabel("País desde el que pagas").selectOption("otro");
+  await page.getByRole("radio", { name: "Tarjeta simulada" }).check();
+}

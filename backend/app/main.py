@@ -40,10 +40,11 @@ if not _app_logger.handlers:
     _app_logger.addHandler(_handler)
     _app_logger.setLevel(logging.INFO)
 
-# Deja dicho con que pasarela quedo, sin mostrar ninguna llave
-# (docs/PLATAFORMA_COMPLETA.md §12). Las protecciones de arranque contra la
-# pasarela simulada y el correo a archivo en produccion dependian de las llaves
-# de Wompi y salieron con el (§3.18); vuelven con la pasarela nueva.
+# Falla aqui, al arrancar, si las llaves de la pasarela estan incompletas o la
+# URL base no es una de las de Tipster Page; o si, con sus llaves de
+# produccion, quedo puesta la pasarela simulada o el correo a archivo
+# (`payments/tipsterpage.check_startup`). Deja dicho con que pasarela quedo,
+# sin mostrar ninguna llave (docs/PLATAFORMA_COMPLETA.md §12 y §3.19).
 _app_logger.info("Pagos: %s", get_payment_provider().describe())
 
 # Igual con la verificacion contra bots: una sola de sus dos llaves es un error

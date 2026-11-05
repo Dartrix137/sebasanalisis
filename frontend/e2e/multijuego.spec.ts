@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
 import {
+  chooseFakeCard,
   API_URL,
   adminAuth,
   confirmEmail,
@@ -163,7 +164,7 @@ test("un juego fuera del plan: disponible en otro plan, sin mesa", async ({ page
       code: `e2e-${rand()}`,
       name,
       description: "Plan que solo incluye el dado (e2e).",
-      price_cents: 10_000_000,
+      price_cents: 3_200,
       interval: "month",
       reason: "Plan para probar el acceso por juego",
     },
@@ -186,7 +187,8 @@ test("un juego fuera del plan: disponible en otro plan, sin mesa", async ({ page
   await expect(tarjetaPlan.getByText(`Incluye: ${dados.name}`)).toBeVisible();
   await tarjetaPlan.getByRole("link", { name: "Suscribirme" }).click();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 

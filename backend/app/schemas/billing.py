@@ -17,9 +17,9 @@ from app.schemas.base import ApiModel, Reason
 # Tope de un INTEGER de Postgres.
 _MAX_CENTS = 2_147_483_647
 
-# Pesos colombianos (§3.10): la unica moneda de cobro hasta que la pasarela
-# nueva diga en cual cobra (Fase 5, paso 5.3).
-ChargeCurrency = Literal["COP"]
+# Euros (Fase 5, paso 5.3; decidido el 2026-11-03): Tipster Page cobra siempre
+# en euros. Es la unica moneda de cobro de planes y cupones.
+ChargeCurrency = Literal["EUR"]
 
 
 class PlanInterval(str, Enum):
@@ -123,12 +123,6 @@ class PaymentStatus(str, Enum):
     error = "error"
 
 
-class PaymentSourceKind(str, Enum):
-    """Medios que se pueden guardar para la renovacion automatica."""
-    CARD = "CARD"
-    NEQUI = "NEQUI"
-
-
 class TokenizerKind(str, Enum):
     # Selector de la pasarela simulada. La pasarela nueva agrega aqui su forma
     # de tokenizar (Fase 5, paso 5.3).
@@ -143,13 +137,35 @@ class BillingAvailabilityResponse(ApiModel):
     tokenizer: TokenizerKind | None = None
 
 
-class AcceptanceResponse(ApiModel):
-    """Los dos contratos del procesador de pagos que el cliente acepta antes
-    de guardar un medio de pago. Los tokens se devuelven al suscribirse."""
-    acceptance_token: str
-    terms_url: str
-    personal_data_token: str
-    personal_data_url: str
+class BuyerFieldName(str, Enum):
+    """Los datos del comprador que puede pedir un medio de pago."""
+    first_name = "first_name"
+    last_name = "last_name"
+    personal_id = "personal_id"
+    phone = "phone"
+
+
+class CheckoutMethodResponse(ApiModel):
+    """Un medio de pago que ofrece la pasarela en un pais."""
+    key: str
+    name: str
+    # Logo en el CDN de la pasarela. Null si no trae uno por HTTPS.
+    logo_url: str | None = None
+    # El rango de monto que admite, ambos incluidos.
+    min_cents: int
+    max_cents: int
+    currency: str
+    # Los datos del comprador que hay que pedir para este medio.
+    fields: list[BuyerFieldName]
+
+
+class BuyerData(ApiModel):
+    """Los datos que pide el medio de pago elegido. Se mandan a la pasarela
+    y no se guardan: ni en la base, ni en los registros, ni en el monitoreo."""
+    first_name: str | None = Field(default=None, max_length=80)
+    last_name: str | None = Field(default=None, max_length=80)
+    personal_id: str | None = Field(default=None, max_length=40)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class SubscribeRequest(ApiModel):
@@ -157,31 +173,30 @@ class SubscribeRequest(ApiModel):
     cliente se ignora."""
     plan_id: UUID
     coupon_code: str | None = Field(default=None, max_length=80)
-    # `automatic` exige los cuatro campos de abajo.
     renewal_mode: RenewalMode = RenewalMode.manual
-    # El token que el procesador le dio al navegador. No son datos de tarjeta.
+    # Pago manual: el medio elegido (`GET /billing/payment-methods`), el pais
+    # del comprador y los datos que pide ese medio.
+    payment_method: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
+    buyer: BuyerData | None = None
+    # Renovacion automatica: el token que el procesador le dio al navegador.
+    # No son datos de tarjeta.
     payment_source_token: str | None = Field(default=None, max_length=500)
-    payment_source_type: PaymentSourceKind | None = None
-    # Los tokens de `GET /billing/acceptance`, tras marcar las dos casillas.
-    acceptance_token: str | None = Field(default=None, max_length=5000)
-    personal_data_token: str | None = Field(default=None, max_length=5000)
+    payment_source_type: str | None = Field(default=None, max_length=16)
 
 
 class PaymentMethodRequest(ApiModel):
     """PUT /billing/payment-method: el medio de pago que el cliente tokenizo en
     la ventana del procesador. No son datos de tarjeta."""
     payment_source_token: str = Field(min_length=1, max_length=500)
-    payment_source_type: PaymentSourceKind
-    # Los tokens de `GET /billing/acceptance`, tras marcar las dos casillas.
-    acceptance_token: str = Field(min_length=1, max_length=5000)
-    personal_data_token: str = Field(min_length=1, max_length=5000)
+    payment_source_type: str = Field(min_length=1, max_length=16)
 
 
 class SubscribeResponse(ApiModel):
     """El pago quedo abierto. En el pago manual falta que el cliente pague en
     la pasarela; con un medio guardado, el cobro ya se envio."""
     payment_id: UUID
-    # La pagina de la pasarela donde se paga. Null con un medio de pago
+    # El enlace de un solo uso de la pagina de pago. Null con un medio de pago
     # guardado: no hay a donde ir, solo esperar el resultado.
     checkout_url: str | None = None
     subtotal_cents: int
@@ -262,7 +277,7 @@ class SubscriptionResponse(ApiModel):
     # El periodo pagado todavia no vence. Lo dice el servidor, con su reloj.
     in_force: bool
     # El medio de pago guardado, solo para mostrarlo. Nunca el numero completo.
-    payment_source_type: PaymentSourceKind | None = None
+    payment_source_type: str | None = None
     card_brand: str | None = None
     card_last4: str | None = None
     # Cuando se intenta el proximo cobro automatico. Null si no hay ninguno previsto.
@@ -309,7 +324,7 @@ class CreatePlanRequest(ApiModel):
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=2000)
     price_cents: int = Field(gt=0, le=_MAX_CENTS)
-    currency: ChargeCurrency = "COP"
+    currency: ChargeCurrency = "EUR"
     interval: PlanInterval
     interval_count: int = Field(default=1, ge=1, le=36)
     active: bool = True

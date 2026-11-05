@@ -62,11 +62,13 @@ Las dos `TURNSTILE_*` van juntas o ninguna: sin ninguna, el registro, el ingreso
 y el olvido de contrasena no piden la verificacion contra bots; con una sola, la
 API no arranca. Como crearlas, en "Antes del lanzamiento comercial", paso 8.
 
-Pagos: no hay ninguna variable de la pasarela. `PAYMENT_PROVIDER` no se pone
-(vale `none`): la API arranca con el pago apagado y el acceso se da a mano. Las
+Pagos: sin `PAYMENT_PROVIDER` (vale `none`) la API arranca con el pago apagado
+y el acceso se da a mano. Con `PAYMENT_PROVIDER=tipsterpage` cobra con Tipster
+Page y pide `TSPAY_API_BASE_URL`, `TSPAY_MERCHANT_CODE`, `TSPAY_AUTH_BEARER` y
+`TSPAY_SECRET_KEY`, y `API_PUBLIC_URL` (la URL publica de la API: ahi llegan
+los avisos de pago). El detalle esta en "Pagos con Tipster Page" abajo. Las
 `WOMPI_*` y `PAYMENT_PROVIDER=wompi` salieron con Wompi; con
-`PAYMENT_PROVIDER=wompi` la API ya no arranca. El detalle esta en "Pagos: sin
-pasarela" abajo.
+`PAYMENT_PROVIDER=wompi` la API ya no arranca.
 
 `FRONTEND_BASE_URL` es la base de los enlaces que viajan en los correos
 (verificar el correo, restablecer la contrasena). Es la direccion **publica del
@@ -215,10 +217,104 @@ Que pasa al desplegar este paso:
   "Guardar acceso"). Mientras no exista el pago (paso 5) es la unica via.
 - Cada cambio de acceso y cada suspension queda en `/admin/auditoria`.
 
+### Pagos con Tipster Page (Fase 5, paso 5.3)
+
+Integracion V2 de Tipster Page, sin su landing: el cliente elige su pais y el
+medio de pago en `/planes/pagar`, la API crea la orden firmada y le entrega al
+navegador la pagina que lo lleva al procesador (Redsys para tarjeta y Bizum,
+EBANX para los medios locales). Como quedo construido:
+`PLATAFORMA_COMPLETA.md` §3.19. Solo pago manual por periodo: Tipster Page no
+tiene cobros recurrentes, asi que la renovacion automatica no se ofrece.
+
+**Variables** (en `Environment` de la API y del job de renovaciones, que
+reconsulta los pagos pendientes):
+
+| Variable | Valor |
+|---|---|
+| `PAYMENT_PROVIDER` | `tipsterpage` |
+| `TSPAY_API_BASE_URL` | Sandbox: `https://sandboxv2.ttpgpay.com/tspayv2`. Produccion: `https://paymentsv2.ttpgpay.com/tspayv2`. Otra URL no arranca |
+| `TSPAY_MERCHANT_CODE` | El `MERCHANT_CODE` que da Tipster Page (va en la cabecera `X-TSPAY-USER`) |
+| `TSPAY_AUTH_BEARER` | El `AUTH_BEARER` |
+| `TSPAY_SECRET_KEY` | El `SECRET_KEY` (la clave HMAC de las firmas). Copiarlo tal cual, sin espacios al final; en un `.env` local, entre comillas simples |
+| `API_PUBLIC_URL` | La URL publica de la API, por HTTPS (`https://api.<dominio>`). De ella salen la URL de los avisos (`/webhooks/payments`) y el enlace de la pagina de pago |
+
+Son distintas por ambiente (sandbox y produccion). La API dice al arrancar
+contra cual quedo: `Pagos: Tipster Page (sandbox)` o `Pagos: Tipster Page
+(PRODUCCION)`. Con la URL de produccion **no arranca** si queda
+`PAYMENT_PROVIDER=fake`, `EMAIL_BACKEND=file`, o `API_PUBLIC_URL` o
+`FRONTEND_BASE_URL` sin HTTPS: el manual exige HTTPS en las URL de regreso y de
+aviso. Si falta una de las cuatro `TSPAY_*`, tampoco arranca, y el error dice
+cual.
+
+**La URL de avisos no se configura en el panel de Tipster Page**: viaja en cada
+orden (`notification_url`), armada con `API_PUBLIC_URL`. Desde un equipo local
+el sandbox no puede avisar a `localhost`: en local los pagos se resuelven con
+la reconsulta (la pantalla `/pago/:id` y el job). El aviso de verdad se prueba
+en el VPS.
+
+**El job de renovaciones** reconsulta cada hora los pagos manuales pendientes de
+la ultima semana: si un aviso no llega, el pago se resuelve igual en la
+corrida siguiente.
+
+**Una orden abierta cuenta como un cobro en proceso durante 7 dias**
+(`PENDING_PAYMENT_WINDOW`, `billing/schedule.py`): mientras tanto la cuenta no se
+puede eliminar y el admin no extiende ni cancela su suscripcion. Pasada una
+semana se da por abandonada: deja de bloquear y el job deja de reconsultarla.
+Si Tipster Page la resuelve despues, lo trae su aviso.
+
+**Precios**: la migracion `22780db115af` pasa los planes a 32 EUR (mensual) y
+46 EUR (dos meses). Se detiene si hay suscripciones activas o en mora en COP, o
+traslados de precio en COP sin aplicar. Los cupones de monto fijo en COP dejan
+de aplicar: desactivarlos en `/admin/descuentos`.
+
+**Desplegar** (en este orden):
+
+1. Mezclar el PR y desplegar backend y frontend desde el mismo commit. Corren
+   cuatro migraciones: tres de `payment_events` (la pasarela de cada evento, y
+   la idempotencia por pasarela) y la de los precios.
+2. En Dokploy, en la API y en el job: `PAYMENT_PROVIDER=tipsterpage`, las cuatro
+   `TSPAY_*` del sandbox y `API_PUBLIC_URL`. Reiniciar y revisar la linea de
+   arranque.
+3. Probar en el sandbox lo de "Pruebas en el sandbox de Tipster Page", abajo.
+4. Las llaves de produccion van al final, con Siigo y los textos legales v2
+   (`HOJA_DE_RUTA.md` §5). Mientras el VPS tenga las del sandbox, cualquier
+   cuenta obtiene acceso pagando con una tarjeta de prueba.
+
+#### Pruebas en el sandbox de Tipster Page
+
+Con las tarjetas de prueba de Redsys del manual V2 §11 (caducidad 12/34). Bizum
+aprueba solo hasta 12 EUR en el sandbox, asi que los planes se prueban con
+tarjeta. Las del 2026-11-05 se hicieron en local: la API con
+`PAYMENT_PROVIDER=tipsterpage` y las llaves del sandbox, sobre una base
+desechable (`sebasanalisis_sandbox_e2e`, armada con `prepare_e2e_db.py`), y el
+frontend apuntando a ella, en Chrome.
+
+| Caso | Resultado |
+|---|---|
+| Catalogo de medios por pais (`GET /payment-methods`, 2026-11-04) | **Responde.** Colombia: tarjeta (Redsys) y 6 medios de EBANX, todos piden el nombre; Espana: tarjeta y Bizum (el sandbox no le pide datos a Bizum, aunque el manual dice que nombre, apellidos y documento); Mexico: tarjeta y 4 de EBANX. Todos de 1 a 400 EUR. Logos en `cdntpfiles86236.tipsterpage.com`. Las cabeceras de autenticacion funcionan |
+| Orden de un pais o un `order_id` que no existen (`GET /order-status`) | `404 Order not found` |
+| Crear una orden (`POST /create-order-tspay`) | **Responde (2026-11-05).** El 2026-11-04 daba `400 Invalid signature`: el `SECRET_KEY` del sandbox estaba mal del lado de Tipster Page, que lo cambio en su documento compartido. El algoritmo no cambio: nuestra firma coincide con su script de referencia (`sign-tspay-order.js`) sobre su orden de ejemplo (`tests/payments/test_tipsterpage.py`). Acepta `url_ok`, `url_ko` y `notification_url` por `http://localhost`, asi que el flujo se prueba en local |
+| El HTML de la pagina de pago | **Visto (2026-11-05).** Con tarjeta: una pagina sin `<script>`, con `<body onload="document.getElementById('form').submit()">` y un formulario `POST` a `https://sis-t.redsys.es:25443/sis/realizarPago` (`Ds_SignatureVersion`, `Ds_MerchantParameters`, `Ds_Signature`). La CSP de `/billing/checkout/{token}` deja correr solo ese `onload` (`'unsafe-hashes'` con su huella) y enviar a Redsys y al frontend: en Chrome el formulario se envio solo y llego a Redsys. En produccion el origen del TPV sera otro: lo saca la API de la pagina, no hay que configurarlo |
+| Pago aceptado (4548 8120 4940 0004, 12/34, CVV 123) | **Aprobado (2026-11-05).** El sandbox le pide el desafio 3DS tambien a esta tarjeta ("Autenticacion con exito" en el simulador de `sis-d.redsys.es`). Redsys devuelve al navegador a `url_ok` (`/pago/:id`), que reconsulta: pago `approved`, suscripcion `active` por un mes, factura `pending` y los dos correos. La pantalla de Redsys muestra como comercio a "GGBAMARKETING SOLUTIONS S.L. (SPAIN)" (ver "Lo que ve el cliente", abajo) |
+| Pago denegado (4548 8144 7972 7229, CVV 999) | **Denegado en Redsys (2026-11-05)**, con "el emisor de su tarjeta requiere autenticacion del titular... el comercio no tiene activada esta funcion". Redsys deja al comprador en su pagina para probar otra tarjeta con la misma orden: la orden sigue `pending` |
+| Con desafio 3DS, autenticacion fallida (4548 8172 1249 3017, CVV 123, "Denegar autenticacion") | **Denegado (2026-11-05)**: "Error de Autenticacion", y otra vez la pagina para reintentar; la orden sigue `pending` |
+| Cancelar en Redsys | **Rechazado (2026-11-05)**: "A peticion del usuario, se ha cancelado el pago (SIS9915)". Con "Continuar" vuelve a `url_ko` (`/pago/:id`): la reconsulta da `error`, el pago queda `declined`, sin acceso ni factura, y la pantalla dice "El pago no se completo" con el boton de volver a los planes |
+| Con desafio 3DS, aceptado (4548 8172 1249 3017, CVV 123, "Autenticacion con exito") | **Aprobado (2026-11-05)**, con la misma cuenta del rechazo anterior (un pago nuevo). Sin pulsar "Continuar" en Redsys (el comprador cierra la pestaña): el job de renovaciones lo resolvio en la corrida siguiente (`reconsultas=1 aprobados=1 correos=2`), con la factura `pending` |
+| Recargar la pagina de pago | **Probado (2026-11-05).** El enlace de la API ya usado responde 410 "Este enlace de pago ya se uso o vencio" y no crea otra orden |
+| Repetir un `order_id` | **Se acepta (2026-11-05)**: responde 201 con una pagina nueva, y la orden queda con los datos de la ultima creacion, **monto incluido** (de 1,00 a 2,00 EUR en la reconsulta). No nos afecta: la referencia es una por pago y la orden se crea una vez. El transporte simulado de los tests hace lo mismo |
+| `error_and_refund_payment` | **No se pudo provocar** con las tarjetas de Redsys del sandbox. Queda como no aprobado (sin acceso); hay que preguntarle a Tipster Page como provocarlo (pregunta 7) |
+| Bizum, medios de EBANX | Sin probar. Bizum aprueba hasta 12 EUR en el sandbox, y los planes son de 32 y 46 |
+| El webhook en local, con avisos armados como los del manual §9 y firmados con la llave del sandbox (2026-11-05) | Firma mala: 401, guardado sin verificar. Firma buena: `processed`; el mismo aviso otra vez: `duplicate`. Un `ok` bien firmado de la orden que Tipster Page da por `error`: se reconsulta y el pago sigue `declined`, sin factura. El monto reformateado (`32.00` firmado como `32`): 401 |
+| Aviso de pago real de Tipster Page (`notification_url`) en el VPS | Pendiente: desde un equipo local no llega. Falta ver el formato real del `amount` y que lo resuelva antes que la reconsulta de `/pago/:id` |
+
+**Lo que ve el cliente en Redsys.** El comercio que aparece en la pagina de pago (y, presumiblemente, en el extracto de la tarjeta) es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", con "Url Comercio: https://www.tipsterpage.com", no Sebasanalisis. Un cliente que no lo reconozca puede pedir un contracargo. Hay que confirmarlo con Tipster Page, y decirlo en la pantalla de pago, el recibo y los textos legales v2 (paso 5.5).
+
+**El regreso de Redsys trae parametros.** Redsys devuelve al navegador a `url_ok`/`url_ko` con `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature` en la URL. No llevan el numero de la tarjeta, ni el titular ni el CVV, pero si la marca, el pais y el tipo de la tarjeta, el codigo de autorizacion y el codigo de comercio de Redsys. La pagina `/pago/:id` no los usa (es la reconsulta la que decide) y los quita de la barra de direcciones al cargar, para que no queden en el historial; GlitchTip ya filtraba los parametros de toda URL.
+
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 
-Desde el 2026-10-23 no hay pasarela de pagos: Wompi salio del proyecto y la
-nueva (Tipster Page) entra en el paso 5.3. Mientras tanto:
+Desde el 2026-10-23 hasta que se encienda Tipster Page (arriba) no hay pasarela
+de pagos: Wompi salio del proyecto. Mientras tanto:
 
 - `PAYMENT_PROVIDER` no se pone en Dokploy (vale `none`). El arranque de la API
   dice `Pagos: sin pasarela configurada: el pago esta apagado`.
@@ -230,8 +326,9 @@ nueva (Tipster Page) entra en el paso 5.3. Mientras tanto:
   avisos de las que pagaron a mano. Por eso las suscripciones de sandbox se
   cancelan antes de desplegar el retiro (abajo).
 - `PAYMENT_PROVIDER=fake` es la pasarela simulada, solo para desarrollo y
-  Playwright. **Nunca en produccion**: aprueba pagos sin cobrar, y desde que
-  salio Wompi la API no tiene como detectarlo.
+  Playwright. **Nunca en produccion**: aprueba pagos sin cobrar. Con las llaves
+  de produccion de Tipster Page la API no arranca con ella (paso 5.3); sin
+  ellas no tiene como detectarlo.
 
 **Desplegar el retiro de Wompi** (una sola vez, en este orden):
 

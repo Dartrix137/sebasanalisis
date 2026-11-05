@@ -1,7 +1,7 @@
 """Gestion de una suscripcion ya pagada y cierre de la cuenta (§3.6, §3.10 y §5.4 de la Fase 4).
 
 Cambiar el medio de pago, pasar de un modo de pago al otro, y lo que queda de
-los pagos al eliminar la cuenta. La pasarela es el doble de `pasarela_double.py`; el job
+los pagos al eliminar la cuenta. La pasarela es la simulada (`pasarela_simulada.py`); el job
 de renovaciones se llama directo con el `now` que cada caso necesita.
 """
 
@@ -11,14 +11,12 @@ from sqlalchemy import select, text
 from app.billing.periods import add_interval
 from app.models import Coupon, CouponRedemption, Payment, PaymentEvent
 from tests.api.conftest import auth
-from tests.api.pasarela_double import (
-    ACEPTACION,
-    DATOS_PERSONALES,
-    TOKEN_NEQUI,
+from tests.api.pasarela_simulada import (
+    TOKEN_OTRO_MEDIO,
     TOKEN_RECHAZADO,
     TOKEN_TARJETA,
-    Pasarela,
 )
+from tests.api.pasarela_simulada import PasarelaSimulada as Pasarela
 from tests.api.test_billing import _cupon, _mensual
 from tests.api.test_renewals import (
     DIA,
@@ -60,8 +58,6 @@ def _guardar_medio(client, token: str | None, **cambios):
     body = {
         "payment_source_token": TOKEN_TARJETA,
         "payment_source_type": "CARD",
-        "acceptance_token": ACEPTACION,
-        "personal_data_token": DATOS_PERSONALES,
         **cambios,
     }
     return client.put("/billing/payment-method", json=body, headers=auth(token) if token else {})
@@ -95,14 +91,12 @@ def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
     assert (data["status"], data["renewal_mode"], data["card_last4"]) == ("active", "automatic", "4242")
     assert data["next_charge_cents"] == PRECIO
 
-    # A la pasarela se le pidio guardar el medio nuevo, con los dos contratos, y nada mas:
-    # el periodo vigente ya estaba pagado.
+    # A la pasarela se le pidio guardar el medio nuevo, y nada mas: el periodo
+    # vigente ya estaba pagado.
     assert pasarela.fuentes_pedidas[-1] == {
         "type": "CARD",
         "token": TOKEN_TARJETA,
         "customer_email": correo,
-        "acceptance_token": ACEPTACION,
-        "personal_data_token": DATOS_PERSONALES,
     }
     assert len(pasarela.cobros) == 1
     suscripcion = _suscripcion(db, user_id)
@@ -112,7 +106,7 @@ def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
     [correo_cambio] = [m for m in outbox if m.to == correo]
     assert correo_cambio.subject == CAMBIO
     assert "Cambiaste el medio de pago" in correo_cambio.text
-    assert "Hoy no te cobramos nada" in correo_cambio.text and "100.000 COP" in correo_cambio.text
+    assert "Hoy no te cobramos nada" in correo_cambio.text and "32 EUR" in correo_cambio.text
     # Ni el token ni nada parecido a un numero de tarjeta.
     assert TOKEN_TARJETA not in correo_cambio.text
 
@@ -123,15 +117,15 @@ def test_cambiar_la_tarjeta_no_cobra_y_el_siguiente_cobro_va_a_la_nueva(
     assert _suscripcion(db, user_id).card_brand == "VISA"
 
 
-def test_cambiar_a_nequi(client, db, pasarela) -> None:
+def test_cambiar_a_un_medio_que_no_es_tarjeta(client, db, pasarela) -> None:
     token, user_id, _, _ = _suscriptor_automatico(client, db, pasarela)
     r = _guardar_medio(
-        client, token, payment_source_token=TOKEN_NEQUI, payment_source_type="NEQUI"
+        client, token, payment_source_token=TOKEN_OTRO_MEDIO, payment_source_type="WALLET"
     )
     assert r.status_code == 200, r.text
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.payment_source_type, suscripcion.card_brand, suscripcion.card_last4) == (
-        "NEQUI",
+        "WALLET",
         None,
         None,
     )
@@ -165,11 +159,11 @@ def test_sin_un_periodo_pagado_no_hay_donde_guardar_el_medio(client, db, pasarel
     assert (r.status_code, r.json()["detail"]["code"]) == (409, "no_subscription")
 
 
-def test_guardar_un_medio_exige_el_token_y_los_dos_contratos(client, db, pasarela) -> None:
+def test_guardar_un_medio_exige_el_token_y_el_tipo(client, db, pasarela) -> None:
     token, _, _, _ = _suscriptor_automatico(client, db, pasarela)
-    for campo in ("payment_source_token", "acceptance_token", "personal_data_token"):
+    for campo in ("payment_source_token", "payment_source_type"):
         assert _guardar_medio(client, token, **{campo: ""}).status_code == 422
-    assert _guardar_medio(client, token, payment_source_type="PSE").status_code == 422
+    assert _guardar_medio(client, token, payment_source_type="X" * 17).status_code == 422
     assert len(pasarela.fuentes_pedidas) == 1
 
 
@@ -225,8 +219,6 @@ def test_el_alta_no_sirve_para_cambiar_de_modo_con_un_periodo_pagado(client, db,
             "renewal_mode": "automatic",
             "payment_source_token": TOKEN_TARJETA,
             "payment_source_type": "CARD",
-            "acceptance_token": ACEPTACION,
-            "personal_data_token": DATOS_PERSONALES,
         },
         headers=auth(token),
     )
@@ -278,7 +270,7 @@ def test_de_automatica_a_manual_deja_de_cobrar_y_olvida_el_medio(client, db, pas
     # Y puede pagar a mano el periodo siguiente.
     pago = _abrir_pago(client, db, token)
     assert pago.kind == "renewal"
-    _aprobar(client, pasarela, pago, timestamp=1_760_000_500)
+    _aprobar(client, pasarela, pago)
     assert _suscripcion(db, user_id).current_period_end == add_interval(vence, "month", 1)
 
 
@@ -435,7 +427,7 @@ def test_eliminar_la_cuenta_cancela_la_renovacion_y_conserva_los_pagos_anonimos(
     pago_id = pago.id
     # Un evento de ese pago, con los datos personales que manda el proveedor.
     evento = pasarela.evento(pago.provider_transaction_id, timestamp=1_760_000_900)
-    assert evento["data"]["transaction"]["customer_email"]
+    assert b"customer_email" in evento.body
     assert _webhook(client, evento).status_code == 200
     outbox.clear()
 
@@ -448,11 +440,11 @@ def test_eliminar_la_cuenta_cancela_la_renovacion_y_conserva_los_pagos_anonimos(
     # El pago queda, sin cuenta.
     conservado = db.get(Payment, pago_id)
     assert (conservado.user_id, conservado.subscription_id) == (None, None)
-    assert (conservado.status, conservado.currency) == ("approved", "COP")
+    assert (conservado.status, conservado.currency) == ("approved", "EUR")
     # Su evento ya no tiene el correo ni nada del medio de pago.
     guardado = db.scalar(select(PaymentEvent).where(PaymentEvent.payment_id == pago_id))
     assert guardado.raw_payload["anonymized"] is True
-    assert guardado.raw_payload["data"]["transaction"]["id"] == pago.provider_transaction_id
+    assert guardado.raw_payload["transaction_id"] == pago.provider_transaction_id
     assert "customer_email" not in str(guardado.raw_payload)
     assert correo not in str(guardado.raw_payload) and "4242" not in str(guardado.raw_payload)
     # El uso del cupon sigue contando, sin la cuenta.
@@ -493,8 +485,6 @@ def test_con_un_cobro_en_proceso_la_cuenta_no_se_elimina_todavia(client, db, pas
             "renewal_mode": "automatic",
             "payment_source_token": TOKEN_TARJETA,
             "payment_source_type": "CARD",
-            "acceptance_token": ACEPTACION,
-            "personal_data_token": DATOS_PERSONALES,
         },
         headers=auth(token),
     )
@@ -544,7 +534,7 @@ def test_exportar_trae_la_suscripcion_y_todos_los_pagos_de_la_cuenta(client, db,
     )
     assert datos["subscription"]["card_last4"] == "4242"
     [pago] = datos["payments"]
-    assert (pago["status"], pago["amount_cents"], pago["currency"]) == ("approved", PRECIO, "COP")
+    assert (pago["status"], pago["amount_cents"], pago["currency"]) == ("approved", PRECIO, "EUR")
     assert pago["id"] == str(_pagos(db, user_id)[0].id)
     # Ni la referencia del medio de pago ni la del pago: son del proveedor.
     assert "3000" not in str(datos["subscription"]) and "reference" not in pago

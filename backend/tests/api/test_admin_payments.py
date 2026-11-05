@@ -4,7 +4,9 @@ Extender, cancelar al final del periodo y cancelar de inmediato; listas y
 detalle de suscripciones y pagos; reconsultar un pago; registrar un reembolso;
 y el pago aprobado que el proveedor anula despues.
 
-La pasarela es el doble de `pasarela_double.py`, y el job de renovaciones se llama directo con el `now` que cada caso necesita.
+La pasarela es la simulada (`pasarela_simulada.py`): la anulacion y la renovacion
+automatica no existen con Tipster Page. El job de renovaciones se llama directo
+con el `now` que cada caso necesita.
 """
 
 import uuid
@@ -16,6 +18,7 @@ from sqlalchemy import func, select, text
 from app.billing.periods import add_interval
 from app.models import AdminAuditLog, Payment, PaymentEvent, PaymentRefund, Plan, Subscription
 from tests.api.conftest import auth
+from tests.api.pasarela_simulada import Aviso
 from tests.api.test_billing import _mensual
 from tests.api.test_renewals import _avisada, _correos, _correr, _suscriptor_automatico
 from tests.api.test_subscriptions import (
@@ -258,7 +261,7 @@ def test_extender_una_renovacion_automatica_corre_el_cobro_y_el_aviso(
     assert suscripcion.next_charge_at == nueva - 48 * H
     assert r.json()["subscription"]["next_charge_at"] is not None
     [correo_enviado] = outbox
-    assert "próximo cobro" in correo_enviado.text and "100.000 COP" in correo_enviado.text
+    assert "próximo cobro" in correo_enviado.text and "32 EUR" in correo_enviado.text
 
     # A la hora del cobro viejo no se cobra ni se avisa.
     for cuando in (vence - 48 * H, vence - 24 * H, vence):
@@ -453,7 +456,7 @@ def test_cancelar_de_inmediato_una_de_pago_manual(client, db, pasarela, admin_to
     assert "más cobros" not in outbox[0].text
     # Puede volver a suscribirse: es un alta nueva.
     r = client.post(
-        "/billing/subscriptions", json={"plan_id": str(_mensual(db).id)}, headers=auth(token)
+        "/billing/subscriptions", json={"plan_id": str(_mensual(db).id), "payment_method": "cardtpv"}, headers=auth(token)
     )
     assert r.status_code == 202, r.text
 
@@ -513,8 +516,7 @@ def test_el_detalle_trae_los_eventos_incluidos_los_de_firma_invalida(
     pago = _abrir_pago(client, db, token)
     tx = pasarela.transaccion(pago, "APPROVED")
     # Primero uno falsificado: no se asocia al pago ni lo mueve.
-    falso = pasarela.evento(tx)
-    falso["firma"] = "0" * 64
+    falso = Aviso(body=pasarela.evento(tx).body)  # sin la marca de la pasarela
     assert _webhook(client, falso).status_code == 401
     assert _webhook(client, pasarela.evento(tx)).status_code == 200
     # Y uno de otro pago, que no debe aparecer.
@@ -527,7 +529,7 @@ def test_el_detalle_trae_los_eventos_incluidos_los_de_firma_invalida(
     assert data["payment"]["status"] == "approved"
     eventos = data["events"]
     assert [(e["signature_verified"], e["linked"]) for e in eventos] == [(False, False), (True, True)]
-    assert eventos[0]["raw_payload"]["data"]["transaction"]["id"] == tx
+    assert eventos[0]["raw_payload"]["transaction_id"] == tx
     assert data["refunds"] == [] and data["audit"] == []
     assert client.get(f"/admin/payments/{uuid.uuid4()}", headers=auth(admin_token)).status_code == 404
 
@@ -625,7 +627,7 @@ def test_reconsultar_sin_pasarela(client, db, admin_token: str) -> None:
     db.execute(
         text(
             "INSERT INTO subscriptions (id, user_id, plan_id, provider, status, price_cents, currency) "
-            "VALUES (:s, :u, :p, 'pasarela', 'pending', :c, 'COP')"
+            "VALUES (:s, :u, :p, 'fake', 'pending', :c, 'EUR')"
         ),
         {"s": uuid.uuid4(), "u": uuid.UUID(user_id), "p": plan.id, "c": PRECIO},
     )
@@ -633,8 +635,8 @@ def test_reconsultar_sin_pasarela(client, db, admin_token: str) -> None:
     db.execute(
         text(
             "INSERT INTO payments (id, user_id, plan_id, provider, reference, kind, amount_cents, "
-            "currency, status, provider_transaction_id) VALUES (:id, :u, :p, 'pasarela', :r, "
-            "'initial', :c, 'COP', 'pending', 'tx-1')"
+            "currency, status, provider_transaction_id) VALUES (:id, :u, :p, 'fake', :r, "
+            "'initial', :c, 'EUR', 'pending', 'tx-1')"
         ),
         {"id": pago_id, "u": uuid.UUID(user_id), "p": plan.id, "r": f"SA-{pago_id.hex}", "c": PRECIO},
     )
@@ -655,7 +657,8 @@ def test_un_pago_anulado_despues_quita_el_acceso_en_el_acto(
     confirma y el periodo que habia comprado se retira."""
     token, user_id, correo = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx = _aprobar(client, pasarela, pago)
+    tx = pasarela.transaccion(pago, "APPROVED")
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
     assert _tiene_acceso(client, token)
     outbox.clear()
 
@@ -707,7 +710,7 @@ def test_anular_un_pago_con_un_periodo_posterior_no_toca_nada(client, db, pasare
     token, user_id, _, suscripcion = _suscriptor_manual(client, db, pasarela)
     primero = _pagos(db, user_id)[0]
     segundo = _abrir_pago(client, db, token)
-    _aprobar(client, pasarela, segundo, timestamp=1_760_000_100)
+    _aprobar(client, pasarela, segundo)
     vence = _suscripcion(db, suscripcion.id).current_period_end
     assert vence == _pagos(db, user_id)[1].period_end
 
@@ -758,7 +761,7 @@ def test_una_anulacion_de_otra_transaccion_no_toca_el_pago(client, db, pasarela)
 
 def _reembolso(client, admin_token: str, pago_id, **cambios):
     body = {
-        "amount_cents": 4_000_000,
+        "amount_cents": 1_000,
         "refunded_at": (datetime.now(UTC) - H).isoformat(),
         "provider_refund_id": "rf-123",
         "reason": MOTIVO,
@@ -777,24 +780,24 @@ def test_registrar_un_reembolso_deja_fila_y_no_toca_el_acceso(
     r = _reembolso(client, admin_token, pago.id)
     assert r.status_code == 201, r.text
     data = r.json()
-    assert data["payment"]["refunded_cents"] == 4_000_000
+    assert data["payment"]["refunded_cents"] == 1_000
     assert data["payment"]["status"] == "approved"
     [registro] = data["refunds"]
     assert (registro["amount_cents"], registro["currency"], registro["provider_refund_id"]) == (
-        4_000_000,
-        "COP",
+        1_000,
+        "EUR",
         "rf-123",
     )
     assert [a["action"] for a in data["audit"]] == ["payment.refund.record"]
     [fila] = _filas(db, "payment.refund.record")
-    assert (fila.reason, fila.after["refunded_cents"]) == (MOTIVO, 4_000_000)
+    assert (fila.reason, fila.after["refunded_cents"]) == (MOTIVO, 1_000)
     # Un registro, no un movimiento.
     assert _tiene_acceso(client, token)
     assert _suscripcion(db, suscripcion.id).current_period_end == suscripcion.current_period_end
     assert outbox == []
 
     # El resto, hasta completar lo cobrado; mas no.
-    assert _reembolso(client, admin_token, pago.id, amount_cents=PRECIO - 4_000_000).status_code == 201
+    assert _reembolso(client, admin_token, pago.id, amount_cents=PRECIO - 1_000).status_code == 201
     r = _reembolso(client, admin_token, pago.id, amount_cents=1)
     assert r.status_code == 409
     assert len(_filas(db, "payment.refund.record")) == 2
@@ -845,7 +848,7 @@ def test_el_detalle_de_la_cuenta_muestra_las_acciones_sobre_su_suscripcion(
     assert r.status_code == 200, r.text
     data = r.json()
     assert [a["action"] for a in data["audit"]] == ["payment.refund.record", "subscription.extend"]
-    assert data["payments"][0]["refunded_cents"] == 4_000_000
+    assert data["payments"][0]["refunded_cents"] == 1_000
     assert data["subscription"]["id"] == str(suscripcion.id)
 
 

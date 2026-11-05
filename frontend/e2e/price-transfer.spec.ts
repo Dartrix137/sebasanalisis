@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
 import {
+  chooseFakeCard,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   API_URL,
@@ -31,7 +32,7 @@ async function createPlan(request: APIRequestContext, name: string): Promise<str
       code: `e2e-${Math.random().toString(36).slice(2, 10)}`,
       name,
       description: "Plan del traslado de precio (e2e).",
-      price_cents: 10_000_000,
+      price_cents: 3_200,
       interval: "month",
       reason: "Plan para probar el traslado de precio",
     },
@@ -48,7 +49,7 @@ test("el administrador traslada el precio nuevo de un plan a sus suscripciones y
   const name = `Plan traslado ${Math.random().toString(36).slice(2, 7)}`;
   const code = await createPlan(request, name);
 
-  // Una cuenta se suscribe a ese plan a 100.000 COP.
+  // Una cuenta se suscribe a ese plan a 32 EUR.
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
   await confirmEmail(request, email);
@@ -56,7 +57,8 @@ test("el administrador traslada el precio nuevo de un plan a sus suscripciones y
   await expect(page).toHaveURL(/\/planes/);
   await page.getByRole("article", { name }).getByRole("link", { name: "Suscribirme" }).click();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 
@@ -68,12 +70,12 @@ test("el administrador traslada el precio nuevo de un plan a sus suscripciones y
   await panel.goto("/admin/planes");
   const fila = panel.getByTestId(`plan-${code}`);
   await fila.getByRole("button", { name: "Editar" }).click();
-  await fila.getByLabel("Precio que se cobra (COP)").fill("120000");
+  await fila.getByLabel("Precio que se cobra (EUR)").fill("40");
   await fila.getByLabel(`Motivo del cambio en ${code}`).fill("Ajuste de precio de prueba");
   await fila.getByRole("button", { name: "Guardar cambios" }).click();
 
   const traslado = fila.getByRole("region", { name: "Precio de las suscripciones vigentes" });
-  await expect(traslado.getByText(/1 suscripcion sube a 120\.000 COP/)).toBeVisible();
+  await expect(traslado.getByText(/1 suscripcion sube a 40 EUR/)).toBeVisible();
 
   // Sin motivo y sin confirmar no se traslada.
   const boton = traslado.getByRole("button", { name: "Trasladar el precio a las vigentes" });
@@ -83,19 +85,19 @@ test("el administrador traslada el precio nuevo de un plan a sus suscripciones y
   await boton.click();
 
   const enCurso = traslado.getByTestId("traslado-en-curso");
-  await expect(enCurso.getByText(/Traslado en curso a 120\.000 COP/)).toBeVisible();
+  await expect(enCurso.getByText(/Traslado en curso a 40 EUR/)).toBeVisible();
   await expect(enCurso.getByText("Esperando su aviso")).toBeVisible();
 
   // Hasta que salga el aviso, el cliente sigue viendo su precio.
   await page.goto("/cuenta");
   const suscripcion = page.getByTestId("suscripcion");
-  await expect(suscripcion.getByText(/100\.000 COP \/ mes/)).toBeVisible();
+  await expect(suscripcion.getByText(/32 EUR \/ mes/)).toBeVisible();
   await expect(suscripcion.getByText("Precio nuevo")).toHaveCount(0);
 
   // Se cancela, con motivo, y queda en la bitácora.
   await enCurso.getByLabel("Motivo de la cancelación").fill(`Se decidió no subir (${email})`);
   await enCurso.getByRole("button", { name: "Cancelar el traslado" }).click();
-  await expect(traslado.getByText(/1 suscripcion sube a 120\.000 COP/)).toBeVisible();
+  await expect(traslado.getByText(/1 suscripcion sube a 40 EUR/)).toBeVisible();
 
   await panel.goto("/admin/auditoria");
   await expect(

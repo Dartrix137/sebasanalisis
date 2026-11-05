@@ -37,7 +37,7 @@ type ActiveFilter = "" | "true" | "false";
 
 const KINDS: readonly (readonly [CouponKind, string])[] = [
   ["percent", "Porcentaje"],
-  ["fixed_cents", "Monto fijo (COP)"],
+  ["fixed_cents", "Monto fijo (EUR)"],
 ];
 
 const DURATIONS: readonly (readonly [CouponDuration, string])[] = [
@@ -66,7 +66,7 @@ function localDate(iso: string | null): string {
 
 function discountLabel(c: AdminCouponResponse): string {
   const amount =
-    c.kind === "percent" ? `${c.value} %` : formatMoney(c.value, c.currency ?? "COP");
+    c.kind === "percent" ? `${c.value} %` : formatMoney(c.value, c.currency ?? "EUR");
   const duration =
     c.duration === "once"
       ? "en el primer cobro"
@@ -128,7 +128,7 @@ function fieldsOf(draft: CouponDraft) {
     fields: {
       kind: draft.kind,
       value,
-      currency: draft.kind === "fixed_cents" ? ("COP" as const) : null,
+      currency: draft.kind === "fixed_cents" ? ("EUR" as const) : null,
       duration: draft.duration,
       duration_periods: draft.duration === "repeating" ? Number(draft.durationPeriods) : null,
       max_redemptions: draft.maxRedemptions.trim() ? Number(draft.maxRedemptions) : null,
@@ -433,7 +433,7 @@ function CouponForm({
           onChange={(v) => setDraft((prev) => ({ ...prev, kind: v, value: "" }))}
         />
         <Field
-          label={draft.kind === "percent" ? "Porcentaje (1 a 99)" : "Monto del descuento (COP)"}
+          label={draft.kind === "percent" ? "Porcentaje (1 a 99)" : "Monto del descuento (EUR)"}
           required
           disabled={used}
           inputMode="decimal"

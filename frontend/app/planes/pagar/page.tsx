@@ -5,8 +5,9 @@
  *
  * Muestra lo que se va a cobrar y deja elegir cómo pagar:
  *
- * - **Pago manual**: un pago por período, en la página de la pasarela, con
- *   cualquier medio. No se guarda nada.
+ * - **Pago manual**: un pago por período. El cliente elige aquí su país y el
+ *   medio de pago (`CheckoutMethodPicker`), y paga en la página del procesador
+ *   (Redsys o EBANX, detrás de Tipster Page). No se guarda nada.
  * - **Renovación automática**: el cliente guarda un medio de pago con
  *   `PaymentSourceForm`, y se le cobra cada período, con un aviso por correo
  *   antes. Solo se ofrece si la pasarela tokeniza (`availability.tokenizer`).
@@ -15,20 +16,26 @@
  * automáticos sin haberlo escogido.
  *
  * Aquí no se calcula ningún precio: el total viene del servidor, que lo vuelve
- * a calcular al abrir el pago. Y a nuestro servidor no llega ningún dato de
- * pago: se paga en la página de la pasarela, o la pasarela tokeniza el medio, y
- * aquí solo vuelve un token.
+ * a calcular al abrir el pago. A nuestro servidor no llega ningún dato de
+ * tarjeta: se pagan en la página del procesador. Los datos del comprador que
+ * pide un medio local (nombre, documento, teléfono) pasan por la API hacia la
+ * pasarela y no se guardan.
  *
- * Sin pasarela configurada (paso 5.1 de la Fase 5),
- * `/planes` no deja llegar aquí con el pago encendido.
+ * Al abrir el pago la API devuelve un enlace de un solo uso a la página de
+ * pago (`GET /billing/checkout/:token`); de allá el navegador sigue al
+ * procesador y vuelve a /pago/:id.
+ *
+ * Sin pasarela configurada, `/planes` no deja llegar aquí con el pago encendido.
  */
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
+import { CheckoutMethodPicker } from "@/components/billing/CheckoutMethodPicker";
+import type { CheckoutChoice } from "@/components/billing/CheckoutMethodPicker";
 import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
 import { InlineSkeleton } from "@/components/PageSkeleton";
 import { AppHeader } from "@/components/AppHeader";
@@ -39,7 +46,6 @@ import { CURRENCY_NOTE, formatMoney, intervalLabel, periodLabel } from "@/lib/mo
 import { useSession } from "@/lib/session";
 import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
-  AcceptanceResponse,
   BillingAvailabilityResponse,
   PlanResponse,
   QuoteResponse,
@@ -75,6 +81,9 @@ function Checkout() {
 
   // Ningún modo entra marcado.
   const [mode, setMode] = useState<RenewalMode | null>(null);
+  // País, medio y datos del comprador para el pago manual.
+  const [choice, setChoice] = useState<CheckoutChoice | null>(null);
+  const onChoice = useCallback((next: CheckoutChoice | null) => setChoice(next), []);
 
   useEffect(() => {
     if (loading) return;
@@ -209,6 +218,7 @@ function Checkout() {
   }
 
   async function payManually() {
+    if (!choice) return;
     setError(null);
     setCouponError(null);
     setPaying(true);
@@ -218,10 +228,13 @@ function Checkout() {
           plan_id: planId,
           coupon_code: renewing ? null : appliedCode,
           renewal_mode: "manual",
+          payment_method: choice.method,
+          country: choice.country,
+          buyer: choice.buyer,
         }),
       );
       if (!started.checkout_url) throw new Error("sin página de pago");
-      // A la página de la pasarela. De allá vuelve a /pago/:id.
+      // El enlace de un solo uso: de ahí sigue al procesador y vuelve a /pago/:id.
       window.location.assign(started.checkout_url);
     } catch (e) {
       handleFailure(e);
@@ -229,7 +242,7 @@ function Checkout() {
   }
 
   /** Con el token que devolvió la pasarela: guarda el medio y hace el primer cobro. */
-  async function subscribeWith(source: TokenizedSource, acceptance: AcceptanceResponse) {
+  async function subscribeWith(source: TokenizedSource) {
     setError(null);
     setCouponError(null);
     setPaying(true);
@@ -241,8 +254,6 @@ function Checkout() {
           renewal_mode: "automatic",
           payment_source_token: source.token,
           payment_source_type: source.type,
-          acceptance_token: acceptance.acceptance_token,
-          personal_data_token: acceptance.personal_data_token,
         }),
       );
       // El cobro ya se envió: la pantalla de resultado espera la respuesta.
@@ -348,7 +359,7 @@ function Checkout() {
                 title="Pago manual"
                 lines={[
                   `Pagas ${period} de acceso ahora.`,
-                  "Eliges el medio en la página de la pasarela.",
+                  "Eliges tu país y el medio de pago, y pagas en la página del procesador.",
                   "No se guarda tu medio de pago ni se renueva solo. Antes de que venza te avisamos por correo.",
                 ]}
               />
@@ -381,12 +392,23 @@ function Checkout() {
         </Card>
       ) : null}
 
+      {chosen === "manual" ? (
+        <Card>
+          <CheckoutMethodPicker
+            totalCents={total}
+            currency={currency}
+            disabled={paying}
+            onChange={onChoice}
+          />
+        </Card>
+      ) : null}
+
       {user.email_verified ? null : <VerifyEmailNotice />}
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="space-y-3">
         {chosen === "automatic" ? null : (
-          <Button onClick={payManually} disabled={blocked || chosen === null}>
+          <Button onClick={payManually} disabled={blocked || chosen === null || choice === null}>
             {paying ? "Abriendo el pago…" : `Ir a pagar ${totalText}`}
           </Button>
         )}
@@ -395,11 +417,15 @@ function Checkout() {
         )}
         {chosen === null ? (
           <p className="text-sm text-muted">Elige cómo quieres pagar para continuar.</p>
+        ) : chosen === "manual" && choice === null ? (
+          <p className="text-sm text-muted">
+            Elige tu país, el medio de pago y completa los datos que pida para continuar.
+          </p>
         ) : null}
         <p className="max-w-prose text-xs leading-relaxed text-muted">
           {chosen === "automatic"
             ? null
-            : "Al continuar vas a la página de la pasarela de pagos, donde eliges el medio de pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
+            : "Al continuar vas a la página del procesador de pagos del medio que elegiste, donde completas el pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
           La suscripción da acceso a la plataforma: no cambia el resultado de ningún juego ni la
           ventaja de la casa. Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>

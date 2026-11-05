@@ -13,7 +13,7 @@ Fecha del pago: {{ paid_at | fecha }}
 Período: del {{ period_start | fecha }} al {{ period_end | fecha }}
 Referencia: {{ reference }}
 
-Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones, así que el valor en tu extracto puede ser distinto.
+Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella. Por eso el valor en tu extracto puede ser distinto.
 
 Las fechas van en hora de Colombia. Este correo es una constancia de pago, no una factura.
 

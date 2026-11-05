@@ -5,8 +5,10 @@ corre en el VPS: no se envia nada a un tercero. Sin `SENTRY_DSN` queda
 desactivado (desarrollo, tests y CI).
 
 Lo que no sale de la aplicacion, aunque haya un error: cabeceras de
-autenticacion, cuerpos de `/auth/*` y `/billing/*`, y el cuerpo crudo de los
-webhooks. Ni contrasenas, ni tokens, ni referencias de pago llegan al monitoreo.
+autenticacion, cuerpos de `/auth/*` y `/billing/*` (con los datos del comprador
+que pide un medio de pago), el cuerpo crudo de los webhooks y el token del
+enlace de la pagina de pago. Ni contrasenas, ni tokens, ni referencias de pago
+llegan al monitoreo.
 """
 
 from typing import Any
@@ -18,6 +20,8 @@ SENSITIVE_HEADERS = frozenset({"authorization", "cookie", "set-cookie", "x-api-k
 # Rutas cuyo cuerpo nunca se envia: credenciales, datos de pago y webhooks.
 SENSITIVE_PATH_PREFIXES = ("/auth", "/billing", "/webhooks")
 FILTERED = "[filtrado]"
+# El token del enlace de la pagina de pago viaja en la ruta, no en la query.
+CHECKOUT_PATH = "/billing/checkout/"
 
 
 def _is_sensitive_path(url: str) -> bool:
@@ -43,7 +47,12 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any] | None = None) -> di
 
     request.pop("cookies", None)
 
-    if _is_sensitive_path(str(request.get("url", ""))):
+    url = str(request.get("url", ""))
+    if CHECKOUT_PATH in url:
+        # El enlace de un solo uso de la pagina de pago es una credencial.
+        request["url"] = url[: url.index(CHECKOUT_PATH) + len(CHECKOUT_PATH)] + FILTERED
+
+    if _is_sensitive_path(url):
         if "data" in request:
             request["data"] = FILTERED
         # Los tokens de un solo uso pueden viajar en la URL de un enlace.

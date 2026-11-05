@@ -275,10 +275,18 @@ def _payment_detail(db: DbSession, payment: Payment) -> AdminPaymentDetailRespon
     # firma invalida nunca se asocian: no se reconsultan) pero nombran en su
     # cuerpo la transaccion o la referencia de este pago. El cuerpo de un evento
     # sin firma valida no es confiable: aqui solo sirve para mostrarlo.
-    transaction = PaymentEvent.raw_payload["data"]["transaction"]
-    mentions = [transaction["reference"].astext == payment.reference]
+    # Cada pasarela nombra el pago a su manera: Wompi (los eventos que quedaron
+    # del sandbox) en `data.transaction`, Tipster Page con `order_id` (que es
+    # nuestra referencia) y la pasarela simulada con `transaction_id`.
+    payload = PaymentEvent.raw_payload
+    transaction = payload["data"]["transaction"]
+    mentions = [
+        transaction["reference"].astext == payment.reference,
+        payload["order_id"].astext == payment.reference,
+    ]
     if payment.provider_transaction_id is not None:
         mentions.append(transaction["id"].astext == payment.provider_transaction_id)
+        mentions.append(payload["transaction_id"].astext == payment.provider_transaction_id)
     events = db.scalars(
         select(PaymentEvent)
         .where(

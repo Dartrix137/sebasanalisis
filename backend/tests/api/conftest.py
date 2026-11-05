@@ -114,17 +114,43 @@ def client(test_database: str, outbox: list) -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def pasarela(client: TestClient) -> Iterator[object]:
-    """La pasarela de pruebas en memoria (`pasarela_double.py`)."""
+def tipster(client: TestClient) -> Iterator[object]:
+    """Tipster Page: su proveedor de verdad sobre un transporte HTTP simulado
+    (`tipster_sandbox.py`). Es la pasarela del pago manual."""
     from app.main import app
     from app.payments.base import get_payment_provider
-    from tests.api.pasarela_double import Pasarela
+    from tests.api.tipster_sandbox import TipsterSandbox
 
-    double = Pasarela()
+    sandbox = TipsterSandbox()
     anterior = app.dependency_overrides.get(get_payment_provider)
-    app.dependency_overrides[get_payment_provider] = lambda: double.provider
-    yield double
+    app.dependency_overrides[get_payment_provider] = lambda: sandbox.provider
+    yield sandbox
     app.dependency_overrides[get_payment_provider] = anterior
+
+
+@pytest.fixture
+def pasarela(client: TestClient) -> Iterator[object]:
+    """La pasarela simulada con controles (`pasarela_simulada.py`): la de la
+    renovacion automatica y la anulacion, que Tipster Page no tiene."""
+    from app.main import app
+    from app.payments.base import get_payment_provider
+    from tests.api.pasarela_simulada import PasarelaSimulada
+
+    simulada = PasarelaSimulada()
+    anterior = app.dependency_overrides.get(get_payment_provider)
+    app.dependency_overrides[get_payment_provider] = lambda: simulada
+    yield simulada
+    app.dependency_overrides[get_payment_provider] = anterior
+
+
+@pytest.fixture(autouse=True)
+def clean_checkout_pages() -> Iterator[None]:
+    """Las paginas de pago de un solo uso viven en memoria: se limpian entre tests."""
+    from app.core import checkout_pages
+
+    checkout_pages.clear()
+    yield
+    checkout_pages.clear()
 
 
 def register_with_consents(client: TestClient, database_url: str) -> None:

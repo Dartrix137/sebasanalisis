@@ -3,8 +3,9 @@ Fase 5, paso 5.2).
 
 Nace en la misma transaccion en que `apply_transaction` aprueba el pago, es
 unica por pago y se queda en `pending`: la emision con Siigo es del paso 5.4.
-La pasarela es el doble de `pasarela_double.py`, salvo en el caso de la pasarela
-simulada.
+La pasarela es Tipster Page sobre el transporte simulado (`tipster_sandbox.py`),
+salvo la renovacion automatica y la anulacion, que solo existen con la pasarela
+simulada (`pasarela_simulada.py`).
 """
 
 import uuid
@@ -43,12 +44,12 @@ def _facturas(db, payment_id) -> list[Invoice]:
 # ---------- Nace con el pago aprobado ----------
 
 
-def test_un_pago_aprobado_deja_su_factura_pendiente(client, db, pasarela) -> None:
+def test_un_pago_aprobado_deja_su_factura_pendiente(client, db, tipster) -> None:
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
     assert _facturas(db, pago.id) == []
 
-    _aprobar(client, pasarela, pago)
+    _aprobar(client, tipster, pago)
 
     [pago] = _pagos(db, user_id)
     [factura] = _facturas(db, pago.id)
@@ -56,11 +57,11 @@ def test_un_pago_aprobado_deja_su_factura_pendiente(client, db, pasarela) -> Non
     assert factura.operation_date == fx.operation_date(pago.resolved_at)
 
 
-def test_el_dia_de_la_operacion_es_el_de_colombia(client, db, pasarela) -> None:
+def test_el_dia_de_la_operacion_es_el_de_colombia(client, db, tipster) -> None:
     """Aprobado a las 03:00 UTC del 24: en Colombia todavia es el 23."""
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    transaction = pasarela.provider.fetch_transaction(pasarela.transaccion(pago, "APPROVED"))
+    transaction = tipster.provider.fetch_transaction(tipster.pagar(pago, "paid"))
 
     subscriptions.apply_transaction(db, transaction, datetime(2026, 10, 24, 3, 0, tzinfo=UTC))
 
@@ -68,10 +69,10 @@ def test_el_dia_de_la_operacion_es_el_de_colombia(client, db, pasarela) -> None:
     assert factura.operation_date == date(2026, 10, 23)
 
 
-def test_el_mismo_webhook_varias_veces_deja_una_sola_factura(client, db, pasarela) -> None:
+def test_el_mismo_webhook_varias_veces_deja_una_sola_factura(client, db, tipster) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    evento = pasarela.evento(pasarela.transaccion(pago, "APPROVED"))
+    evento = tipster.aprobar(pago)
 
     assert _webhook(client, evento).json() == {"status": "processed"}
     for _ in range(3):
@@ -80,17 +81,15 @@ def test_el_mismo_webhook_varias_veces_deja_una_sola_factura(client, db, pasarel
     assert len(_facturas(db, pago.id)) == 1
 
 
-def test_el_webhook_y_la_consulta_del_pago_dejan_una_sola_factura(client, db, pasarela) -> None:
+def test_el_webhook_y_la_consulta_del_pago_dejan_una_sola_factura(client, db, tipster) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx_id = pasarela.transaccion(pago, "APPROVED")
+    tipster.pagar(pago, "paid")
 
-    # El cliente vuelve de la pasarela antes de que llegue el webhook.
-    r = client.get(
-        f"/billing/payments/{pago.id}", params={"transaction_id": tx_id}, headers=auth(token)
-    )
+    # El cliente vuelve de la pasarela antes de que llegue el aviso.
+    r = client.get(f"/billing/payments/{pago.id}", headers=auth(token))
     assert r.json()["status"] == "approved"
-    assert _webhook(client, pasarela.evento(tx_id)).status_code == 200
+    assert _webhook(client, tipster.aviso(pago, "ok")).status_code == 200
 
     assert len(_facturas(db, pago.id)) == 1
 
@@ -103,14 +102,23 @@ def test_un_pago_aprobado_con_la_pasarela_simulada_deja_su_factura(client, db) -
     app.dependency_overrides[get_payment_provider] = lambda: fake
     try:
         token, user_id, _ = _cuenta(client, db)
-        r = _suscribir(client, token, _mensual(db).id)
+        r = _suscribir(client, token, _mensual(db).id, metodo="fakecard")
         assert r.status_code == 202, r.text
-        url = httpx.URL(r.json()["checkout_url"])
+        assert client.get(httpx.URL(r.json()["checkout_url"]).path).status_code == 200
+        [pago] = _pagos(db, user_id)
         r = client.post(
-            url.path, data={**dict(url.params), "outcome": "approved"}, follow_redirects=False
+            "/dev/fake-checkout",
+            data={
+                "reference": pago.reference,
+                "amount_cents": pago.amount_cents,
+                "currency": pago.currency,
+                "url_ok": f"http://localhost:3000/pago/{pago.id}",
+                "url_ko": f"http://localhost:3000/pago/{pago.id}",
+                "outcome": "approved",
+            },
+            follow_redirects=False,
         )
         assert r.status_code == 303
-        [pago] = _pagos(db, user_id)
         r = client.get(
             f"/billing/payments/{pago.id}",
             params={"transaction_id": httpx.URL(r.headers["location"]).params["id"]},
@@ -128,19 +136,20 @@ def test_un_pago_aprobado_con_la_pasarela_simulada_deja_su_factura(client, db) -
 # ---------- Sin pago aprobado no hay factura ----------
 
 
-@pytest.mark.parametrize("estado", ["DECLINED", "ERROR", "PENDING"])
-def test_un_pago_que_no_se_aprueba_no_deja_factura(client, db, pasarela, estado: str) -> None:
+@pytest.mark.parametrize("estado", ["error", "expired", "error_and_refund_payment", "fraud", "pending"])
+def test_un_pago_que_no_se_aprueba_no_deja_factura(client, db, tipster, estado: str) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    assert _webhook(client, pasarela.evento(pasarela.transaccion(pago, estado))).status_code == 200
+    tipster.pagar(pago, estado)
+    assert _webhook(client, tipster.aviso(pago, "ko")).status_code == 200
     assert _facturas(db, pago.id) == []
 
 
-def test_aprobado_por_otro_monto_no_deja_factura(client, db, pasarela) -> None:
+def test_aprobado_por_otro_monto_no_deja_factura(client, db, tipster) -> None:
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx_id = pasarela.transaccion(pago, "APPROVED", amount_cents=100)
-    assert _webhook(client, pasarela.evento(tx_id)).status_code == 200
+    tipster.pagar(pago, "paid", amount=100)
+    assert _webhook(client, tipster.aviso(pago, "ok")).status_code == 200
     [pago] = _pagos(db, user_id)
     assert pago.status == "error"
     assert _facturas(db, pago.id) == []
@@ -178,7 +187,8 @@ def test_un_pago_anulado_despues_conserva_su_factura_pendiente(client, db, pasar
     """Que hacer con ella (nota credito o no emitirla) lo decide el paso 5.4."""
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    tx = _aprobar(client, pasarela, pago)
+    tx = pasarela.transaccion(pago, "APPROVED")
+    assert _webhook(client, pasarela.evento(tx)).status_code == 200
 
     pasarela.resolver(tx, "VOIDED")
     assert _webhook(client, pasarela.evento(tx, timestamp=1_760_000_500)).status_code == 200
@@ -189,10 +199,10 @@ def test_un_pago_anulado_despues_conserva_su_factura_pendiente(client, db, pasar
     assert factura.status == "pending"
 
 
-def test_la_factura_sobrevive_a_la_cuenta_eliminada(client, db, pasarela) -> None:
+def test_la_factura_sobrevive_a_la_cuenta_eliminada(client, db, tipster) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    _aprobar(client, pasarela, pago)
+    _aprobar(client, tipster, pago)
     pago_id = pago.id
 
     assert _eliminar(client, token).status_code == 204
@@ -203,10 +213,10 @@ def test_la_factura_sobrevive_a_la_cuenta_eliminada(client, db, pasarela) -> Non
     assert factura.status == "pending"
 
 
-def test_la_base_no_admite_dos_facturas_del_mismo_pago(client, db, pasarela) -> None:
+def test_la_base_no_admite_dos_facturas_del_mismo_pago(client, db, tipster) -> None:
     token, _, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
-    _aprobar(client, pasarela, pago)
+    _aprobar(client, tipster, pago)
 
     db.add(Invoice(payment_id=pago.id, status="pending", operation_date=date(2026, 10, 23)))
     with pytest.raises(IntegrityError):
@@ -225,7 +235,7 @@ def test_una_factura_necesita_un_pago(db) -> None:
 
 
 def test_el_detalle_del_pago_en_el_admin_trae_la_factura(
-    client, db, pasarela, admin_token: str
+    client, db, tipster, admin_token: str
 ) -> None:
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
@@ -234,7 +244,7 @@ def test_el_detalle_del_pago_en_el_admin_trae_la_factura(
     assert r.status_code == 200, r.text
     assert r.json()["invoice"] is None
 
-    _aprobar(client, pasarela, pago)
+    _aprobar(client, tipster, pago)
     [pago] = _pagos(db, user_id)
     r = client.get(f"/admin/payments/{pago.id}", headers=auth(admin_token))
     assert r.json()["invoice"]["status"] == "pending"

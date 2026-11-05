@@ -28,13 +28,13 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(plan.getByRole("heading", { name: "Acceso Mensual" })).toBeVisible();
   // Lo que se cobra es el protagonista y va con su moneda.
-  await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
+  await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
   await expect(plan.getByText("/ mes")).toBeVisible();
   // Un solo precio: no se muestra ninguna cifra en otra moneda.
   await expect(plan.getByText(/USD/)).toHaveCount(0);
   await expect(
     plan.getByText(
-      "Cobro en pesos colombianos (COP). Con tarjeta de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones.",
+      "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
     ),
   ).toBeVisible();
   // La descripción no promete resultados.
@@ -42,7 +42,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
 
   // El plan de dos meses es un plan aparte, con su propio precio.
   const bimestral = page.getByRole("article", { name: "Acceso Bimestral" });
-  await expect(bimestral.getByText("150.000 COP", { exact: true })).toBeVisible();
+  await expect(bimestral.getByText("46 EUR", { exact: true })).toBeVisible();
   await expect(bimestral.getByText("/ 2 meses")).toBeVisible();
   // Cada plan lleva su enlace de pago (el flujo completo está en subscribe.spec.ts).
   await expect(bimestral.getByRole("link", { name: "Suscribirme" })).toBeVisible();
@@ -58,7 +58,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
 test("/planes es pública: se ve sin sesión", async ({ page }) => {
   await page.goto("/planes");
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
-  await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
+  await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
   await expect(page.getByText(/USD/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Crear cuenta", exact: true })).toBeVisible();
   // Sin sesión no hay a quién cobrarle: el plan invita a crear la cuenta.
@@ -76,7 +76,7 @@ test("cuenta con acceso: /planes la devuelve a la mesa", async ({ page, request 
   await expect(page.getByText("Tu cuenta ya tiene acceso.")).toBeVisible();
   // Con acceso manual no hay nada que pagar: los planes se ven sin botón.
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
-  await expect(plan.getByText("100.000 COP", { exact: true })).toBeVisible();
+  await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
   await page.getByRole("link", { name: "Ir a la mesa" }).click();
@@ -98,13 +98,13 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
 
   // El plan sembrado, con lo que se cobra.
   const mensual = page.getByTestId("plan-mensual");
-  await expect(mensual.getByText(/Se cobra 100\.000 COP \/ mes/)).toBeVisible();
+  await expect(mensual.getByText(/Se cobra 32 EUR \/ mes/)).toBeVisible();
 
   // El formulario dice en una frase qué cobra el plan y qué da cada pago.
   const bimestral = page.getByTestId("plan-bimestral");
   await bimestral.getByRole("button", { name: "Editar" }).click();
   await expect(bimestral.getByTestId("resumen-cobro")).toHaveText(
-    "Se cobran 150.000 COP cada 2 meses. Cada pago da 2 meses de acceso.",
+    "Se cobran 46 EUR cada 2 meses. Cada pago da 2 meses de acceso.",
   );
   await bimestral.getByRole("button", { name: "Cerrar" }).click();
 
@@ -113,14 +113,14 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
   await nuevo.getByLabel("Código").fill(code);
   await nuevo.getByLabel("Nombre").fill(name);
   await nuevo.getByLabel("Descripción").fill("Acceso a la plataforma. Solo para un test.");
-  await nuevo.getByLabel("Precio que se cobra (COP)").fill("50000");
+  await nuevo.getByLabel("Precio que se cobra (EUR)").fill("50");
   await nuevo.getByLabel("Orden en la página").fill("900");
   await nuevo.getByLabel("Motivo de la creación").fill("Plan de un test de punta a punta");
   await nuevo.getByRole("button", { name: "Crear plan" }).click();
   await expect(nuevo.getByText("Plan creado")).toBeVisible();
 
   const fila = page.getByTestId(`plan-${code}`);
-  await expect(fila.getByText(/Se cobra 50\.000 COP \/ mes/)).toBeVisible();
+  await expect(fila.getByText(/Se cobra 50 EUR \/ mes/)).toBeVisible();
   await expect(fila.getByText("Activo", { exact: true })).toBeVisible();
 
   // El público ya lo ve.
@@ -128,19 +128,19 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
   const visita = await publico.newPage();
   await visita.goto("/planes");
   await expect(
-    visita.getByRole("article", { name }).getByText("50.000 COP", { exact: true }),
+    visita.getByRole("article", { name }).getByText("50 EUR", { exact: true }),
   ).toBeVisible();
 
   // Le cambia el precio.
   await fila.getByRole("button", { name: "Editar" }).click();
-  await fila.getByLabel("Precio que se cobra (COP)").fill("60000");
+  await fila.getByLabel("Precio que se cobra (EUR)").fill("60");
   // Sin motivo no se guarda.
   await fila.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(fila.getByText("Plan actualizado")).toHaveCount(0);
   await fila.getByLabel(`Motivo del cambio en ${code}`).fill("Ajuste de precio de prueba");
   await fila.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(fila.getByText("Plan actualizado")).toBeVisible();
-  await expect(fila.getByText(/Se cobra 60\.000 COP \/ mes/)).toBeVisible();
+  await expect(fila.getByText(/Se cobra 60 EUR \/ mes/)).toBeVisible();
 
   // Lo desactiva: deja de ofrecerse, pero no se borra.
   await fila.getByLabel(`Motivo del cambio en ${code}`).fill("Fin de la prueba");
@@ -155,8 +155,8 @@ test("el administrador crea, edita y desactiva un plan, con motivo y bitácora",
   await page.goto("/admin/auditoria");
   const precio = page.locator("li", { hasText: "Ajuste de precio de prueba" });
   await expect(precio.getByText("Editó un plan")).toBeVisible();
-  await expect(precio.getByText(/price_cents: 5000000/)).toBeVisible();
-  await expect(precio.getByText(/price_cents: 6000000/)).toBeVisible();
+  await expect(precio.getByText(/price_cents: 5000/)).toBeVisible();
+  await expect(precio.getByText(/price_cents: 6000/)).toBeVisible();
   await expect(
     page.locator("li", { hasText: "Plan de un test de punta a punta" }).getByText("Creó un plan"),
   ).toBeVisible();

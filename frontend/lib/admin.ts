@@ -57,6 +57,7 @@ export function actionLabel(entry: AuditLogEntry): string {
  */
 const PROVIDER_LABEL: Record<string, string> = {
   wompi: "Wompi (sandbox)",
+  tipsterpage: "Tipster Page",
   fake: "Pasarela simulada",
 };
 

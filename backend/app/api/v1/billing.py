@@ -7,18 +7,31 @@ Tambien la gestion de la suscripcion ya pagada: cancelar, reanudar, cambiar el
 medio de pago y pasar de un modo de pago al otro (§3.6).
 
 Este router NO exige `RequireAccess`: quien cotiza y paga es justo quien todavia
-no tiene acceso. El pago en si ocurre en la pagina del proveedor; aqui se abre
-(`POST /billing/subscriptions`) y se consulta como termino
-(`GET /billing/payments/:id`). Lo que mueve una suscripcion es
+no tiene acceso. El pago en si ocurre en la pagina del procesador; aqui se
+listan los medios de pago (`GET /billing/payment-methods`), se abre el pago
+(`POST /billing/subscriptions`), se entrega una sola vez la pagina con la que el
+navegador sigue a la pasarela (`GET /billing/checkout/:token`) y se consulta
+como termino (`GET /billing/payments/:id`). Lo que mueve una suscripcion es
 `core/subscriptions.apply_transaction`, la misma funcion que usa el webhook.
 """
 
 import logging
 from datetime import UTC, datetime
+from html import escape
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    status,
+)
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -28,11 +41,13 @@ from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.pricing import CouponRejection
-from app.core import billing_emails, rate_limit, renewals, subscriptions
+from app.core import billing_emails, checkout_pages, rate_limit, renewals, subscriptions
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.subscriptions import (
     COUPON_MESSAGES,
+    CheckoutChoice,
+    CheckoutUrls,
     Settlement,
     SourceInput,
     SubscribeError,
@@ -40,13 +55,16 @@ from app.core.subscriptions import (
 )
 from app.models import Coupon, Payment, Plan, User
 from app.payments.base import (
+    BuyerField,
     PaymentProvider,
     PaymentProviderError,
     get_payment_provider,
 )
 from app.schemas.billing import (
-    AcceptanceResponse,
     BillingAvailabilityResponse,
+    BuyerData,
+    BuyerFieldName,
+    CheckoutMethodResponse,
     PaymentListResponse,
     PaymentMethodRequest,
     PaymentResponse,
@@ -95,6 +113,41 @@ def _frontend_url(path: str) -> str:
     return f"{get_settings().frontend_base_url.rstrip('/')}{path}"
 
 
+def _api_url(path: str) -> str:
+    return f"{get_settings().api_public_url.rstrip('/')}{path}"
+
+
+# Los nombres de los datos del comprador en la API y en la pasarela.
+_BUYER_FIELDS: dict[BuyerFieldName, BuyerField] = {
+    BuyerFieldName.first_name: "firstName",
+    BuyerFieldName.last_name: "lastName",
+    BuyerFieldName.personal_id: "personalId",
+    BuyerFieldName.phone: "phone",
+}
+_BUYER_NAMES: dict[BuyerField, BuyerFieldName] = {v: k for k, v in _BUYER_FIELDS.items()}
+
+
+def _buyer(data: BuyerData | None) -> dict[BuyerField, str]:
+    if data is None:
+        return {}
+    values = data.model_dump()
+    return {
+        provider_name: values[api_name.value]
+        for api_name, provider_name in _BUYER_FIELDS.items()
+        if values.get(api_name.value)
+    }
+
+
+def _checkout_urls(payment: Payment) -> CheckoutUrls:
+    """A donde vuelve el navegador al terminar y a donde avisa la pasarela.
+    La pantalla de regreso consulta el pago: lo que diga la URL no cuenta."""
+    return CheckoutUrls(
+        url_ok=_frontend_url(f"/pago/{payment.id}"),
+        url_ko=_frontend_url(f"/pago/{payment.id}"),
+        notification_url=_api_url("/webhooks/payments"),
+    )
+
+
 @router.get("/plans", response_model=list[PlanResponse])
 def list_plans(db: DbSession) -> list[Plan]:
     """Los planes que se ofrecen. Publico."""
@@ -119,6 +172,46 @@ def availability(provider: PaymentProviderDep) -> BillingAvailabilityResponse:
     )
 
 
+@router.get("/billing/payment-methods", response_model=list[CheckoutMethodResponse])
+def payment_methods(
+    user: CurrentUser,
+    provider: PaymentProviderDep,
+    country: Annotated[str | None, Query(pattern=r"^[A-Z]{2}$")] = None,
+) -> list[CheckoutMethodResponse]:
+    """Los medios de pago que ofrece la pasarela en un pais, para la pantalla
+    de pago. Sin pais, los que no dependen del pais. Exige sesion: la consulta
+    sale con las llaves de la pasarela, y no se le presta a cualquiera."""
+    if not provider.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "payments_unavailable", "message": "El pago todavía no está disponible."},
+        )
+    if get_settings().rate_limit_enabled and not rate_limit.hit(
+        f"payment-methods:user:{user.id}", limit=30, window=_MINUTE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
+        )
+    try:
+        methods = provider.payment_methods(country)
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=_PROVIDER_UNAVAILABLE
+        ) from exc
+    return [
+        CheckoutMethodResponse(
+            key=m.key,
+            name=m.name,
+            logo_url=m.logo_url,
+            min_cents=m.min_cents,
+            max_cents=m.max_cents,
+            currency=m.currency,
+            fields=[_BUYER_NAMES[f] for f in m.fields],
+        )
+        for m in methods
+    ]
+
+
 def _require_tokenizer(provider: PaymentProvider) -> None:
     if not provider.enabled or provider.tokenizer() is None:
         raise HTTPException(
@@ -134,25 +227,6 @@ _PROVIDER_UNAVAILABLE = {
     "code": "provider_unavailable",
     "message": "No pudimos consultar al procesador de pagos. Intenta de nuevo.",
 }
-
-
-@router.get("/billing/acceptance", response_model=AcceptanceResponse)
-def acceptance(user: CurrentUser, provider: PaymentProviderDep) -> AcceptanceResponse:
-    """Los contratos del procesador de pagos que hay que aceptar antes de
-    guardar un medio de pago (§3.4). Se piden al momento: no se guardan."""
-    _require_tokenizer(provider)
-    try:
-        found = provider.acceptance()
-    except PaymentProviderError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=_PROVIDER_UNAVAILABLE
-        ) from exc
-    return AcceptanceResponse(
-        acceptance_token=found.acceptance_token,
-        terms_url=found.terms_url,
-        personal_data_token=found.personal_data_token,
-        personal_data_url=found.personal_data_url,
-    )
 
 
 @router.post("/billing/quote", response_model=QuoteResponse)
@@ -218,8 +292,10 @@ def subscribe(
 ) -> SubscribeResponse:
     """Abre el pago de un periodo.
 
-    Pago manual (`renewal_mode: manual`): devuelve la pagina del proveedor
-    donde el cliente paga. No se tokeniza nada.
+    Pago manual (`renewal_mode: manual`): crea la orden en la pasarela con el
+    medio, el pais y los datos del comprador que mando el cliente, y devuelve
+    el enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos
+    del comprador van a la pasarela y no se guardan. No se tokeniza nada.
 
     Renovacion automatica (`automatic`): recibe el token que el procesador le
     dio al navegador, guarda el medio de pago en el proveedor y le hace el
@@ -251,14 +327,22 @@ def subscribe(
             renewal_mode=payload.renewal_mode.value,
             source=(
                 SourceInput(
-                    type=payload.payment_source_type.value if payload.payment_source_type else "",
+                    type=payload.payment_source_type or "",
                     token=payload.payment_source_token or "",
-                    acceptance_token=payload.acceptance_token or "",
-                    personal_data_token=payload.personal_data_token or "",
                 )
                 if payload.renewal_mode.value == "automatic"
                 else None
             ),
+            choice=(
+                CheckoutChoice(
+                    method=payload.payment_method or "",
+                    country=payload.country,
+                    buyer=_buyer(payload.buyer),
+                )
+                if payload.renewal_mode.value == "manual"
+                else None
+            ),
+            urls=_checkout_urls,
         )
     except SubscribeError as exc:
         db.rollback()
@@ -276,15 +360,10 @@ def subscribe(
             total_cents=payment.amount_cents,
             currency=payment.currency,
         )
-    checkout_url = provider.checkout_url(
-        reference=payment.reference,
-        amount_cents=payment.amount_cents,
-        currency=payment.currency,
-        # El proveedor devuelve aqui al cliente y le agrega `?id=` con el id de
-        # su transaccion. Es solo informativo: el resultado se reconsulta.
-        redirect_url=_frontend_url(f"/pago/{payment.id}"),
-        customer_email=user.email,
-    )
+    assert started.checkout is not None
+    # La pagina se entrega una sola vez (core/checkout_pages.py).
+    token = checkout_pages.put(started.checkout.html, return_url=_frontend_url("/"))
+    checkout_url = _api_url(f"/billing/checkout/{token}")
     return SubscribeResponse(
         payment_id=payment.id,
         checkout_url=checkout_url,
@@ -292,6 +371,42 @@ def subscribe(
         discount_cents=payment.discount_cents,
         total_cents=payment.amount_cents,
         currency=payment.currency,
+    )
+
+
+_USED_LINK_PAGE = """<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Enlace de pago usado</title></head>
+<body style="font-family:sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;">
+<h1>Este enlace de pago ya se usó o venció</h1>
+<p>Por seguridad, la página de pago se abre una sola vez. Si no terminaste de
+pagar, vuelve a los planes y abre el pago de nuevo.</p>
+<p><a href="{planes}">Volver a los planes</a></p>
+</body></html>"""
+
+
+@router.get("/billing/checkout/{token}", response_class=HTMLResponse, include_in_schema=False)
+def checkout_page(token: Annotated[str, Path(min_length=20, max_length=100)]) -> HTMLResponse:
+    """La pagina de pago, una sola vez (core/checkout_pages.py).
+
+    Sin sesion: es una navegacion del navegador, que no lleva el token de
+    acceso; el enlace mismo es la credencial. Lleva su propia CSP, que deja
+    correr solo los scripts de la pagina que mando la pasarela. Una recarga, o
+    el enlace pasados diez minutos, muestra como volver a empezar.
+    """
+    page = checkout_pages.take(token)
+    headers = {"Cache-Control": "no-store"}
+    if page is None:
+        return HTMLResponse(
+            _USED_LINK_PAGE.format(planes=escape(_frontend_url("/planes"), quote=True)),
+            status_code=status.HTTP_410_GONE,
+            headers={
+                **headers,
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            },
+        )
+    return HTMLResponse(
+        page.html, headers={**headers, "Content-Security-Policy": page.csp}
     )
 
 
@@ -334,8 +449,21 @@ def get_payment(
     if payment is None or payment.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
 
-    lookup_id = payment.provider_transaction_id or transaction_id
-    if payment.status == "pending" and provider.enabled and lookup_id and _may_requery(user):
+    # Una pasarela sin id de transaccion propio se reconsulta con la referencia
+    # del pago. Con ella, un rechazo tambien se reconsulta: puede pasar a
+    # aprobado si el comprador reintento (manual V2 de Tipster Page, §10).
+    if provider.lookup_by_reference:
+        lookup_id: str | None = payment.reference
+        open_statuses = ("pending", "declined")
+    else:
+        lookup_id = payment.provider_transaction_id or transaction_id
+        open_statuses = ("pending",)
+    if (
+        payment.status in open_statuses
+        and provider.enabled
+        and lookup_id
+        and _may_requery(user)
+    ):
         reference = payment.reference
         try:
             transaction = provider.fetch_transaction(lookup_id)
@@ -436,7 +564,7 @@ def set_payment_method(
     sender: EmailSenderDep,
 ) -> SubscriptionResponse:
     """Guarda un medio de pago en la suscripcion vigente, que queda renovandose
-    sola con el: cambia la tarjeta o el Nequi, pasa de pago manual a renovacion
+    sola con el: cambia el medio guardado, pasa de pago manual a renovacion
     automatica, o reanuda una renovacion cancelada con otro medio.
 
     No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
@@ -456,10 +584,8 @@ def set_payment_method(
             user=user,
             provider=provider,
             source=SourceInput(
-                type=payload.payment_source_type.value,
+                type=payload.payment_source_type,
                 token=payload.payment_source_token,
-                acceptance_token=payload.acceptance_token,
-                personal_data_token=payload.personal_data_token,
             ),
             now=now,
         )

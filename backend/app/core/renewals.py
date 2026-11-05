@@ -2,6 +2,9 @@
 
 Lo corre `scripts/run_renewals.py` cada hora. Una corrida:
 
+0. Pagos manuales que siguen pendientes: los reconsulta, por si el aviso de la
+   pasarela no llego (decidido el 2026-11-03: no se depende de sus
+   reintentos). Es lo primero: un periodo ya pagado no se deja vencer.
 1. Suscripciones de renovacion automatica: resuelve los cobros que quedaron sin
    respuesta, avisa por correo antes del primer cobro, hace el intento que
    toque (48 h, 24 h y 0 h antes del vencimiento) y, agotados los tres, la deja
@@ -56,11 +59,14 @@ ADVISORY_LOCK_KEY = 5_005_202_610
 ORPHAN_AFTER = timedelta(hours=1)
 
 
+
 @dataclass
 class RenewalReport:
     """Lo que hizo una corrida. Va al log."""
 
     notices: int = 0
+    #: Pagos manuales pendientes reconsultados.
+    requeried: int = 0
     charges: int = 0
     approved: int = 0
     failed: int = 0
@@ -75,6 +81,7 @@ class RenewalReport:
 
     def summary(self) -> str:
         return (
+            f"reconsultas={self.requeried} "
             f"avisos={self.notices} avisos_fallidos={self.notices_failed} "
             f"cobros={self.charges} aprobados={self.approved} "
             f"fallidos={self.failed} vencidas={self.expired} errores={self.errors}"
@@ -126,6 +133,7 @@ def run_renewals(
     # corrida sale con un precio que ya no corre (§4.10).
     price_changes.apply_due(db, now)
     db.commit()
+    _requery_pending(db, provider, now, report)
     ids = list(
         db.scalars(
             select(Subscription.id)
@@ -145,6 +153,46 @@ def run_renewals(
             report.errors += 1
             logger.exception("Renovaciones: fallo la suscripcion %s", subscription_id)
     return report
+
+
+def _requery_pending(
+    db: Session, provider: PaymentProvider, now: datetime, report: RenewalReport
+) -> None:
+    """Reconsulta los pagos manuales de la pasarela que siguen pendientes.
+
+    Solo los de esta pasarela, de la ultima semana y que no son cobros de la
+    renovacion automatica (esos los resuelve `_settle_in_flight`). Lo que se
+    aplica es la respuesta de la pasarela, con `apply_transaction`.
+    """
+    if not provider.enabled:
+        return
+    payments = list(
+        db.scalars(
+            select(Payment)
+            .where(
+                Payment.provider == provider.name,
+                Payment.status == "pending",
+                # Uno mas viejo es una orden abandonada (`schedule.PENDING_PAYMENT_WINDOW`).
+                Payment.created_at > now - schedule.PENDING_PAYMENT_WINDOW,
+                Payment.reference.not_like("SA-R-%"),
+            )
+            .order_by(Payment.created_at)
+        )
+    )
+    db.commit()
+    for payment in payments:
+        key = payment.reference if provider.lookup_by_reference else payment.provider_transaction_id
+        if key is None:
+            continue
+        try:
+            transaction = provider.fetch_transaction(key)
+        except PaymentProviderError:
+            logger.warning("Renovaciones: no se pudo reconsultar el pago %s", payment.id)
+            report.errors += 1
+            continue
+        report.requeried += 1
+        if transaction is not None and transaction.reference == payment.reference:
+            _count(db, subscriptions.apply_transaction(db, transaction, now), report)
 
 
 def retry_now(

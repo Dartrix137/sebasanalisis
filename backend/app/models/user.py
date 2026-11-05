@@ -4,7 +4,7 @@ Modelo de datos de docs/PLATAFORMA_COMPLETA.md §3.2. La logica vive en
 `app/core/subscriptions.py`; antes de tocarla lee "Pagos: reglas no
 negociables" en CLAUDE.md (firma verificada contra la documentacion oficial
 vigente, el webhook no es fuente de verdad por si solo, idempotencia por
-`provider_event_id`).
+pasarela e id de evento: `payment_events.provider` y `provider_event_id`).
 
 Nunca se guardan datos de tarjeta: solo la referencia del proveedor y, para
 mostrar, la marca y los ultimos cuatro digitos.
@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     false,
     func,
     text,
@@ -151,7 +152,7 @@ class Subscription(Base):
     )
     # Referencia de la fuente de pago en el proveedor. Nunca datos de tarjeta.
     payment_source_id: Mapped[str | None] = mapped_column(String(255))
-    # CARD o NEQUI. Las cuotas solo se mandan al cobrar si es una tarjeta.
+    # El tipo del medio, en el vocabulario de la pasarela (`CARD` para una tarjeta).
     payment_source_type: Mapped[str | None] = mapped_column(String(16))
     card_brand: Mapped[str | None] = mapped_column(String(50))
     card_last4: Mapped[str | None] = mapped_column(String(4))
@@ -273,12 +274,19 @@ class PaymentEvent(Base):
     """Bitacora de TODO evento que manda el proveedor de pagos, con firma valida
     o no (`signature_verified`), para poder auditar intentos de falsificacion.
 
-    `provider_event_id` es unico a proposito: es la clave de idempotencia frente
-    a los reintentos del webhook. Un evento de una referencia que no es nuestra
-    queda sin suscripcion ni pago.
+    (`provider`, `provider_event_id`) es unico a proposito: es la clave de
+    idempotencia frente a los reintentos del webhook. Va con la pasarela desde
+    el paso 5.3 de la Fase 5, para que una segunda pasarela no pueda chocar con
+    los ids de la primera. Un evento de una referencia que no es nuestra queda
+    sin suscripcion ni pago.
     """
 
     __tablename__ = "payment_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_event_id", name="uq_payment_events_provider_event"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     subscription_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -287,7 +295,9 @@ class PaymentEvent(Base):
     payment_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("payments.id", ondelete="SET NULL"), index=True
     )
-    provider_event_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    #: La pasarela que mando el evento (`PaymentProvider.name`).
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     event_type: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB)

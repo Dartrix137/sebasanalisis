@@ -30,14 +30,15 @@ export const PAYMENT_STATUS_TONE: Record<PaymentStatus, "neutral" | "ok" | "off"
 
 /** El medio de pago guardado, como se le nombra al cliente. Nunca el número completo. */
 export function sourceLabel(subscription: SubscriptionResponse): string | null {
-  if (subscription.payment_source_type === "NEQUI") return "Nequi";
+  if (subscription.payment_source_type === null) return null;
   if (subscription.payment_source_type === "CARD") {
     const brand = subscription.card_brand
       ? subscription.card_brand.charAt(0) + subscription.card_brand.slice(1).toLowerCase()
       : "Tarjeta";
     return subscription.card_last4 ? `${brand} •••• ${subscription.card_last4}` : brand;
   }
-  return null;
+  // Otro tipo de medio: lo nombra la pasarela, no la aplicación.
+  return "Medio de pago guardado";
 }
 
 /** El estado de una suscripción tal como está en la base, para el admin. */

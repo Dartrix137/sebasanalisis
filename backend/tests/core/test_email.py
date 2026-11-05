@@ -143,6 +143,7 @@ def test_el_recibo_dice_cuanto_se_cobro_y_en_que_moneda() -> None:
         assert "13 de octubre de 2026" in cuerpo
         assert "al 13 de noviembre de 2026" in cuerpo
         assert "tu banco aplica su tasa de cambio" in cuerpo
+        assert "la pasarela hace la conversión y puede sumar un recargo" in cuerpo
         # Un solo precio, en la moneda en que se cobra.
         assert "USD" not in cuerpo
 

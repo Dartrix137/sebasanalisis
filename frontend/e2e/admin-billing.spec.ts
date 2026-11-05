@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Browser, Page } from "@playwright/test";
 
 import {
+  chooseFakeCard,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   confirmEmail,
@@ -33,7 +34,8 @@ async function subscriber(page: Page, request: Parameters<typeof registerViaApi>
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Pago manual" }).check();
-  await page.getByRole("button", { name: "Ir a pagar 100.000 COP" }).click();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR" }).click();
   await page.getByRole("button", { name: "Aprobar el pago" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
   return email;
@@ -142,12 +144,12 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
     detalle.getByText("Pendiente de emitir: la emisión todavía no está encendida"),
   ).toBeVisible();
   await expect(detalle.getByText("Día de la operación")).toBeVisible();
-  await detalle.getByLabel("Monto (COP)").fill("50000");
+  await detalle.getByLabel("Monto (EUR)").fill("10");
   await detalle.getByLabel("Fecha en la pasarela").fill(new Date().toISOString().slice(0, 10));
   await detalle.getByLabel("Motivo del reembolso").fill(`Devolución parcial (${email})`);
   await detalle.getByRole("button", { name: "Registrar reembolso" }).click();
   // Queda en la lista de reembolsos y en lo reembolsado del pago.
-  await expect(detalle.getByText("50.000 COP", { exact: true })).toHaveCount(2);
+  await expect(detalle.getByText("10 EUR", { exact: true })).toHaveCount(2);
   await expect(detalle.getByText("Reembolsado", { exact: true })).toBeVisible();
   await expect(detalle.getByText("Registró un reembolso")).toBeVisible();
   await close();

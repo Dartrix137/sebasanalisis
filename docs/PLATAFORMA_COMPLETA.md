@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones](#3-pagos-y-suscripciones) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Siigo, en §3.17; el retiro de Wompi, en §3.18)
+3. [Pagos y suscripciones](#3-pagos-y-suscripciones) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Siigo, en §3.17; el retiro de Wompi, en §3.18; Tipster Page, en §3.19)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -338,7 +338,8 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 **Público y precio**
 
 - El público es **internacional**, no solo Colombia.
-- **Dos planes** (2026-10-09; el 2026-10-08 se había decidido uno solo): **mensual, de 100.000 COP**, y **de dos meses, de 150.000 COP**. El de dos meses es un plan aparte, no un cupón: un solo cobro cada dos meses (`interval = month`, `interval_count = 2`). No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: cada plan es una fila, y nada impide crear otro después.
+- **En euros desde el 2026-11-03** (§3.19): Tipster Page cobra solo en euros, y los planes pasaron a **32 EUR el mensual y 46 EUR el de dos meses** (migración `22780db115af`). Se muestra y se cobra ese único precio; lo que el resto de esta sección dice en pesos es la historia. Los cupones de monto fijo en pesos dejaron de aplicar.
+- **Dos planes** (2026-10-09; el 2026-10-08 se había decidido uno solo): **mensual, de 100.000 COP**, y **de dos meses, de 150.000 COP** (en euros desde el 2026-11-03, arriba). El de dos meses es un plan aparte, no un cupón: un solo cobro cada dos meses (`interval = month`, `interval_count = 2`). No hay plan anual ni trimestral. El modelo de `plans` (§3.2) se conserva tal cual: cada plan es una fila, y nada impide crear otro después.
 - **No hay precio de referencia en dólares** (decidido el 2026-10-09, al construir el paso 4). El 2026-10-08 se había decidido mostrar además un precio fijo de 30 USD, solo visual; se descartó: 30 USD no es el equivalente de 100.000 COP, y mostrar una cifra que no se cobra presta a confusión. **Se muestra y se cobra un solo precio: 100.000 COP.** El plan no tiene campos de presentación.
 - A quien pague con una tarjeta de otro país su banco le convertirá los 100.000 COP a su tasa. La pantalla de planes lo dice, y la de pago deberá decirlo también (§3.11).
 - **Los cupones se mantienen** (§3.3, §4.5).
@@ -347,13 +348,15 @@ Tomadas por el usuario antes de empezar el paso 4. Ajustan lo que dicen §3.2 a 
 
 - **Automático**: lo que ya describían §3.4 y §3.5. Fuente de pago tokenizada, cobro en cada período, reintentos.
 - **Manual mes a mes**: el usuario paga un período cada vez, sin tokenizar nada. El pago aprobado fija o extiende `current_period_end`; no hay cobro automático ni reintentos. Antes del vencimiento se le avisa por correo para que pague el siguiente; si no paga, el acceso cae en `current_period_end`, igual que una suscripción vencida.
+- **Con Tipster Page solo hay pago manual** (2026-11-03, §3.19): no tiene cobros recurrentes ("en desarrollo"). La renovación automática no se ofrece; su código se conserva apagado y probado sobre la pasarela simulada, para cuando una pasarela la tenga.
 - El control de acceso no cambia: `has_access` ya decide por `status` y `current_period_end` (§2.2 n.º 6), sin importar cómo se pagó el período.
 - Las reglas no negociables de §3.1 aplican igual a los dos modos: firma verificada, reconsulta de la transacción, idempotencia, montos en centavos y acceso decidido en el servidor.
 - **Definido el 2026-10-13 (§3.12)**: el modo es `subscriptions.renewal_mode`, un pago hecho antes del vencimiento extiende desde `current_period_end`, y se pasa de un modo al otro sobre la misma suscripción (entrega 3). Lo que este punto dejaba abierto: cómo se representa el modo en `subscriptions` (por ejemplo un campo `renewal_mode`), si un pago manual hecho antes del vencimiento extiende desde `current_period_end` o desde la fecha de pago, y cómo se pasa de un modo al otro.
 
 **Pasarela**
 
-- **Wompi es la pasarela principal.** Consultado en su documentación oficial el 2026-10-08: opera en COP; ofrece tarjetas, PSE, Nequi, Daviplata, Botón Bancolombia, corresponsales en efectivo y cuotas; y se pueden tokenizar para cobro automático las tarjetas y las cuentas Nequi, Daviplata y Bancolombia. Estos datos se vuelven a leer de la documentación vigente al construir el paso 5 (§3.1).
+- **Desde el 2026-10-22 la pasarela es Tipster Page** (§3.18 y §3.19). Lo que sigue sobre Wompi y Premium Pay es la decisión del 2026-10-08, que quedó como historia; Premium Pay se volvió a evaluar el 2026-11-03 como posible segunda pasarela y tampoco sirve por ahora (`HOJA_DE_RUTA.md` §5, "Evaluación de PremiumPay").
+- **Wompi era la pasarela principal.** Consultado en su documentación oficial el 2026-10-08: opera en COP; ofrece tarjetas, PSE, Nequi, Daviplata, Botón Bancolombia, corresponsales en efectivo y cuotas; y se pueden tokenizar para cobro automático las tarjetas y las cuentas Nequi, Daviplata y Bancolombia. Estos datos se vuelven a leer de la documentación vigente al construir el paso 5 (§3.1).
 - **Por confirmar con Wompi, por escrito, antes del paso 5**: que acepta esta categoría de negocio (análisis estadístico por suscripción, adyacente a juegos de azar, que no recibe apuestas) y que acepta tarjetas internacionales. Un directorio de terceros dice que sí acepta Visa y MasterCard internacionales; no se vio en la documentación oficial.
 - **El paso 5 se construye detrás de una interfaz de proveedor**, como el correo (`EmailSender`), para que una segunda pasarela no obligue a reescribir. `subscriptions.provider` ya existe.
 - **Hueco conocido**: un cliente de fuera de Colombia sin tarjeta no puede pagar con Wompi.
@@ -873,6 +876,63 @@ Rama `fase-5-facturacion-base`. La base de la facturación, sin proveedor: **la 
 4. En el panel de Wompi: desactivar la URL de eventos y, si se quiere, cerrar la cuenta.
 
 Hecho por el usuario el 2026-10-23, con el PR #41 mezclado y desplegado.
+
+### 3.19 Tipster Page (Fase 5, paso 5.3; construido el 2026-11-04, probado en su sandbox el 2026-11-05)
+
+**Fuente.** Todo sale de la documentación oficial de Tipster Page, nunca de memoria:
+- el manual "tsPay v2", v2.0 del 2026-10-29 (`MANUAL_INTEGRACION_API_PAGOS_TSPAY_V2_NO_LANDING.pdf`), citado en el código como "manual §N";
+- su OpenAPI (`apiekans.tipster.page/tspayv2/docs`, con usuario y contraseña);
+- su respuesta al anexo de preguntas (2026-11-03);
+- su script de referencia de la firma, `sign-tspay-order.js`, con la orden de ejemplo `orderexample.json` (2026-11-05).
+
+Todo está en `docs/docs tipsterpage/`, fuera del repositorio. Lo que respondieron y lo decidido con el usuario está en `HOJA_DE_RUTA.md` §5, "Paso 5.3". Rama `fase-5-tipster-page`.
+
+**Forma de la integración.** V2, sin su landing: la de landing no tiene cómo consultar una orden, y sin reconsulta no se concede acceso (§3.1). **Solo pago manual por período**: Tipster Page no tiene cobros recurrentes, así que `tokenizer()` es `None` y la renovación automática no se ofrece (§3.10). Cobra **siempre en euros**: con Redsys (tarjeta, Bizum) en euros, y con EBANX (medios locales) en la moneda del país, convertida por la plataforma.
+
+**El proveedor (`backend/app/payments/tipsterpage.py`):**
+
+| Parte | Cómo |
+|---|---|
+| Ambientes | Solo las dos URL base del manual §3 (sandbox `sandboxv2.ttpgpay.com/tspayv2`, producción `paymentsv2.ttpgpay.com/tspayv2`). Otra no arranca |
+| Cabeceras | `X-TSPAY-USER` (el comercio) y `Authorization: Bearer` en todas las llamadas (§4) |
+| Catálogo | `GET /payment-methods?country-code=` (§5), cinco minutos en memoria. Un medio que pide un dato que no sabemos pedir no se ofrece |
+| Orden | `POST /create-order-tspay` (§7). `order_id` = `payments.reference`; `product_id` = `plans.code`; `product_name` y `product_description` en ASCII (`billing/checkout_text.py`); `amount` en euros con dos decimales; los datos del comprador como campos sueltos, fuera de la firma |
+| Firma de la orden | `HMAC-SHA256(SECRET_KEY, S)` en hexadecimal (§7.1), con `S` la concatenación sin separador de `order_id, product_id, product_name, product_description, amount, payment_method, url_ok, url_ko, notification_url, country`, en ese orden; un campo ausente aporta `""`. Coincide con su script de referencia sobre su ejemplo (`tests/payments/test_tipsterpage.py`) |
+| Respuesta de la orden | HTML (201) que lleva al navegador al procesador. Un 400 es un rechazo; 401, 500 y 502 son errores de la pasarela |
+| Aviso | `{paid_status, order_id, amount, nt_signature}` (§9), con `nt_signature = HMAC-SHA256(SECRET_KEY, paid_status + order_id + amount)` sobre el `amount` **tal como llegó en el JSON** (`32`, no `32.00`). Sin id de evento propio: el id es `tipsterpage:<orden>:<resultado>` |
+| Reconsulta | `GET /order-status/{orderId}` (§10), con el monto en euros leído como `Decimal`. `paid` → aprobado; `error`, `expired` y `error_and_refund_payment` → rechazado; `fraud` → error para revisión; un estado desconocido no mueve nada |
+
+**Lo que cambió alrededor:**
+- **`apply_transaction` compara también el plan**: si la reconsulta trae otro `product_id`, el pago queda en `error` y no concede nada, igual que con un monto distinto.
+- **Un rechazo puede pasar a aprobado** si la reconsulta lo dice: en Tipster Page un `error` pasa a `paid` cuando el comprador reintenta la misma operación (`_resolvable`).
+- **El job reconsulta los pagos manuales pendientes**: un aviso perdido no deja a nadie pagado y sin acceso. Una orden abierta cuenta como cobro en proceso solo siete días (`billing/schedule.PENDING_PAYMENT_WINDOW`); después se da por abandonada.
+- **La página de pago de un solo uso** (`core/checkout_pages.py`):
+  - la API guarda en memoria el HTML de la orden por diez minutos;
+  - le da al navegador `GET /billing/checkout/{token}`, que lo entrega una sola vez (una recarga responde 410), con su propia CSP;
+  - la CSP deja correr solo los scripts y manejadores de esa página (por su huella sha256; los manejadores con `'unsafe-hashes'`) y enviar formularios solo a los orígenes de sus formularios y al frontend.
+- **`payment_events` guarda su pasarela**, con la idempotencia por (pasarela, id de evento): tres migraciones, `8281a0c1bd4a` (DDL), `8bb49e212973` (datos) y `1016ad86ae61` (DDL).
+- **Precios en euros** con la migración de datos `22780db115af` (§3.10). `ChargeCurrency` es `EUR`.
+- **El frontend**: `/planes/pagar` pide el país, el medio y los datos que pida el medio (`CheckoutMethodPicker`). Los logos vienen del CDN de Tipster Page, en `img-src` de `lib/csp.ts`. Los datos del comprador viajan a la pasarela y no se guardan en la base, ni en los registros, ni en el monitoreo.
+- **Protecciones de arranque**: con llaves de producción de Tipster Page no arrancan `PAYMENT_PROVIDER=fake`, `EMAIL_BACKEND=file` ni `API_PUBLIC_URL` o `FRONTEND_BASE_URL` sin HTTPS (las que salieron con Wompi en §3.18).
+
+**Tests.**
+- El proveedor real corre sobre un transporte HTTP simulado, `tests/api/tipster_sandbox.py`, que verifica la firma con su propio cálculo y imita lo visto en el sandbox: la página de pago con `onload`, y el `order_id` repetido que se acepta.
+- Lo que Tipster Page no tiene (renovación automática, cambio de medio, anulación) corre sobre la pasarela simulada, `tests/api/pasarela_simulada.py`.
+- `pasarela_double.py` se borró. Backend con 1397 tests en verde (2026-11-05) y Playwright con 68 (2026-11-04), más el del regreso de Redsys (2026-11-05, corrido con `subscribe.spec.ts`, sus 10 en verde).
+
+**Sandbox (2026-11-05).** La firma de la orden fallaba por la llave, no por el algoritmo: Tipster Page cambió el `SECRET_KEY` del sandbox. Con la llave nueva se probó en local, en Chrome, el flujo completo con las tarjetas de Redsys:
+- aprobado, con y sin el desafío 3DS;
+- denegado, autenticación fallida y cancelado;
+- la recarga del enlace y el `order_id` repetido;
+- el pago resuelto por el job sin volver de Redsys;
+- el webhook con avisos firmados como los del manual.
+
+Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster Page". **Falta**: el aviso real de Tipster Page en el VPS; `error_and_refund_payment`, que no se pudo provocar; Bizum y los medios de EBANX.
+
+**Lo que se vio y queda por decidir:**
+- **El comercio que ve el cliente** en la página de Redsys es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", no Sebasanálisis. Va para Tipster Page (qué aparece en el extracto), la pantalla de pago, el recibo y los textos legales v2 (5.5).
+- **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan, y desde el 2026-11-05 la página los quita de la barra de direcciones al cargar (`history.replaceState`; solo se queda el `?id=` de la pasarela simulada), para que no queden en el historial del navegador ni en una URL copiada. GlitchTip ya los quitaba por su lado (`lib/monitoring.ts` borra los parámetros de toda URL). Lo prueba `e2e/subscribe.spec.ts`.
+- **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
 ---
 
