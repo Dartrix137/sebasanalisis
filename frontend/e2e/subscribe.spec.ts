@@ -238,6 +238,21 @@ test("pago rechazado: no hay acceso y se puede volver a intentar", async ({ page
   ).toBeVisible();
 });
 
+test("el regreso de Redsys: sus parámetros salen de la barra de direcciones", async ({ page }) => {
+  // Lo que agrega Redsys al volver a `url_ok`/`url_ko` (sandbox, 2026-11-05).
+  const pago = "/pago/0b6f3c1e-2a4d-4e8f-9c7b-5d1a2e3f4a5b";
+  const redsys =
+    "Ds_SignatureVersion=HMAC_SHA256_V1&Ds_MerchantParameters=eyJEc19DYXJkX0JyYW5kIjoiMSJ9&Ds_Signature=abc%3D";
+
+  await page.goto(`${pago}?${redsys}`);
+  await expect(page.getByText("Inicia sesión para ver el resultado de tu pago.")).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${pago}$`));
+
+  // El `?id=` de la pasarela simulada se queda: es lo que se reconsulta.
+  await page.goto(`${pago}?id=fake-123&${redsys}`);
+  await expect(page).toHaveURL(new RegExp(`${pago}\\?id=fake-123$`));
+});
+
 test("medio local: pide el nombre, y la página de pago se abre una sola vez", async ({
   page,
   request,

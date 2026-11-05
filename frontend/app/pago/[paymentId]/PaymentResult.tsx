@@ -32,8 +32,30 @@ const POLL_MS = 3_000;
 // tardan más, y el resultado llega igual por correo.
 const MAX_POLLS = 40;
 
+/**
+ * La URL sin lo que esta pantalla no usa. Redsys vuelve aquí con
+ * `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature`: no traen el
+ * número ni el titular de la tarjeta, pero sí su marca, su país y el código de
+ * autorización. Solo se queda el `?id=` que agrega la pasarela simulada.
+ * Devuelve `null` si no hay nada que quitar.
+ */
+function cleanReturnUrl(href: string): string | null {
+  const url = new URL(href);
+  if ([...url.searchParams.keys()].every((key) => key === "id")) return null;
+  const id = url.searchParams.get("id");
+  url.search = id === null ? "" : new URLSearchParams({ id }).toString();
+  return url.toString();
+}
+
 export function PaymentResult({ paymentId }: { paymentId: string }) {
   const transactionId = useSearchParams().get("id") ?? undefined;
+
+  // Que los parámetros de Redsys no queden en el historial del navegador ni en
+  // una URL copiada. El monitoreo ya los quita por su lado (`lib/monitoring.ts`).
+  useEffect(() => {
+    const clean = cleanReturnUrl(window.location.href);
+    if (clean) window.history.replaceState(null, "", clean);
+  }, []);
   const { user, loading, withToken, refreshUser } = useSession();
   const userId = user?.id ?? null;
 

@@ -309,7 +309,7 @@ frontend apuntando a ella, en Chrome.
 
 **Lo que ve el cliente en Redsys.** El comercio que aparece en la pagina de pago (y, presumiblemente, en el extracto de la tarjeta) es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", con "Url Comercio: https://www.tipsterpage.com", no Sebasanalisis. Un cliente que no lo reconozca puede pedir un contracargo. Hay que confirmarlo con Tipster Page, y decirlo en la pantalla de pago, el recibo y los textos legales v2 (paso 5.5).
 
-**El regreso de Redsys trae parametros.** Redsys devuelve al navegador a `url_ok`/`url_ko` con `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature` en la URL. No llevan el numero de la tarjeta, ni el titular ni el CVV, pero si la marca, el pais y el tipo de la tarjeta, el codigo de autorizacion y el codigo de comercio de Redsys. La pagina `/pago/:id` no los usa: es la reconsulta la que decide.
+**El regreso de Redsys trae parametros.** Redsys devuelve al navegador a `url_ok`/`url_ko` con `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature` en la URL. No llevan el numero de la tarjeta, ni el titular ni el CVV, pero si la marca, el pais y el tipo de la tarjeta, el codigo de autorizacion y el codigo de comercio de Redsys. La pagina `/pago/:id` no los usa (es la reconsulta la que decide) y los quita de la barra de direcciones al cargar, para que no queden en el historial; GlitchTip ya filtraba los parametros de toda URL.
 
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 

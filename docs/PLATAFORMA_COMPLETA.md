@@ -918,7 +918,7 @@ Todo está en `docs/docs tipsterpage/`, fuera del repositorio. Lo que respondier
 **Tests.**
 - El proveedor real corre sobre un transporte HTTP simulado, `tests/api/tipster_sandbox.py`, que verifica la firma con su propio cálculo y imita lo visto en el sandbox: la página de pago con `onload`, y el `order_id` repetido que se acepta.
 - Lo que Tipster Page no tiene (renovación automática, cambio de medio, anulación) corre sobre la pasarela simulada, `tests/api/pasarela_simulada.py`.
-- `pasarela_double.py` se borró. Backend con 1397 tests en verde (2026-11-05) y Playwright con 68 (2026-11-04; el 2026-11-05 no cambió el frontend).
+- `pasarela_double.py` se borró. Backend con 1397 tests en verde (2026-11-05) y Playwright con 68 (2026-11-04), más el del regreso de Redsys (2026-11-05, corrido con `subscribe.spec.ts`, sus 10 en verde).
 
 **Sandbox (2026-11-05).** La firma de la orden fallaba por la llave, no por el algoritmo: Tipster Page cambió el `SECRET_KEY` del sandbox. Con la llave nueva se probó en local, en Chrome, el flujo completo con las tarjetas de Redsys:
 - aprobado, con y sin el desafío 3DS;
@@ -931,7 +931,7 @@ Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster P
 
 **Lo que se vio y queda por decidir:**
 - **El comercio que ve el cliente** en la página de Redsys es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", no Sebasanálisis. Va para Tipster Page (qué aparece en el extracto), la pantalla de pago, el recibo y los textos legales v2 (5.5).
-- **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan. Se propone quitarlos de la barra de direcciones al cargar la página, para que no queden en el historial ni en las migas de GlitchTip. No se construyó.
+- **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan, y desde el 2026-11-05 la página los quita de la barra de direcciones al cargar (`history.replaceState`; solo se queda el `?id=` de la pasarela simulada), para que no queden en el historial del navegador ni en una URL copiada. GlitchTip ya los quitaba por su lado (`lib/monitoring.ts` borra los parámetros de toda URL). Lo prueba `e2e/subscribe.spec.ts`.
 - **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
 ---
