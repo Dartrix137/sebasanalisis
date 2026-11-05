@@ -927,7 +927,7 @@ Todo está en `docs/docs tipsterpage/`, fuera del repositorio. Lo que respondier
 - el pago resuelto por el job sin volver de Redsys;
 - el webhook con avisos firmados como los del manual.
 
-Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster Page". **Falta**: el aviso real de Tipster Page en el VPS; `error_and_refund_payment`, que no se pudo provocar; Bizum y los medios de EBANX.
+Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster Page". El aviso real de Tipster Page se probó en el VPS el 2026-11-05: llegó, se verificó su firma y resolvió el pago antes de que volviera el navegador. **Falta**: `error_and_refund_payment`, que no se pudo provocar; Bizum y los medios de EBANX.
 
 **Lo que se vio y queda por decidir:**
 - **El comercio que ve el cliente** en la página de Redsys es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", no Sebasanálisis. Va para Tipster Page (qué aparece en el extracto), la pantalla de pago, el recibo y los textos legales v2 (5.5).
