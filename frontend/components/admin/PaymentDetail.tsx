@@ -13,7 +13,7 @@
  *
  * La pasarela de cada pago se muestra con `providerLabel` (`lib/admin.ts`). Un
  * pago aprobado muestra además su factura electrónica (§3.17): hoy siempre
- * pendiente, porque la emisión con Dataico es del paso 5.4.
+ * pendiente, porque la emisión con Siigo es del paso 5.4.
  */
 
 import { useCallback, useEffect, useState } from "react";

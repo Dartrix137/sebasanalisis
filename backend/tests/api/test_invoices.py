@@ -2,7 +2,7 @@
 Fase 5, paso 5.2).
 
 Nace en la misma transaccion en que `apply_transaction` aprueba el pago, es
-unica por pago y se queda en `pending`: la emision con Dataico es del paso 5.4.
+unica por pago y se queda en `pending`: la emision con Siigo es del paso 5.4.
 La pasarela es Tipster Page sobre el transporte simulado (`tipster_sandbox.py`),
 salvo la renovacion automatica y la anulacion, que solo existen con la pasarela
 simulada (`pasarela_simulada.py`).

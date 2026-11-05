@@ -276,7 +276,7 @@ de aplicar: desactivarlos en `/admin/descuentos`.
    `TSPAY_*` del sandbox y `API_PUBLIC_URL`. Reiniciar y revisar la linea de
    arranque.
 3. Probar en el sandbox lo de "Pruebas en el sandbox de Tipster Page", abajo.
-4. Las llaves de produccion van al final, con Dataico y los textos legales v2
+4. Las llaves de produccion van al final, con Siigo y los textos legales v2
    (`HOJA_DE_RUTA.md` §5). Mientras el VPS tenga las del sandbox, cualquier
    cuenta obtiene acceso pagando con una tarjeta de prueba.
 
@@ -929,7 +929,7 @@ de produccion al final, cuando lo demas este hecho.
 
 Lo que no es operativo y tambien bloquea (no se resuelve aqui): los textos
 legales revisados por el abogado, el responsable del tratamiento, la
-facturacion electronica (con Dataico; a quien va, por definir; la base esta construida y la emision no) y lo que exige la pasarela nueva
+facturacion electronica (con Siigo; a quien va, por definir; la base esta construida y la emision no) y lo que exige la pasarela nueva
 en seguridad de pagos (`PLATAFORMA_COMPLETA.md` §10 n.º 4, 8, 10 y 16).
 
 ### 1. Respaldos de la base y prueba de restauracion

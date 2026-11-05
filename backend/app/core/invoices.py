@@ -7,7 +7,7 @@ todos los caminos que aprueban (webhook, consulta del estado del pago, cobro de
 la renovacion automatica, "Reconsultar" en el admin) y no existe un pago
 aprobado sin su factura.
 
-La emision con Dataico es del paso 5.4: hasta entonces la fila se queda en
+La emision con Siigo es del paso 5.4: hasta entonces la fila se queda en
 `pending` y nada sale de la aplicacion.
 """
 
