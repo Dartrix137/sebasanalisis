@@ -15,7 +15,7 @@
 0. [Propósito y reglas que se heredan](#0-propósito-y-reglas-que-se-heredan)
 1. [Estado de partida](#1-estado-de-partida)
 2. [Modelo de acceso](#2-modelo-de-acceso)
-3. [Pagos y suscripciones](#3-pagos-y-suscripciones) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Siigo, en §3.17; el retiro de Wompi, en §3.18; Tipster Page, en §3.19)
+3. [Pagos y suscripciones](#3-pagos-y-suscripciones) (la entrega 1 del paso 5 está en §3.12; la tokenización con un formulario propio, en §3.16; la facturación electrónica, con Siigo, en §3.17; el retiro de Wompi, en §3.18; Tipster Page, en §3.19; el diseño de la emisión con Siigo, en §3.20)
 4. [Admin dashboard](#4-admin-dashboard) (las tres entregas del paso 6 están en §4.8, §4.9 y §4.10)
 5. [Mejoras de autenticación](#5-mejoras-de-autenticación)
 6. [Términos, condiciones y políticas](#6-términos-condiciones-y-políticas)
@@ -785,7 +785,7 @@ Cierra §10 n.º 4. La base (paso 5.2) está construida: ver "Paso 5.2: cómo qu
 **Lo decidido por el usuario**
 
 - **Hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica ante la DIAN.
-- ~~**A consumidor final**, sin el nombre ni la cédula del comprador: el registro no los pide y no se agregan.~~ **Por definir (corrección del usuario, 2026-10-23)**: podría hacer falta pedirle al cliente su nombre y su identificación. Ver "Pendiente antes de construir", n.º 5.
+- ~~**A consumidor final**, sin el nombre ni la cédula del comprador: el registro no los pide y no se agregan.~~ **Por definir (corrección del usuario, 2026-10-23)**: podría hacer falta pedirle al cliente su nombre y su identificación. Ver "Pendiente antes de construir", n.º 5. **Decidido (2026-11-05)**: con nombre e identificación, cédula para Colombia y NIT de otro país para los demás (§3.20).
 - **Proveedor: Siigo**, por su API. Siigo valida la factura con la DIAN.
 - **El recibo por correo no cambia**: sigue siendo una constancia de pago y lo dice ("no una factura"). Un correo propio no puede ser factura electrónica: la factura es un XML UBL 2.1 firmado, con numeración autorizada por la DIAN, CUFE, código QR y validación previa de la DIAN antes de entregarse.
 
@@ -803,9 +803,9 @@ Cierra §10 n.º 4. La base (paso 5.2) está construida: ver "Paso 5.2: cómo qu
 0. **Contador (2026-10-23)**: si la factura va en euros con la tasa o directamente en pesos; de dónde sale la tasa de euros a dólares y cómo se redondea; si la comisión de Tipster Page cambia la base de la factura; si una anulación o un reembolso piden nota crédito en Siigo.
 1. **IVA**: si la suscripción lleva IVA del 19 % y si los 32 y 46 EUR ya lo incluyen (va con el precio en pantalla de §3.11; los precios en euros son del 2026-11-03). Lo responde el contador. Una vía en estudio es la exclusión de IVA de los servicios de computación en la nube; ver abajo.
 2. **Cómo le llega la factura al cliente**: con el consumidor final genérico, Siigo no tiene el correo del comprador. Hay dos salidas: poner en cada factura el correo de la cuenta, si la API lo permite, o bajar el PDF por la API y adjuntarlo al recibo. Depende de la documentación de Siigo.
-3. **La documentación oficial vigente de la API de Siigo**, leída al construir y citada en un comentario, igual que la de la pasarela: nunca de memoria ni de código de terceros. El 2026-10-20 no se pudo leer la oficial (la página de Apiary no cargó); solo apareció código de terceros que usa `POST /v1/invoices`, que no sirve como base. Al construir hay que leer, entre otras cosas: la autenticación y la vigencia del token, el cuerpo de la factura (cliente, producto, impuestos, forma de pago, moneda y tasa), la respuesta con el estado ante la DIAN y el CUFE, la nota crédito, los límites de uso y si hay un ambiente de pruebas.
+3. ~~**La documentación oficial vigente de la API de Siigo**~~ (leída el 2026-11-05; lo que cambia el diseño, en §3.20), leída al construir y citada en un comentario, igual que la de la pasarela: nunca de memoria ni de código de terceros. El 2026-10-20 no se pudo leer la oficial (la página de Apiary no cargó); solo apareció código de terceros que usa `POST /v1/invoices`, que no sirve como base. Al construir hay que leer, entre otras cosas: la autenticación y la vigencia del token, el cuerpo de la factura (cliente, producto, impuestos, forma de pago, moneda y tasa), la respuesta con el estado ante la DIAN y el CUFE, la nota crédito, los límites de uso y si hay un ambiente de pruebas.
 4. **Operativo (usuario)**: la cuenta de Siigo ya existe (2026-11-05). Falta confirmar que su plan de Siigo Nube incluye la API, crear las credenciales (aplicación de Desarrollo propio, Facturación de ventas), configurar en Siigo la resolución de facturación de la DIAN y crear allá el producto o servicio "suscripción". Las credenciales van solo en el `.env` local y en Dokploy, nunca en un commit ni en un log.
-5. **A quién va la factura (2026-10-23)**: a consumidor final, o con el nombre y la identificación del cliente. Si es lo segundo: un formulario para pedirlos (¿al registrarse, al pagar?), columnas nuevas, la versión 2 de la política de datos (5.5) y qué se conserva al eliminar la cuenta. Lo responde el contador; los textos, el abogado. §10 n.º 17.
+5. ~~**A quién va la factura (2026-10-23)**~~ (decidido el 2026-11-05: con nombre e identificación; §3.20): a consumidor final, o con el nombre y la identificación del cliente. Si es lo segundo: un formulario para pedirlos (¿al registrarse, al pagar?), columnas nuevas, la versión 2 de la política de datos (5.5) y qué se conserva al eliminar la cuenta. Lo responde el contador; los textos, el abogado. §10 n.º 17.
 
 **Computación en la nube y la exclusión de IVA (consulta del 2026-10-20)**
 
@@ -935,6 +935,189 @@ Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster P
 - **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
 ---
+
+### 3.20 Emisión con Siigo (Fase 5, paso 5.4): diseño (2026-11-05, sin construir)
+
+Diseño escrito sobre la documentación oficial de la API de Siigo, leída el 2026-11-05. No se construye la emisión hasta que el contador responda lo de "Pendiente antes de construir", al final. Lo decidido en §3.17 sigue en pie, salvo lo que corrige esta sección.
+
+**Lo decidido por el usuario (2026-11-05)**
+
+- **La factura va con el nombre y la identificación del cliente**, no a consumidor final. Cierra §10 n.º 17 y el pendiente n.º 5 de §3.17.
+  - Un cliente de Colombia se identifica con su **cédula de ciudadanía** (código `13` en Siigo).
+  - Un cliente de otro país, con **NIT**. En la lista de Siigo es el código `50`, "NIT de otro país". Ver el pendiente n.º 4: Siigo también tiene `41` (pasaporte) y `42` (documento de identificación extranjero), que son los que suele tener una persona de fuera.
+- **La factura va en pesos colombianos.** El monto en euros se convierte con la **TRM vigente el día del pago**. El día del pago es el de la aprobación, en hora de Colombia, como ya hace `billing/fx.operation_date`.
+  - La TRM es la tasa de dólares a pesos. El Decreto 1625 de 2016, art. 1.1.3 par. 1, pide pasar primero de euros a dólares "aplicando el tipo de cambio vigente al día de la operación" y después de dólares a pesos con la TRM. `billing/fx.to_cop_cents` ya lo hace en dos pasos. La tasa de euros a dólares sale de un servicio que se consulta (respuesta de la contadora, 2026-11-05); cuál, en "Tasas de cambio".
+
+**Respuestas de la contadora (2026-11-05)**
+
+- **La suscripción va excluida de IVA**, no exenta, conforme al **artículo 476, numeral 21, del Estatuto Tributario**. La factura lleva un párrafo al pie con ese artículo, y en el cuadro de totales el IVA aparece en 0 % ("IVA excluido (0 %)"). El modelo que revisó está en `docs/reference/factura.jpeg`. Cierra el pendiente n.º 1 de §3.17: los 32 y 46 EUR son el total, sin IVA, y el precio en pantalla no cambia.
+- **La fecha**: está bien que la factura lleve la fecha de su emisión y la TRM del día del pago, cuando no son el mismo día.
+- **La dirección y la ciudad se le preguntan al cliente.**
+- **Nota crédito: cuando se reembolsa una suscripción.**
+- **La factura muestra también el valor en euros.**
+- La identificación de un cliente de fuera: la contadora no sabe cómo la maneja Siigo. Su documentación solo trae la lista de tipos, sin una regla por país: ver "Datos de facturación del cliente".
+
+**Fuentes leídas (2026-11-05)**
+
+- Siigo API, Colombia: `https://developers.siigo.com/docs/siigoapi/`. Páginas: autenticación, Partner-Id, idempotencia, manejo de errores, códigos HTTP, bloqueo de usuarios, facturación electrónica, crear factura, editar factura, crear cliente, crear nota crédito y crear producto.
+- La referencia completa (API Blueprint), en `https://jsapi.apiary.io/apis/siigoapi.apib`. De ahí salen la consulta, el listado, el PDF, el XML, el envío por correo y los errores de la DIAN de una factura. La página de Apiary no muestra contenido sin navegador.
+- TRM: la Superintendencia Financiera la certifica (`https://www.superfinanciera.gov.co/publicacion/60819`). Su histórico abierto está en `https://www.datos.gov.co/resource/mcec-87by.json`, con los campos `valor`, `unidad`, `vigenciadesde` y `vigenciahasta`. La Superfinanciera también publica un servicio web, con un manual en PDF que no se pudo leer.
+- Tasa de euros a dólares:
+  - El Banco de la República lista en su catálogo dos series diarias del euro, "Euro - USD/EUR" y "Euro - COP/EUR - Tasa media" (`https://totoro.banrep.gov.co/estadisticas-economicas/`). Sus páginas de datos piden una verificación contra bots y no se encontró una API ni un CSV para ellas.
+  - El Banco Central Europeo publica la tasa de referencia diaria en XML libre (`https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml`; histórico en `eurofxref-hist.xml` y `eurofxref-hist-90d.xml`), en dólares por euro, hacia las 16:00 de Fráncfort (10:00 en Colombia) de cada día hábil, y no los días de cierre de TARGET. El 2026-11-05 fue 1,1224. El BCE dice que la publica "for information purposes only" y desaconseja usarla para transacciones.
+- Decreto 1625 de 2016, art. 1.1.3, en `https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=83233`. La página dice que el artículo fue sustituido por el Decreto 246 de 2026: el contador confirma el texto vigente.
+
+**Lo que dice la documentación de Siigo y cambia el diseño**
+
+| Tema | Lo documentado | Consecuencia |
+|---|---|---|
+| Autenticación | `POST https://api.siigo.com/auth` con `username` y `access_key`, que se crean en Siigo Nube ("Alianzas", "Mi Credencial API"). Responde `access_token`, `expires_in: 86400` y `token_type: Bearer`. | Un token por proceso, guardado en memoria y renovado antes de vencer, como el token de Tipster Page. Que el encabezado vaya con o sin `Bearer ` no está claro en la documentación: se comprueba en la empresa de pruebas. |
+| `Partner-Id` | Obligatorio en cada petición: el nombre de la aplicación, de 3 a 100 caracteres alfanuméricos, sin espacios. Siigo bloquea a quien manda valores falsos. | Va fijo en el código: `Sebasanalisis`. |
+| Límites | 100 peticiones por minuto por empresa en producción, 10 en la empresa de pruebas. Pasarse responde `429`. Recomiendan esperar 120 segundos o más por respuesta al crear documentos. | Una factura usa de 2 a 4 peticiones. El job emite por tandas pequeñas, con tiempo de espera de 120 s. |
+| Bloqueo | Si en 7 días más del 80 % de las peticiones dan error, Siigo bloquea al usuario de la API. | Un error de validación (`400`) **no se reintenta solo**: la factura queda fallida para el admin. Solo se reintentan `429`, `5xx` y los tiempos de espera agotados. |
+| Idempotencia | Encabezado `Idempotency-Key` en `POST /v1/invoices` y `/v1/credit-notes`, alfanumérico, de hasta 30 caracteres (la página de errores dice 32). Con la misma llave, Siigo devuelve la factura ya creada. | La llave sale del id de nuestra factura en base 32, 26 caracteres. Un reintento después de un tiempo de espera agotado no crea una segunda factura. |
+| El cliente | La factura exige que el cliente ya exista en Siigo (`customer.identification`). También se puede crear desde la factura, pero no con una identificación que ya existe. | Antes de facturar se busca el cliente (`GET /v1/customers?identification=`) y, si no está, se crea (`POST /v1/customers`). |
+| Datos del cliente | **Obligatorios**: `person_type`, `id_type`, `identification`, `name` (nombres y apellidos de una persona), `address.address`, `address.city` con `country_code`, `state_code` y `city_code` (los códigos de Siigo), `contacts[].first_name` y `fiscal_responsibilities` (normalmente `R-99-PN`, "No aplica"). El correo del contacto es opcional. | **Además del nombre y la identificación, Siigo pide la dirección y la ciudad.** Ver "Datos de facturación del cliente" y el pendiente n.º 5. |
+| Fecha | `date` es obligatoria, en formato `yyyy-MM-dd`. Una factura electrónica no puede llevar una fecha anterior a hoy. | **La factura lleva la fecha de su emisión**, no la del pago: si se emite al día siguiente, la fecha cambia. Por eso se emite enseguida, no solo en la corrida de cada hora. La TRM sigue siendo la del día del pago. Lo confirma el contador (pendiente n.º 3). |
+| Moneda | Sin el objeto `currency`, la factura va en la moneda local. Una factura en otra moneda exige configurarla en Siigo Nube. | La factura va en pesos y sin `currency`. El valor en euros, las dos tasas y sus fuentes van en `observations` (máximo 4.000 caracteres), junto con el párrafo de la exclusión del IVA. |
+| Ítems y pagos | `items[]` con `code` (un producto que exista en Siigo), `quantity` y `price` (o `taxed_price`, con el IVA incluido), y `taxes[].id`. `payments[]` con `id` (una forma de pago de `/payment-types?document_type=FV`) y `value`. La suma de los pagos tiene que ser igual al total. Siigo redondea cada línea a 2 decimales. | Un ítem, el producto "suscripción", con el plan y el período en la descripción, sin impuestos: el producto se crea en Siigo como servicio con `tax_classification: Excluded`. Un solo pago, por el total en pesos. |
+| Envío a la DIAN y al cliente | `stamp: {send: true}` la envía a la DIAN. `mail: {send: true}` la manda por correo al contacto. `stamp.status` puede ser `Draft`, `Accepted` o `Rejected`, y `stamp.cufe` trae el CUFE. | Se crea con los dos en `true`, y el correo del contacto es el de la cuenta. La factura le llega al cliente desde Siigo; el recibo nuestro sigue siendo una constancia de pago. |
+| Consultas | `GET /v1/invoices/{id}` (estado y CUFE), `GET /v1/invoices/{id}/stamp/errors` (por qué la rechazó la DIAN), `GET /v1/invoices/{id}/pdf` (en base64) y `POST /v1/invoices/{id}/mail` (hasta 5 correos). | Una factura enviada pero sin respuesta de la DIAN se vuelve a consultar en la corrida siguiente. "Reenviar factura" y "Descargar PDF" en el admin. |
+| Avisos (webhooks) | Siigo solo avisa de cambios en productos, no en facturas. | El estado ante la DIAN se consulta: no se espera un aviso. |
+| Nota crédito | `POST /v1/credit-notes`, con `invoice` (el id de la factura en Siigo) y `reason`. El motivo `2` es "Anulación de factura electrónica" y el `1` es "Devolución parcial… no aceptación parcial del servicio". | Para un pago anulado o reembolsado. Si se hace y con qué motivo lo dice el contador (pendiente n.º 6). |
+| Ambiente de pruebas | No hay una URL de pruebas. La empresa de pruebas se pide a Siigo por sus líneas de atención, dando el NIT de la empresa. | Hay que pedirla antes de construir. Sin ella, la única prueba posible es una factura real. |
+
+**Datos de facturación del cliente**
+
+- **Se piden al pagar, no al registrarse.** Solo los da quien compra, el registro no gana pasos y se guardan menos datos personales. Es el primer bloque de `/planes/pagar` la primera vez. Quedan guardados y se pueden cambiar en "Mi cuenta".
+- **Los campos son:** nombres, apellidos, país, tipo y número de identificación, dirección y ciudad. La dirección y la ciudad las da el cliente (respuesta de la contadora). El correo es el de la cuenta, que ya está confirmado.
+- **El tipo de identificación**: la documentación de Siigo trae la lista de tipos (`id_type`) y sus formatos, pero ninguna regla por país.
+  - **Aprobado por el usuario (2026-11-05)**: el tipo por defecto es el que decidió el usuario, cédula de ciudadanía (`13`) para Colombia y NIT de otro país (`50`) para los demás. El cliente lo puede cambiar por otro tipo válido en su país:
+    - en Colombia, cédula de extranjería (`22`);
+    - fuera, pasaporte (`41`) o documento de identificación extranjero (`42`). Es lo que suele tener una persona de fuera, que casi nunca tiene NIT.
+  - Si la contadora prefiere otra cosa, se cambia la lista.
+  - **La ciudad, para Colombia**: una lista con los códigos de Siigo, en el código y no escrita a mano, porque Siigo rechaza un código que no existe.
+  - **Fuera de Colombia**: Siigo pide también un código de estado y de ciudad, de la misma lista. La lista no tiene todas las ciudades (ver abajo y el pendiente n.º 5).
+- **La lista de ciudades de Siigo** (`Lista-de-ciudades.xlsx`, enlazada en su documentación de clientes, revisada el 2026-11-05):
+  - **Tamaño**: 4.605 ciudades de 220 países, con las columnas `CityCode`, `CityName`, `StateCode`, `StateName`, `CountryCode` y `CountryName`.
+  - **El código de ciudad no es único**: `0101` es Madrid en España y Lisboa en Portugal. Lo que identifica una ciudad es el trío (país, estado, ciudad), que no se repite.
+  - **Colombia está completa**: 1.123 municipios, con su código DANE.
+  - **Fuera de Colombia hay pocas ciudades por país**, casi siempre las capitales y algunas grandes: España 63, Estados Unidos 61, México 32, Argentina 21 y Chile 15. 42 países tienen entre una y tres.
+  - **Faltan ciudades grandes**: Nueva York (justo el ejemplo de la documentación), Los Ángeles, Houston, Buenos Aires (Argentina), Santiago de Chile y Ciudad de Panamá.
+  - **Hay errores**: Quito aparece en Pastaza, no en Pichincha. Algunas filas son estados y no ciudades ("California", "Cataluña", "Massachusetts").
+  - Las ciudades que sí están (Madrid, Barcelona, Ciudad de México, Lima, Londres, París, Toronto…) se pueden elegir.
+- **Formulario propuesto**:
+  - En Colombia, departamento y municipio, de la lista.
+  - Fuera, país y ciudad de la lista. Si su ciudad no está, el cliente escribe la real en la dirección. Qué ciudad de la lista se manda en ese caso lo dice Siigo (pendiente n.º 5).
+  - La lista va en el código como datos, no consultada en vivo: Siigo no tiene un endpoint de ciudades.
+  - La fuente buena es el reporte de la empresa en Siigo Nube ("Reportes > Carteras/Proveedores > Reportes de sistema > Países-Departamentos-Ciudades"), porque el archivo público puede estar desactualizado.
+- **Validación en el servidor**, con las reglas de Siigo:
+  - La cédula es numérica, de 3 a 13 dígitos. Las identificaciones de fuera son alfanuméricas, de 1 a 20 caracteres.
+  - Cada nombre tiene hasta 100 caracteres y la dirección hasta 256.
+  - Siigo dice que el nombre "no permite caracteres especiales": que acepte tildes y la ñ se comprueba en la empresa de pruebas.
+- **Una tabla `billing_profiles`**, una fila por cuenta, con esos campos. Al emitir, la factura guarda **una copia** de ellos (columnas en `invoices`): si el cliente cambia su dirección después, una factura ya emitida no cambia.
+- **Privacidad:**
+  - La identificación no va en un log, ni en GlitchTip, ni en una URL. El monitoreo ya descarta los cuerpos de `/billing`.
+  - La exportación de la cuenta incluye los datos de facturación.
+  - Al eliminar la cuenta se borra `billing_profiles`. La copia de la factura se conserva, porque es un documento tributario, igual que la factura.
+  - La política de datos v2 (5.5) tiene que decir qué se pide, para qué y cuánto tiempo se guarda. Lo redacta el abogado.
+- **Si un cliente ya pagó sin estos datos**, su factura queda en espera ("faltan datos de facturación") hasta que los complete. Solo pasa con pagos anteriores a este paso, que son del sandbox. **No se sale a producción** con facturas en ese estado.
+
+**Tasas de cambio**
+
+- **Tabla `exchange_rates`**: el par (`USD/COP`, `EUR/USD`), el valor en `Numeric` (nunca `float`), la vigencia (desde y hasta), la fuente y cuándo se consultó. Es única por par y fecha de inicio.
+- **La TRM sale de `datos.gov.co`** (`mcec-87by`), la fuente que enlaza la Superfinanciera. Cada fila trae su vigencia, y la TRM de un fin de semana o un festivo es la del último día certificado (Decreto 1625 par. 2). En la tabla se ve así: la fila del 31 de octubre de 2026 va vigente hasta el 3 de noviembre. Se busca la fila cuya vigencia cubre el día del pago, sin suponer días hábiles.
+  - El servicio web de la Superfinanciera queda como alternativa, si datos.gov.co falla. Su manual hay que leerlo antes de usarlo.
+- **Euros a dólares**: se consulta un servicio. El Decreto 1625 remite a la tasa "publicada por el Banco de la República o por la fuente oficial que determine la DIAN" (pendiente n.º 2).
+  - **Propuesta**: la serie "Euro - USD/EUR" del Banco de la República, si tiene una vía de consulta que el servidor pueda usar. Si no, la tasa de referencia del Banco Central Europeo, que sí se puede consultar.
+  - Funciona igual que la TRM: cada tasa se guarda con su fuente, y un día sin tasa (fin de semana o festivo) usa la del último día publicado antes del pago (Decreto 1625 par. 2).
+  - Mientras la contadora no apruebe la fuente, la emisión de un pago en euros no se enciende.
+- **Las tasas se congelan en la factura** (`eur_usd`, `usd_cop`, su fuente y el monto en pesos) antes del primer envío. Los reintentos mandan las mismas, como ya decía §3.17.
+- Si la tasa del día todavía no está publicada, la factura espera a la corrida siguiente. No se usa la de otro día.
+
+**El emisor**
+
+- Un módulo `backend/app/invoicing/` con la interfaz `InvoiceIssuer`, como `PaymentProvider`, y tres implementaciones:
+  - `SiigoIssuer` (`INVOICE_PROVIDER=siigo`).
+  - Una simulada para desarrollo y Playwright (`fake`; con las credenciales de producción de Siigo, la API no arranca con ella).
+  - `none`, el valor por defecto: la emisión queda apagada, como hoy.
+- **Variables de entorno**: `SIIGO_USERNAME`, `SIIGO_ACCESS_KEY` y los ids de la configuración de Siigo Nube:
+  - el tipo de comprobante de factura electrónica (`/document-types?type=FV`);
+  - el vendedor (`/users`);
+  - la forma de pago (`/payment-types?document_type=FV`);
+  - el código del producto "suscripción";
+
+  Se consultan una vez con las credenciales y se ponen a mano. Si falta alguna, la API no arranca, y el error dice cuál.
+- El cálculo puro (la línea de la factura, el redondeo a 2 decimales igual que Siigo, la descripción y el texto de `observations`) va en `billing/`, sin red y con tests, como `fx.py`.
+- **El texto de `observations`**, por ejemplo: "IVA: Operación excluida del IVA, conforme al artículo 476, numeral 21, del Estatuto Tributario. Valor pagado: 32,00 EUR. Tasa EUR/USD del 05/11/2026: 1,1224 (fuente). TRM del 05/11/2026: 3.221,19 COP/USD (Superintendencia Financiera)."
+  - Siigo imprime la representación gráfica (el PDF) con su propia plantilla. Que `observations` salga al pie, y que el cuadro de totales diga "IVA excluido (0 %)", se comprueba en la empresa de pruebas.
+  - Si la API no lo permite, se configura en Siigo Nube: el pie de página del tipo de comprobante, y cómo muestra un producto excluido.
+  - La actividad económica (CIIU 6311 en el modelo) y los datos del emisor son de la configuración de la empresa en Siigo, no del código.
+
+**El recorrido de una factura**
+
+1. **Nace pendiente** cuando se aprueba el pago, en la misma transacción. Ya está construido (5.2): `core/invoices.create_pending`.
+2. **Se prepara**: se toman la TRM y la tasa de euros a dólares del día del pago, se calcula el monto en pesos y se copian los datos de facturación. Queda `ready`. Si falta una tasa o faltan los datos, sigue pendiente, con el motivo.
+3. **Se emite enseguida, fuera de la transacción del pago**: una tarea en segundo plano después del commit, como los correos. El job de cada hora es la red de seguridad. Si Siigo está caído, el pago no falla. La emisión:
+   - busca o crea el cliente;
+   - hace el `POST /v1/invoices` con la `Idempotency-Key`, `stamp` y `mail` en `true`;
+   - guarda el id de Siigo, el número (`FV-…`), el estado ante la DIAN y el CUFE.
+
+   Queda `sent`, o `issued` si la DIAN ya la aceptó.
+4. **Se confirma**: mientras siga `Draft`, el job la vuelve a consultar.
+   - `Accepted` → `issued`, con el CUFE.
+   - `Rejected` → `rejected`, con los motivos de `stamp/errors`, para el admin. No se reintenta sola: hay que corregirla.
+5. **Errores**:
+   - `429`, `5xx` y tiempos agotados se reintentan con espera creciente, hasta un tope de intentos.
+   - Un `400` (datos inválidos, cliente mal configurado, resolución de la DIAN vencida) deja la factura `failed`, con el código de error de Siigo y sin datos personales en el log.
+   - El admin la reintenta con "Reintentar emisión", con motivo y fila en la bitácora.
+6. **Reembolso de una suscripción**: lleva nota crédito (respuesta de la contadora).
+   - Al registrar el reembolso en el admin (`payment_refunds`, §4.8), con su motivo, se emite la nota crédito de la factura de ese pago. Va con `POST /v1/credit-notes`, la `invoice` de Siigo y su propia `Idempotency-Key`, y la emisión y los reintentos funcionan igual que en la factura.
+   - El motivo de la DIAN (`reason`) se propone así: `2` ("Anulación de factura electrónica") si se reembolsa el total, y `1` ("Devolución parcial… no aceptación parcial del servicio") si es una parte. Lo confirma la contadora (pendiente n.º 6).
+   - Un pago que la pasarela anula después de aprobado devuelve el dinero igual: se propone tratarlo como un reembolso total. También lo confirma la contadora.
+
+**Admin y cliente**
+
+- **El detalle del pago en el admin** muestra el estado de la factura, el número y el CUFE, el monto en pesos con sus tasas y su fuente, la fecha de emisión y, si falló, el motivo. Acciones: "Reintentar emisión" y "Reenviar factura", con motivo y fila en `admin_audit_log`, y "Descargar PDF".
+- **El cliente** recibe la factura por correo desde Siigo. El recibo nuestro no cambia: sigue diciendo que no es una factura. Una lista de facturas en "Mi cuenta", con su PDF, queda para después: no hace falta para salir.
+
+**Pruebas**
+
+- Los tests de API corren con `SiigoIssuer` sobre un transporte HTTP simulado con las respuestas documentadas, como `tests/api/tipster_sandbox.py`. Casos mínimos:
+  - el token y su renovación;
+  - el cliente que existe y el que no;
+  - la idempotencia ante un tiempo de espera agotado;
+  - `429` y `5xx` reintentados, y `400` que no se reintenta;
+  - `Draft` → `Accepted` y `Rejected`;
+  - la fecha de hoy contra el día del pago;
+  - la TRM de un fin de semana;
+  - la tasa que falta;
+  - los datos que faltan.
+- El cálculo puro, en `tests/billing/`.
+- Contra la empresa de pruebas de Siigo, de punta a punta: un pago del sandbox de Tipster Page que termine en una factura aceptada, con su CUFE, visible en Siigo Nube y en el admin. Es el criterio de cierre del 5.4.
+
+**Pendiente antes de construir**
+
+Resuelto con la contadora el 2026-11-05: el IVA (excluido, art. 476 num. 21 E.T.), la fecha, la dirección y la ciudad (las da el cliente), la nota crédito (en el reembolso) y el valor en euros. Queda:
+
+1. ~~IVA~~ (excluido).
+2. **La fuente de la tasa de euros a dólares**: la serie del Banco de la República o la del Banco Central Europeo ("Tasas de cambio"). Y el redondeo: hoy es una sola vez, al centavo, hacia arriba en la mitad exacta (`fx.ROUNDING`).
+3. ~~La fecha~~ (está bien).
+4. ~~El tipo de identificación de un cliente de fuera~~ (aprobada la propuesta por el usuario el 2026-11-05: cédula o cédula de extranjería en Colombia; NIT de otro país, pasaporte o documento extranjero fuera).
+5. ~~La dirección y la ciudad~~ (las da el cliente). **La lista de ciudades de Siigo no cubre muchas ciudades de fuera de Colombia** ("Datos de facturación del cliente"). Se le pregunta a Siigo: qué se manda cuando la ciudad del cliente no está, y si el reporte de la empresa en Siigo Nube trae más ciudades que el archivo público.
+6. **El motivo de la nota crédito** (total y parcial) y si la anulación de la pasarela cuenta como reembolso.
+7. ~~El valor en euros~~ (va en la factura).
+
+Para el **usuario, en Siigo**:
+
+- Pedir la empresa de pruebas por las líneas de atención de Siigo, con el NIT de la empresa.
+- Crear las credenciales de la API ("Alianzas", "Mi Credencial API").
+- Configurar la resolución de facturación electrónica de la DIAN.
+- Crear el producto "suscripción" como servicio, con el IVA que diga el contador.
+- Revisar que la forma de pago y el vendedor existan.
+- Las credenciales van solo en `backend/.env` y en Dokploy, nunca en un commit ni en un log.
+
+Para el **abogado**: la política de datos v2 (5.5), con los datos de facturación.
 
 ## 4. Admin dashboard
 
@@ -1775,7 +1958,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 1 | Qué pasa con los usuarios `trial` actuales al activar el control de acceso | **Resuelta (2026-10-08): pasan a `invited` sin vencimiento**, sin correo de aviso. El administrador les retira el acceso a mano cuando exista el pago. La propuesta original (14 días y correo) se descartó porque el pago podía no estar listo en ese plazo. |
 | 2 | Planes y precios iniciales (mensual, trimestral, anual; montos en COP) | **Resuelta (2026-10-09): dos planes**, mensual de 100.000 COP y de dos meses de 150.000 COP. No hay plan anual. El precio de referencia de 30 USD que se decidió el 2026-10-08 se descartó: se muestra y se cobra solo en COP. Ver §3.10. |
 | 3 | Medios de pago que no se pueden tokenizar (PSE, transferencias) | **Cambia (2026-10-08):** con el pago manual mes a mes (§3.10) estos medios sí se pueden ofrecer: cada pago compra un período, sin tokenizar nada. **Resuelta (2026-10-13):** el pago manual usa el Web Checkout de Wompi, que ofrece los medios que el comercio tenga habilitados en su panel; se encienden y se apagan allá, no en el código. Ver §3.12. |
-| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica (a quién va, por definir desde el 2026-10-23: n.º 17), emitida con **Siigo** por su API (Dataico entre el 2026-10-23 y el 2026-11-05, descartado). Un pago en euros se factura en pesos con la tasa del día del pago (§3.17). El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo y sus credenciales; la cuenta de Siigo ya existe desde el 2026-11-05) están en §3.17. Bloquea el lanzamiento. |
+| 4 | Facturación electrónica ante la DIAN | **Resuelta (2026-10-20): hay obligación de facturar.** Cada pago aprobado lleva una factura electrónica (con nombre e identificación del cliente desde el 2026-11-05: n.º 17), emitida con **Siigo** por su API (Dataico entre el 2026-10-23 y el 2026-11-05, descartado). Un pago en euros se factura en pesos con la tasa del día del pago (§3.17). El recibo por correo sigue siendo una constancia de pago, no una factura. **Sin construir.** El diseño propuesto y lo que falta antes de construir (IVA, cómo le llega la factura al cliente, la documentación oficial de la API de Siigo y sus credenciales; la cuenta de Siigo ya existe desde el 2026-11-05) están en §3.17. Bloquea el lanzamiento. |
 | 5 | Si un cambio de precio del plan se traslada a las suscripciones vigentes | **Resuelta (2026-10-14): se construye la acción** (construida ese día, §4.10), en una entrega propia del paso 6, después de la 1: aviso por correo 30 días antes de cobrar el precio nuevo, a todas las suscripciones vigentes del plan en los dos modos (no a las canceladas), y el cupón que todavía descuenta sigue descontando sobre el precio nuevo. El plazo lo confirma el abogado. Ver §4.8. |
 | 6 | Cupón que deja el total en cero (100 % de descuento) | **Resuelta (2026-10-09): no se permite.** El porcentaje va de 1 a 99 y un cupón de monto fijo que cubra todo el precio no aplica; una cortesía total se da como acceso `invited` desde el admin. Ver §3.11. |
 | 7 | Reembolsos: manuales en el panel de Wompi o integrados por API | **Resuelta (2026-10-14): manuales en Wompi y registrados en el admin**, sin cambiar el pago ni el acceso. Una anulación (que Wompi sí reporta como estado de la transacción) retira sola el período que el pago había comprado. Ver §4.8. |
@@ -1788,7 +1971,7 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
 | 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | **Superada (2026-10-23):** Wompi salió y el formulario propio con él (§3.18). La pregunta pasa a la pasarela nueva (n.º 16). Lo que decía: preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
 | 16 | Pasarela nueva: las respuestas de Tipster Page al anexo técnico (medios y monedas, cobro por un monto propio, página alojada, tokenización o recurrencia suya, firma de los webhooks, id de evento, reconsulta, reembolsos, contracargos, sandbox, seguridad de pagos) | Pendiente de Tipster Page (anexo enviado el 2026-10-22). Decide el diseño del paso 5.3: si se conserva el calendario de cobros propio, la moneda de cobro, la forma de `PaymentSourceType` y `acceptance()`, sus orígenes en la CSP y las protecciones de arranque que salieron con Wompi (§3.18). Bloquea vender (5.3). |
-| 17 | A quién va la factura electrónica: a consumidor final, o con el nombre y la identificación del cliente | **Abierta (2026-10-23, corrección del usuario).** Antes figuraba como decidido "a consumidor final, sin nombre ni cédula". Lo responde el contador; si hay que pedir datos nuevos, cambian el registro o el pago, la política de datos (5.5) y lo que se conserva al eliminar la cuenta. La tabla `invoices` del paso 5.2 no guarda datos del comprador, así que no depende de esto. Bloquea la emisión (5.4). |
+| 17 | A quién va la factura electrónica: a consumidor final, o con el nombre y la identificación del cliente | **Resuelta (2026-11-05, el usuario): con el nombre y la identificación**, cédula para Colombia y NIT de otro país para los demás, en pesos con la TRM del día del pago. Se piden al pagar (§3.20). Historia: **abierta el 2026-10-23 (corrección del usuario).** Antes figuraba como decidido "a consumidor final, sin nombre ni cédula". Siigo exige además la dirección y la ciudad del cliente; el tipo de identificación de un cliente de fuera lo confirma el contador (§3.20, pendientes n.º 4 y 5). |
 
 ---
 
