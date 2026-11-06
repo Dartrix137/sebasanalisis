@@ -10,6 +10,10 @@ Sin JWT: lo autentica la firma del evento. Tres reglas, en este orden:
 
 Idempotencia por (pasarela, `provider_event_id`): un evento ya procesado no se
 repite, y el id de una pasarela no choca con el de otra.
+
+La excepcion es un aviso que no mueve nada (`ProviderEvent.notice_only`, la
+devolucion de Tipster Page): se guarda y responde 200, con firma valida o sin
+ella, sin reconsultar.
 """
 
 import logging
@@ -90,6 +94,19 @@ def payments_webhook(
     event = provider.parse_event(body, request.headers)
     row = _store_event(db, provider.name, event)
 
+    if event.notice_only:
+        # Un aviso que no mueve nada (la devolucion de Tipster Page): se guarda
+        # y se acepta para que la pasarela no lo reintente. La devolucion la
+        # registra el admin a mano.
+        logger.warning(
+            "Aviso de pagos sin efecto (%s, evento %s): si es una devolucion, registrala en el admin",
+            event.status,
+            row.id,
+        )
+        if row.processed_at is None:
+            row.processed_at = datetime.now(UTC)
+            db.commit()
+        return {"status": "acknowledged"}
     if not event.signature_verified:
         # Queda guardado para auditar; el acceso no cambia.
         logger.warning("Webhook de pagos con firma invalida (evento %s)", row.id)

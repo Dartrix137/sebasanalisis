@@ -108,6 +108,10 @@ STATUS_MAP: dict[str, TransactionStatus] = {
 #: Manual §9: `paid_status` del aviso.
 NOTIFICATION_STATUSES = ("ok", "ko")
 
+#: Tope del `paid_status` de un aviso que no es de pago (cabe en
+#: `payment_events.status`).
+MAX_NOTICE_STATUS_LENGTH = 50
+
 #: El catalogo cambia poco; con esto no se le pide en cada pantalla.
 CATALOG_TTL_SECONDS = 300.0
 
@@ -297,6 +301,12 @@ class TipsterPageProvider:
         El aviso no trae un id propio; el manual §9.2 dice que la entrega es
         idempotente por resultado. El id del evento es la orden con su
         resultado (decidido el 2026-11-03).
+
+        Un aviso con otro `paid_status` no es de pago: es la devolucion
+        manual, que pasa la orden a `refund` (respuesta de Tipster Page,
+        2026-11-06; el manual V2 no lo documenta). Se acepta sin mover nada,
+        con firma valida o sin ella: la devolucion solo se registra
+        (decidido el 2026-11-06), y la registra el admin a mano.
         """
         try:
             raw = _raw_json(body)
@@ -310,16 +320,43 @@ class TipsterPageProvider:
         amount = raw.get("amount")
         received = raw.get("nt_signature")
         if (
-            paid_status not in NOTIFICATION_STATUSES
+            # `raw` deja los numeros como texto (para firmar el monto como
+            # llego): el tipo del estado se mira en el JSON leido.
+            not isinstance(payload.get("paid_status"), str)
+            or not isinstance(paid_status, str)
+            or not paid_status
+            or len(paid_status) > MAX_NOTICE_STATUS_LENGTH
             or not isinstance(order_id, str)
             or not order_id
             or len(order_id) > 200
-            or not isinstance(amount, str)
-            or not isinstance(received, str)
         ):
             return unverified_event(self.name, body, payload)
-        expected = notification_signature(self._secret_key, paid_status, order_id, amount)
-        if not hmac.compare_digest(expected.encode(), received.strip().lower().encode()):
+        verified = (
+            isinstance(amount, str)
+            and isinstance(received, str)
+            and hmac.compare_digest(
+                notification_signature(self._secret_key, paid_status, order_id, amount).encode(),
+                received.strip().lower().encode(),
+            )
+        )
+        if paid_status not in NOTIFICATION_STATUSES:
+            # Sin firma valida, el id va al espacio de los no verificados: un
+            # aviso falsificado no ocupa el de uno autentico.
+            event_id = (
+                f"{self.name}:{order_id}:{paid_status}"
+                if verified
+                else unverified_event(self.name, body, payload).event_id
+            )
+            return ProviderEvent(
+                event_id=event_id,
+                event_type="order.notice",
+                signature_verified=verified,
+                transaction_id=None,
+                status=paid_status,
+                payload=payload,
+                notice_only=True,
+            )
+        if not verified:
             return unverified_event(self.name, body, payload)
         return ProviderEvent(
             event_id=f"{self.name}:{order_id}:{paid_status}",

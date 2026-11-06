@@ -4,6 +4,7 @@ Con el proveedor de verdad sobre el transporte simulado (`tipster_sandbox.py`):
 
 - la firma del aviso sobre el `amount` crudo (`12.5` contra `12.50`);
 - el `error` que pasa a `paid`, el `fraud`, y un monto o un plan que no coinciden;
+- el aviso de una devolucion (`refund`), que se acepta sin mover nada;
 - la idempotencia por (pasarela, id de evento);
 - el catalogo de medios, y la validacion del medio, el pais y los datos;
 - la pagina de pago de un solo uso y su CSP;
@@ -175,6 +176,81 @@ def test_pagado_por_otro_producto_no_concede_nada(client, db, tipster) -> None:
     [pago] = _pagos(db, user_id)
     assert pago.status == "error" and "bimestral" in pago.failure_reason
     assert _suscripciones(db, user_id)[0].status == "pending"
+    assert not _tiene_acceso(client, token)
+
+
+# ---------- Devoluciones (respuesta de Tipster Page y decision, 2026-11-06) ----------
+
+
+def _eventos(db, provider_event_id_prefijo: str) -> list[PaymentEvent]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(PaymentEvent).where(PaymentEvent.provider_event_id.startswith(provider_event_id_prefijo))
+        )
+    )
+
+
+def test_el_aviso_de_una_devolucion_se_acepta_y_no_mueve_nada(client, db, tipster) -> None:
+    """Una devolucion manual pasa la orden a `refund` y avisa. Solo se registra:
+    el pago sigue aprobado y el acceso sigue; la pasarela no lo reintenta."""
+    token, user_id, _ = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    assert _webhook(client, tipster.aprobar(pago)).status_code == 200
+    periodo = _suscripciones(db, user_id)[0].current_period_end
+
+    tipster.pagar(pago, "refund")
+    aviso = tipster.aviso(pago, "refund")
+    for _ in range(2):
+        r = _webhook(client, aviso)
+        assert (r.status_code, r.json()) == (200, {"status": "acknowledged"})
+
+    [guardado] = _pagos(db, user_id)
+    assert guardado.status == "approved"
+    assert _suscripciones(db, user_id)[0].current_period_end == periodo
+    assert _tiene_acceso(client, token)
+    [evento] = _eventos(db, f"tipsterpage:{pago.reference}:refund")
+    assert (evento.status, evento.signature_verified, evento.event_type) == (
+        "refund",
+        True,
+        "order.notice",
+    )
+    assert evento.processed_at is not None and evento.payment_id is None
+
+
+def test_un_aviso_de_devolucion_sin_firma_valida_tambien_se_acepta(client, db, tipster) -> None:
+    """No se sabe como firma Tipster Page la devolucion: se acepta igual, porque
+    no mueve nada. Queda guardado como no verificado."""
+    token, user_id, _ = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    _webhook(client, tipster.aprobar(pago))
+
+    r = _webhook(client, tipster.aviso(pago, "refund", firma="00"))
+    assert (r.status_code, r.json()) == (200, {"status": "acknowledged"})
+    assert _pagos(db, user_id)[0].status == "approved"
+    assert _tiene_acceso(client, token)
+    assert _eventos(db, f"tipsterpage:{pago.reference}:refund") == []
+    [evento] = [e for e in _eventos(db, "tipsterpage:invalid:") if e.status == "refund"]
+    assert not evento.signature_verified and evento.processed_at is not None
+
+
+def test_un_aviso_ko_de_una_orden_devuelta_no_mueve_nada(client, db, tipster) -> None:
+    """Si la devolucion llegara como `ko`, la reconsulta ve `refund`, que no
+    anula el pago: el acceso sigue."""
+    token, user_id, _ = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    _webhook(client, tipster.aprobar(pago))
+    tipster.pagar(pago, "refund")
+    assert _webhook(client, tipster.aviso(pago, "ko")).status_code == 200
+    assert _pagos(db, user_id)[0].status == "approved"
+    assert _tiene_acceso(client, token)
+
+
+def test_un_aviso_de_devolucion_de_un_pago_pendiente_no_concede_nada(client, db, tipster) -> None:
+    token, user_id, _ = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    assert _webhook(client, tipster.aviso(pago, "refund")).json() == {"status": "acknowledged"}
+    assert _pagos(db, user_id)[0].status == "pending"
     assert not _tiene_acceso(client, token)
 
 

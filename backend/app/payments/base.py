@@ -167,6 +167,10 @@ class ProviderEvent:
     transaction_id: str | None
     status: str
     payload: dict[str, Any] | None
+    # True = un aviso que la pasarela manda y que no mueve nada (la devolucion
+    # de Tipster Page): se guarda y se responde 200, sin reconsultar, para que
+    # no se reintente. Vale con firma valida o sin ella.
+    notice_only: bool = False
 
 
 class PaymentProvider(Protocol):
