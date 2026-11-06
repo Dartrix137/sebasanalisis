@@ -326,13 +326,47 @@ def test_el_monto_reformateado_no_pasa() -> None:
         b"",
         b"[1]",
         b'{"paid_status":"ok"}',
-        _aviso(paid_status="talvez"),
         b'{"paid_status":"ok","order_id":"","amount":1,"nt_signature":"00"}',
         b'{"paid_status":"ok","order_id":"SA-abc","amount":32,"nt_signature":5}',
+        b'{"paid_status":"","order_id":"SA-abc","amount":32,"nt_signature":"00"}',
+        b'{"paid_status":null,"order_id":"SA-abc","amount":32,"nt_signature":"00"}',
+        b'{"paid_status":1,"order_id":"SA-abc","amount":32,"nt_signature":"00"}',
+        _aviso(paid_status="x" * 51),
     ],
 )
 def test_un_aviso_mal_formado_no_se_verifica(cuerpo: bytes) -> None:
-    assert not _proveedor(Respuestas()).parse_event(cuerpo, {}).signature_verified
+    evento = _proveedor(Respuestas()).parse_event(cuerpo, {})
+    assert not evento.signature_verified and not evento.notice_only
+
+
+def test_un_aviso_de_devolucion_no_es_de_pago() -> None:
+    """Respuesta de Tipster Page (2026-11-06): una devolucion manual pasa la
+    orden a `refund` y avisa. Se acepta sin reconsultar ni mover nada."""
+    evento = _proveedor(Respuestas()).parse_event(_aviso("refund"), {})
+    assert evento.notice_only and evento.signature_verified
+    assert (evento.event_id, evento.transaction_id, evento.status, evento.event_type) == (
+        "tipsterpage:SA-abc:refund",
+        None,
+        "refund",
+        "order.notice",
+    )
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [
+        _aviso("refund", firma="00"),
+        b'{"paid_status":"refund","order_id":"SA-abc"}',
+        b'{"paid_status":"refund","order_id":"SA-abc","amount":32,"nt_signature":5}',
+    ],
+)
+def test_un_aviso_de_devolucion_sin_firma_valida_tambien_es_un_aviso(cuerpo: bytes) -> None:
+    """Sin firma valida tambien se acepta (no mueve nada), pero con el id de los
+    no verificados: no ocupa el de un aviso autentico."""
+    evento = _proveedor(Respuestas()).parse_event(cuerpo, {})
+    assert evento.notice_only and not evento.signature_verified
+    assert evento.event_id.startswith("tipsterpage:invalid:")
+    assert (evento.transaction_id, evento.status) == (None, "refund")
 
 
 # ---------- Reconsulta ----------

@@ -643,7 +643,8 @@ def test_si_la_pasarela_no_responde_el_evento_queda_para_el_reintento(client, db
         b"no es json",
         b"[]",
         b'{"paid_status": "ok"}',
-        b'{"paid_status": "quiza", "order_id": "x", "amount": 1, "nt_signature": "00"}',
+        b'{"paid_status": "ok", "order_id": "x", "amount": 1, "nt_signature": "00"}',
+        b'{"paid_status": 1, "order_id": "x", "amount": 1, "nt_signature": "00"}',
     ],
 )
 def test_un_cuerpo_que_no_es_un_aviso_se_rechaza(client, tipster, cuerpo: bytes) -> None:

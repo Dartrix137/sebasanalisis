@@ -899,7 +899,7 @@ Todo está en `docs/docs tipsterpage/`, fuera del repositorio. Lo que respondier
 | Orden | `POST /create-order-tspay` (§7). `order_id` = `payments.reference`; `product_id` = `plans.code`; `product_name` y `product_description` en ASCII (`billing/checkout_text.py`); `amount` en euros con dos decimales; los datos del comprador como campos sueltos, fuera de la firma |
 | Firma de la orden | `HMAC-SHA256(SECRET_KEY, S)` en hexadecimal (§7.1), con `S` la concatenación sin separador de `order_id, product_id, product_name, product_description, amount, payment_method, url_ok, url_ko, notification_url, country`, en ese orden; un campo ausente aporta `""`. Coincide con su script de referencia sobre su ejemplo (`tests/payments/test_tipsterpage.py`) |
 | Respuesta de la orden | HTML (201) que lleva al navegador al procesador. Un 400 es un rechazo; 401, 500 y 502 son errores de la pasarela |
-| Aviso | `{paid_status, order_id, amount, nt_signature}` (§9), con `nt_signature = HMAC-SHA256(SECRET_KEY, paid_status + order_id + amount)` sobre el `amount` **tal como llegó en el JSON** (`32`, no `32.00`). Sin id de evento propio: el id es `tipsterpage:<orden>:<resultado>` |
+| Aviso | `{paid_status, order_id, amount, nt_signature}` (§9), con `nt_signature = HMAC-SHA256(SECRET_KEY, paid_status + order_id + amount)` sobre el `amount` **tal como llegó en el JSON** (`32`, no `32.00`). Sin id de evento propio: el id es `tipsterpage:<orden>:<resultado>`. Un `paid_status` distinto de `ok`/`ko` (la devolución, `refund`) se acepta con 200 sin mover nada (ver "Devoluciones", abajo) |
 | Reconsulta | `GET /order-status/{orderId}` (§10), con el monto en euros leído como `Decimal`. `paid` → aprobado; `error`, `expired` y `error_and_refund_payment` → rechazado; `fraud` → error para revisión; un estado desconocido no mueve nada |
 
 **Lo que cambió alrededor:**
@@ -927,10 +927,16 @@ Todo está en `docs/docs tipsterpage/`, fuera del repositorio. Lo que respondier
 - el pago resuelto por el job sin volver de Redsys;
 - el webhook con avisos firmados como los del manual.
 
-Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster Page". El aviso real de Tipster Page se probó en el VPS el 2026-11-05: llegó, se verificó su firma y resolvió el pago antes de que volviera el navegador. **Falta**: `error_and_refund_payment`, que no se pudo provocar; Bizum y los medios de EBANX.
+Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster Page". El aviso real de Tipster Page se probó en el VPS el 2026-11-05: llegó, se verificó su firma y resolvió el pago antes de que volviera el navegador. **Falta**: `error_and_refund_payment`, que no se pudo provocar; el aviso de una devolución; Bizum y los medios de EBANX.
+
+**Devoluciones** (respuesta de Tipster Page y decisión del usuario, 2026-11-06):
+- Se piden a Tipster Page por correo y las hacen a mano. Con una devolución, un `paid` pasa a `refund` y llega un aviso a la `notification_url` de la orden.
+- `refund` no está en el manual V2, y no se esperó a saber su formato exacto (decisión del usuario).
+- **Un `refund` solo se registra**: no anula el pago ni quita el acceso, que sigue hasta el fin del período o hasta que el admin cancele la suscripción (§4.8). El reembolso se anota a mano en el admin.
+- **Cómo se recibe**: un aviso con un `paid_status` distinto de `ok`/`ko` es un aviso sin efecto (`ProviderEvent.notice_only`). El webhook lo guarda en `payment_events` (`event_type` `order.notice`, `status` el `paid_status`), lo da por procesado y responde 200 `acknowledged`, sin reconsultar, para que Tipster Page no lo reintente. Vale con firma válida o sin ella, porque no mueve nada; sin firma válida lleva el id de los no verificados (`tipsterpage:invalid:<hash>`), y con ella `tipsterpage:<orden>:<paid_status>`. Deja un aviso en el log para registrar la devolución. Si la devolución llegara como `ko`, la reconsulta ve un estado desconocido, y un pago aprobado solo cambia si la pasarela lo reporta anulado: tampoco mueve nada. Los tests están en `tests/api/test_tipster_page.py` ("Devoluciones") y `tests/payments/test_tipsterpage.py`.
 
 **Lo que se vio y queda por decidir:**
-- **El comercio que ve el cliente** en la página de Redsys es "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", no Sebasanálisis. Va para Tipster Page (qué aparece en el extracto), la pantalla de pago, el recibo y los textos legales v2 (5.5).
+- **El comercio que ve el cliente**: en producción las pantallas de Redsys se personalizan y no muestran tipsterpage.com ni "GGBAMARKETING SOLUTIONS S.L. (SPAIN)", pero en el extracto y los justificantes del banco sale "GGBAMARKETING SOLUTIONS S.L." y no se puede cambiar (Tipster Page, 2026-11-06). Va en la pantalla de pago, el recibo y los textos legales v2 (5.5).
 - **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan, y desde el 2026-11-05 la página los quita de la barra de direcciones al cargar (`history.replaceState`; solo se queda el `?id=` de la pasarela simulada), para que no queden en el historial del navegador ni en una URL copiada. GlitchTip ya los quitaba por su lado (`lib/monitoring.ts` borra los parámetros de toda URL). Lo prueba `e2e/subscribe.spec.ts`.
 - **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
