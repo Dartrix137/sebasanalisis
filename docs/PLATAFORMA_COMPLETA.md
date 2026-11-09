@@ -956,6 +956,33 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 14. **Tests.** `SiigoIssuer` sobre un transporte HTTP simulado (`tests/api/siigo_sandbox.py`, como el de Tipster Page): token, `Partner-Id`, `Idempotency-Key` en el reintento, timeout, errores pasajeros contra errores de configuración, freno, `Rejected`, total que no cuadra y fecha. `fake` en Playwright. Puro: el cálculo del precio con IVA y la búsqueda de la TRM por vigencia.
 15. **Prueba real.** En la empresa de pruebas que da soporte de Siigo: una factura de un pago en euros, aceptada, vista en Siigo Nube y en el admin; una rechazada a propósito; una nota crédito. Después, la prueba en producción del 5.6.
 
+*Cómo va la construcción (rama `fase-5-siigo-emision`):*
+
+- **Entrega 1, tasas de cambio (2026-11-09).**
+  - `billing/exchange_rates.py` (puro) lee la TRM de datos.gov.co y el XML del BCE, y elige la tasa del día del pago.
+    - **TRM**: la fila cuya vigencia cubre el día.
+    - **BCE**: la del día. Un sábado o domingo usa la del último día hábil. Un día hábil sin tasa espera, salvo que ya haya salido un día posterior (día de cierre).
+    - Una tasa anterior de más de 7 días es un error de la fuente.
+  - Tabla `exchange_rates` (migración `c4faf46696b1`): par, vigencia, tasa en `Numeric`, fuente y hora de la consulta. Una tasa guardada no se reemplaza.
+  - `core/exchange_rates.py` usa lo guardado y consulta solo lo que falta. Un sábado no se fía de lo guardado si falta el viernes.
+  - `DATOS_GOV_APP_TOKEN` (opcional) va solo en la cabecera `X-App-Token` de las peticiones a datos.gov.co, nunca al BCE. Si datos.gov.co lo rechaza, la TRM se consulta sin token y queda un aviso en el log. El valor que puso el usuario el 2026-11-09 era una API key (identificador y secreto, para autenticación Basic) y no un token de aplicación: datos.gov.co lo rechaza como token.
+  - Consulta real del 2026-11-09: 32 EUR pagados el viernes 6 de noviembre son 115.339,27 COP (TRM 3.228,26; EUR/USD 1,1165).
+- **Entrega 2, datos de facturación del comprador (2026-11-09).**
+  - `billing/places.py` (puro): la lista de ciudades de Siigo en `billing/data/siigo_cities.json`, generada con `scripts/siigo_cities_from_xlsx.py` desde el archivo público (decidido por el usuario el 2026-11-09). Colombia primero, y la ciudad se busca por el trío (país, departamento, ciudad).
+  - `billing/billing_profile.py` (puro): tipos de documento por país, normalización y validación con las reglas de Siigo. Los nombres van hasta 50 caracteres, el límite del contacto en Siigo.
+  - Tabla `billing_profiles` (migración `750301b44179`): una fila por cuenta, que se borra con ella.
+  - API:
+    - `GET` y `PUT /billing/profile`. Un dato inválido responde 422 con `detail.code = invalid_billing_profile` y un error por campo.
+    - `GET /billing/places/countries`: los países, con sus tipos de documento.
+    - `GET /billing/places/cities?country=`: las ciudades de un país.
+  - **`POST /billing/subscriptions` no abre un pago sin datos de facturación** (409 `billing_profile_required`).
+  - La exportación de la cuenta (`GET /auth/me/export`) los incluye.
+  - Frontend:
+    - `components/billing/BillingProfileForm.tsx`, en `/planes/pagar` (bloque "Datos de tu factura", antes del medio de pago) y en "Mi cuenta" ("Datos de facturación").
+    - Fuera de Colombia, el formulario dice que, si la ciudad no está en la lista, se elija la más cercana y se escriba la real en la dirección. Es provisional hasta que responda soporte de Siigo.
+  - Tests: los de la parte pura, `tests/api/test_billing_profile.py` y `e2e/billing-profile.spec.ts`. Los tests que pagan crean los datos de facturación por defecto (`_cuenta` en la API y `registerViaApi` en Playwright).
+- **Faltan**: el emisor de Siigo (puntos 1 a 4, 7, 9 a 11 y 14), el admin (punto 13), la nota crédito (punto 12, espera a la contadora) y la prueba real (punto 15).
+
 *Lo que hay que pedir o decidir para construirlo:*
 
 | Quién | Qué |

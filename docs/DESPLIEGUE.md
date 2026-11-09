@@ -318,6 +318,15 @@ frontend apuntando a ella, en Chrome.
 
 **El regreso de Redsys trae parametros.** Redsys devuelve al navegador a `url_ok`/`url_ko` con `Ds_SignatureVersion`, `Ds_MerchantParameters` y `Ds_Signature` en la URL. No llevan el numero de la tarjeta, ni el titular ni el CVV, pero si la marca, el pais y el tipo de la tarjeta, el codigo de autorizacion y el codigo de comercio de Redsys. La pagina `/pago/:id` no los usa (es la reconsulta la que decide) y los quita de la barra de direcciones al cargar, para que no queden en el historial; GlitchTip ya filtraba los parametros de toda URL.
 
+### Factura electronica con Siigo (Fase 5, paso 5.4; en construccion)
+
+Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el despliegue:
+
+- **Dos migraciones**: `c4faf46696b1` (tabla `exchange_rates`) y `750301b44179` (tabla `billing_profiles`). Solo DDL.
+- **Desde este cambio, pagar pide los datos de facturacion**: la pantalla de pago los pide la primera vez y `POST /billing/subscriptions` responde 409 `billing_profile_required` sin ellos.
+- **`DATOS_GOV_APP_TOKEN`** (opcional, en la API y en el job): un token de aplicacion de datos.gov.co, que va en la cabecera `X-App-Token` de la consulta de la TRM. Sin el, la consulta va por el limite compartido por IP. **No es una API key**: una API key (identificador y secreto) datos.gov.co la rechaza como token, y la API consulta entonces sin token y deja el aviso "datos.gov.co rechazo DATOS_GOV_APP_TOKEN" en el log. El secreto de la cuenta no se usa.
+- Las variables de Siigo (`SIIGO_USERNAME`, `SIIGO_ACCESS_KEY`, `SIIGO_PARTNER_ID`) todavia no se leen: entran con el emisor.
+
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 
 Desde el 2026-10-23 hasta que se encienda Tipster Page (arriba) no hay pasarela

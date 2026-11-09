@@ -25,6 +25,10 @@
  * pago (`GET /billing/checkout/:token`); de allá el navegador sigue al
  * procesador y vuelve a /pago/:id.
  *
+ * Antes de pagar, el cliente da sus datos de facturación (`BillingProfileForm`,
+ * §3.17, "Paso 5.4"): la factura electrónica va a su nombre. Quedan en la cuenta
+ * y la próxima vez solo se muestran, con la opción de cambiarlos.
+ *
  * Sin pasarela configurada, `/planes` no deja llegar aquí con el pago encendido.
  */
 
@@ -34,6 +38,10 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
+import {
+  BillingProfileForm,
+  BillingProfileSummary,
+} from "@/components/billing/BillingProfileForm";
 import { CheckoutMethodPicker } from "@/components/billing/CheckoutMethodPicker";
 import type { CheckoutChoice } from "@/components/billing/CheckoutMethodPicker";
 import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
@@ -52,6 +60,7 @@ import type {
   RenewalMode,
   SubscriptionResponse,
 } from "@/lib/types/billing";
+import type { BillingProfileResponse } from "@/lib/types/billing-profile";
 
 const LINK = "font-bold text-gold hover:text-gold-soft";
 
@@ -69,6 +78,8 @@ function Checkout() {
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [availability, setAvailability] = useState<BillingAvailabilityResponse | null>(null);
+  const [profile, setProfile] = useState<BillingProfileResponse | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,9 +108,11 @@ function Checkout() {
       withToken((t) => billingApi.subscription(t)),
       withToken((t) => billingApi.quote(t, { plan_id: planId })),
       billingApi.availability(),
+      withToken((t) => billingApi.billingProfile(t)),
     ])
-      .then(([plans, current, first, available]) => {
+      .then(([plans, current, first, available, billing]) => {
         if (cancelled) return;
+        setProfile(billing);
         setPlan(plans.find((p) => p.id === planId) ?? null);
         setSubscription(current);
         setQuote(first);
@@ -205,6 +218,11 @@ function Checkout() {
 
   function handleFailure(e: unknown) {
     setPaying(false);
+    if (e instanceof ApiError && e.code === "billing_profile_required") {
+      setProfile(null);
+      setError(e.message);
+      return;
+    }
     if (e instanceof ApiError && e.code === "coupon_rejected") {
       setAppliedCode(null);
       setCouponError(e.message);
@@ -263,7 +281,8 @@ function Checkout() {
     }
   }
 
-  const blocked = paying || quoting || !user.email_verified;
+  const needsProfile = profile === null || editingProfile;
+  const blocked = paying || quoting || !user.email_verified || needsProfile;
 
   return (
     <div className="space-y-5">
@@ -392,6 +411,30 @@ function Checkout() {
         </Card>
       ) : null}
 
+      <Card>
+        <h2 className="text-base font-bold text-white">Datos de tu factura</h2>
+        <div className="mt-3">
+          {needsProfile ? (
+            <BillingProfileForm
+              profile={profile}
+              onSaved={(saved) => {
+                setProfile(saved);
+                setEditingProfile(false);
+                setError(null);
+              }}
+              onCancel={profile ? () => setEditingProfile(false) : undefined}
+            />
+          ) : profile ? (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <BillingProfileSummary profile={profile} />
+              <Button variant="ghost" onClick={() => setEditingProfile(true)} disabled={paying}>
+                Cambiar
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
       {chosen === "manual" ? (
         <Card>
           <CheckoutMethodPicker
@@ -415,7 +458,9 @@ function Checkout() {
         {user.email_verified ? null : (
           <p className="text-sm text-muted">Confirma tu correo para poder pagar.</p>
         )}
-        {chosen === null ? (
+        {needsProfile ? (
+          <p className="text-sm text-muted">Guarda tus datos de facturación para continuar.</p>
+        ) : chosen === null ? (
           <p className="text-sm text-muted">Elige cómo quieres pagar para continuar.</p>
         ) : chosen === "manual" && choice === null ? (
           <p className="text-sm text-muted">

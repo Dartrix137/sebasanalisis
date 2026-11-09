@@ -1121,6 +1121,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/places/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cities
+         * @description Las ciudades de un pais en la lista de Siigo, por departamento y nombre.
+         */
+        get: operations["list_cities_billing_places_cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/places/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Countries
+         * @description Los paises de la lista de Siigo (Colombia primero), con los tipos de
+         *     documento que admite cada uno.
+         */
+        get: operations["list_countries_billing_places_countries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Billing Profile
+         * @description Los datos de facturacion de la cuenta, o null si todavia no los dio.
+         */
+        get: operations["get_billing_profile_billing_profile_get"];
+        /**
+         * Put Billing Profile
+         * @description Guarda los datos de facturacion de la cuenta (crea o reemplaza).
+         *
+         *     Los valida con las reglas de Siigo (`billing/billing_profile`). Si algo no
+         *     vale, responde 422 con `detail.code = "invalid_billing_profile"` y la lista
+         *     de campos en `detail.errors`. Cambiarlos no toca ninguna factura ya
+         *     emitida: cada factura guarda su propia copia.
+         */
+        put: operations["put_billing_profile_billing_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/billing/quote": {
         parameters: {
             query?: never;
@@ -2522,6 +2592,66 @@ export interface components {
             tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
+         * BillingIdType
+         * @description Los codigos de documento de Siigo (`billing/billing_profile.IdType`).
+         * @enum {string}
+         */
+        BillingIdType: "13" | "22" | "50" | "41" | "42";
+        /**
+         * BillingProfileRequest
+         * @description PUT /billing/profile. El servidor normaliza y valida con las reglas de
+         *     Siigo; los topes de aqui solo frenan un cuerpo desmedido.
+         */
+        BillingProfileRequest: {
+            /** Address */
+            address: string;
+            /** City Code */
+            city_code: string;
+            /** Country Code */
+            country_code: string;
+            /** First Names */
+            first_names: string;
+            /** Id Number */
+            id_number: string;
+            /** Id Type */
+            id_type: string;
+            /** Last Names */
+            last_names: string;
+            /** State Code */
+            state_code: string;
+        };
+        /** BillingProfileResponse */
+        BillingProfileResponse: {
+            /** Address */
+            address: string;
+            /** City */
+            city: string;
+            /** City Code */
+            city_code: string;
+            /** Country */
+            country: string;
+            /** Country Code */
+            country_code: string;
+            /** First Names */
+            first_names: string;
+            /** Id Number */
+            id_number: string;
+            id_type: components["schemas"]["BillingIdType"];
+            /** Id Type Name */
+            id_type_name: string;
+            /** Last Names */
+            last_names: string;
+            /** State */
+            state: string;
+            /** State Code */
+            state_code: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * BotCheckConfigResponse
          * @description La llave publica del widget contra bots, o null si esta apagado.
          */
@@ -2648,6 +2778,17 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** CityResponse */
+        CityResponse: {
+            /** City */
+            city: string;
+            /** City Code */
+            city_code: string;
+            /** State */
+            state: string;
+            /** State Code */
+            state_code: string;
+        };
         /**
          * Comparison
          * @description Un indicador de flujo en el mes en curso y en el mismo tramo del anterior.
@@ -2680,6 +2821,19 @@ export interface components {
             title: string;
             /** Version */
             version: number;
+        };
+        /**
+         * CountryResponse
+         * @description Un pais de la lista de Siigo, con los tipos de documento que admite.
+         */
+        CountryResponse: {
+            /** Code */
+            code: string;
+            default_id_type: components["schemas"]["BillingIdType"];
+            /** Id Types */
+            id_types: components["schemas"]["IdTypeOption"][];
+            /** Name */
+            name: string;
         };
         /**
          * CouponDuration
@@ -2948,6 +3102,7 @@ export interface components {
          */
         ExportResponse: {
             account: components["schemas"]["UserResponse"];
+            billing_profile: components["schemas"]["BillingProfileResponse"] | null;
             /** Consents */
             consents: components["schemas"]["ConsentResponse"][];
             /**
@@ -3214,6 +3369,12 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IdTypeOption */
+        IdTypeOption: {
+            code: components["schemas"]["BillingIdType"];
+            /** Name */
+            name: string;
         };
         /**
          * InvoiceResponse
@@ -6613,6 +6774,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_cities_billing_places_cities_get: {
+        parameters: {
+            query: {
+                country: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_countries_billing_places_countries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryResponse"][];
+                };
+            };
+        };
+    };
+    get_billing_profile_billing_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingProfileResponse"] | null;
+                };
+            };
+        };
+    };
+    put_billing_profile_billing_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingProfileResponse"];
                 };
             };
             /** @description Validation Error */

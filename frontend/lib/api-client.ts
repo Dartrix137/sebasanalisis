@@ -26,6 +26,12 @@ import type {
   UpdateUserStatusRequest,
 } from "./types/admin";
 import type {
+  BillingProfileRequest,
+  BillingProfileResponse,
+  CityResponse,
+  CountryResponse,
+} from "./types/billing-profile";
+import type {
   AccessType,
   BotCheckConfigResponse,
   ChangeEmailRequest,
@@ -133,6 +139,8 @@ export class ApiError extends Error {
     readonly validationErrors?: string[],
     /** Motivo legible por código, cuando el `detail` lo trae (`consent_required`). */
     readonly code?: string,
+    /** Qué está mal en cada campo, cuando el 422 lo trae (`invalid_billing_profile`). */
+    readonly fieldErrors?: Record<string, string>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -144,6 +152,7 @@ function parseDetail(detail: unknown): {
   message: string;
   errors?: string[];
   code?: string;
+  fieldErrors?: Record<string, string>;
 } {
   if (typeof detail === "string") return { message: detail };
 
@@ -156,8 +165,24 @@ function parseDetail(detail: unknown): {
   }
 
   if (typeof detail === "object" && detail !== null) {
-    const obj = detail as { message?: string; errors?: string[]; code?: string };
-    return { message: obj.message ?? "Datos inválidos", errors: obj.errors, code: obj.code };
+    const obj = detail as { message?: string; errors?: unknown[]; code?: string };
+    // Los errores por campo llegan como [{ field, message }]; los del
+    // validador de configuración, como textos.
+    const list = Array.isArray(obj.errors) ? obj.errors : undefined;
+    const byField: Record<string, string> = {};
+    const texts: string[] = [];
+    for (const item of list ?? []) {
+      if (typeof item === "string") texts.push(item);
+      else if (typeof item === "object" && item !== null && "field" in item && "message" in item) {
+        byField[String(item.field)] ??= String(item.message);
+      }
+    }
+    return {
+      message: obj.message ?? "Datos inválidos",
+      errors: list ? texts : undefined,
+      code: obj.code,
+      fieldErrors: Object.keys(byField).length ? byField : undefined,
+    };
   }
 
   return { message: "Error inesperado" };
@@ -181,15 +206,17 @@ export async function apiFetch<T>(
     let message = `Error ${res.status}`;
     let errors: string[] | undefined;
     let code: string | undefined;
+    let fieldErrors: Record<string, string> | undefined;
     try {
       const parsed = parseDetail((await res.json()).detail);
       message = parsed.message;
       errors = parsed.errors;
       code = parsed.code;
+      fieldErrors = parsed.fieldErrors;
     } catch {
       // Respuesta sin cuerpo JSON: se conserva el mensaje genérico.
     }
-    throw new ApiError(res.status, message, errors, code);
+    throw new ApiError(res.status, message, errors, code, fieldErrors);
   }
 
   if (res.status === 204) return undefined as T;
@@ -358,6 +385,28 @@ export const billingApi = {
       `/billing/payment-methods${country ? `?country=${encodeURIComponent(country)}` : ""}`,
       { token },
     ),
+
+  /** Los datos de facturación de la cuenta, o null si todavía no los dio. */
+  billingProfile: (token: string) =>
+    apiFetch<BillingProfileResponse | null>("/billing/profile", { token }),
+
+  /** Guarda los datos de facturación (crea o reemplaza). 422 con `fieldErrors` si algo no vale. */
+  saveBillingProfile: (token: string, body: BillingProfileRequest) =>
+    apiFetch<BillingProfileResponse>("/billing/profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Los países de la lista de Siigo, con sus tipos de documento. */
+  billingCountries: (token: string) =>
+    apiFetch<CountryResponse[]>("/billing/places/countries", { token }),
+
+  /** Las ciudades de un país en la lista de Siigo. */
+  billingCities: (token: string, country: string) =>
+    apiFetch<CityResponse[]>(`/billing/places/cities?country=${encodeURIComponent(country)}`, {
+      token,
+    }),
 
   /** Detiene la renovación automática. Conserva el acceso hasta el fin del período. */
   cancelSubscription: (token: string) =>

@@ -41,15 +41,34 @@ PRECIO_BIMESTRAL = 4_600  # 46 EUR
 # ---------- Ayudas ----------
 
 
-def _cuenta(client: TestClient, db, *, verificada: bool = True) -> tuple[str, str, str]:
-    """Una cuenta como la de un cliente nuevo: consentimientos aceptados y sin
-    acceso. Devuelve (token, id, correo)."""
+def _datos_de_facturacion(db, user_id) -> None:
+    """Los datos de facturacion de un cliente inventado (§3.17, "Paso 5.4"):
+    sin ellos no se abre un pago."""
+    db.execute(
+        text(
+            "INSERT INTO billing_profiles (id, user_id, first_names, last_names, id_type,"
+            " id_number, country_code, state_code, city_code, address)"
+            " VALUES (gen_random_uuid(), :id, 'Cliente', 'De Prueba', '13', '1234567890',"
+            " 'Co', '11', '11001', 'Calle 1 # 2-3')"
+        ),
+        {"id": user_id},
+    )
+
+
+def _cuenta(
+    client: TestClient, db, *, verificada: bool = True, facturacion: bool = True
+) -> tuple[str, str, str]:
+    """Una cuenta como la de un cliente nuevo: consentimientos aceptados, sin
+    acceso y, salvo que se pida lo contrario, con sus datos de facturacion.
+    Devuelve (token, id, correo)."""
     email = f"pago-{uuid.uuid4().hex[:12]}@ejemplo.com"
     registro = register_raw(client, email)
     user_id = registro["user"]["id"]
     if verificada:
         db.execute(text("UPDATE users SET email_verified = true WHERE id = :id"), {"id": user_id})
-        db.commit()
+    if facturacion:
+        _datos_de_facturacion(db, user_id)
+    db.commit()
     return registro["access_token"], user_id, email
 
 

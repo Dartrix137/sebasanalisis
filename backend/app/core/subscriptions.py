@@ -39,7 +39,7 @@ from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
 from app.billing.schedule import first_charge_at
-from app.core import invoices, legal, price_changes
+from app.core import billing_profiles, invoices, legal, price_changes
 from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
 from app.models.user import LIVE_SUBSCRIPTION_STATUSES
@@ -242,6 +242,14 @@ def _check_can_pay(db: Session, user: User, now: datetime) -> None:
     if has_access(db, user, now).reason in _ACCESS_WITHOUT_SUBSCRIPTION:
         raise SubscribeError(
             409, "already_has_access", "Tu cuenta ya tiene acceso: no necesita una suscripción."
+        )
+    # La factura va a cada comprador, con su nombre y su documento (§3.17,
+    # "Paso 5.4", punto 8): no se abre un pago sin los datos de facturacion.
+    if not billing_profiles.has_profile(db, user.id):
+        raise SubscribeError(
+            409,
+            "billing_profile_required",
+            "Completa tus datos de facturación antes de pagar.",
         )
 
 

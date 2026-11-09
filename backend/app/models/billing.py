@@ -342,3 +342,43 @@ class ExchangeRate(Base):
     rate: Mapped[Decimal] = mapped_column(Numeric(20, 10), nullable=False)
     source: Mapped[str] = mapped_column(String(200), nullable=False)
     fetched_at: Mapped[datetime] = created_at_col()
+
+
+# Deben coincidir con `IdType` de `app.billing.billing_profile`.
+BILLING_ID_TYPES = ("13", "22", "50", "41", "42")
+
+
+class BillingProfile(Base):
+    """Los datos de facturacion de una cuenta (§3.17, "Paso 5.4", punto 8;
+    Fase 5, paso 5.4).
+
+    Se piden al pagar, no al registrarse, y los valida `billing/billing_profile`.
+    Una fila por cuenta, que se borra con ella (CASCADE). La factura emitida
+    guarda su propia copia: un cambio posterior no altera una factura, y la
+    eliminacion de la cuenta no borra lo que ya se facturo.
+
+    Son datos personales: el documento no va en un log, ni en GlitchTip, ni en
+    una URL.
+    """
+
+    __tablename__ = "billing_profiles"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    first_names: Mapped[str] = mapped_column(String(50), nullable=False)
+    last_names: Mapped[str] = mapped_column(String(50), nullable=False)
+    id_type: Mapped[str] = mapped_column(
+        enum_col(*BILLING_ID_TYPES, name="billing_id_type", length=2), nullable=False
+    )
+    id_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Los codigos de Siigo (`billing/places`), tal como vienen en su lista.
+    country_code: Mapped[str] = mapped_column(String(4), nullable=False)
+    state_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    city_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    address: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

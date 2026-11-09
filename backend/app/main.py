@@ -16,6 +16,7 @@ from app.api.v1 import (
     admin_users,
     auth,
     billing,
+    billing_profile,
     fake_checkout,
     games,
     legal,
@@ -86,6 +87,7 @@ app.include_router(admin_legal.router)
 app.include_router(admin_users.router)
 app.include_router(legal.router)
 app.include_router(billing.router)
+app.include_router(billing_profile.router)
 app.include_router(admin_billing.router)
 app.include_router(admin_payments.router)
 app.include_router(admin_overview.router)

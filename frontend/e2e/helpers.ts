@@ -60,7 +60,12 @@ export async function grantAccess(request: APIRequestContext, email: string): Pr
 export async function registerViaApi(
   request: APIRequestContext,
   email: string,
-  options: { onboarding?: "leido" | "pendiente"; access?: "otorgado" | "ninguno" } = {},
+  options: {
+    onboarding?: "leido" | "pendiente";
+    access?: "otorgado" | "ninguno";
+    /** Los datos de facturación que pide el pago (§3.17, "Paso 5.4"). Por defecto, sí. */
+    facturacion?: boolean;
+  } = {},
 ): Promise<string> {
   const required = await request.get(`${API_URL}/legal/required`);
   expect(required.ok()).toBeTruthy();
@@ -84,7 +89,26 @@ export async function registerViaApi(
     expect(done.ok()).toBeTruthy();
   }
   if (options.access !== "ninguno") await grantAccess(request, email);
+  if (options.facturacion !== false) await saveBillingProfile(request, token);
   return token;
+}
+
+/** Datos de facturación de un cliente inventado, como los guardaría la pantalla de pago. */
+export async function saveBillingProfile(request: APIRequestContext, token: string): Promise<void> {
+  const saved = await request.put(`${API_URL}/billing/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      first_names: "Cliente",
+      last_names: "De Prueba",
+      country_code: "Co",
+      id_type: "13",
+      id_number: "1234567890",
+      address: "Calle 1 # 2-3",
+      state_code: "11",
+      city_code: "11001",
+    },
+  });
+  expect(saved.ok()).toBeTruthy();
 }
 
 /** Confirma el correo de una cuenta con el enlace que le llegó, sin pasar por la pantalla. */
