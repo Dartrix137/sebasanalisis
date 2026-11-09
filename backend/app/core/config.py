@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     tspay_auth_bearer: str = ""
     tspay_secret_key: str = ""
 
+    # Tasas de la factura (core/exchange_rates.py). El token de la app en
+    # datos.gov.co es opcional: sin el, la consulta de la TRM va por el limite
+    # compartido por IP. No es un secreto de cobro, pero no va en un log.
+    datos_gov_app_token: str = ""
+
     # Verificacion contra bots con Cloudflare Turnstile (core/bot_check.py). Van
     # las dos o ninguna; sin ninguna, la verificacion queda apagada.
     turnstile_site_key: str = ""

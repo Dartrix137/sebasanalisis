@@ -9,6 +9,7 @@ apuntan a un plan o a un cupon son RESTRICT.
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -19,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -306,3 +308,37 @@ class Invoice(Base):
     # congelado al crear la fila.
     operation_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+
+
+# Deben coincidir con `Pair` de `app.billing.exchange_rates`.
+EXCHANGE_RATE_PAIRS = ("USD/COP", "EUR/USD")
+
+
+class ExchangeRate(Base):
+    """Una tasa de cambio con su vigencia y su fuente (§3.17, "Paso 5.4",
+    punto 5; Fase 5, paso 5.4).
+
+    La TRM (`USD/COP`) sale de datos.gov.co y cubre a veces varios dias (un fin
+    de semana); la del BCE (`EUR/USD`) es de un dia. Se guardan al consultarlas
+    (`core/exchange_rates.py`) y no se editan: una factura congela las suyas, y
+    la tabla deja constancia de donde salieron. Una sola fila por par y dia de
+    inicio.
+    """
+
+    __tablename__ = "exchange_rates"
+    __table_args__ = (
+        UniqueConstraint("pair", "valid_from", name="uq_exchange_rates_pair_valid_from"),
+        CheckConstraint("rate > 0", name="ck_exchange_rates_rate_positive"),
+        CheckConstraint("valid_to >= valid_from", name="ck_exchange_rates_validity"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    pair: Mapped[str] = mapped_column(
+        enum_col(*EXCHANGE_RATE_PAIRS, name="exchange_rate_pair", length=10), nullable=False
+    )
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_to: Mapped[date] = mapped_column(Date, nullable=False)
+    # Numeric, nunca float: la TRM trae 2 decimales y el BCE hasta 5.
+    rate: Mapped[Decimal] = mapped_column(Numeric(20, 10), nullable=False)
+    source: Mapped[str] = mapped_column(String(200), nullable=False)
+    fetched_at: Mapped[datetime] = created_at_col()
