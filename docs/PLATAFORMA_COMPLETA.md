@@ -865,7 +865,7 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 |---|---|
 | Servidor | `https://api.siigo.com`, rutas `/v1/...` |
 | Token | `POST /auth` con `{username, access_key}` y la cabecera `Partner-Id`. Devuelve `access_token` (tipo `Bearer`), "válido por 24 horas". Va en `Authorization` en todas las peticiones |
-| `Partner-Id` | **Obligatorio en todas las peticiones**: el nombre de la aplicación, de 3 a 100 caracteres alfanuméricos, sin espacios ni caracteres especiales (será `Sebasanalisis`, sin tilde). Un valor falso bloquea al usuario |
+| `Partner-Id` | **Obligatorio en todas las peticiones**: el nombre de la aplicación, de 3 a 100 caracteres alfanuméricos, sin espacios ni caracteres especiales (es el que se registró en Siigo al crear la aplicación: `sebasanalisisp`, en `SIIGO_PARTNER_ID`; el mismo en producción). Un valor falso bloquea al usuario |
 | Idempotencia | Cabecera `Idempotency-Key` en `POST /v1/invoices` y `POST /v1/credit-notes`: alfanumérica, sin caracteres especiales, de **hasta 30 caracteres**. Con la misma llave, si el documento ya existe, devuelve el que se creó. No se manda en GET, PUT ni DELETE. No dice por cuánto tiempo guarda la llave |
 | Límites | 100 peticiones por minuto por empresa (10 en la empresa de pruebas). Ante `requests_limit`, reintentos con espera exponencial. Timeout recomendado: **120 s o más** al crear una factura o una nota crédito |
 | Bloqueo | **Si más del 80 % de las peticiones de 7 días dan error, Siigo bloquea al usuario de la API** hasta que se corrija. Un reintento ciego de algo que falla por configuración nos puede bloquear |
@@ -881,7 +881,15 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 | Nota crédito | `POST /v1/credit-notes` con `invoice` (el UUID de la factura en Siigo), `reason` (`1` devolución parcial, `2` anulación de la factura electrónica, `3` descuento; la lista completa al construir), `items`, `payments` y `stamp`. Total o parcial. Fecha no anterior a hoy |
 | Ambiente de pruebas | No hay un sandbox público: **Siigo da una empresa de pruebas si se le pide a soporte con el NIT** registrado, y manda los datos por correo |
 
-*Contradicciones de la documentación (se resuelven probando):* el largo máximo de la `Idempotency-Key` (30 en su página, 32 en la tabla de errores: usamos 25); el `expires_in` del token ("86400, en milisegundos" contra "24 horas"); los motivos de la nota crédito (1 a 5 contra 1 a 6); y si `stamp` y `mail` son objetos o booleanos.
+*Primera prueba en la empresa de pruebas (2026-11-09, solo lectura, sin crear nada):*
+
+- **Token**: `POST /auth` responde 200 con `token_type: Bearer`, `expires_in: 86400` (son segundos: 24 horas) y `scope: SiigoAPI`. **El encabezado es `Authorization: Bearer <token>`**: con el prefijo, las consultas responden 200.
+- **El límite real es más estricto que "10 por minuto"**: no admite ráfagas. Tres consultas seguidas ya dan `429 requests_limit`, con el tiempo de espera en el mensaje ("Try again in 16 seconds"). Con unos 8 segundos entre peticiones y un reintento después de esa espera, pasaron casi todas. El emisor tiene que esperar entre peticiones y respetar ese tiempo, no reintentar enseguida. Cada `429` cuenta para el bloqueo por el 80 % de errores.
+- **La empresa de pruebas es compartida.** Tiene catálogos de muchos desarrolladores: 278 tipos de comprobante de factura, 226 formas de pago, 115 impuestos, 419 grupos de inventario y 25 usuarios con nombres de otras personas. **Lo que se cree ahí lo ven otros**: en las pruebas se usan solo datos de clientes inventados, nunca los de un cliente real.
+- **Catálogos para la configuración**: hay varios tipos de comprobante con `electronic_type: ElectronicInvoice` ("Factura electrónica de venta"), uno de exportación (`ExportInvoice`) y otros no electrónicos. Qué tipo, vendedor, forma de pago y grupo de inventario usar en la empresa de pruebas se elige al construir, con `scripts/siigo_catalogs.py`. En producción salen de la cuenta de la empresa, no de estos.
+- `GET /v1/products` respondió `429` incluso después de esperar: queda para la próxima prueba.
+
+*Contradicciones de la documentación (se resuelven probando):* el largo máximo de la `Idempotency-Key` (30 en su página, 32 en la tabla de errores: usamos 25); ~~el `expires_in` del token~~ (son segundos: 24 horas, probado el 2026-11-09); los motivos de la nota crédito (1 a 5 contra 1 a 6); y si `stamp` y `mail` son objetos o booleanos.
 
 *El diseño:*
 
