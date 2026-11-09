@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     siigo_seller_id: int = 0
     siigo_payment_type_id: int = 0
     siigo_product_code: str = ""
+    # El centro de costo, si el tipo de comprobante lo pide (su `cost_center`
+    # en /v1/document-types). 0 = no se manda.
+    siigo_cost_center_id: int = 0
     # Espera minima entre peticiones a Siigo. La empresa de pruebas no admite
     # rafagas (10 por minuto): alli conviene 8. En produccion, 100 por minuto.
     siigo_min_interval_seconds: float = 1.0

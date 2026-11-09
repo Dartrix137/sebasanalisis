@@ -1005,7 +1005,26 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
     - `tests/api/siigo_sandbox.py`: el emisor de verdad sobre un Siigo simulado.
     - `tests/api/test_invoice_emission.py`, 18 casos: el caso feliz con el cuerpo exacto, el tercero reutilizado, la espera por tasas y por datos, el tiempo agotado con la misma llave, el 429 corto y el largo, el error de datos, el freno, el tipo de comprobante no electrónico, el total que no cuadra, el tope de intentos, el token renovado, el borrador confirmado, la rechazada por la DIAN, el documento fuera del log y la fecha de envío con la TRM del pago.
     - Los tests fijan `INVOICE_ISSUER=none`, aunque el `.env` local tenga las credenciales.
-- **Faltan**: la prueba real en la empresa de pruebas (punto 15), el admin (punto 13) y la nota crédito (punto 12, espera a la contadora).
+- **Prueba real en la empresa de pruebas (2026-11-09, autorizada por el usuario).**
+  - Se creó el producto `SEBASSUSC` ("Suscripción Sebasanálisis": servicio, excluido de IVA, grupo de inventario 1501 "Servicios"). Se emitió una factura de 32 EUR a un cliente inventado, con las tasas reales del día (TRM 3.237,83 del 7 de noviembre y EUR/USD 1,1193 del 9): 115.971,30 COP.
+  - **Lo que funcionó:**
+    - Siigo creó el tercero **sin teléfono** (le puso uno en ceros) y con tildes y la ñ en el nombre ("Prueba Ñandú Gómez Peña").
+    - Lo guardó como cédula de ciudadanía (`13`), persona natural y `R-99-PN`.
+    - El total de Siigo cuadró al centavo con el nuestro.
+    - La misma `Idempotency-Key` devolvió la misma factura, sin duplicarla.
+    - El PDF (`GET /v1/invoices/{id}/pdf`) trae las observaciones completas al pie: la exclusión del IVA, el valor en euros, las dos tasas con su fecha y su fuente, y la referencia del pago.
+  - **Lo que hay que resolver:**
+    - **El PDF rotula el documento del cliente como "NIT 9.992.429.418-5"**, con un dígito de verificación que Siigo calcula solo (`check_digit` "5"), aunque el tercero quedó como cédula. Puede ser solo la plantilla del PDF. Se le pregunta a soporte de Siigo y a la contadora.
+    - **El cuadro de totales no trae la línea "IVA (0 %)"** que pidió la contadora: solo "Total Bruto" y "Total a Pagar". Se configura en la plantilla de Siigo Nube, o se pregunta a soporte.
+    - **La DIAN de la empresa de pruebas la rechazó** (`stamp.status` "Rejected") sin motivos en `stamp/errors`: "Check the invoice errors and send it again from Siigo Nube". La empresa de pruebas es compartida, y su resolución de facturación no es la nuestra. Por eso Siigo no mandó el correo (`mail.status` "not_sent"). La aceptación se prueba con la cuenta de la empresa.
+    - **Estados intermedios no documentados:** al crearla, `stamp.status` fue "Sending" y `mail.status` "process_of_sending". El emisor trata cualquier estado distinto de "Accepted" o "Rejected" como emitida que espera a la DIAN, y la vuelve a consultar.
+  - **Tipos de comprobante:**
+    - El 28006 ("Factura de Venta", electrónica, sin centro de costo) funcionó.
+    - El 27860 ("Factura electrónica de venta", con centro de costo) respondió `documents_service`, "Your request could not be completed with the data you submitted", con y sin el centro de costo 1028. No se insistió, para no sumar errores al bloqueo del 80 %. La causa queda para soporte de Siigo.
+  - **Cambios por la prueba:**
+    - `documents_service` deja de tratarse como pasajero: llegó por un dato, no por una caída, así que la factura queda `failed` y no se reintenta sola.
+    - Se agregó `SIIGO_COST_CENTER_ID` (opcional), que va en la factura si está puesto. `check_ready` lo exige si el tipo de comprobante maneja centro de costo, como dice la documentación ("obligatorio según la configuración del comprobante"); la prueba no lo confirmó.
+- **Faltan**: el admin (punto 13), la nota crédito (punto 12, espera a la contadora) y la prueba con la cuenta de la empresa en Siigo (punto 15).
 
 *Lo que hay que pedir o decidir para construirlo:*
 

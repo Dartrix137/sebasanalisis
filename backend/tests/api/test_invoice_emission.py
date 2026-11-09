@@ -277,3 +277,21 @@ def test_la_fecha_es_la_del_envio_y_la_trm_la_del_pago(client, db, tipster, siig
     assert factura.issue_date == fx.operation_date(manana)
     assert factura.usd_cop_date == factura.operation_date
     assert factura.issue_date > factura.operation_date or factura.issue_date == date.today()
+
+
+def test_un_comprobante_con_centro_de_costo_lo_pide_en_la_configuracion(
+    client, db, tipster, siigo
+) -> None:
+    """Probado en la empresa de pruebas el 2026-11-09: sin el centro de costo,
+    un tipo que lo maneja responde `documents_service`."""
+    siigo.tipo_de_comprobante["cost_center"] = True
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _factura(db, pago.id).status == "pending"
+    assert siigo.pedidos_a("POST", "/v1/invoices") == []
+
+    siigo.issuer.cost_center_id = 1028
+    siigo.issuer._ready_until = 0
+    _correr(db, siigo)
+    assert _factura(db, pago.id).status == "accepted"
+    [crear] = siigo.pedidos_a("POST", "/v1/invoices")
+    assert siigo.cuerpo(crear)["cost_center"] == 1028

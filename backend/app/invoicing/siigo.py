@@ -131,6 +131,7 @@ class SiigoIssuer:
         seller_id: int,
         payment_type_id: int,
         product_code: str,
+        cost_center_id: int = 0,
         base_url: str = BASE_URL,
         min_interval_seconds: float = 1.0,
         transport: httpx.BaseTransport | None = None,
@@ -144,6 +145,7 @@ class SiigoIssuer:
         self.seller_id = seller_id
         self.payment_type_id = payment_type_id
         self.product_code = product_code
+        self.cost_center_id = cost_center_id
         self.base_url = base_url.rstrip("/")
         self._min_interval = min_interval_seconds
         self._clock = clock
@@ -294,6 +296,13 @@ class SiigoIssuer:
             raise IssuerMisconfigured(
                 f"SIIGO_DOCUMENT_TYPE_ID={self.document_type_id} no es un tipo de factura activo"
             )
+        if document.get("cost_center") and not self.cost_center_id:
+            # Sin el, Siigo responde `documents_service` ("could not be
+            # completed with the data you submitted"): probado el 2026-11-09.
+            raise IssuerMisconfigured(
+                f"SIIGO_DOCUMENT_TYPE_ID={self.document_type_id} pide centro de costo:"
+                " falta SIIGO_COST_CENTER_ID"
+            )
         if document.get("electronic_type") != "ElectronicInvoice":
             raise IssuerMisconfigured(
                 f"SIIGO_DOCUMENT_TYPE_ID={self.document_type_id} no es de factura electronica"
@@ -374,6 +383,8 @@ class SiigoIssuer:
             ],
             "payments": [{"id": self.payment_type_id, "value": draft.amount}],
         }
+        if self.cost_center_id:
+            payload["cost_center"] = self.cost_center_id
         body = self._request(
             "POST", "/v1/invoices", payload=payload, idempotency_key=draft.idempotency_key
         )
@@ -421,6 +432,7 @@ def from_settings(settings: Settings, **kwargs: Any) -> SiigoIssuer:
         seller_id=settings.siigo_seller_id,
         payment_type_id=settings.siigo_payment_type_id,
         product_code=settings.siigo_product_code,
+        cost_center_id=settings.siigo_cost_center_id,
         base_url=settings.siigo_api_base_url,
         min_interval_seconds=settings.siigo_min_interval_seconds,
         **kwargs,

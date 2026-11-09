@@ -82,7 +82,7 @@ def test_un_pago_en_euros_sin_tasas_es_un_error() -> None:
         (429, ["requests_limit"], "transient"),
         (500, [], "transient"),
         (503, ["service_unavailable"], "transient"),
-        (400, ["documents_service"], "transient"),
+        (400, ["documents_service"], "invalid"),
         (401, ["unauthorized"], "config"),
         (400, ["invalid_dian_resolution"], "config"),
         (400, ["document_settings", "invalid_total_payments"], "config"),

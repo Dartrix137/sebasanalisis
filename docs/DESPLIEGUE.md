@@ -337,7 +337,8 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 | `SIIGO_SELLER_ID` | El usuario vendedor |
 | `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, sin vencimiento |
 | `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
-| `SIIGO_MIN_INTERVAL_SECONDS` | Opcional. Espera entre peticiones: 1 por defecto; 8 en la empresa de pruebas |
+| `SIIGO_COST_CENTER_ID` | Opcional. El centro de costo, si el tipo de comprobante lo maneja: sin el, la emision no arranca |
+| `SIIGO_MIN_INTERVAL_SECONDS` | Opcional. Espera entre peticiones: 1 por defecto; 8 en la empresa de pruebas (aun asi responde 429 de vez en cuando) |
 
   Los ids salen de `python scripts/siigo_catalogs.py` (solo lee). Sin una de las siete obligatorias, la API no arranca y el error dice cual. La linea de arranque dice `Factura electronica: Siigo (https://api.siigo.com)`.
 - **La empresa de pruebas de Siigo es compartida** con otros desarrolladores: ahi solo clientes inventados.

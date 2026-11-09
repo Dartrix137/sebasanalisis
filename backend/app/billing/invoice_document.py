@@ -130,12 +130,14 @@ def observations(
 ErrorKind = Literal["transient", "config", "invalid"]
 
 #: Pasajeros: se reintentan en otra corrida (codigos de "Manejo de errores").
+#: `documents_service` no esta: en la empresa de pruebas (2026-11-09) llego
+#: con "Your request could not be completed with the data you submitted", por
+#: un tipo de comprobante que pide centro de costo. Es de datos, no pasajero.
 TRANSIENT_CODES = frozenset(
     {
         "requests_limit",
         "request_timeout",
         "service_unavailable",
-        "documents_service",
         "payment_types_service",
         "general_service",
     }
