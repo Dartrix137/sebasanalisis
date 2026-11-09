@@ -23,6 +23,16 @@ export function LegalFooter() {
             {doc.label}
           </Link>
         ))}
+        {/* Ley 1480 de 2011: enlace visible a la autoridad de protección al
+            consumidor en los medios de comercio electrónico. */}
+        <a
+          href="https://www.sic.gov.co"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center px-1.5 hover:text-gold"
+        >
+          Superintendencia de Industria y Comercio
+        </a>
       </nav>
     </footer>
   );

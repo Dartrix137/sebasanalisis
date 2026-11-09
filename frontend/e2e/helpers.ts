@@ -77,6 +77,7 @@ export async function registerViaApi(
       password: PASSWORD,
       accepted_document_ids: documents.map((d) => d.id),
       adult_confirmed: true,
+      loss_risk_acknowledged: true,
     },
   });
   expect(response.ok()).toBeTruthy();
@@ -146,6 +147,7 @@ export async function checkRegisterConsents(page: Page): Promise<void> {
     .getByRole("checkbox", { name: /Autorizo el tratamiento de mis datos personales/ })
     .check();
   await page.getByRole("checkbox", { name: /Declaro que soy mayor de edad/ }).check();
+  await page.getByRole("checkbox", { name: /riesgo de pérdida de dinero/ }).check();
 }
 
 /**

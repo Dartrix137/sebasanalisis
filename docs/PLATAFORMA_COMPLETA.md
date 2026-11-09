@@ -1528,7 +1528,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 | Términos y Condiciones | `/legal/terminos` | Contrato de uso y de suscripción. |
 | Política de Tratamiento de Datos Personales | `/legal/privacidad` | Ley 1581 de 2012 y Decreto 1377 de 2013 (Colombia): finalidades, derechos del titular, canal de consultas y reclamos, responsable del tratamiento. |
 | ~~Juego Responsable~~ | ~~`/legal/juego-responsable`~~ | **Descartado por el usuario el 2026-10-08**: no se construye. |
-| Cancelación y Reembolsos | `/legal/reembolsos` | Cómo cancelar, qué pasa con el período pagado, reembolsos. Revisar con abogado el derecho de retracto del Estatuto del Consumidor (Ley 1480 de 2011) en ventas a distancia. |
+| ~~Cancelación y Reembolsos~~ | ~~`/legal/reembolsos`~~ | **Retirada el 2026-11-09 (paso 5.5 de la Fase 5)**: la cancelación, el retracto y la reversión de pagos están en los Términos y Condiciones del abogado. La dirección lleva a `/legal/terminos`. Ver §6.8. |
 | Cookies y almacenamiento local | `/legal/cookies` | Hoy la sesión vive en `localStorage` y no hay analítica de terceros; el documento lo dice así. Si se agrega analítica, se actualiza. |
 | Aviso sobre la naturaleza del servicio | dentro de T&C | Ver §6.5. |
 
@@ -1557,7 +1557,7 @@ user_consents (
 
 ### 6.3 Aceptación
 
-- **Registro**: casillas obligatorias para T&C y Tratamiento de Datos (con enlace a cada uno) y declaración de **mayoría de edad (18+)**. El backend rechaza el registro si faltan; guarda un `user_consent` por documento y `users.adult_confirmed_at`.
+- **Registro**: casillas obligatorias para T&C y Tratamiento de Datos (con enlace a cada uno), declaración de **mayoría de edad (18+)** y, desde el paso 5.5, declaración de que **las apuestas implican riesgo de pérdida de dinero**. El backend rechaza el registro si faltan; guarda un `user_consent` por documento, `users.adult_confirmed_at` y `users.loss_risk_acknowledged_at`.
 - **Onboarding scroll-to-accept** (§0 del doc de arquitectura): la primera vez que el usuario entra a la mesa, una pantalla explica qué hace y qué no hace la plataforma, y el botón de continuar se habilita al llegar al final.
 - **Versión nueva** de un documento con `requires_acceptance`: el siguiente acceso a la mesa devuelve `403 consent_required` (§2.2) y el frontend muestra el documento para aceptarlo. No se bloquea el acceso a `/cuenta` ni a cancelar la suscripción.
 - **Checkout**: además se muestran los términos de Wompi con su acceptance token (§3.4); esa aceptación la registra Wompi, no reemplaza la nuestra.
@@ -1604,7 +1604,7 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
 - **Auditoría**: al cerrar este paso, publicar un documento legal no escribía en `admin_audit_log` (§4.6) porque la tabla no existía. **Hecho en el paso 3** (2026-10-08): `POST /admin/legal-documents/:id/publish` deja su fila.
 - **Onboarding**: `users.onboarding_completed_at` y `POST /auth/me/onboarding` (no estaban en §11). Es una pantalla informativa, no un consentimiento legal: se guarda en el servidor para que no reaparezca en cada dispositivo, la exige el frontend al entrar a la mesa y no participa en `has_access`. Su texto es fijo en el frontend (`components/AccessGate.tsx` desde el paso 3), no un documento versionado.
 - **Compuerta del frontend** (`LegalGate`; `AccessGate` desde el paso 3): envuelve el menú principal, la mesa y el panel de admin (que lista juegos). Pregunta `GET /legal/pending` antes de montar la pantalla. Es presentación: quien decide es el servidor.
-- **Markdown**: `react-markdown` 10.1.0, sin `rehype-raw` ni `remark-gfm` (los documentos se escriben sin tablas). Las imágenes se descartan. `npm audit --omit=dev` quedó sin vulnerabilidades tras instalarla.
+- **Markdown**: `react-markdown` 10.1.0, sin `rehype-raw` (y con `remark-gfm` desde el paso 5.5, §6.8). Las imágenes se descartan. `npm audit --omit=dev` quedó sin vulnerabilidades tras instalarla.
 - **Rutas públicas en español, `kind` en inglés**: `/legal/terminos`, `/legal/privacidad`, `/legal/reembolsos`, `/legal/cookies` (`frontend/lib/legal.ts`). Las páginas se renderizan en el navegador, pidiendo `GET /legal/:kind`.
 - **Endpoints que no estaban en §11**: `GET /legal/required` (público: lo que el registro pide aceptar), `GET /legal/consents` (lo que la cuenta aceptó, para `/cuenta`) y `POST /auth/me/onboarding`.
 - **`GET /auth/me/export`**: cuenta, mesas con sus giros y apuestas, y consentimientos. `payments` va vacío hasta el paso 5. Límite: 10 cada 15 min por usuario. No exige `RequireAccess`.
@@ -1619,6 +1619,35 @@ Decisiones de implementación que este documento no fijaba, confirmadas por el u
   - **Idempotencia**: tabla `legal_notices` (migración `7d82b3f54867`, solo DDL), una fila por (cuenta, versión) con restricción única, escrita solo si el correo salió. Si el correo falla, se reintenta en la corrida siguiente. Queda la misma ventana que en los avisos de precio: si el proceso muere entre enviar y anotar, esa cuenta recibe el aviso otra vez.
   - La pantalla de aceptación no cambió: es la que deja la constancia. `/admin/legal` avisa al confirmar la publicación que saldrá el correo.
   - Código en `backend/app/core/legal_notices.py`; tests en `tests/api/test_legal_notices.py`.
+
+### 6.8 Paso 5.5: textos legales, versión 2 (2026-11-09)
+
+Decidido por el usuario el 2026-11-09, rama `fase-5-textos-legales`.
+
+- **Tres documentos**: Términos y Condiciones, Política de Tratamiento de Datos Personales y Política de Cookies.
+  - **Términos**: el texto del abogado, transcrito tal cual del PDF (`docs/reference/terminos-y-condiciones-abogado-v01.pdf`), incluidas sus erratas. Incluyen la cancelación, el retracto, la reversión de pagos y el juego responsable.
+  - **Datos y cookies**: escritas a partir de lo que la plataforma guarda y usa hoy. Las dos tienen tablas.
+  - **Política de reembolsos, retirada.** Lo que dice el abogado sobre la cancelación y los reembolsos está en los términos.
+  - Ninguno de los tres documentos lo presenta la plataforma como revisado por un abogado: eso lo dice el usuario, no el código.
+- **Un tipo retirado** (`RETIRED_LEGAL_KINDS` en `models/legal.py`, hoy solo `refunds`):
+  - no tiene versión vigente: `GET /legal/refunds` responde 404, y no cuenta para el registro, la re-aceptación ni el aviso por correo;
+  - el admin no crea ni publica versiones suyas (409);
+  - su versión 1 se conserva, porque hay aceptaciones que apuntan a ella, y en `/cuenta` sale como versión anterior;
+  - `/legal/reembolsos` lleva a `/legal/terminos` con una redirección permanente (`app/legal/[slug]/page.tsx`).
+
+  `ACTIVE_LEGAL_KINDS` es la lista de los vigentes.
+- **La versión 2 entra como borrador** (migración de datos `7b636895d186`; los textos, congelados en `migrations/data/legal_v2/`). El usuario la publica desde `/admin/legal` el día en que entra en vigencia: términos y datos con "exigir aceptación", y cookies sin ella. Publicarla le pide a todas las cuentas aceptarla otra vez y dispara el aviso por correo (§6.7). Si un administrador ya tenía un borrador de ese tipo, la migración no inserta el suyo. El downgrade borra solo sus propios borradores sin publicar.
+- **La declaración del riesgo de pérdida** (`users.loss_risk_acknowledged_at`, migración `fbce7237bed1`, solo DDL). El texto de la casilla es la frase de la cláusula 84 de los términos: "Entiendo que las apuestas implican riesgo de pérdida de dinero." (`LOSS_RISK_TEXT`, `frontend/lib/legal.ts`).
+  - El usuario decidió que, de las casillas de la cláusula 84, solo dos son obligatorias: la mayoría de edad y el riesgo de pérdida. Las demás quedan cubiertas por la aceptación de los términos.
+  - Van al registrarse, no antes de cada compra: la compra exige una cuenta, y la cuenta ya las tiene.
+  - Funciona como la mayoría de edad: obligatoria en `POST /auth/register` (`loss_risk_acknowledged`, 422 sin ella), pendiente en `GET /legal/pending` (`loss_risk_acknowledgment_required`) y aceptable en `POST /legal/accept`. Una cuenta anterior la tiene en null: no se le inventa, se le pide antes de usar la mesa (`consent_required`).
+- **Pie de página**: un enlace a la Superintendencia de Industria y Comercio (`https://www.sic.gov.co`), que la Ley 1480 exige en el comercio electrónico (cláusula 75 de los términos).
+- **Markdown**: se agrega `remark-gfm` 4.0.1, para las tablas de las políticas. Una tabla ancha se desplaza dentro de su caja, no la página.
+- **La pantalla de pago** enlaza solo a los términos, "que incluyen la cancelación y los reembolsos".
+- **Tests**:
+  - La fixture de la sesión anota los borradores que dejó la migración y los quita, porque los tests publican sus propias versiones; `test_legal.py` comprueba lo que anotó y el contenido de los tres archivos.
+  - Casos nuevos: el documento retirado, el registro sin la declaración, la cuenta anterior que la declara, y el admin que no publica un tipo retirado.
+  - En Playwright: el pie sin reembolsos y con la SIC, la redirección, la casilla nueva del registro, y la versión nueva de los términos, publicada desde el borrador de la migración.
   - A confirmar con el abogado: si el aviso es obligatorio y si debe salir con antelación.
 - **Tests de punta a punta**: el de re-aceptación corre en un proyecto aparte de Playwright (`*.serial.spec.ts`), al final: publicar una versión le pide re-aceptar a todas las cuentas de la base y en paralelo le cortaría la mesa a los demás tests. `start-api.mjs` fija las credenciales del administrador sembrado para esa base desechable.
 

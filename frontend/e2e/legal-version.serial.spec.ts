@@ -46,7 +46,10 @@ test("versión nueva de los términos: la mesa pide re-aceptar y después deja e
   const tarjeta = panel.locator("section", {
     has: panel.getByRole("heading", { name: TITULO }),
   });
-  await tarjeta.getByRole("button", { name: "Preparar versión nueva" }).click();
+  // La migración del paso 5.5 deja la versión 2 de los términos como borrador:
+  // el texto del abogado, listo para publicar. El test parte de ese borrador.
+  await expect(tarjeta.getByText("Borrador de la versión 2")).toBeVisible();
+  await expect(tarjeta.getByLabel("Texto (Markdown)")).toHaveValue(/MEDIOS Y NO DE RESULTADOS/);
   await tarjeta
     .getByLabel("Texto (Markdown)")
     .fill(`## ${marca}\n\nTexto nuevo.\n\n<b id="html-crudo">no debe ser un elemento</b>`);

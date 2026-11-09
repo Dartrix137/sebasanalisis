@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { LegalDocumentView } from "@/components/legal/LegalDocumentView";
-import { LEGAL_DOCUMENTS, kindFromSlug } from "@/lib/legal";
+import { LEGAL_DOCUMENTS, RETIRED_SLUGS, kindFromSlug } from "@/lib/legal";
 
 export async function generateMetadata({
   params,
@@ -22,6 +22,8 @@ export default async function LegalDocumentPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Un documento retirado vive ahora dentro de los términos.
+  if (slug in RETIRED_SLUGS) permanentRedirect("/legal/terminos");
   const kind = kindFromSlug(slug);
   if (!kind) notFound();
   return <LegalDocumentView kind={kind} />;

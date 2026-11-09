@@ -16,6 +16,11 @@
             "maxItems": 20,
             "title": "Legal Document Ids",
             "type": "array"
+          },
+          "loss_risk_acknowledged": {
+            "default": false,
+            "title": "Loss Risk Acknowledged",
+            "type": "boolean"
           }
         },
         "title": "AcceptLegalRequest",
@@ -4678,11 +4683,16 @@
             },
             "title": "Documents",
             "type": "array"
+          },
+          "loss_risk_acknowledgment_required": {
+            "title": "Loss Risk Acknowledgment Required",
+            "type": "boolean"
           }
         },
         "required": [
           "documents",
-          "adult_confirmation_required"
+          "adult_confirmation_required",
+          "loss_risk_acknowledgment_required"
         ],
         "title": "PendingConsentResponse",
         "type": "object"
@@ -5635,6 +5645,11 @@
             "format": "email",
             "title": "Email",
             "type": "string"
+          },
+          "loss_risk_acknowledged": {
+            "default": false,
+            "title": "Loss Risk Acknowledged",
+            "type": "boolean"
           },
           "password": {
             "title": "Password",
@@ -7445,6 +7460,18 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "loss_risk_acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Risk Acknowledged At"
+          },
           "onboarding_completed_at": {
             "anyOf": [
               {
@@ -7472,6 +7499,7 @@
           "role",
           "created_at",
           "adult_confirmed_at",
+          "loss_risk_acknowledged_at",
           "onboarding_completed_at",
           "access",
           "can_delete_account"

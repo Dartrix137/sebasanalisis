@@ -6,6 +6,7 @@ despues de preparar lo que necesita, y nunca supone que la version vigente es
 la 1.
 """
 
+import pathlib
 import re
 import uuid
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from sqlalchemy import text
 
 from app.core.access import has_access
 from app.models import User
-from tests.api.conftest import OPEN_PREFIXES, auth, consent_fields
+from tests.api.conftest import OPEN_PREFIXES, SEEDED_LEGAL_DRAFTS, auth, consent_fields
 from tests.api.test_spins import _crear_sesion, variant_id  # noqa: F401, I001
 
 PASSWORD = "clave-segura-123"
@@ -53,14 +54,67 @@ def _publish(
 # ---------- Paginas publicas ----------
 
 
-def test_la_migracion_deja_publicados_los_cuatro_borradores(client: TestClient) -> None:
-    for kind in ("terms", "privacy", "refunds", "cookies"):
+def test_la_migracion_deja_publicados_los_borradores_vigentes(client: TestClient) -> None:
+    for kind in ("terms", "privacy", "cookies"):
         r = client.get(f"/legal/{kind}")
         assert r.status_code == 200, r.text
         doc = r.json()
         assert doc["kind"] == kind
         assert doc["version"] >= 1
         assert doc["published_at"]
+
+
+def test_la_politica_de_reembolsos_se_retiro(client: TestClient, db) -> None:
+    """Paso 5.5: la cancelacion y los reembolsos estan en los terminos. La version
+    1 sigue en la base (hay aceptaciones que apuntan a ella), pero ya no rige."""
+    assert client.get("/legal/refunds").status_code == 404
+    assert "refunds" not in {d["kind"] for d in client.get("/legal/required").json()}
+    assert db.execute(
+        text("SELECT count(*) FROM legal_documents WHERE kind = 'refunds'")
+    ).scalar_one() >= 1
+
+
+def test_la_migracion_deja_la_version_2_como_borrador() -> None:
+    """Paso 5.5: terminos, datos y cookies quedan sin publicar, para publicarlos
+    desde el admin el dia en que entran en vigencia. Sin version 2 de reembolsos.
+    (La fixture de la sesion los anota y los quita: ver `conftest.py`.)"""
+    assert SEEDED_LEGAL_DRAFTS == {("terms", 2), ("privacy", 2), ("cookies", 2)}
+
+
+def test_la_version_2_cubre_lo_que_hace_la_plataforma() -> None:
+    """Los textos de la version 2, leidos de los archivos de la migracion."""
+    data = pathlib.Path("app/db/migrations/data/legal_v2")
+    terms = (data / "terms.md").read_text(encoding="utf-8")
+    for frase in (
+        "SEBASTIÁN PLATA GIL",
+        "MEDIOS Y NO DE RESULTADOS",
+        "Ley 1480 de 2011",
+        "riesgo de pérdida de dinero",
+        "CANCELACIÓN DE LA SUSCRIPCIÓN",
+        "DERECHO DE RETRACTO",
+    ):
+        assert frase in terms, frase
+
+    privacy = (data / "privacy.md").read_text(encoding="utf-8")
+    for frase in (
+        "Ley 1581 de 2012",
+        "Tipster Page",
+        "Siigo",
+        "DIAN",
+        "Resend",
+        "Cloudflare",
+        "último número en cero",
+        "tipo y número de documento",
+        "10 días hábiles",
+        "15 días hábiles",
+    ):
+        assert frase in privacy, frase
+
+    cookies = (data / "cookies.md").read_text(encoding="utf-8")
+    # La clave de la sesion es la de `frontend/lib/session.tsx`.
+    assert "`sebasanalisis.session`" in cookies
+    assert "Sebas Análisis no pone cookies" in cookies
+    assert "Turnstile" in cookies
 
 
 def test_los_borradores_iniciales_dicen_que_son_borradores(db) -> None:
@@ -183,6 +237,7 @@ def test_registro_al_que_le_falta_un_documento_es_rechazado(client: TestClient) 
                 "password": PASSWORD,
                 "accepted_document_ids": ids,
                 "adult_confirmed": True,
+                "loss_risk_acknowledged": True,
             },
         )
         assert r.status_code == 422, falta["kind"]
@@ -191,6 +246,21 @@ def test_registro_al_que_le_falta_un_documento_es_rechazado(client: TestClient) 
             client.post("/auth/login", json={"email": email, "password": PASSWORD}).status_code
             == 401
         )
+
+
+def test_registro_sin_declarar_el_riesgo_de_perdida_es_rechazado(client: TestClient) -> None:
+    """Paso 5.5: la mayoria de edad y el riesgo de perdida son obligatorias."""
+    email = _email()
+    body = {
+        "email": email,
+        "password": PASSWORD,
+        **consent_fields(client),
+        "loss_risk_acknowledged": False,
+    }
+    r = client.post("/auth/register", json=body)
+    assert r.status_code == 422
+    assert "riesgo de pérdida" in r.json()["detail"]
+    assert client.post("/auth/login", json={"email": email, "password": PASSWORD}).status_code == 401
 
 
 def test_registro_guarda_un_consentimiento_por_documento_con_ip_y_navegador(
@@ -205,6 +275,7 @@ def test_registro_guarda_un_consentimiento_por_documento_con_ip_y_navegador(
     assert r.status_code == 201, r.text
     user = r.json()["user"]
     assert user["adult_confirmed_at"] is not None
+    assert user["loss_risk_acknowledged_at"] is not None
     assert user["onboarding_completed_at"] is None
 
     rows = db.execute(
@@ -224,7 +295,14 @@ def test_registro_guarda_un_consentimiento_por_documento_con_ip_y_navegador(
 def test_registro_no_guarda_aceptaciones_de_documentos_que_no_se_piden(
     client: TestClient, db
 ) -> None:
-    refunds = client.get("/legal/refunds").json()
+    # Un documento que no se pide: la politica de reembolsos, retirada.
+    refunds = {
+        "id": str(
+            db.execute(
+                text("SELECT id FROM legal_documents WHERE kind = 'refunds' LIMIT 1")
+            ).scalar_one()
+        )
+    }
     campos = consent_fields(client)
     campos["accepted_document_ids"].append(refunds["id"])
     r = client.post("/auth/register", json={"email": _email(), "password": PASSWORD, **campos})
@@ -241,7 +319,11 @@ def test_cuenta_recien_registrada_no_tiene_nada_pendiente(client: TestClient) ->
     token = _register(client)["access_token"]
     r = client.get("/legal/pending", headers=auth(token))
     assert r.status_code == 200
-    assert r.json() == {"documents": [], "adult_confirmation_required": False}
+    assert r.json() == {
+        "documents": [],
+        "adult_confirmation_required": False,
+        "loss_risk_acknowledgment_required": False,
+    }
     assert client.get("/sessions", headers=auth(token)).status_code == 200
 
 
@@ -335,6 +417,7 @@ def test_cuenta_anterior_al_paso_2_debe_aceptar_y_declarar_mayoria_de_edad(
     db.execute(text("DELETE FROM user_consents WHERE user_id = :u"), {"u": user_id})
     db.execute(text("UPDATE users SET adult_confirmed_at = NULL WHERE id = :u"), {"u": user_id})
     db.commit()
+    sin_documentos = {"documents": [], "loss_risk_acknowledgment_required": False}
 
     r = client.get("/sessions", headers=auth(token))
     assert r.status_code == 403
@@ -346,13 +429,46 @@ def test_cuenta_anterior_al_paso_2_debe_aceptar_y_declarar_mayoria_de_edad(
     # Aceptar los documentos sin declarar la mayoria de edad no alcanza.
     ids = [d["id"] for d in pendiente["documents"]]
     r = client.post("/legal/accept", json={"legal_document_ids": ids}, headers=auth(token))
-    assert r.json() == {"documents": [], "adult_confirmation_required": True}
+    assert r.json() == {**sin_documentos, "adult_confirmation_required": True}
     assert client.get("/sessions", headers=auth(token)).status_code == 403
 
     r = client.post("/legal/accept", json={"adult_confirmed": True}, headers=auth(token))
-    assert r.json() == {"documents": [], "adult_confirmation_required": False}
+    assert r.json() == {**sin_documentos, "adult_confirmation_required": False}
     assert client.get("/sessions", headers=auth(token)).status_code == 200
     assert client.get("/auth/me", headers=auth(token)).json()["adult_confirmed_at"] is not None
+
+
+def test_cuenta_anterior_al_paso_5_5_debe_declarar_el_riesgo_de_perdida(
+    client: TestClient, db
+) -> None:
+    """La declaracion del riesgo de perdida no se le inventa a nadie: la cuenta
+    que no la hizo al registrarse la hace antes de usar la mesa."""
+    registro = _register(client)
+    token, user_id = registro["access_token"], registro["user"]["id"]
+    db.execute(
+        text("UPDATE users SET loss_risk_acknowledged_at = NULL WHERE id = :u"), {"u": user_id}
+    )
+    db.commit()
+
+    r = client.get("/sessions", headers=auth(token))
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "consent_required"
+    assert client.get("/legal/pending", headers=auth(token)).json() == {
+        "documents": [],
+        "adult_confirmation_required": False,
+        "loss_risk_acknowledgment_required": True,
+    }
+
+    # Sin marcarla no alcanza.
+    r = client.post("/legal/accept", json={}, headers=auth(token))
+    assert r.json()["loss_risk_acknowledgment_required"] is True
+    assert client.get("/sessions", headers=auth(token)).status_code == 403
+
+    r = client.post("/legal/accept", json={"loss_risk_acknowledged": True}, headers=auth(token))
+    assert r.json()["loss_risk_acknowledgment_required"] is False
+    assert client.get("/sessions", headers=auth(token)).status_code == 200
+    me = client.get("/auth/me", headers=auth(token)).json()
+    assert me["loss_risk_acknowledged_at"] is not None
 
 
 def test_un_administrador_tambien_debe_aceptar(client: TestClient, admin_token: str) -> None:
@@ -411,14 +527,14 @@ def test_has_access_decide_por_el_consentimiento(client: TestClient, admin_token
 
 
 def test_una_version_publicada_no_se_edita(client: TestClient, admin_token: str) -> None:
-    publicada = _publish(client, admin_token, "refunds", requires_acceptance=False)
+    publicada = _publish(client, admin_token, "cookies", requires_acceptance=False)
     r = client.patch(
         f"/admin/legal-documents/{publicada['id']}",
         json={"title": "Otro título", "content_md": "otro texto", "requires_acceptance": False},
         headers=auth(admin_token),
     )
     assert r.status_code == 409
-    assert client.get("/legal/refunds").json()["content_md"] == publicada["content_md"]
+    assert client.get("/legal/cookies").json()["content_md"] == publicada["content_md"]
 
     r = client.post(
         f"/admin/legal-documents/{publicada['id']}/publish", headers=auth(admin_token)
@@ -429,10 +545,10 @@ def test_una_version_publicada_no_se_edita(client: TestClient, admin_token: str)
 def test_un_borrador_se_edita_y_su_version_es_la_siguiente(
     client: TestClient, admin_token: str
 ) -> None:
-    vigente = client.get("/legal/refunds").json()
+    vigente = client.get("/legal/cookies").json()
     body = {
-        "kind": "refunds",
-        "title": "Reembolsos",
+        "kind": "cookies",
+        "title": "Cookies",
         "content_md": "primer texto",
         "requires_acceptance": False,
     }
@@ -450,7 +566,7 @@ def test_un_borrador_se_edita_y_su_version_es_la_siguiente(
 
     r = client.patch(
         f"/admin/legal-documents/{borrador['id']}",
-        json={"title": "Reembolsos", "content_md": "texto corregido", "requires_acceptance": False},
+        json={"title": "Cookies", "content_md": "texto corregido", "requires_acceptance": False},
         headers=auth(admin_token),
     )
     assert r.status_code == 200, r.text
@@ -458,15 +574,63 @@ def test_un_borrador_se_edita_y_su_version_es_la_siguiente(
 
     r = client.post(f"/admin/legal-documents/{borrador['id']}/publish", headers=auth(admin_token))
     assert r.status_code == 200
-    assert client.get("/legal/refunds").json()["content_md"] == "texto corregido"
+    assert client.get("/legal/cookies").json()["content_md"] == "texto corregido"
 
     versiones = client.get(
-        "/admin/legal-documents", params={"kind": "refunds"}, headers=auth(admin_token)
+        "/admin/legal-documents", params={"kind": "cookies"}, headers=auth(admin_token)
     ).json()
     assert [v["version"] for v in versiones] == sorted(
         (v["version"] for v in versiones), reverse=True
     )
     assert versiones[0]["id"] == borrador["id"]
+
+
+def test_no_se_publica_una_version_de_un_documento_retirado(
+    client: TestClient, admin_token: str, db
+) -> None:
+    body = {"kind": "refunds", "title": "x", "content_md": "x", "requires_acceptance": False}
+    r = client.post("/admin/legal-documents", json=body, headers=auth(admin_token))
+    assert r.status_code == 409
+    assert "Términos y Condiciones" in r.json()["detail"]
+
+    # Ni un borrador que ya existiera de antes.
+    borrador_id = uuid.uuid4()
+    db.execute(
+        text(
+            "INSERT INTO legal_documents (id, kind, version, title, content_md, "
+            "requires_acceptance, created_at) "
+            "VALUES (:id, 'refunds', 99, 'x', 'x', false, now())"
+        ),
+        {"id": borrador_id},
+    )
+    db.commit()
+    r = client.post(f"/admin/legal-documents/{borrador_id}/publish", headers=auth(admin_token))
+    assert r.status_code == 409
+    assert client.get("/legal/refunds").status_code == 404
+    db.execute(text("DELETE FROM legal_documents WHERE id = :id"), {"id": borrador_id})
+    db.commit()
+
+
+def test_una_aceptacion_de_un_documento_retirado_ya_no_es_vigente(
+    client: TestClient, db
+) -> None:
+    registro = _register(client)
+    token, user_id = registro["access_token"], registro["user"]["id"]
+    refunds_id = db.execute(
+        text("SELECT id FROM legal_documents WHERE kind = 'refunds' LIMIT 1")
+    ).scalar_one()
+    db.execute(
+        text(
+            "INSERT INTO user_consents (id, user_id, legal_document_id, accepted_at) "
+            "VALUES (:id, :u, :d, now())"
+        ),
+        {"id": uuid.uuid4(), "u": user_id, "d": refunds_id},
+    )
+    db.commit()
+    aceptados = {c["kind"]: c for c in client.get("/legal/consents", headers=auth(token)).json()}
+    assert aceptados["refunds"]["current"] is False
+    # Y no le pide nada: un documento retirado no se acepta.
+    assert client.get("/sessions", headers=auth(token)).status_code == 200
 
 
 def test_el_panel_legal_es_solo_para_administradores(client: TestClient, user_token: str) -> None:

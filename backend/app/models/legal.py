@@ -12,7 +12,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
 
+#: Todos los tipos que alguna vez tuvieron versiones. Las aceptaciones viejas
+#: siguen apuntando a ellas, asi que un tipo retirado no sale de aqui.
 LEGAL_KINDS = ("terms", "privacy", "refunds", "cookies")
+
+#: Los tipos retirados (paso 5.5 de la Fase 5, 2026-11-09): los reembolsos y la
+#: cancelacion pasaron a los Terminos y Condiciones. Un tipo retirado no tiene
+#: version vigente, no se acepta ni se publica, y su pagina lleva a los terminos.
+RETIRED_LEGAL_KINDS = ("refunds",)
+
+#: Los tipos vigentes, en el orden en que se muestran y se aceptan.
+ACTIVE_LEGAL_KINDS = tuple(k for k in LEGAL_KINDS if k not in RETIRED_LEGAL_KINDS)
 
 
 class LegalDocument(Base):

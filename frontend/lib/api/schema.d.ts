@@ -2007,6 +2007,11 @@ export interface components {
             adult_confirmed: boolean;
             /** Legal Document Ids */
             legal_document_ids?: string[];
+            /**
+             * Loss Risk Acknowledged
+             * @default false
+             */
+            loss_risk_acknowledged: boolean;
         };
         /**
          * AccessInfo
@@ -3868,6 +3873,8 @@ export interface components {
             adult_confirmation_required: boolean;
             /** Documents */
             documents: components["schemas"]["LegalDocumentResponse"][];
+            /** Loss Risk Acknowledgment Required */
+            loss_risk_acknowledgment_required: boolean;
         };
         /**
          * PlanGameRef
@@ -4267,6 +4274,11 @@ export interface components {
              * Format: email
              */
             email: string;
+            /**
+             * Loss Risk Acknowledged
+             * @default false
+             */
+            loss_risk_acknowledged: boolean;
             /** Password */
             password: string;
         };
@@ -4928,6 +4940,8 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Loss Risk Acknowledged At */
+            loss_risk_acknowledged_at: string | null;
             /** Onboarding Completed At */
             onboarding_completed_at: string | null;
             role: components["schemas"]["UserRole"];

@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from app.api.deps import AdminUser, DbSession
 from app.core import audit
 from app.models import LegalDocument
+from app.models.legal import RETIRED_LEGAL_KINDS
 from app.schemas.legal import (
     AdminLegalDocumentResponse,
     CreateLegalDocumentRequest,
@@ -26,6 +27,10 @@ from app.schemas.legal import (
 router = APIRouter(prefix="/admin/legal-documents", tags=["admin"])
 
 _PUBLISHED = "Esta versión ya está publicada y no se puede editar. Crea una versión nueva"
+_RETIRED = (
+    "Ese documento se retiró: su contenido está en los Términos y Condiciones. "
+    "No se publican versiones nuevas"
+)
 
 
 def _get_or_404(db: DbSession, document_id: UUID) -> LegalDocument:
@@ -53,6 +58,8 @@ def create_document(
     payload: CreateLegalDocumentRequest, db: DbSession, admin: AdminUser
 ) -> LegalDocument:
     """Crea el borrador de la version siguiente de un documento."""
+    if payload.kind.value in RETIRED_LEGAL_KINDS:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_RETIRED)
     # Un solo borrador por tipo: con dos, el numero de version de cada uno
     # dependeria de cual se publique primero.
     if db.scalar(
@@ -110,6 +117,8 @@ def publish_document(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Esta versión ya está publicada"
         )
+    if document.kind in RETIRED_LEGAL_KINDS:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_RETIRED)
     document.published_at = datetime.now(UTC)
     audit.record(
         db,
