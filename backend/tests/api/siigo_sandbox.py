@@ -29,6 +29,8 @@ VENDEDOR = 916
 FORMA_DE_PAGO = 11143
 PRODUCTO = "SUSCRIPCION"
 PARTNER = "sebasanalisisp"
+IVA_0 = 13160
+IVA_19 = 13156
 
 
 @dataclass
@@ -60,6 +62,11 @@ class SiigoSandbox:
             "id": DOCUMENTO, "code": "4", "name": "Factura electrónica de venta",
             "type": "FV", "active": True, "electronic_type": "ElectronicInvoice",
         }
+        #: El catalogo de `GET /v1/taxes` (forma de `Tax` en Apiary).
+        self.impuestos = [
+            {"id": IVA_19, "name": "IVA 19%", "type": "IVA", "percentage": 19, "active": True},
+            {"id": IVA_0, "name": "IVA 0%", "type": "IVA", "percentage": 0, "active": True},
+        ]
         self.dormido: list[float] = []
         self.issuer = SiigoIssuer(
             username="usuario@prueba",
@@ -130,6 +137,8 @@ class SiigoSandbox:
         if path == "/v1/payment-types":
             return httpx.Response(200, json=[{"id": FORMA_DE_PAGO, "name": "Cuenta por cobrar API",
                                               "type": "Cartera", "active": True, "due_date": False}])
+        if path == "/v1/taxes":
+            return httpx.Response(200, json=self.impuestos)
         if path == "/v1/users":
             return httpx.Response(200, json={"pagination": {"page": 1}, "results": [
                 {"id": VENDEDOR, "first_name": "Pruebas Api", "active": True}]})

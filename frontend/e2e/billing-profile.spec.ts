@@ -64,8 +64,8 @@ test("sin datos de facturación, el pago los pide y quedan en la cuenta", async 
   await expect(cuenta.getByText("Ana María Gómez Peña")).toBeVisible();
   await cuenta.getByRole("button", { name: "Cambiar" }).click();
   await cuenta.getByLabel("País").selectOption({ label: "España" });
-  // Fuera de Colombia, el tipo por defecto es NIT de otro país.
-  await expect(cuenta.getByLabel("Tipo de documento")).toHaveValue("50");
+  // Fuera de Colombia, el tipo por defecto es el documento de identificación extranjero.
+  await expect(cuenta.getByLabel("Tipo de documento")).toHaveValue("42");
   await cuenta.getByLabel("Tipo de documento").selectOption({ label: "Pasaporte" });
   await cuenta.getByLabel("Número de documento").fill("pa 998877");
   await cuenta.getByLabel("Estado o región").selectOption({ label: "Comunidad de Madrid" });

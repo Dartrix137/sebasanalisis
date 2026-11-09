@@ -33,8 +33,10 @@ VAT_EXCLUSION_NOTE = (
 #: Siigo admite `observations` de hasta 4.000 caracteres.
 OBSERVATIONS_MAX = 4000
 
-#: La `Idempotency-Key` de Siigo: alfanumerica, de hasta 30 caracteres (su
-#: pagina de idempotencia; la de errores dice 32). Un UUID en base 36 cabe en 25.
+#: La `Idempotency-Key` de Siigo: alfanumerica, de hasta 30 caracteres. Su
+#: pagina de errores decia 32; soporte de Siigo confirmo 30 (2026-11-09), y que
+#: la llave no vence: una llave usada devuelve el documento que creo, aunque ese
+#: documento se haya borrado. Un UUID en base 36 cabe en 25.
 IDEMPOTENCY_KEY_LENGTH = 25
 _BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
@@ -130,9 +132,8 @@ def observations(
 ErrorKind = Literal["transient", "config", "invalid"]
 
 #: Pasajeros: se reintentan en otra corrida (codigos de "Manejo de errores").
-#: `documents_service` no esta: en la empresa de pruebas (2026-11-09) llego
-#: con "Your request could not be completed with the data you submitted", por
-#: un tipo de comprobante que pide centro de costo. Es de datos, no pasajero.
+#: `documents_service` no esta, aunque "Manejo de errores" lo liste entre los
+#: pasajeros: ver `CONFIG_CODES`.
 TRANSIENT_CODES = frozenset(
     {
         "requests_limit",
@@ -146,9 +147,18 @@ TRANSIENT_CODES = frozenset(
 #: De configuracion de la cuenta: detienen toda la corrida (el "freno"), porque
 #: mientras no se corrijan ninguna factura se puede emitir, y reintentar a
 #: ciegas lleva al bloqueo por el 80 % de errores.
+#:
+#: `documents_service`: soporte de Siigo (2026-11-09) dice que "se devuelve
+#: cuando se trata de hacer un proceso que no esta parametrizado en la
+#: configuracion del documento, como centros de costos inactivos o cuentas
+#: contables". En la empresa de pruebas llego con "Your request could not be
+#: completed with the data you submitted", por un tipo de comprobante que pide
+#: centro de costo. Es de la configuracion del tipo de comprobante, no de una
+#: factura: se repetiria en todas.
 CONFIG_CODES = frozenset(
     {
         "company_settings",
+        "documents_service",
         "document_settings",
         "invalid_reference",
         "parameter_inactive",
@@ -163,9 +173,17 @@ CONFIG_CODES = frozenset(
 
 
 def classify(status_code: int, codes: list[str]) -> ErrorKind:
-    """Que hacer con una respuesta de error de Siigo."""
-    if status_code == 429 or status_code >= 500 or any(c in TRANSIENT_CODES for c in codes):
+    """Que hacer con una respuesta de error de Siigo.
+
+    Un codigo de configuracion gana sobre un 5xx o un codigo pasajero que venga
+    con el: reintentarlo solo sumaria errores para el bloqueo. El 429 es
+    siempre pasajero."""
+    if status_code == 429:
         return "transient"
-    if status_code in (401, 403) or any(c in CONFIG_CODES for c in codes):
+    if any(c in CONFIG_CODES for c in codes):
+        return "config"
+    if status_code >= 500 or any(c in TRANSIENT_CODES for c in codes):
+        return "transient"
+    if status_code in (401, 403):
         return "config"
     return "invalid"

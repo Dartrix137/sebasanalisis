@@ -28,12 +28,34 @@ Lo que importa aqui:
   configuracion frena la corrida (`billing/invoice_document.classify`).
 - `Idempotency-Key` en `POST /v1/invoices`: con la misma llave, si la factura
   ya existe, Siigo devuelve la ya creada. Timeout recomendado: 120 s o mas.
+  Soporte (2026-11-09): hasta 30 caracteres, y "No existe tiempo limite de
+  guardado, al ser usado, aunque se borre el documento permanecera usado".
 - La factura exige que el tercero exista (`customer.identification`); se busca
   con `GET /v1/customers?identification=` y, si no esta, se crea con
   `POST /v1/customers`. `CustomerIn` marca `phones` como obligatorio, pero el
-  portal lo da como opcional: no pedimos telefono y se manda sin el (se
-  confirma en la empresa de pruebas).
+  portal lo da como opcional y soporte de Siigo lo confirmo (2026-11-09:
+  "El telefono es un campo opcional"). No pedimos telefono: en la empresa de
+  pruebas Siigo creo el tercero sin el, y le puso uno en ceros.
+- `check_digit` no se manda: Siigo lo calcula solo. El PDF de Siigo rotula el
+  documento de una persona como "NIT", con ese digito, aunque sea una cedula.
+  Soporte (2026-11-09): "Es solo visual en el PDF, en el XML si se refleja con
+  el codigo 13", y no se puede hacer que el PDF diga CC.
 - Errores: `{"Status": 400, "Errors": [{"Code", "Message", "Params", "Detail"}]}`.
+- Estados de una factura, segun soporte de Siigo (2026-11-09). Ante la DIAN
+  (`stamp.status`): Draft, Sending, Rejected y Accepted. Del correo
+  (`mail.status`): "Proccess of Sending, Send, Not Send, y Read"; la API los
+  devolvio como `process_of_sending` y `not_sent`. Solo Accepted y Rejected
+  son finales: con cualquier otro, la factura espera y se vuelve a consultar.
+- El IVA del 0 % de la operacion excluida: soporte de Siigo (2026-11-09),
+  "Para que se refleje el IVA del 0% deben informar el campo taxes con el ID
+  del impuesto". En la factura, `items[].taxes[].id` es opcional y sale de
+  `GET /v1/taxes`, cuyos impuestos traen `id`, `name`, `type` (`IVA`, ...),
+  `percentage` y `active` (Apiary, `Tax`). Con `SIIGO_TAX_ID` el item lleva
+  ese impuesto, y `check_ready` exige que sea de IVA, activo y del 0 %; sin
+  el, el item va sin impuestos. El total no cambia.
+- La empresa de pruebas no tiene habilitado el envio a la DIAN (soporte,
+  2026-11-09): alli toda factura termina Rejected. La aceptacion solo se ve
+  con la cuenta de la empresa.
 """
 
 from __future__ import annotations
@@ -132,6 +154,7 @@ class SiigoIssuer:
         payment_type_id: int,
         product_code: str,
         cost_center_id: int = 0,
+        tax_id: int = 0,
         base_url: str = BASE_URL,
         min_interval_seconds: float = 1.0,
         transport: httpx.BaseTransport | None = None,
@@ -146,6 +169,7 @@ class SiigoIssuer:
         self.payment_type_id = payment_type_id
         self.product_code = product_code
         self.cost_center_id = cost_center_id
+        self.tax_id = tax_id
         self.base_url = base_url.rstrip("/")
         self._min_interval = min_interval_seconds
         self._clock = clock
@@ -318,6 +342,18 @@ class SiigoIssuer:
         users = _results(self._request("GET", "/v1/users"))
         if not any(u.get("id") == self.seller_id and u.get("active") for u in users):
             raise IssuerMisconfigured(f"SIIGO_SELLER_ID={self.seller_id} no es un usuario activo")
+        if self.tax_id:
+            taxes = _results(self._request("GET", "/v1/taxes"))
+            tax = next((t for t in taxes if t.get("id") == self.tax_id), None)
+            if (
+                tax is None
+                or not tax.get("active")
+                or tax.get("type") != "IVA"
+                or _number(tax.get("percentage")) != 0
+            ):
+                raise IssuerMisconfigured(
+                    f"SIIGO_TAX_ID={self.tax_id} no es un impuesto de IVA del 0 % activo"
+                )
         self._ready_until = self._clock() + _READY_TTL_SECONDS
 
     # ---------- Terceros ----------
@@ -365,7 +401,15 @@ class SiigoIssuer:
     def issue(self, draft: InvoiceDraft) -> IssuedInvoice:
         if not self._customer_exists(draft.buyer):
             self._create_customer(draft.buyer)
-        payload = {
+        item: dict[str, Any] = {
+            "code": self.product_code,
+            "description": draft.description,
+            "quantity": 1,
+            "price": draft.amount,
+        }
+        if self.tax_id:
+            item["taxes"] = [{"id": self.tax_id}]
+        payload: dict[str, Any] = {
             "document": {"id": self.document_type_id},
             "date": draft.issue_date.isoformat(),
             "customer": {"identification": draft.buyer.id_number, "branch_office": 0},
@@ -373,14 +417,7 @@ class SiigoIssuer:
             "stamp": {"send": True},
             "mail": {"send": True},
             "observations": draft.observations,
-            "items": [
-                {
-                    "code": self.product_code,
-                    "description": draft.description,
-                    "quantity": 1,
-                    "price": draft.amount,
-                }
-            ],
+            "items": [item],
             "payments": [{"id": self.payment_type_id, "value": draft.amount}],
         }
         if self.cost_center_id:
@@ -433,6 +470,7 @@ def from_settings(settings: Settings, **kwargs: Any) -> SiigoIssuer:
         payment_type_id=settings.siigo_payment_type_id,
         product_code=settings.siigo_product_code,
         cost_center_id=settings.siigo_cost_center_id,
+        tax_id=settings.siigo_tax_id,
         base_url=settings.siigo_api_base_url,
         min_interval_seconds=settings.siigo_min_interval_seconds,
         **kwargs,

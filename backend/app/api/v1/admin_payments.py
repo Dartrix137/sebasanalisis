@@ -563,13 +563,21 @@ def retry_invoice(
     """Reintenta la emision de una factura pendiente, en envio o fallida
     (§3.17, "Paso 5.4", puntos 3 y 13), y la intenta enseguida.
 
-    Una fallida que nunca llego a Siigo se vuelve a preparar, para tomar los
-    datos de facturacion corregidos. Deja fila en la bitacora, con el motivo,
+    Una fallida se vuelve a preparar, para tomar los datos de facturacion
+    corregidos, con una llave nueva (`core/invoices.reset_for_retry`). Deja fila en la bitacora, con el motivo,
     en la misma transaccion que la deja lista; el intento va despues.
     """
     issuer = _issuer_or_503()
     payment, invoice = _invoice_for_action(db, payment_id)
-    before = {"status": invoice.status, "errors": invoice.last_error_codes}
+    before = {
+        "status": invoice.status,
+        "errors": invoice.last_error_codes,
+        # La factura que habia quedado en Siigo (un total que no cuadro), para
+        # encontrarla despues de que el reintento la suelte.
+        "provider_id": invoice.provider_id,
+        "provider_name": invoice.provider_name,
+        "idempotency_key": invoice.idempotency_key,
+    }
     try:
         invoices.reset_for_retry(invoice)
     except ValueError as exc:
@@ -581,7 +589,7 @@ def retry_invoice(
         target_type="payment",
         target_id=payment.id,
         before=before,
-        after={"status": invoice.status},
+        after={"status": invoice.status, "idempotency_key": invoice.idempotency_key},
         reason=payload.reason.strip(),
         ip=client_ip(request),
     )

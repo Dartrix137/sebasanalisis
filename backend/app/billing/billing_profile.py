@@ -8,8 +8,12 @@ registrarse. Tipos de documento (aprobados el 2026-11-05):
 
 - En Colombia: cedula de ciudadania (`13`) por defecto, o cedula de
   extranjeria (`22`).
-- Fuera de Colombia: NIT de otro pais (`50`) por defecto, o pasaporte (`41`) o
-  documento de identificacion extranjero (`42`).
+- Fuera de Colombia: documento de identificacion extranjero (`42`) por
+  defecto, o pasaporte (`41`) o NIT de otro pais (`50`). Hasta el 2026-11-09
+  el defecto era `50`, que es de una empresa; el tercero se crea siempre como
+  persona. Soporte de Siigo (2026-11-09): "El ID se informa dependiendo del
+  documento que tenga el tercero", y el extranjero pide los mismos campos
+  obligatorios que el nacional (decidido por el usuario el 2026-11-09).
 
 Los codigos y sus formatos salen de la documentacion de clientes de Siigo
 (`https://developers.siigo.com/docs/siigoapi/customer/1-create-customer/`,
@@ -47,7 +51,7 @@ ID_TYPE_NAMES: dict[IdType, str] = {
 
 #: Los tipos de cada lado, el primero es el que va por defecto.
 COLOMBIA_ID_TYPES: tuple[IdType, ...] = ("13", "22")
-FOREIGN_ID_TYPES: tuple[IdType, ...] = ("50", "41", "42")
+FOREIGN_ID_TYPES: tuple[IdType, ...] = ("42", "41", "50")
 NUMERIC_ID_TYPES: frozenset[IdType] = frozenset({"13"})
 
 NAME_MAX = 50

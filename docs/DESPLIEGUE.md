@@ -363,6 +363,7 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 | `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, sin vencimiento |
 | `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
 | `SIIGO_COST_CENTER_ID` | Opcional. El centro de costo, si el tipo de comprobante lo maneja: sin el, la emision no arranca |
+| `SIIGO_TAX_ID` | Opcional. El impuesto de IVA del 0 % (su `id` en `/v1/taxes`, no el código de Siigo Nube), para que la factura muestre el IVA en 0 %. Tiene que ser de IVA, activo y del 0 %: si no, la emisión no arranca. Sin él, el ítem va sin impuestos |
 | `SIIGO_MIN_INTERVAL_SECONDS` | Opcional. Espera entre peticiones: 1 por defecto; 8 en la empresa de pruebas (aun asi responde 429 de vez en cuando) |
 
   Los ids salen de `python scripts/siigo_catalogs.py` (solo lee). Sin una de las siete obligatorias, la API no arranca y el error dice cual. La linea de arranque dice `Factura electronica: Siigo (https://api.siigo.com)`.
