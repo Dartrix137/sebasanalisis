@@ -46,12 +46,25 @@ test("el pie con los documentos legales está en login y en registro", async ({ 
     for (const nombre of [
       "Términos y Condiciones",
       "Tratamiento de datos",
-      "Cancelación y reembolsos",
       "Cookies",
+      "Superintendencia de Industria y Comercio",
     ]) {
       await expect(pie.getByRole("link", { name: nombre })).toBeVisible();
     }
+    // La política de reembolsos se retiró (paso 5.5): está en los términos.
+    await expect(pie.getByRole("link", { name: /reembolsos/i })).toHaveCount(0);
   }
+  await expect(
+    page
+      .getByRole("navigation", { name: "Documentos legales" })
+      .getByRole("link", { name: "Superintendencia de Industria y Comercio" }),
+  ).toHaveAttribute("href", "https://www.sic.gov.co");
+});
+
+test("la dirección de la política de reembolsos lleva a los términos", async ({ page }) => {
+  await page.goto("/legal/reembolsos");
+  await expect(page).toHaveURL(/\/legal\/terminos$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Términos y Condiciones" })).toBeVisible();
 });
 
 test("registro: sin las casillas no se crea la cuenta; con ellas, sí", async ({ page }) => {
@@ -71,8 +84,11 @@ test("registro: sin las casillas no se crea la cuenta; con ellas, sí", async ({
   await page.getByRole("button", { name: "Crear mi cuenta" }).click();
   await expect(page).toHaveURL(/\/register/);
 
-  // Con dos de tres tampoco.
+  // Con tres de cuatro tampoco: falta el riesgo de pérdida.
   await page.getByRole("checkbox", { name: /Acepto los Términos y Condiciones/ }).check();
+  await page
+    .getByRole("checkbox", { name: /Autorizo el tratamiento de mis datos personales/ })
+    .check();
   await page.getByRole("checkbox", { name: /Declaro que soy mayor de edad/ }).check();
   await page.getByRole("button", { name: "Crear mi cuenta" }).click();
   await expect(page).toHaveURL(/\/register/);

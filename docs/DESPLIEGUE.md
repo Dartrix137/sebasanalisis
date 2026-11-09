@@ -206,6 +206,31 @@ nueva. La pantalla de aceptacion sigue igual.
   select count(*) from legal_notices where legal_document_id = '<id de la version>';
   ```
 
+#### Version 2 de los textos legales (Fase 5, paso 5.5)
+
+Que pasa al desplegar (`PLATAFORMA_COMPLETA.md` §6.8):
+
+- La migracion `fbce7237bed1` agrega `users.loss_risk_acknowledged_at`. El
+  registro pide una casilla mas: "Entiendo que las apuestas implican riesgo de
+  perdida de dinero". **Toda cuenta que ya existia, incluido el administrador,
+  la ve en la pantalla de aceptacion la proxima vez que entra a la mesa**, como
+  paso con la mayoria de edad.
+- La politica de reembolsos se retira en ese momento: sale del pie de pagina, y
+  `/legal/reembolsos` lleva a los terminos. El pie suma el enlace a la SIC.
+- La migracion `7b636895d186` deja la **version 2 de terminos, datos y cookies
+  como borradores**. Hasta publicarlos rige la version 1.
+
+El dia de la vigencia, en `/admin/legal`:
+
+1. Revisar cada borrador con "Vista previa". En la politica de datos, completar
+   el pais del centro de datos de Hostinger (`[PENDIENTE]`) y "Guardar borrador".
+2. Si hacen falta mas de 40 avisos al dia, pasar antes a Resend Pro y subir
+   `EMAIL_DAILY_LIMIT` (ver arriba).
+3. Publicar los tres. Terminos y datos ya vienen con "exigir aceptacion" (se le
+   piden otra vez a todas las cuentas, con aviso por correo); cookies, sin ella.
+   Publicarlos uno tras otro, antes de la siguiente corrida del job (cada
+   hora), hace que el correo sea uno solo por cuenta.
+
 ### Control de acceso (Fase 4, paso 3)
 
 Que pasa al desplegar este paso:

@@ -36,6 +36,7 @@ class PendingConsentResponse(ApiModel):
     """Lo que la cuenta debe aceptar antes de usar la mesa."""
     documents: list[LegalDocumentResponse]
     adult_confirmation_required: bool
+    loss_risk_acknowledgment_required: bool
 
 
 class AcceptLegalRequest(ApiModel):
@@ -43,6 +44,9 @@ class AcceptLegalRequest(ApiModel):
     # La declaracion de mayoria de edad, para las cuentas que no la hicieron al
     # registrarse.
     adult_confirmed: bool = False
+    # La declaracion del riesgo de perdida, para las cuentas que no la hicieron
+    # al registrarse.
+    loss_risk_acknowledged: bool = False
 
 
 class ConsentResponse(ApiModel):

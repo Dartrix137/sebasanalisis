@@ -18,6 +18,10 @@ from app.core.config import get_settings
 TEST_DB_NAME = "sebasanalisis_test"
 
 
+#: (tipo, version) de los borradores que dejaron las migraciones.
+SEEDED_LEGAL_DRAFTS: set[tuple[str, int]] = set()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def test_database() -> Iterator[str]:
     """Crea la base de test desde cero y aplica el schema con Alembic."""
@@ -49,6 +53,21 @@ def test_database() -> Iterator[str]:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", test_url)
     command.upgrade(cfg, "head")
+
+    # La migracion 7b636895d186 deja la version 2 de terminos, datos y cookies
+    # como borradores. Los tests crean y publican sus propias versiones, y solo
+    # puede haber un borrador por tipo: se anota cuales dejo (lo comprueba
+    # `test_legal.py`) y se quitan.
+    engine = create_engine(test_url)
+    with engine.begin() as conn:
+        SEEDED_LEGAL_DRAFTS.update(
+            (kind, version)
+            for kind, version in conn.execute(
+                text("SELECT kind, version FROM legal_documents WHERE published_at IS NULL")
+            )
+        )
+        conn.execute(text("DELETE FROM legal_documents WHERE published_at IS NULL"))
+    engine.dispose()
 
     yield test_url
 
@@ -236,7 +255,11 @@ def register_raw(client: TestClient, email: str, password: str = "clave-segura-1
 def consent_fields(client: TestClient) -> dict:
     """Los campos de consentimiento de un registro valido, con los documentos vigentes."""
     required = client.get("/legal/required").json()
-    return {"accepted_document_ids": [d["id"] for d in required], "adult_confirmed": True}
+    return {
+        "accepted_document_ids": [d["id"] for d in required],
+        "adult_confirmed": True,
+        "loss_risk_acknowledged": True,
+    }
 
 
 @pytest.fixture(autouse=True)

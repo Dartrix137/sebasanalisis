@@ -86,6 +86,10 @@ _BOT_CHECK_FAILED = {
 }
 
 _ADULT_REQUIRED = "Para crear una cuenta debes declarar que eres mayor de edad"
+_LOSS_RISK_REQUIRED = (
+    "Para crear una cuenta debes declarar que entiendes que las apuestas "
+    "implican riesgo de pérdida de dinero"
+)
 _CONSENTS_REQUIRED = (
     "Para crear una cuenta debes aceptar los Términos y Condiciones y la "
     "Política de Tratamiento de Datos Personales vigentes"
@@ -210,6 +214,10 @@ def register(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_ADULT_REQUIRED
         )
+    if not payload.loss_risk_acknowledged:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_LOSS_RISK_REQUIRED
+        )
     required = legal.required_documents(db)
     accepted = set(payload.accepted_document_ids)
     if any(doc.id not in accepted for doc in required):
@@ -230,6 +238,7 @@ def register(
         access_type="none",
         role="user",
         adult_confirmed_at=now,
+        loss_risk_acknowledged_at=now,
     )
     db.add(user)
     db.flush()

@@ -89,6 +89,12 @@ class User(Base):
     # Declaracion de mayoria de edad (§6.3 de la Fase 4). Null en las cuentas
     # anteriores al paso 2 hasta que la confirmen al entrar a la mesa.
     adult_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # La declaracion de que entiende que las apuestas implican riesgo de perdida
+    # de dinero (paso 5.5 de la Fase 5). Null en las cuentas anteriores: se les
+    # pide antes de usar la mesa, como la mayoria de edad.
+    loss_risk_acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # Cuando leyo hasta el final la pantalla que explica que hace y que no hace
     # la plataforma. Es informativa: no es un consentimiento legal.
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

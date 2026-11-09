@@ -9,6 +9,14 @@ Dos reglas:
   exige (corregir una errata) no le pide nada a nadie, y una que si la exige se
   la pide a todos.
 
+Un tipo retirado (`RETIRED_LEGAL_KINDS`) no tiene version vigente: no cuenta en
+ninguna de las dos reglas, aunque tenga versiones publicadas.
+
+Ademas de los documentos, la cuenta debe tener dos declaraciones: la mayoria de
+edad y que entiende que las apuestas implican riesgo de perdida de dinero
+(decidido por el usuario el 2026-11-09). Se hacen al registrarse; a una cuenta
+que no las tiene se le piden antes de usar la mesa.
+
 Aqui no se decide el acceso: eso es de `core/access.py`, que consulta este
 modulo.
 """
@@ -20,7 +28,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import LegalDocument, User, UserConsent
-from app.models.legal import LEGAL_KINDS
+from app.models.legal import ACTIVE_LEGAL_KINDS
 
 USER_AGENT_MAX_LENGTH = 400
 
@@ -35,18 +43,27 @@ class PendingConsent:
 
     documents: list[LegalDocument]
     adult_confirmation_required: bool
+    loss_risk_acknowledgment_required: bool
 
     @property
     def any(self) -> bool:
-        return bool(self.documents) or self.adult_confirmation_required
+        return (
+            bool(self.documents)
+            or self.adult_confirmation_required
+            or self.loss_risk_acknowledgment_required
+        )
 
 
 def current_documents(db: Session) -> list[LegalDocument]:
-    """La ultima version publicada de cada tipo, en el orden de `LEGAL_KINDS`
-    (terminos primero): es el orden en que se muestran y se aceptan."""
+    """La ultima version publicada de cada tipo vigente, en el orden de
+    `ACTIVE_LEGAL_KINDS` (terminos primero): es el orden en que se muestran y
+    se aceptan."""
     latest = (
         select(LegalDocument.kind, func.max(LegalDocument.version).label("version"))
-        .where(LegalDocument.published_at.is_not(None))
+        .where(
+            LegalDocument.published_at.is_not(None),
+            LegalDocument.kind.in_(ACTIVE_LEGAL_KINDS),
+        )
         .group_by(LegalDocument.kind)
         .subquery()
     )
@@ -56,10 +73,12 @@ def current_documents(db: Session) -> list[LegalDocument]:
             (LegalDocument.kind == latest.c.kind) & (LegalDocument.version == latest.c.version),
         )
     )
-    return sorted(documents, key=lambda doc: LEGAL_KINDS.index(doc.kind))
+    return sorted(documents, key=lambda doc: ACTIVE_LEGAL_KINDS.index(doc.kind))
 
 
 def current_document(db: Session, kind: str) -> LegalDocument | None:
+    if kind not in ACTIVE_LEGAL_KINDS:
+        return None
     return db.scalar(
         select(LegalDocument)
         .where(LegalDocument.kind == kind, LegalDocument.published_at.is_not(None))
@@ -75,6 +94,7 @@ def _required_versions(db: Session) -> dict[str, int]:
         .where(
             LegalDocument.published_at.is_not(None),
             LegalDocument.requires_acceptance.is_(True),
+            LegalDocument.kind.in_(ACTIVE_LEGAL_KINDS),
         )
         .group_by(LegalDocument.kind)
     )
@@ -112,6 +132,7 @@ def pending_consent(db: Session, user: User) -> PendingConsent:
     return PendingConsent(
         documents=pending_documents(db, user),
         adult_confirmation_required=user.adult_confirmed_at is None,
+        loss_risk_acknowledgment_required=user.loss_risk_acknowledged_at is None,
     )
 
 

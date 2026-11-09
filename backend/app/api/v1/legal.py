@@ -64,6 +64,8 @@ def accept(
         ) from None
     if payload.adult_confirmed and user.adult_confirmed_at is None:
         user.adult_confirmed_at = now
+    if payload.loss_risk_acknowledged and user.loss_risk_acknowledged_at is None:
+        user.loss_risk_acknowledged_at = now
     db.commit()
     db.refresh(user)
     return legal.pending_consent(db, user)

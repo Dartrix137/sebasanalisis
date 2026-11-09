@@ -49,7 +49,7 @@ from app.core.config import get_settings
 from app.core.email import EmailMessage, EmailSender
 from app.emails import build_email
 from app.models import LegalDocument, LegalNotice, Subscription, User, UserConsent
-from app.models.legal import LEGAL_KINDS
+from app.models.legal import ACTIVE_LEGAL_KINDS
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,6 @@ _PAID = ("active", "past_due", "canceled")
 PUBLIC_PATHS = {
     "terms": "/legal/terminos",
     "privacy": "/legal/privacidad",
-    "refunds": "/legal/reembolsos",
     "cookies": "/legal/cookies",
 }
 
@@ -100,6 +99,7 @@ def notifiable_documents(db: Session) -> list[LegalDocument]:
             .where(
                 LegalDocument.published_at.is_not(None),
                 LegalDocument.requires_acceptance.is_(True),
+                LegalDocument.kind.in_(ACTIVE_LEGAL_KINDS),
             )
             .group_by(LegalDocument.kind)
         ).all()
@@ -125,7 +125,7 @@ def notifiable_documents(db: Session) -> list[LegalDocument]:
         if document is not None:
             documents.append(document)
     # Terminos primero, como en la pantalla de aceptacion.
-    return sorted(documents, key=lambda doc: LEGAL_KINDS.index(doc.kind))
+    return sorted(documents, key=lambda doc: ACTIVE_LEGAL_KINDS.index(doc.kind))
 
 
 def _sent_today(db: Session, now: datetime) -> int:

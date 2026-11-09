@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { ApiError, authApi, legalApi } from "@/lib/api-client";
-import { formatLegalDate, legalPath } from "@/lib/legal";
+import { LOSS_RISK_TEXT, formatLegalDate, legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
 import type { LegalDocumentResponse, PendingConsentResponse } from "@/lib/types/legal";
 
@@ -153,12 +153,14 @@ function ConsentScreen({
   const { withToken, refreshUser } = useSession();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [adult, setAdult] = useState(false);
+  const [lossRisk, setLossRisk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   const complete =
     pending.documents.every((d) => checked[d.id]) &&
-    (!pending.adult_confirmation_required || adult);
+    (!pending.adult_confirmation_required || adult) &&
+    (!pending.loss_risk_acknowledgment_required || lossRisk);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -169,6 +171,7 @@ function ConsentScreen({
         legalApi.accept(t, {
           legal_document_ids: pending.documents.map((d) => d.id),
           adult_confirmed: pending.adult_confirmation_required && adult,
+          loss_risk_acknowledged: pending.loss_risk_acknowledgment_required && lossRisk,
         }),
       );
       await refreshUser();
@@ -206,6 +209,14 @@ function ConsentScreen({
           <Card>
             <Checkbox checked={adult} onChange={(e) => setAdult(e.target.checked)}>
               Declaro que soy mayor de edad (18 años o más).
+            </Checkbox>
+          </Card>
+        ) : null}
+
+        {pending.loss_risk_acknowledgment_required ? (
+          <Card>
+            <Checkbox checked={lossRisk} onChange={(e) => setLossRisk(e.target.checked)}>
+              {LOSS_RISK_TEXT}
             </Checkbox>
           </Card>
         ) : null}

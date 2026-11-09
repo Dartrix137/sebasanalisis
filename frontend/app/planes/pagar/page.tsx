@@ -474,13 +474,9 @@ function Checkout() {
           La suscripción da acceso a la plataforma: no cambia el resultado de ningún juego ni la
           ventaja de la casa. Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>
-            términos
-          </Link>{" "}
-          y la{" "}
-          <Link href="/legal/reembolsos" className={LINK}>
-            política de reembolsos
+            Términos y Condiciones
           </Link>
-          .
+          , que incluyen la cancelación y los reembolsos.
         </p>
       </div>
     </div>

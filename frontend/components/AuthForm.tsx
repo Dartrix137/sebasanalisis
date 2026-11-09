@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ApiError, authApi, legalApi } from "@/lib/api-client";
-import { legalPath } from "@/lib/legal";
+import { LOSS_RISK_TEXT, legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
 import type { LegalDocumentResponse } from "@/lib/types/legal";
 
@@ -45,6 +45,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [documents, setDocuments] = useState<LegalDocumentResponse[] | null>(null);
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [adult, setAdult] = useState(false);
+  const [lossRisk, setLossRisk] = useState(false);
   const botCheck = useBotCheck(isRegister ? "register" : "login");
 
   useEffect(() => {
@@ -78,6 +79,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             // atada al texto exacto. El servidor rechaza el registro si faltan.
             accepted_document_ids: (documents ?? []).filter((d) => accepted[d.id]).map((d) => d.id),
             adult_confirmed: adult,
+            loss_risk_acknowledged: lossRisk,
             bot_check_token: botCheck.token,
           })
         : await authApi.login({ email, password, bot_check_token: botCheck.token });
@@ -182,6 +184,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               ))}
               <Checkbox required checked={adult} onChange={(e) => setAdult(e.target.checked)}>
                 Declaro que soy mayor de edad (18 años o más).
+              </Checkbox>
+              <Checkbox required checked={lossRisk} onChange={(e) => setLossRisk(e.target.checked)}>
+                {LOSS_RISK_TEXT}
               </Checkbox>
             </fieldset>
           ) : null}

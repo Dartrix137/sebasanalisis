@@ -79,6 +79,7 @@ class RegisterRequest(ApiModel):
     # defecto para que, si faltan, responda el endpoint con un mensaje claro.
     accepted_document_ids: list[UUID] = Field(default_factory=list, max_length=20)
     adult_confirmed: bool = False
+    loss_risk_acknowledged: bool = False
     bot_check_token: str | None = BotCheckToken
 
 
@@ -156,6 +157,7 @@ class UserAccount(ApiModel):
     role: UserRole
     created_at: datetime
     adult_confirmed_at: datetime | None = None
+    loss_risk_acknowledged_at: datetime | None = None
     # Null hasta que lee la pantalla de bienvenida de la mesa (§6.3).
     onboarding_completed_at: datetime | None = None
 
