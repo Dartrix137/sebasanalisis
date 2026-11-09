@@ -981,7 +981,31 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
     - `components/billing/BillingProfileForm.tsx`, en `/planes/pagar` (bloque "Datos de tu factura", antes del medio de pago) y en "Mi cuenta" ("Datos de facturación").
     - Fuera de Colombia, el formulario dice que, si la ciudad no está en la lista, se elija la más cercana y se escriba la real en la dirección. Es provisional hasta que responda soporte de Siigo.
   - Tests: los de la parte pura, `tests/api/test_billing_profile.py` y `e2e/billing-profile.spec.ts`. Los tests que pagan crean los datos de facturación por defecto (`_cuenta` en la API y `registerViaApi` en Playwright).
-- **Faltan**: el emisor de Siigo (puntos 1 a 4, 7, 9 a 11 y 14), el admin (punto 13), la nota crédito (punto 12, espera a la contadora) y la prueba real (punto 15).
+- **Entrega 3, el emisor de Siigo (2026-11-09).**
+  - `invoicing/`: la interfaz `InvoiceIssuer` (`base.py`), el emisor de Siigo (`siigo.py`) y uno simulado (`fake.py`), elegidos por `INVOICE_ISSUER` (`none` por defecto).
+  - `siigo.py`:
+    - El token va en memoria y se renueva antes de vencer o una vez ante un 401.
+    - Entre peticiones espera `SIIGO_MIN_INTERVAL_SECONDS`.
+    - Ante un 429 con una espera de hasta 30 s, espera y reintenta una vez. Con una espera más larga, queda para otra corrida.
+    - El tercero se busca por su documento y, si no está, se crea. La factura sale con `Idempotency-Key`, `stamp` y `mail` en `true`, sin `currency` ni impuestos.
+    - Al log van solo los códigos de error de Siigo, nunca sus mensajes: pueden nombrar el documento del comprador.
+  - `billing/invoice_document.py` (puro): la llave de idempotencia (el id en base 36, 25 caracteres), el monto en pesos, el texto de `observations` y la clasificación de los errores (pasajero, de configuración o de datos).
+  - Migración `a9ce7406f0b4`: lo congelado (llave, monto en pesos, tasas con su día y su fuente, textos, copia del comprador) y la emisión (estado ante la DIAN, CUFE, intentos, último error, errores de la DIAN). `status` queda con su CHECK de seis estados.
+  - `core/invoices.py`:
+    - `prepare` congela; si falta algo, deja el motivo (`billing_profile_missing`, `rates_pending`, `rates_unavailable` o `payment_not_approved`).
+    - `run_emission` emite y reconsulta, con el freno ante un error de configuración. Toma cada factura con `SELECT ... FOR UPDATE SKIP LOCKED` y la deja en `sending` durante 10 minutos, para que dos corridas no la manden a la vez.
+    - Hasta 8 intentos pasajeros, con espera creciente.
+    - Si el total de Siigo no cuadra, la factura queda `failed`.
+  - **Dónde corre**:
+    - Como tarea de fondo después de cada pago aprobado (`queue_payment_emails`, en los cuatro caminos que aprueban).
+    - En el job de cada hora: `scripts/run_renewals.py` sale con 1 si la emisión se frenó por configuración.
+  - **Cambio sobre el punto 10**: la API no comprueba la configuración contra Siigo al arrancar, porque si Siigo está caído la API tiene que arrancar igual. Al arrancar solo exige las variables. Contra Siigo comprueba antes de emitir (`check_ready`, cada 6 horas): que el tipo de comprobante sea de factura electrónica y esté activo, y que existan la forma de pago y el vendedor.
+  - `scripts/siigo_catalogs.py`: lista los catálogos de la cuenta para elegir los ids. Solo lee.
+  - Tests:
+    - `tests/api/siigo_sandbox.py`: el emisor de verdad sobre un Siigo simulado.
+    - `tests/api/test_invoice_emission.py`, 18 casos: el caso feliz con el cuerpo exacto, el tercero reutilizado, la espera por tasas y por datos, el tiempo agotado con la misma llave, el 429 corto y el largo, el error de datos, el freno, el tipo de comprobante no electrónico, el total que no cuadra, el tope de intentos, el token renovado, el borrador confirmado, la rechazada por la DIAN, el documento fuera del log y la fecha de envío con la TRM del pago.
+    - Los tests fijan `INVOICE_ISSUER=none`, aunque el `.env` local tenga las credenciales.
+- **Faltan**: la prueba real en la empresa de pruebas (punto 15), el admin (punto 13) y la nota crédito (punto 12, espera a la contadora).
 
 *Lo que hay que pedir o decidir para construirlo:*
 

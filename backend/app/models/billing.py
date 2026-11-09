@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -28,6 +29,7 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
@@ -282,6 +284,10 @@ class SubscriptionPriceChange(Base):
     price_change: Mapped[PriceChange] = relationship()
 
 
+# Deben coincidir con los estados de `core/invoices.py`.
+INVOICE_STATUSES = ("pending", "sending", "issued", "accepted", "rejected", "failed")
+
+
 class Invoice(Base):
     """La factura electronica de un pago aprobado (§3.17; Fase 5, paso 5.2).
 
@@ -290,10 +296,19 @@ class Invoice(Base):
     repetido no deja dos. La emision con Siigo es del paso 5.4; hasta
     entonces ninguna sale de `pending`.
 
-    No guarda datos del comprador: a quien va la factura (consumidor final, o
-    con nombre e identificacion) esta por definir. Es un documento tributario:
-    no se borra al eliminar la cuenta, y por eso la llave al pago es RESTRICT
-    (los pagos tampoco se borran).
+    Desde el paso 5.4 se emite con Siigo (`core/invoices.py`). Antes del primer
+    envio se congela todo lo que lleva: el monto en pesos, las tasas con su dia
+    y su fuente, y una copia de los datos de facturacion del comprador (la
+    factura va a cada comprador). Los reintentos mandan lo mismo, con la misma
+    `idempotency_key`.
+
+    Estados (§3.17, "Paso 5.4", punto 3): `pending` (sin enviar), `sending`
+    (salio y no se sabe el resultado), `issued` (creada en Siigo, esperando a
+    la DIAN), `accepted` (con CUFE), `rejected` (la DIAN la rechazo) y
+    `failed` (Siigo rechazo los datos: no se reintenta sola).
+
+    Es un documento tributario: no se borra al eliminar la cuenta, y por eso la
+    llave al pago es RESTRICT (los pagos tampoco se borran).
     """
 
     __tablename__ = "invoices"
@@ -302,12 +317,58 @@ class Invoice(Base):
     payment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("payments.id", ondelete="RESTRICT"), unique=True, nullable=False
     )
-    # Hoy solo `pending`. Los estados de la emision entran en el paso 5.4.
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(
+        enum_col(*INVOICE_STATUSES, name="invoice_status", length=20), nullable=False
+    )
     # El dia de la aprobacion del pago en hora de Colombia (`billing/fx`),
     # congelado al crear la fila.
     operation_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+
+    # --- Lo congelado antes del primer envio (`prepared_at`) ---
+    prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str | None] = mapped_column(String(30), unique=True)
+    cop_cents: Mapped[int | None] = mapped_column(BigInteger)
+    eur_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    eur_usd_date: Mapped[date | None] = mapped_column(Date)
+    eur_usd_source: Mapped[str | None] = mapped_column(String(200))
+    usd_cop: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    usd_cop_date: Mapped[date | None] = mapped_column(Date)
+    usd_cop_source: Mapped[str | None] = mapped_column(String(200))
+    observations: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(String(500))
+    # Copia de los datos de facturacion del comprador al preparar.
+    buyer_first_names: Mapped[str | None] = mapped_column(String(50))
+    buyer_last_names: Mapped[str | None] = mapped_column(String(50))
+    buyer_id_type: Mapped[str | None] = mapped_column(String(2))
+    buyer_id_number: Mapped[str | None] = mapped_column(String(20))
+    buyer_email: Mapped[str | None] = mapped_column(String(255))
+    buyer_country_code: Mapped[str | None] = mapped_column(String(4))
+    buyer_state_code: Mapped[str | None] = mapped_column(String(10))
+    buyer_city_code: Mapped[str | None] = mapped_column(String(10))
+    buyer_address: Mapped[str | None] = mapped_column(String(256))
+
+    # --- La emision ---
+    # Por que todavia no sale: `billing_profile_missing`, `rates_pending`...
+    waiting_reason: Mapped[str | None] = mapped_column(String(40))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # El dia con el que se mando a Siigo (no puede ser anterior a hoy).
+    issue_date: Mapped[date | None] = mapped_column(Date)
+    provider_id: Mapped[str | None] = mapped_column(String(64))
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_total: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    stamp_status: Mapped[str | None] = mapped_column(String(20))
+    cufe: Mapped[str | None] = mapped_column(String(200))
+    mail_status: Mapped[str | None] = mapped_column(String(20))
+    last_error_codes: Mapped[list[str] | None] = mapped_column(JSONB)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    dian_errors: Mapped[list[str] | None] = mapped_column(JSONB)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 # Deben coincidir con `Pair` de `app.billing.exchange_rates`.

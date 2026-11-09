@@ -325,7 +325,22 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 - **Dos migraciones**: `c4faf46696b1` (tabla `exchange_rates`) y `750301b44179` (tabla `billing_profiles`). Solo DDL.
 - **Desde este cambio, pagar pide los datos de facturacion**: la pantalla de pago los pide la primera vez y `POST /billing/subscriptions` responde 409 `billing_profile_required` sin ellos.
 - **`DATOS_GOV_APP_TOKEN`** (opcional, en la API y en el job): un token de aplicacion de datos.gov.co, que va en la cabecera `X-App-Token` de la consulta de la TRM. Sin el, la consulta va por el limite compartido por IP. **No es una API key**: una API key (identificador y secreto) datos.gov.co la rechaza como token, y la API consulta entonces sin token y deja el aviso "datos.gov.co rechazo DATOS_GOV_APP_TOKEN" en el log. El secreto de la cuenta no se usa.
-- Las variables de Siigo (`SIIGO_USERNAME`, `SIIGO_ACCESS_KEY`, `SIIGO_PARTNER_ID`) todavia no se leen: entran con el emisor.
+- **Una tercera migracion**, `a9ce7406f0b4` (columnas de la emision en `invoices`). Solo DDL.
+- **La emision va apagada por defecto** (`INVOICE_ISSUER` ausente o `none`): las facturas se quedan `pending`, como hasta ahora. Para encenderla, en la API y en el job:
+
+| Variable | Valor |
+|---|---|
+| `INVOICE_ISSUER` | `siigo` |
+| `SIIGO_USERNAME`, `SIIGO_ACCESS_KEY` | Las credenciales de la API ("Alianzas" > "Mi Credencial API" en Siigo Nube). Secretas |
+| `SIIGO_PARTNER_ID` | El nombre registrado de la aplicacion (`sebasanalisisp`) |
+| `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica |
+| `SIIGO_SELLER_ID` | El usuario vendedor |
+| `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, sin vencimiento |
+| `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
+| `SIIGO_MIN_INTERVAL_SECONDS` | Opcional. Espera entre peticiones: 1 por defecto; 8 en la empresa de pruebas |
+
+  Los ids salen de `python scripts/siigo_catalogs.py` (solo lee). Sin una de las siete obligatorias, la API no arranca y el error dice cual. La linea de arranque dice `Factura electronica: Siigo (https://api.siigo.com)`.
+- **La empresa de pruebas de Siigo es compartida** con otros desarrolladores: ahi solo clientes inventados.
 
 ### Pagos: sin pasarela (Fase 5, paso 5.1)
 

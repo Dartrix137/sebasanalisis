@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -220,3 +221,9 @@ def rates_for(
     if eur_usd is None:
         return None
     return DayRates(trm=trm, eur_usd=eur_usd)
+
+
+@lru_cache
+def get_rate_sources() -> RateSources:
+    """Las fuentes de la aplicacion. Los tests la sustituyen."""
+    return build_sources()

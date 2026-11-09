@@ -27,6 +27,7 @@ from app.core.config import get_settings
 from app.core.monitoring import init_monitoring
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.validation_errors import validation_exception_handler
+from app.invoicing.base import get_invoice_issuer
 from app.payments.base import get_payment_provider
 
 settings = get_settings()
@@ -47,6 +48,11 @@ if not _app_logger.handlers:
 # (`payments/tipsterpage.check_startup`). Deja dicho con que pasarela quedo,
 # sin mostrar ninguna llave (docs/PLATAFORMA_COMPLETA.md §12 y §3.19).
 _app_logger.info("Pagos: %s", get_payment_provider().describe())
+
+# La factura electronica (§3.17, "Paso 5.4"): con INVOICE_ISSUER=siigo, sin
+# sus credenciales o sus ids no arranca. Contra Siigo no se comprueba aqui: si
+# Siigo esta caido, la API tiene que arrancar (lo comprueba cada emision).
+_app_logger.info("Factura electronica: %s", get_invoice_issuer().describe())
 
 # Igual con la verificacion contra bots: una sola de sus dos llaves es un error
 # de configuracion, y se dice aqui y no en el primer registro.
