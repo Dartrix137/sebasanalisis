@@ -41,7 +41,14 @@ from app.api.v1.legal import client_ip
 from app.billing import pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.pricing import CouponRejection
-from app.core import billing_emails, checkout_pages, rate_limit, renewals, subscriptions
+from app.core import (
+    billing_emails,
+    checkout_pages,
+    invoices,
+    rate_limit,
+    renewals,
+    subscriptions,
+)
 from app.core.config import get_settings
 from app.core.email import EmailSender, get_email_sender, send_safely
 from app.core.subscriptions import (
@@ -420,10 +427,14 @@ def _http_error(exc: SubscribeError) -> HTTPException:
 def queue_payment_emails(
     db: DbSession, settlement: Settlement, background: BackgroundTasks, sender: EmailSender
 ) -> None:
-    """Encola los correos de un pago que esta llamada resolvio (§3.8): recibo,
-    bienvenida o aviso de cobro fallido. Los arma `core/billing_emails`."""
+    """Encola lo que sigue a un pago que esta llamada resolvio: los correos
+    (§3.8: recibo, bienvenida o aviso de cobro fallido, armados por
+    `core/billing_emails`) y, si quedo aprobado, la emision de su factura
+    (§3.17, "Paso 5.4"), fuera de la transaccion del pago."""
     for message in billing_emails.payment_emails(db, settlement):
         background.add_task(send_safely, sender, message)
+    if settlement.changed and settlement.payment.status == "approved":
+        background.add_task(invoices.emit_in_background, db.get_bind(), settlement.payment.id)
 
 
 @router.get("/billing/payments/{payment_id}", response_model=PaymentResponse)

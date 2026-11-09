@@ -22,8 +22,9 @@ from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.api.presenters import payment_response, subscription_response, user_response
+from app.api.v1.billing_profile import profile_response
 from app.api.v1.legal import client_ip, list_consents
-from app.core import legal, payment_privacy, rate_limit, subscriptions
+from app.core import billing_profiles, legal, payment_privacy, rate_limit, subscriptions
 from app.core.accounts import is_last_active_admin
 from app.core.bot_check import BotChecker, get_bot_checker
 from app.core.config import get_settings
@@ -366,6 +367,7 @@ def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
             bets[bet.session_id].append(BetResponse.model_validate(bet))
 
     subscription = subscriptions.current_subscription(db, user.id)
+    profile = billing_profiles.get(db, user.id)
     payments = db.scalars(
         select(Payment).where(Payment.user_id == user.id).order_by(Payment.created_at, Payment.id)
     )
@@ -384,6 +386,7 @@ def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
             subscription_response(db, subscription, _now()) if subscription is not None else None
         ),
         payments=[payment_response(p) for p in payments],
+        billing_profile=profile_response(profile) if profile is not None else None,
     )
 
 

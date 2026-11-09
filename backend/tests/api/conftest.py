@@ -38,6 +38,9 @@ def test_database() -> Iterator[str]:
     admin.dispose()
 
     os.environ["DATABASE_URL"] = test_url
+    # Los tests nunca emiten facturas de verdad, aunque el .env local tenga las
+    # credenciales de Siigo: el que las necesita usa la fixture `siigo`.
+    os.environ["INVOICE_ISSUER"] = "none"
     get_settings.cache_clear()
 
     from alembic import command
@@ -141,6 +144,31 @@ def pasarela(client: TestClient) -> Iterator[object]:
     app.dependency_overrides[get_payment_provider] = lambda: simulada
     yield simulada
     app.dependency_overrides[get_payment_provider] = anterior
+
+
+@pytest.fixture
+def siigo(db, monkeypatch) -> Iterator[object]:
+    """Siigo: el emisor de verdad sobre un transporte HTTP simulado
+    (`siigo_sandbox.py`), con las tasas simuladas. Lo usan la tarea de fondo
+    que sigue a un pago aprobado y el job."""
+    from sqlalchemy import text as sql
+
+    from app.core import exchange_rates
+    from app.invoicing import base
+    from tests.api.siigo_sandbox import SiigoSandbox, TasasSimuladas
+
+    sandbox = SiigoSandbox()
+    sandbox.tasas = TasasSimuladas()
+    monkeypatch.setattr(base, "get_invoice_issuer", lambda: sandbox.issuer)
+    monkeypatch.setattr(exchange_rates, "get_rate_sources", lambda: sandbox.tasas)
+    # Una corrida emite todo lo pendiente: las facturas de otros tests no entran.
+    db.execute(sql("DELETE FROM invoices"))
+    db.execute(sql("DELETE FROM exchange_rates"))
+    db.commit()
+    yield sandbox
+    db.rollback()
+    db.execute(sql("DELETE FROM exchange_rates"))
+    db.commit()
 
 
 @pytest.fixture(autouse=True)

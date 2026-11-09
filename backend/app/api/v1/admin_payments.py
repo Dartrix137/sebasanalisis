@@ -26,8 +26,17 @@ from app.api.deps import AdminUser, DbSession
 from app.api.presenters import admin_payment_responses, admin_subscription_response
 from app.api.v1.billing import EmailSenderDep, PaymentProviderDep, queue_payment_emails
 from app.api.v1.legal import client_ip
-from app.core import audit, billing_emails, subscription_admin, subscriptions
+from app.core import (
+    audit,
+    billing_emails,
+    exchange_rates,
+    invoices,
+    subscription_admin,
+    subscriptions,
+)
 from app.core.email import send_safely
+from app.invoicing import base as invoicing
+from app.invoicing.base import InvoiceIssuer, IssuerError, IssuerMisconfigured
 from app.models import (
     AdminAuditLog,
     Invoice,
@@ -44,6 +53,7 @@ from app.schemas.admin import (
     AdminSubscriptionDetailResponse,
     AdminSubscriptionListResponse,
     AuditLogEntry,
+    InvoiceActionRequest,
     InvoiceResponse,
     PaymentEventResponse,
     PaymentRefundResponse,
@@ -54,6 +64,13 @@ from app.schemas.admin import (
 from app.schemas.billing import PaymentKind, PaymentStatus, RenewalMode, SubscriptionStatus
 
 logger = logging.getLogger(__name__)
+
+
+
+def _issuer() -> InvoiceIssuer:
+    # Se lee del modulo en cada llamada: es el mismo emisor que usa la tarea de
+    # fondo del pago, y los tests lo sustituyen en un solo lugar.
+    return invoicing.get_invoice_issuer()
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -270,6 +287,41 @@ def _get_payment(db: DbSession, payment_id: UUID) -> Payment:
     return payment
 
 
+def _invoice_response(invoice: Invoice) -> InvoiceResponse:
+    def text(value: object) -> str | None:
+        return format(value.normalize(), "f") if value is not None else None  # type: ignore[attr-defined]
+
+    names = " ".join(n for n in (invoice.buyer_first_names, invoice.buyer_last_names) if n)
+    return InvoiceResponse(
+        status=invoice.status,  # type: ignore[arg-type]
+        operation_date=invoice.operation_date,
+        created_at=invoice.created_at,
+        waiting_reason=invoice.waiting_reason,
+        attempts=invoice.attempts,
+        next_attempt_at=invoice.next_attempt_at,
+        prepared_at=invoice.prepared_at,
+        cop_cents=invoice.cop_cents,
+        eur_usd=text(invoice.eur_usd),
+        eur_usd_date=invoice.eur_usd_date,
+        eur_usd_source=invoice.eur_usd_source,
+        usd_cop=text(invoice.usd_cop),
+        usd_cop_date=invoice.usd_cop_date,
+        usd_cop_source=invoice.usd_cop_source,
+        buyer_name=names or None,
+        buyer_id_type=invoice.buyer_id_type,
+        buyer_id_number=invoice.buyer_id_number,
+        issue_date=invoice.issue_date,
+        provider_name=invoice.provider_name,
+        stamp_status=invoice.stamp_status,
+        cufe=invoice.cufe,
+        mail_status=invoice.mail_status,
+        last_error_codes=invoice.last_error_codes,
+        last_error_message=invoice.last_error_message,
+        dian_errors=invoice.dian_errors,
+        accepted_at=invoice.accepted_at,
+    )
+
+
 def _payment_detail(db: DbSession, payment: Payment) -> AdminPaymentDetailResponse:
     # Los eventos que quedaron asociados al pago y, ademas, los que no (los de
     # firma invalida nunca se asocian: no se reconsultan) pero nombran en su
@@ -307,7 +359,8 @@ def _payment_detail(db: DbSession, payment: Payment) -> AdminPaymentDetailRespon
     [response] = admin_payment_responses(db, [payment])
     return AdminPaymentDetailResponse(
         payment=response,
-        invoice=InvoiceResponse.model_validate(invoice) if invoice is not None else None,
+        invoice=_invoice_response(invoice) if invoice is not None else None,
+        invoice_issuer_enabled=_issuer().enabled,
         events=[
             PaymentEventResponse(
                 id=e.id,
@@ -475,3 +528,117 @@ def record_refund(
     )
     db.commit()
     return _payment_detail(db, payment)
+
+
+def _invoice_for_action(db: DbSession, payment_id: UUID) -> tuple[Payment, Invoice]:
+    payment = _get_payment(db, payment_id)
+    invoice = db.scalar(
+        select(Invoice).where(Invoice.payment_id == payment.id).with_for_update()
+    )
+    if invoice is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Este pago no tiene factura"
+        )
+    return payment, invoice
+
+
+def _issuer_or_503() -> InvoiceIssuer:
+    issuer = _issuer()
+    if not issuer.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="La emisión de facturas está apagada (INVOICE_ISSUER)",
+        )
+    return issuer
+
+
+@router.post("/payments/{payment_id}/invoice/retry", response_model=AdminPaymentDetailResponse)
+def retry_invoice(
+    payment_id: UUID,
+    payload: InvoiceActionRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> AdminPaymentDetailResponse:
+    """Reintenta la emision de una factura pendiente, en envio o fallida
+    (§3.17, "Paso 5.4", puntos 3 y 13), y la intenta enseguida.
+
+    Una fallida que nunca llego a Siigo se vuelve a preparar, para tomar los
+    datos de facturacion corregidos. Deja fila en la bitacora, con el motivo,
+    en la misma transaccion que la deja lista; el intento va despues.
+    """
+    issuer = _issuer_or_503()
+    payment, invoice = _invoice_for_action(db, payment_id)
+    before = {"status": invoice.status, "errors": invoice.last_error_codes}
+    try:
+        invoices.reset_for_retry(invoice)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    audit.record(
+        db,
+        admin,
+        action="invoice.retry",
+        target_type="payment",
+        target_id=payment.id,
+        before=before,
+        after={"status": invoice.status},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    report = invoices.run_emission(
+        db, issuer, exchange_rates.get_rate_sources(), datetime.now(UTC), payment_id=payment.id
+    )
+    if report.stopped:
+        logger.warning("Reintento de la factura del pago %s: %s", payment.id, report.stopped)
+    return _payment_detail(db, _get_payment(db, payment_id))
+
+
+@router.post("/payments/{payment_id}/invoice/refresh", response_model=AdminPaymentDetailResponse)
+def refresh_invoice(
+    payment_id: UUID,
+    payload: InvoiceActionRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> AdminPaymentDetailResponse:
+    """Vuelve a consultar en Siigo una factura emitida o rechazada: por
+    ejemplo, despues de corregirla y reenviarla a la DIAN desde Siigo Nube."""
+    issuer = _issuer_or_503()
+    payment, invoice = _invoice_for_action(db, payment_id)
+    if invoice.status not in invoices.REFRESHABLE or invoice.provider_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se reconsulta una factura emitida o rechazada por la DIAN",
+        )
+    before = {"status": invoice.status, "stamp_status": invoice.stamp_status}
+    reason = payload.reason.strip()
+    ip = client_ip(request)
+    try:
+        state = invoices.refresh(db, issuer, invoice, datetime.now(UTC))
+    except IssuerMisconfigured as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Siigo no acepta la configuración: {exc}",
+        ) from None
+    except IssuerError as exc:
+        db.rollback()
+        logger.warning("No se pudo reconsultar la factura del pago %s", payment.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Siigo no respondió. Intenta de nuevo en unos minutos.",
+        ) from exc
+    audit.record(
+        db,
+        admin,
+        action="invoice.refresh",
+        target_type="payment",
+        target_id=payment.id,
+        before=before,
+        after={"status": state, "stamp_status": invoice.stamp_status},
+        reason=reason,
+        ip=ip,
+    )
+    db.commit()
+    return _payment_detail(db, _get_payment(db, payment_id))

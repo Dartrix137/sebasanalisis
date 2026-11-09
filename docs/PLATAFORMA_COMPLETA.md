@@ -956,6 +956,91 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 14. **Tests.** `SiigoIssuer` sobre un transporte HTTP simulado (`tests/api/siigo_sandbox.py`, como el de Tipster Page): token, `Partner-Id`, `Idempotency-Key` en el reintento, timeout, errores pasajeros contra errores de configuración, freno, `Rejected`, total que no cuadra y fecha. `fake` en Playwright. Puro: el cálculo del precio con IVA y la búsqueda de la TRM por vigencia.
 15. **Prueba real.** En la empresa de pruebas que da soporte de Siigo: una factura de un pago en euros, aceptada, vista en Siigo Nube y en el admin; una rechazada a propósito; una nota crédito. Después, la prueba en producción del 5.6.
 
+*Cómo va la construcción (rama `fase-5-siigo-emision`):*
+
+- **Entrega 1, tasas de cambio (2026-11-09).**
+  - `billing/exchange_rates.py` (puro) lee la TRM de datos.gov.co y el XML del BCE, y elige la tasa del día del pago.
+    - **TRM**: la fila cuya vigencia cubre el día.
+    - **BCE**: la del día. Un sábado o domingo usa la del último día hábil. Un día hábil sin tasa espera, salvo que ya haya salido un día posterior (día de cierre).
+    - Una tasa anterior de más de 7 días es un error de la fuente.
+  - Tabla `exchange_rates` (migración `c4faf46696b1`): par, vigencia, tasa en `Numeric`, fuente y hora de la consulta. Una tasa guardada no se reemplaza.
+  - `core/exchange_rates.py` usa lo guardado y consulta solo lo que falta. Un sábado no se fía de lo guardado si falta el viernes.
+  - `DATOS_GOV_APP_TOKEN` (opcional) va solo en la cabecera `X-App-Token` de las peticiones a datos.gov.co, nunca al BCE. Si datos.gov.co lo rechaza, la TRM se consulta sin token y queda un aviso en el log. El valor que puso el usuario el 2026-11-09 era una API key (identificador y secreto, para autenticación Basic) y no un token de aplicación: datos.gov.co lo rechaza como token.
+  - Consulta real del 2026-11-09: 32 EUR pagados el viernes 6 de noviembre son 115.339,27 COP (TRM 3.228,26; EUR/USD 1,1165).
+- **Entrega 2, datos de facturación del comprador (2026-11-09).**
+  - `billing/places.py` (puro): la lista de ciudades de Siigo en `billing/data/siigo_cities.json`, generada con `scripts/siigo_cities_from_xlsx.py` desde el archivo público (decidido por el usuario el 2026-11-09). Colombia primero, y la ciudad se busca por el trío (país, departamento, ciudad).
+  - `billing/billing_profile.py` (puro): tipos de documento por país, normalización y validación con las reglas de Siigo. Los nombres van hasta 50 caracteres, el límite del contacto en Siigo.
+  - Tabla `billing_profiles` (migración `750301b44179`): una fila por cuenta, que se borra con ella.
+  - API:
+    - `GET` y `PUT /billing/profile`. Un dato inválido responde 422 con `detail.code = invalid_billing_profile` y un error por campo.
+    - `GET /billing/places/countries`: los países, con sus tipos de documento.
+    - `GET /billing/places/cities?country=`: las ciudades de un país.
+  - **`POST /billing/subscriptions` no abre un pago sin datos de facturación** (409 `billing_profile_required`).
+  - La exportación de la cuenta (`GET /auth/me/export`) los incluye.
+  - Frontend:
+    - `components/billing/BillingProfileForm.tsx`, en `/planes/pagar` (bloque "Datos de tu factura", antes del medio de pago) y en "Mi cuenta" ("Datos de facturación").
+    - Fuera de Colombia, el formulario dice que, si la ciudad no está en la lista, se elija la más cercana y se escriba la real en la dirección. Es provisional hasta que responda soporte de Siigo.
+  - Tests: los de la parte pura, `tests/api/test_billing_profile.py` y `e2e/billing-profile.spec.ts`. Los tests que pagan crean los datos de facturación por defecto (`_cuenta` en la API y `registerViaApi` en Playwright).
+- **Entrega 3, el emisor de Siigo (2026-11-09).**
+  - `invoicing/`: la interfaz `InvoiceIssuer` (`base.py`), el emisor de Siigo (`siigo.py`) y uno simulado (`fake.py`), elegidos por `INVOICE_ISSUER` (`none` por defecto).
+  - `siigo.py`:
+    - El token va en memoria y se renueva antes de vencer o una vez ante un 401.
+    - Entre peticiones espera `SIIGO_MIN_INTERVAL_SECONDS`.
+    - Ante un 429 con una espera de hasta 30 s, espera y reintenta una vez. Con una espera más larga, queda para otra corrida.
+    - El tercero se busca por su documento y, si no está, se crea. La factura sale con `Idempotency-Key`, `stamp` y `mail` en `true`, sin `currency` ni impuestos.
+    - Al log van solo los códigos de error de Siigo, nunca sus mensajes: pueden nombrar el documento del comprador.
+  - `billing/invoice_document.py` (puro): la llave de idempotencia (el id en base 36, 25 caracteres), el monto en pesos, el texto de `observations` y la clasificación de los errores (pasajero, de configuración o de datos).
+  - Migración `a9ce7406f0b4`: lo congelado (llave, monto en pesos, tasas con su día y su fuente, textos, copia del comprador) y la emisión (estado ante la DIAN, CUFE, intentos, último error, errores de la DIAN). `status` queda con su CHECK de seis estados.
+  - `core/invoices.py`:
+    - `prepare` congela; si falta algo, deja el motivo (`billing_profile_missing`, `rates_pending`, `rates_unavailable` o `payment_not_approved`).
+    - `run_emission` emite y reconsulta, con el freno ante un error de configuración. Toma cada factura con `SELECT ... FOR UPDATE SKIP LOCKED` y la deja en `sending` durante 10 minutos, para que dos corridas no la manden a la vez.
+    - Hasta 8 intentos pasajeros, con espera creciente.
+    - Si el total de Siigo no cuadra, la factura queda `failed`.
+  - **Dónde corre**:
+    - Como tarea de fondo después de cada pago aprobado (`queue_payment_emails`, en los cuatro caminos que aprueban).
+    - En el job de cada hora: `scripts/run_renewals.py` sale con 1 si la emisión se frenó por configuración.
+  - **Cambio sobre el punto 10**: la API no comprueba la configuración contra Siigo al arrancar, porque si Siigo está caído la API tiene que arrancar igual. Al arrancar solo exige las variables. Contra Siigo comprueba antes de emitir (`check_ready`, cada 6 horas): que el tipo de comprobante sea de factura electrónica y esté activo, y que existan la forma de pago y el vendedor.
+  - `scripts/siigo_catalogs.py`: lista los catálogos de la cuenta para elegir los ids. Solo lee.
+  - Tests:
+    - `tests/api/siigo_sandbox.py`: el emisor de verdad sobre un Siigo simulado.
+    - `tests/api/test_invoice_emission.py`, 18 casos: el caso feliz con el cuerpo exacto, el tercero reutilizado, la espera por tasas y por datos, el tiempo agotado con la misma llave, el 429 corto y el largo, el error de datos, el freno, el tipo de comprobante no electrónico, el total que no cuadra, el tope de intentos, el token renovado, el borrador confirmado, la rechazada por la DIAN, el documento fuera del log y la fecha de envío con la TRM del pago.
+    - Los tests fijan `INVOICE_ISSUER=none`, aunque el `.env` local tenga las credenciales.
+- **Prueba real en la empresa de pruebas (2026-11-09, autorizada por el usuario).**
+  - Se creó el producto `SEBASSUSC` ("Suscripción Sebasanálisis": servicio, excluido de IVA, grupo de inventario 1501 "Servicios"). Se emitió una factura de 32 EUR a un cliente inventado, con las tasas reales del día (TRM 3.237,83 del 7 de noviembre y EUR/USD 1,1193 del 9): 115.971,30 COP.
+  - **Lo que funcionó:**
+    - Siigo creó el tercero **sin teléfono** (le puso uno en ceros) y con tildes y la ñ en el nombre ("Prueba Ñandú Gómez Peña").
+    - Lo guardó como cédula de ciudadanía (`13`), persona natural y `R-99-PN`.
+    - El total de Siigo cuadró al centavo con el nuestro.
+    - La misma `Idempotency-Key` devolvió la misma factura, sin duplicarla.
+    - El PDF (`GET /v1/invoices/{id}/pdf`) trae las observaciones completas al pie: la exclusión del IVA, el valor en euros, las dos tasas con su fecha y su fuente, y la referencia del pago.
+  - **Lo que hay que resolver:**
+    - **El PDF rotula el documento del cliente como "NIT 9.992.429.418-5"**, con un dígito de verificación que Siigo calcula solo (`check_digit` "5"), aunque el tercero quedó como cédula. Puede ser solo la plantilla del PDF. Se le pregunta a soporte de Siigo y a la contadora.
+    - **El cuadro de totales no trae la línea "IVA (0 %)"** que pidió la contadora: solo "Total Bruto" y "Total a Pagar". Se configura en la plantilla de Siigo Nube, o se pregunta a soporte.
+    - **La DIAN de la empresa de pruebas la rechazó** (`stamp.status` "Rejected") sin motivos en `stamp/errors`: "Check the invoice errors and send it again from Siigo Nube". La empresa de pruebas es compartida, y su resolución de facturación no es la nuestra. Por eso Siigo no mandó el correo (`mail.status` "not_sent"). La aceptación se prueba con la cuenta de la empresa.
+    - **Estados intermedios no documentados:** al crearla, `stamp.status` fue "Sending" y `mail.status` "process_of_sending". El emisor trata cualquier estado distinto de "Accepted" o "Rejected" como emitida que espera a la DIAN, y la vuelve a consultar.
+  - **Tipos de comprobante:**
+    - El 28006 ("Factura de Venta", electrónica, sin centro de costo) funcionó.
+    - El 27860 ("Factura electrónica de venta", con centro de costo) respondió `documents_service`, "Your request could not be completed with the data you submitted", con y sin el centro de costo 1028. No se insistió, para no sumar errores al bloqueo del 80 %. La causa queda para soporte de Siigo.
+  - **Cambios por la prueba:**
+    - `documents_service` deja de tratarse como pasajero: llegó por un dato, no por una caída, así que la factura queda `failed` y no se reintenta sola.
+    - Se agregó `SIIGO_COST_CENTER_ID` (opcional), que va en la factura si está puesto. `check_ready` lo exige si el tipo de comprobante maneja centro de costo, como dice la documentación ("obligatorio según la configuración del comprobante"); la prueba no lo confirmó.
+- **Entrega 4, el admin (2026-11-09).**
+  - **El detalle de un pago** (`/admin/pagos`, sección "Factura electrónica") muestra:
+    - el estado, el número de Siigo, la fecha de emisión y el CUFE;
+    - el valor en pesos, la TRM y la tasa EUR/USD con su día;
+    - a nombre de quién va (la copia congelada);
+    - el estado y el correo según Siigo, los intentos y el próximo intento;
+    - el motivo de espera, el último error con sus códigos y los motivos de la DIAN.
+
+    Si la emisión está apagada, lo dice ("Emisión apagada") y no ofrece acciones.
+  - **Dos acciones con motivo y fila en la bitácora:**
+    - **"Reintentar la emisión"** (`POST /admin/payments/:id/invoice/retry`), sobre una factura pendiente, en envío o fallida. Una fallida que nunca llegó a Siigo se vuelve a preparar, con los datos de facturación actuales de la cuenta. Una en `sending` conserva lo congelado, porque la llave devuelve la que Siigo ya creó. La bitácora se escribe en la misma transacción que la deja lista; el intento va enseguida y su resultado se ve en el detalle.
+    - **"Reconsultar en Siigo"** (`POST /admin/payments/:id/invoice/refresh`), sobre una emitida o rechazada: por ejemplo, después de corregirla y reenviarla desde Siigo Nube. El cambio y su fila de bitácora van en la misma transacción.
+  - **La lista de pagos** trae `invoice_status`, y marca las facturas fallidas o rechazadas.
+  - Tests: cinco casos de admin en `tests/api/test_invoice_emission.py` (lo que muestra, reintentar con los datos corregidos, lo que no se reintenta ni se reconsulta, la rechazada corregida en Siigo Nube, la emisión apagada), y las dos rutas nuevas en la prueba de permisos del admin.
+  - Playwright corre con `INVOICE_ISSUER=none` (`e2e/start-api.mjs`): emitir pediría las tasas reales a datos.gov.co y al BCE. `e2e/admin-billing.spec.ts` ve la factura pendiente, con la emisión apagada y sin acciones.
+- **Faltan**: la nota crédito (punto 12, espera a la contadora) y la prueba con la cuenta de la empresa en Siigo (punto 15).
+
 *Lo que hay que pedir o decidir para construirlo:*
 
 | Quién | Qué |

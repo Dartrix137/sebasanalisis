@@ -392,6 +392,11 @@
               }
             ]
           },
+          "invoice_issuer_enabled": {
+            "default": false,
+            "title": "Invoice Issuer Enabled",
+            "type": "boolean"
+          },
           "payment": {
             "$ref": "#/components/schemas/AdminPaymentResponse"
           },
@@ -406,6 +411,7 @@
         "required": [
           "payment",
           "invoice",
+          "invoice_issuer_enabled",
           "events",
           "refunds",
           "audit"
@@ -479,6 +485,16 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "invoice_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvoiceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "kind": {
             "$ref": "#/components/schemas/PaymentKind"
@@ -635,7 +651,8 @@
           "user_email",
           "reversed_at",
           "reversal_note",
-          "refunded_cents"
+          "refunded_cents",
+          "invoice_status"
         ],
         "title": "AdminPaymentResponse",
         "type": "object"
@@ -1740,6 +1757,148 @@
         "title": "BillingAvailabilityResponse",
         "type": "object"
       },
+      "BillingIdType": {
+        "description": "Los codigos de documento de Siigo (`billing/billing_profile.IdType`).",
+        "enum": [
+          "13",
+          "22",
+          "50",
+          "41",
+          "42"
+        ],
+        "title": "BillingIdType",
+        "type": "string"
+      },
+      "BillingProfileRequest": {
+        "description": "PUT /billing/profile. El servidor normaliza y valida con las reglas de\nSiigo; los topes de aqui solo frenan un cuerpo desmedido.",
+        "properties": {
+          "address": {
+            "maxLength": 600,
+            "title": "Address",
+            "type": "string"
+          },
+          "city_code": {
+            "maxLength": 16,
+            "title": "City Code",
+            "type": "string"
+          },
+          "country_code": {
+            "maxLength": 8,
+            "title": "Country Code",
+            "type": "string"
+          },
+          "first_names": {
+            "maxLength": 200,
+            "title": "First Names",
+            "type": "string"
+          },
+          "id_number": {
+            "maxLength": 60,
+            "title": "Id Number",
+            "type": "string"
+          },
+          "id_type": {
+            "maxLength": 4,
+            "title": "Id Type",
+            "type": "string"
+          },
+          "last_names": {
+            "maxLength": 200,
+            "title": "Last Names",
+            "type": "string"
+          },
+          "state_code": {
+            "maxLength": 16,
+            "title": "State Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_names",
+          "last_names",
+          "country_code",
+          "id_type",
+          "id_number",
+          "address",
+          "state_code",
+          "city_code"
+        ],
+        "title": "BillingProfileRequest",
+        "type": "object"
+      },
+      "BillingProfileResponse": {
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "city_code": {
+            "title": "City Code",
+            "type": "string"
+          },
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "country_code": {
+            "title": "Country Code",
+            "type": "string"
+          },
+          "first_names": {
+            "title": "First Names",
+            "type": "string"
+          },
+          "id_number": {
+            "title": "Id Number",
+            "type": "string"
+          },
+          "id_type": {
+            "$ref": "#/components/schemas/BillingIdType"
+          },
+          "id_type_name": {
+            "title": "Id Type Name",
+            "type": "string"
+          },
+          "last_names": {
+            "title": "Last Names",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "state_code": {
+            "title": "State Code",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_names",
+          "last_names",
+          "country_code",
+          "country",
+          "id_type",
+          "id_type_name",
+          "id_number",
+          "address",
+          "state_code",
+          "state",
+          "city_code",
+          "city",
+          "updated_at"
+        ],
+        "title": "BillingProfileResponse",
+        "type": "object"
+      },
       "BotCheckConfigResponse": {
         "description": "La llave publica del widget contra bots, o null si esta apagado.",
         "properties": {
@@ -2047,6 +2206,34 @@
         "title": "CheckoutMethodResponse",
         "type": "object"
       },
+      "CityResponse": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "city_code": {
+            "title": "City Code",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "state_code": {
+            "title": "State Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_code",
+          "state",
+          "city_code",
+          "city"
+        ],
+        "title": "CityResponse",
+        "type": "object"
+      },
       "Comparison": {
         "description": "Un indicador de flujo en el mes en curso y en el mismo tramo del anterior.",
         "properties": {
@@ -2104,6 +2291,37 @@
           "current"
         ],
         "title": "ConsentResponse",
+        "type": "object"
+      },
+      "CountryResponse": {
+        "description": "Un pais de la lista de Siigo, con los tipos de documento que admite.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "default_id_type": {
+            "$ref": "#/components/schemas/BillingIdType"
+          },
+          "id_types": {
+            "items": {
+              "$ref": "#/components/schemas/IdTypeOption"
+            },
+            "title": "Id Types",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "id_types",
+          "default_id_type"
+        ],
+        "title": "CountryResponse",
         "type": "object"
       },
       "CouponDuration": {
@@ -2751,6 +2969,16 @@
           "account": {
             "$ref": "#/components/schemas/UserResponse"
           },
+          "billing_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BillingProfileResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "consents": {
             "items": {
               "$ref": "#/components/schemas/ConsentResponse"
@@ -2794,7 +3022,8 @@
           "sessions",
           "consents",
           "subscription",
-          "payments"
+          "payments",
+          "billing_profile"
         ],
         "title": "ExportResponse",
         "type": "object"
@@ -3335,34 +3564,355 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "InvoiceResponse": {
-        "description": "La factura electronica de un pago aprobado (§3.17; paso 5.2).",
+      "IdTypeOption": {
         "properties": {
+          "code": {
+            "$ref": "#/components/schemas/BillingIdType"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "IdTypeOption",
+        "type": "object"
+      },
+      "InvoiceActionRequest": {
+        "description": "POST /admin/payments/:id/invoice/retry y /refresh.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "InvoiceActionRequest",
+        "type": "object"
+      },
+      "InvoiceResponse": {
+        "description": "La factura electronica de un pago aprobado (§3.17; pasos 5.2 y 5.4).",
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "buyer_id_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Id Number"
+          },
+          "buyer_id_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Id Type"
+          },
+          "buyer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Name"
+          },
+          "cop_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cop Cents"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "cufe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cufe"
+          },
+          "dian_errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dian Errors"
+          },
+          "eur_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Usd"
+          },
+          "eur_usd_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Usd Date"
+          },
+          "eur_usd_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eur Usd Source"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "last_error_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Codes"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "mail_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Status"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
           },
           "operation_date": {
             "format": "date",
             "title": "Operation Date",
             "type": "string"
           },
+          "prepared_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared At"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "stamp_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stamp Status"
+          },
           "status": {
             "$ref": "#/components/schemas/InvoiceStatus"
+          },
+          "usd_cop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Cop"
+          },
+          "usd_cop_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Cop Date"
+          },
+          "usd_cop_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Cop Source"
+          },
+          "waiting_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Reason"
           }
         },
         "required": [
           "status",
           "operation_date",
-          "created_at"
+          "created_at",
+          "waiting_reason",
+          "attempts",
+          "next_attempt_at",
+          "prepared_at",
+          "cop_cents",
+          "eur_usd",
+          "eur_usd_date",
+          "eur_usd_source",
+          "usd_cop",
+          "usd_cop_date",
+          "usd_cop_source",
+          "buyer_name",
+          "buyer_id_type",
+          "buyer_id_number",
+          "issue_date",
+          "provider_name",
+          "stamp_status",
+          "cufe",
+          "mail_status",
+          "last_error_codes",
+          "last_error_message",
+          "dian_errors",
+          "accepted_at"
         ],
         "title": "InvoiceResponse",
         "type": "object"
       },
       "InvoiceStatus": {
+        "description": "Los estados de la factura (`core/invoices.py`; §3.17, \"Paso 5.4\", punto 3).",
         "enum": [
-          "pending"
+          "pending",
+          "sending",
+          "issued",
+          "accepted",
+          "rejected",
+          "failed"
         ],
         "title": "InvoiceStatus",
         "type": "string"
@@ -8177,6 +8727,124 @@
         ]
       }
     },
+    "/admin/payments/{payment_id}/invoice/refresh": {
+      "post": {
+        "description": "Vuelve a consultar en Siigo una factura emitida o rechazada: por\nejemplo, despues de corregirla y reenviarla a la DIAN desde Siigo Nube.",
+        "operationId": "refresh_invoice_admin_payments__payment_id__invoice_refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Refresh Invoice",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}/invoice/retry": {
+      "post": {
+        "description": "Reintenta la emision de una factura pendiente, en envio o fallida\n(§3.17, \"Paso 5.4\", puntos 3 y 13), y la intenta enseguida.\n\nUna fallida que nunca llego a Siigo se vuelve a preparar, para tomar los\ndatos de facturacion corregidos. Deja fila en la bitacora, con el motivo,\nen la misma transaccion que la deja lista; el intento va despues.",
+        "operationId": "retry_invoice_admin_payments__payment_id__invoice_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retry Invoice",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/payments/{payment_id}/refunds": {
       "post": {
         "description": "Registra un reembolso ya hecho en el panel del proveedor. No mueve el\npago ni el acceso: si ademas hay que quitar el acceso, se cancela la\nsuscripcion de inmediato.",
@@ -10561,6 +11229,171 @@
           }
         ],
         "summary": "Get Payment",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/places/cities": {
+      "get": {
+        "description": "Las ciudades de un pais en la lista de Siigo, por departamento y nombre.",
+        "operationId": "list_cities_billing_places_cities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "country",
+            "required": true,
+            "schema": {
+              "maxLength": 4,
+              "minLength": 2,
+              "title": "Country",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CityResponse"
+                  },
+                  "title": "Response List Cities Billing Places Cities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cities",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/places/countries": {
+      "get": {
+        "description": "Los paises de la lista de Siigo (Colombia primero), con los tipos de\ndocumento que admite cada uno.",
+        "operationId": "list_countries_billing_places_countries_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CountryResponse"
+                  },
+                  "title": "Response List Countries Billing Places Countries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Countries",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/profile": {
+      "get": {
+        "description": "Los datos de facturacion de la cuenta, o null si todavia no los dio.",
+        "operationId": "get_billing_profile_billing_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BillingProfileResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Billing Profile Billing Profile Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Billing Profile",
+        "tags": [
+          "billing"
+        ]
+      },
+      "put": {
+        "description": "Guarda los datos de facturacion de la cuenta (crea o reemplaza).\n\nLos valida con las reglas de Siigo (`billing/billing_profile`). Si algo no\nvale, responde 422 con `detail.code = \"invalid_billing_profile\"` y la lista\nde campos en `detail.errors`. Cambiarlos no toca ninguna factura ya\nemitida: cada factura guarda su propia copia.",
+        "operationId": "put_billing_profile_billing_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Billing Profile",
         "tags": [
           "billing"
         ]

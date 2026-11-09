@@ -12,13 +12,18 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PaymentsCard, SubscriptionCard } from "@/components/account/SubscriptionCards";
+import {
+  BillingProfileForm,
+  BillingProfileSummary,
+} from "@/components/billing/BillingProfileForm";
 import { AppHeader } from "@/components/AppHeader";
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, SuccessBox } from "@/components/AuthShell";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, CardHeader, ErrorBox, Field, PasswordField } from "@/components/ui";
-import { ApiError, authApi, legalApi } from "@/lib/api-client";
+import { ApiError, authApi, billingApi, legalApi } from "@/lib/api-client";
 import { formatLegalDate, legalPath } from "@/lib/legal";
 import { useSession } from "@/lib/session";
+import type { BillingProfileResponse } from "@/lib/types/billing-profile";
 import type { ConsentResponse } from "@/lib/types/legal";
 import { useResendVerification } from "@/lib/useResendVerification";
 
@@ -41,6 +46,7 @@ const SECCIONES: readonly [string, string][] = [
   ["perfil", "Perfil"],
   ["suscripcion", "Suscripción"],
   ["pagos", "Pagos"],
+  ["facturacion", "Facturación"],
   ["correo", "Correo"],
   ["contrasena", "Contraseña"],
   ["documentos", "Documentos"],
@@ -95,6 +101,9 @@ export default function AccountPage() {
           </div>
           <div id="pagos" className="scroll-mt-4 py-6">
             <PaymentsCard />
+          </div>
+          <div id="facturacion" className="scroll-mt-4 py-6">
+            <BillingCard />
           </div>
           <div id="correo" className="scroll-mt-4 py-6">
             <EmailCard />
@@ -158,6 +167,81 @@ function ProfileCard() {
           {pending ? "Guardando…" : "Guardar nombre"}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+/**
+ * Los datos de la factura electrónica (§3.17, "Paso 5.4"). Se dan al pagar por
+ * primera vez y se cambian aquí; una factura ya emitida no cambia.
+ */
+function BillingCard() {
+  const { withToken } = useSession();
+  // `undefined` mientras carga; `null` si la cuenta todavía no los dio.
+  const [profile, setProfile] = useState<BillingProfileResponse | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    withToken((t) => billingApi.billingProfile(t))
+      .then((p) => {
+        if (!cancelled) setProfile(p);
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudieron cargar tus datos de facturación.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [withToken]);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Datos de facturación"
+        subtitle="Tu factura electrónica va a tu nombre, con estos datos. Si los cambias, aplican a las facturas siguientes."
+      />
+      {error ? <ErrorBox message={error} /> : null}
+      {profile === undefined && !error ? <p className="text-sm text-muted">Cargando…</p> : null}
+      {profile !== undefined && (editing || profile === null) ? (
+        profile === null && !editing ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Todavía no los has dado. Te los pedimos al pagar, o puedes darlos ahora.
+            </p>
+            <Button variant="ghost" onClick={() => setEditing(true)}>
+              Agregar mis datos
+            </Button>
+          </div>
+        ) : (
+          <BillingProfileForm
+            profile={profile}
+            onSaved={(next) => {
+              setProfile(next);
+              setEditing(false);
+              setSaved(true);
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        )
+      ) : null}
+      {profile && !editing ? (
+        <div className="space-y-3">
+          {saved ? <SuccessBox message="Datos de facturación guardados." /> : null}
+          <BillingProfileSummary profile={profile} />
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSaved(false);
+              setEditing(true);
+            }}
+          >
+            Cambiar
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

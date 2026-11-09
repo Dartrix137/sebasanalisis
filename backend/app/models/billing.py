@@ -9,9 +9,11 @@ apuntan a un plan o a un cupon son RESTRICT.
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -19,6 +21,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -26,6 +29,7 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, created_at_col, enum_col, uuid_pk
@@ -280,6 +284,10 @@ class SubscriptionPriceChange(Base):
     price_change: Mapped[PriceChange] = relationship()
 
 
+# Deben coincidir con los estados de `core/invoices.py`.
+INVOICE_STATUSES = ("pending", "sending", "issued", "accepted", "rejected", "failed")
+
+
 class Invoice(Base):
     """La factura electronica de un pago aprobado (§3.17; Fase 5, paso 5.2).
 
@@ -288,10 +296,19 @@ class Invoice(Base):
     repetido no deja dos. La emision con Siigo es del paso 5.4; hasta
     entonces ninguna sale de `pending`.
 
-    No guarda datos del comprador: a quien va la factura (consumidor final, o
-    con nombre e identificacion) esta por definir. Es un documento tributario:
-    no se borra al eliminar la cuenta, y por eso la llave al pago es RESTRICT
-    (los pagos tampoco se borran).
+    Desde el paso 5.4 se emite con Siigo (`core/invoices.py`). Antes del primer
+    envio se congela todo lo que lleva: el monto en pesos, las tasas con su dia
+    y su fuente, y una copia de los datos de facturacion del comprador (la
+    factura va a cada comprador). Los reintentos mandan lo mismo, con la misma
+    `idempotency_key`.
+
+    Estados (§3.17, "Paso 5.4", punto 3): `pending` (sin enviar), `sending`
+    (salio y no se sabe el resultado), `issued` (creada en Siigo, esperando a
+    la DIAN), `accepted` (con CUFE), `rejected` (la DIAN la rechazo) y
+    `failed` (Siigo rechazo los datos: no se reintenta sola).
+
+    Es un documento tributario: no se borra al eliminar la cuenta, y por eso la
+    llave al pago es RESTRICT (los pagos tampoco se borran).
     """
 
     __tablename__ = "invoices"
@@ -300,9 +317,129 @@ class Invoice(Base):
     payment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("payments.id", ondelete="RESTRICT"), unique=True, nullable=False
     )
-    # Hoy solo `pending`. Los estados de la emision entran en el paso 5.4.
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(
+        enum_col(*INVOICE_STATUSES, name="invoice_status", length=20), nullable=False
+    )
     # El dia de la aprobacion del pago en hora de Colombia (`billing/fx`),
     # congelado al crear la fila.
     operation_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+
+    # --- Lo congelado antes del primer envio (`prepared_at`) ---
+    prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str | None] = mapped_column(String(30), unique=True)
+    cop_cents: Mapped[int | None] = mapped_column(BigInteger)
+    eur_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    eur_usd_date: Mapped[date | None] = mapped_column(Date)
+    eur_usd_source: Mapped[str | None] = mapped_column(String(200))
+    usd_cop: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    usd_cop_date: Mapped[date | None] = mapped_column(Date)
+    usd_cop_source: Mapped[str | None] = mapped_column(String(200))
+    observations: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(String(500))
+    # Copia de los datos de facturacion del comprador al preparar.
+    buyer_first_names: Mapped[str | None] = mapped_column(String(50))
+    buyer_last_names: Mapped[str | None] = mapped_column(String(50))
+    buyer_id_type: Mapped[str | None] = mapped_column(String(2))
+    buyer_id_number: Mapped[str | None] = mapped_column(String(20))
+    buyer_email: Mapped[str | None] = mapped_column(String(255))
+    buyer_country_code: Mapped[str | None] = mapped_column(String(4))
+    buyer_state_code: Mapped[str | None] = mapped_column(String(10))
+    buyer_city_code: Mapped[str | None] = mapped_column(String(10))
+    buyer_address: Mapped[str | None] = mapped_column(String(256))
+
+    # --- La emision ---
+    # Por que todavia no sale: `billing_profile_missing`, `rates_pending`...
+    waiting_reason: Mapped[str | None] = mapped_column(String(40))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # El dia con el que se mando a Siigo (no puede ser anterior a hoy).
+    issue_date: Mapped[date | None] = mapped_column(Date)
+    provider_id: Mapped[str | None] = mapped_column(String(64))
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_total: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    stamp_status: Mapped[str | None] = mapped_column(String(20))
+    cufe: Mapped[str | None] = mapped_column(String(200))
+    mail_status: Mapped[str | None] = mapped_column(String(20))
+    last_error_codes: Mapped[list[str] | None] = mapped_column(JSONB)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    dian_errors: Mapped[list[str] | None] = mapped_column(JSONB)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+# Deben coincidir con `Pair` de `app.billing.exchange_rates`.
+EXCHANGE_RATE_PAIRS = ("USD/COP", "EUR/USD")
+
+
+class ExchangeRate(Base):
+    """Una tasa de cambio con su vigencia y su fuente (§3.17, "Paso 5.4",
+    punto 5; Fase 5, paso 5.4).
+
+    La TRM (`USD/COP`) sale de datos.gov.co y cubre a veces varios dias (un fin
+    de semana); la del BCE (`EUR/USD`) es de un dia. Se guardan al consultarlas
+    (`core/exchange_rates.py`) y no se editan: una factura congela las suyas, y
+    la tabla deja constancia de donde salieron. Una sola fila por par y dia de
+    inicio.
+    """
+
+    __tablename__ = "exchange_rates"
+    __table_args__ = (
+        UniqueConstraint("pair", "valid_from", name="uq_exchange_rates_pair_valid_from"),
+        CheckConstraint("rate > 0", name="ck_exchange_rates_rate_positive"),
+        CheckConstraint("valid_to >= valid_from", name="ck_exchange_rates_validity"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    pair: Mapped[str] = mapped_column(
+        enum_col(*EXCHANGE_RATE_PAIRS, name="exchange_rate_pair", length=10), nullable=False
+    )
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_to: Mapped[date] = mapped_column(Date, nullable=False)
+    # Numeric, nunca float: la TRM trae 2 decimales y el BCE hasta 5.
+    rate: Mapped[Decimal] = mapped_column(Numeric(20, 10), nullable=False)
+    source: Mapped[str] = mapped_column(String(200), nullable=False)
+    fetched_at: Mapped[datetime] = created_at_col()
+
+
+# Deben coincidir con `IdType` de `app.billing.billing_profile`.
+BILLING_ID_TYPES = ("13", "22", "50", "41", "42")
+
+
+class BillingProfile(Base):
+    """Los datos de facturacion de una cuenta (§3.17, "Paso 5.4", punto 8;
+    Fase 5, paso 5.4).
+
+    Se piden al pagar, no al registrarse, y los valida `billing/billing_profile`.
+    Una fila por cuenta, que se borra con ella (CASCADE). La factura emitida
+    guarda su propia copia: un cambio posterior no altera una factura, y la
+    eliminacion de la cuenta no borra lo que ya se facturo.
+
+    Son datos personales: el documento no va en un log, ni en GlitchTip, ni en
+    una URL.
+    """
+
+    __tablename__ = "billing_profiles"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    first_names: Mapped[str] = mapped_column(String(50), nullable=False)
+    last_names: Mapped[str] = mapped_column(String(50), nullable=False)
+    id_type: Mapped[str] = mapped_column(
+        enum_col(*BILLING_ID_TYPES, name="billing_id_type", length=2), nullable=False
+    )
+    id_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Los codigos de Siigo (`billing/places`), tal como vienen en su lista.
+    country_code: Mapped[str] = mapped_column(String(4), nullable=False)
+    state_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    city_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    address: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

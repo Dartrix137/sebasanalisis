@@ -36,6 +36,9 @@ const env = {
   // Pasarela simulada: una pagina de la propia API con "aprobar" y "rechazar".
   // No cobra nada ni sale a la red.
   PAYMENT_PROVIDER: "fake",
+  // La factura electronica, apagada aunque el .env local tenga las credenciales
+  // de Siigo: emitirla pediria las tasas reales a datos.gov.co y al BCE.
+  INVOICE_ISSUER: "none",
   API_PUBLIC_URL: `http://127.0.0.1:${process.env.E2E_API_PORT}`,
   SEED_ADMIN_EMAIL: "admin-e2e@ejemplo.com",
   SEED_ADMIN_PASSWORD: "clave-del-admin-e2e-789",

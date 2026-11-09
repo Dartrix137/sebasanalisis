@@ -289,6 +289,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/payments/{payment_id}/invoice/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Invoice
+         * @description Vuelve a consultar en Siigo una factura emitida o rechazada: por
+         *     ejemplo, despues de corregirla y reenviarla a la DIAN desde Siigo Nube.
+         */
+        post: operations["refresh_invoice_admin_payments__payment_id__invoice_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/invoice/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Invoice
+         * @description Reintenta la emision de una factura pendiente, en envio o fallida
+         *     (§3.17, "Paso 5.4", puntos 3 y 13), y la intenta enseguida.
+         *
+         *     Una fallida que nunca llego a Siigo se vuelve a preparar, para tomar los
+         *     datos de facturacion corregidos. Deja fila en la bitacora, con el motivo,
+         *     en la misma transaccion que la deja lista; el intento va despues.
+         */
+        post: operations["retry_invoice_admin_payments__payment_id__invoice_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/payments/{payment_id}/refunds": {
         parameters: {
             query?: never;
@@ -1114,6 +1160,76 @@ export interface paths {
          */
         get: operations["get_payment_billing_payments__payment_id__get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/places/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cities
+         * @description Las ciudades de un pais en la lista de Siigo, por departamento y nombre.
+         */
+        get: operations["list_cities_billing_places_cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/places/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Countries
+         * @description Los paises de la lista de Siigo (Colombia primero), con los tipos de
+         *     documento que admite cada uno.
+         */
+        get: operations["list_countries_billing_places_countries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Billing Profile
+         * @description Los datos de facturacion de la cuenta, o null si todavia no los dio.
+         */
+        get: operations["get_billing_profile_billing_profile_get"];
+        /**
+         * Put Billing Profile
+         * @description Guarda los datos de facturacion de la cuenta (crea o reemplaza).
+         *
+         *     Los valida con las reglas de Siigo (`billing/billing_profile`). Si algo no
+         *     vale, responde 422 con `detail.code = "invalid_billing_profile"` y la lista
+         *     de campos en `detail.errors`. Cambiarlos no toca ninguna factura ya
+         *     emitida: cada factura guarda su propia copia.
+         */
+        put: operations["put_billing_profile_billing_profile_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2029,6 +2145,11 @@ export interface components {
             /** Events */
             events: components["schemas"]["PaymentEventResponse"][];
             invoice: components["schemas"]["InvoiceResponse"] | null;
+            /**
+             * Invoice Issuer Enabled
+             * @default false
+             */
+            invoice_issuer_enabled: boolean;
             payment: components["schemas"]["AdminPaymentResponse"];
             /** Refunds */
             refunds: components["schemas"]["PaymentRefundResponse"][];
@@ -2067,6 +2188,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            invoice_status: components["schemas"]["InvoiceStatus"] | null;
             kind: components["schemas"]["PaymentKind"];
             /** Period End */
             period_end: string | null;
@@ -2522,6 +2644,66 @@ export interface components {
             tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
+         * BillingIdType
+         * @description Los codigos de documento de Siigo (`billing/billing_profile.IdType`).
+         * @enum {string}
+         */
+        BillingIdType: "13" | "22" | "50" | "41" | "42";
+        /**
+         * BillingProfileRequest
+         * @description PUT /billing/profile. El servidor normaliza y valida con las reglas de
+         *     Siigo; los topes de aqui solo frenan un cuerpo desmedido.
+         */
+        BillingProfileRequest: {
+            /** Address */
+            address: string;
+            /** City Code */
+            city_code: string;
+            /** Country Code */
+            country_code: string;
+            /** First Names */
+            first_names: string;
+            /** Id Number */
+            id_number: string;
+            /** Id Type */
+            id_type: string;
+            /** Last Names */
+            last_names: string;
+            /** State Code */
+            state_code: string;
+        };
+        /** BillingProfileResponse */
+        BillingProfileResponse: {
+            /** Address */
+            address: string;
+            /** City */
+            city: string;
+            /** City Code */
+            city_code: string;
+            /** Country */
+            country: string;
+            /** Country Code */
+            country_code: string;
+            /** First Names */
+            first_names: string;
+            /** Id Number */
+            id_number: string;
+            id_type: components["schemas"]["BillingIdType"];
+            /** Id Type Name */
+            id_type_name: string;
+            /** Last Names */
+            last_names: string;
+            /** State */
+            state: string;
+            /** State Code */
+            state_code: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * BotCheckConfigResponse
          * @description La llave publica del widget contra bots, o null si esta apagado.
          */
@@ -2648,6 +2830,17 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** CityResponse */
+        CityResponse: {
+            /** City */
+            city: string;
+            /** City Code */
+            city_code: string;
+            /** State */
+            state: string;
+            /** State Code */
+            state_code: string;
+        };
         /**
          * Comparison
          * @description Un indicador de flujo en el mes en curso y en el mismo tramo del anterior.
@@ -2680,6 +2873,19 @@ export interface components {
             title: string;
             /** Version */
             version: number;
+        };
+        /**
+         * CountryResponse
+         * @description Un pais de la lista de Siigo, con los tipos de documento que admite.
+         */
+        CountryResponse: {
+            /** Code */
+            code: string;
+            default_id_type: components["schemas"]["BillingIdType"];
+            /** Id Types */
+            id_types: components["schemas"]["IdTypeOption"][];
+            /** Name */
+            name: string;
         };
         /**
          * CouponDuration
@@ -2948,6 +3154,7 @@ export interface components {
          */
         ExportResponse: {
             account: components["schemas"]["UserResponse"];
+            billing_profile: components["schemas"]["BillingProfileResponse"] | null;
             /** Consents */
             consents: components["schemas"]["ConsentResponse"][];
             /**
@@ -3215,28 +3422,92 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IdTypeOption */
+        IdTypeOption: {
+            code: components["schemas"]["BillingIdType"];
+            /** Name */
+            name: string;
+        };
+        /**
+         * InvoiceActionRequest
+         * @description POST /admin/payments/:id/invoice/retry y /refresh.
+         */
+        InvoiceActionRequest: {
+            /** Reason */
+            reason: string;
+        };
         /**
          * InvoiceResponse
-         * @description La factura electronica de un pago aprobado (§3.17; paso 5.2).
+         * @description La factura electronica de un pago aprobado (§3.17; pasos 5.2 y 5.4).
          */
         InvoiceResponse: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /** Buyer Id Number */
+            buyer_id_number: string | null;
+            /** Buyer Id Type */
+            buyer_id_type: string | null;
+            /** Buyer Name */
+            buyer_name: string | null;
+            /** Cop Cents */
+            cop_cents: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Cufe */
+            cufe: string | null;
+            /** Dian Errors */
+            dian_errors: string[] | null;
+            /** Eur Usd */
+            eur_usd: string | null;
+            /** Eur Usd Date */
+            eur_usd_date: string | null;
+            /** Eur Usd Source */
+            eur_usd_source: string | null;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Last Error Codes */
+            last_error_codes: string[] | null;
+            /** Last Error Message */
+            last_error_message: string | null;
+            /** Mail Status */
+            mail_status: string | null;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
             /**
              * Operation Date
              * Format: date
              */
             operation_date: string;
+            /** Prepared At */
+            prepared_at: string | null;
+            /** Provider Name */
+            provider_name: string | null;
+            /** Stamp Status */
+            stamp_status: string | null;
             status: components["schemas"]["InvoiceStatus"];
+            /** Usd Cop */
+            usd_cop: string | null;
+            /** Usd Cop Date */
+            usd_cop_date: string | null;
+            /** Usd Cop Source */
+            usd_cop_source: string | null;
+            /** Waiting Reason */
+            waiting_reason: string | null;
         };
         /**
          * InvoiceStatus
+         * @description Los estados de la factura (`core/invoices.py`; §3.17, "Paso 5.4", punto 3).
          * @enum {string}
          */
-        InvoiceStatus: "pending";
+        InvoiceStatus: "pending" | "sending" | "issued" | "accepted" | "rejected" | "failed";
         /**
          * LegalDocumentResponse
          * @description Una version publicada, con su texto en Markdown.
@@ -5274,6 +5545,76 @@ export interface operations {
             };
         };
     };
+    refresh_invoice_admin_payments__payment_id__invoice_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_invoice_admin_payments__payment_id__invoice_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_refund_admin_payments__payment_id__refunds_post: {
         parameters: {
             query?: never;
@@ -6613,6 +6954,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_cities_billing_places_cities_get: {
+        parameters: {
+            query: {
+                country: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_countries_billing_places_countries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryResponse"][];
+                };
+            };
+        };
+    };
+    get_billing_profile_billing_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingProfileResponse"] | null;
+                };
+            };
+        };
+    };
+    put_billing_profile_billing_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingProfileResponse"];
                 };
             };
             /** @description Validation Error */

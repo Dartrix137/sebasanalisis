@@ -5,7 +5,8 @@
 Cobra las suscripciones de renovacion automatica cuyo cobro toca, avisa por
 correo antes de cada cobro y antes de cada vencimiento, y deja vencidas las que
 terminaron. Tambien envia los avisos de los traslados de precio y, por tandas,
-los de una version nueva de un documento legal (§6.7). Es idempotente: se puede correr dos veces seguidas, o en paralelo,
+los de una version nueva de un documento legal (§6.7), y emite las facturas
+electronicas que quedaron pendientes (§3.17, "Paso 5.4"). Es idempotente: se puede correr dos veces seguidas, o en paralelo,
 sin cobrar dos veces (ver `app/core/renewals.py`).
 
 Sale con codigo 0 si corrio (o si otra corrida tenia el candado) y con 1 si
@@ -23,11 +24,14 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import get_settings  # noqa: E402
 from app.core.email import get_email_sender, send_safely  # noqa: E402
+from app.core.exchange_rates import get_rate_sources  # noqa: E402
+from app.core.invoices import run_emission  # noqa: E402
 from app.core.legal_notices import send_legal_notices  # noqa: E402
 from app.core.monitoring import init_monitoring  # noqa: E402
 from app.core.price_changes import send_notices as send_price_notices  # noqa: E402
 from app.core.renewals import advisory_lock, run_renewals  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
+from app.invoicing.base import get_invoice_issuer  # noqa: E402
 from app.payments.base import get_payment_provider  # noqa: E402
 
 logger = logging.getLogger("app.renewals")
@@ -52,6 +56,10 @@ def main() -> int:
             # El aviso de una version nueva de los terminos o de la politica de
             # datos, por tandas y con su propio tope diario (§6.7).
             legal = send_legal_notices(db, sender, datetime.now(UTC))
+            # Las facturas que no salieron enseguida (Siigo caido, tasa del dia
+            # sin publicar, error pasajero) y las que esperan a la DIAN.
+            issuer = get_invoice_issuer()
+            emission = run_emission(db, issuer, get_rate_sources(), datetime.now(UTC))
 
     for message in report.emails:
         send_safely(sender, message)
@@ -68,8 +76,11 @@ def main() -> int:
         legal.failed,
         " (quedan para manana: tope diario)" if legal.deferred_by_daily_limit else "",
     )
-    # Un aviso que no salio tambien marca la corrida: sin aviso no se cobra.
-    return 1 if report.errors or report.notices_failed else 0
+    logger.info("Facturas (%s): %s", issuer.describe(), emission.summary())
+    # Un aviso que no salio tambien marca la corrida: sin aviso no se cobra. Una
+    # emision detenida por configuracion, tambien: nadie mas lo va a ver.
+    stopped = emission.stopped is not None and emission.stopped.startswith("config")
+    return 1 if report.errors or report.notices_failed or stopped else 0
 
 
 if __name__ == "__main__":

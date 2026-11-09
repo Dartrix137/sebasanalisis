@@ -4,9 +4,11 @@ from app.models.audit import AdminAuditLog
 from app.models.base import Base
 from app.models.bet import Bet
 from app.models.billing import (
+    BillingProfile,
     Coupon,
     CouponPlan,
     CouponRedemption,
+    ExchangeRate,
     Invoice,
     Plan,
     PriceChange,
@@ -24,10 +26,12 @@ from app.models.user_token import UserToken
 __all__ = [
     "AdminAuditLog",
     "Base",
+    "BillingProfile",
     "Bet",
     "Coupon",
     "CouponPlan",
     "CouponRedemption",
+    "ExchangeRate",
     "Game",
     "GameVariant",
     "GameSession",

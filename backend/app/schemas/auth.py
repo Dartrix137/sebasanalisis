@@ -13,6 +13,7 @@ from app.core.password_policy import PasswordPolicyError, validate_password
 from app.schemas.base import ApiModel
 from app.schemas.bets import BetResponse
 from app.schemas.billing import PaymentResponse, SubscriptionResponse
+from app.schemas.billing_profile import BillingProfileResponse
 from app.schemas.legal import ConsentResponse
 from app.schemas.sessions import SessionResponse
 from app.schemas.spins import SpinResponse
@@ -206,5 +207,7 @@ class ExportResponse(ApiModel):
     subscription: SubscriptionResponse | None = None
     # Todos sus pagos, tambien los que no se completaron.
     payments: list[PaymentResponse]
+    # Los datos de facturacion, o null si nunca los dio.
+    billing_profile: BillingProfileResponse | None = None
 
 

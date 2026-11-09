@@ -64,6 +64,36 @@ class Settings(BaseSettings):
     tspay_auth_bearer: str = ""
     tspay_secret_key: str = ""
 
+    # Tasas de la factura (core/exchange_rates.py). El token de la app en
+    # datos.gov.co es opcional: sin el, la consulta de la TRM va por el limite
+    # compartido por IP. No es un secreto de cobro, pero no va en un log.
+    datos_gov_app_token: str = ""
+
+    # Emision de la factura electronica (invoicing/; §3.17, "Paso 5.4").
+    # `none` la deja apagada: las facturas se quedan `pending`. `fake` es un
+    # emisor simulado, solo para desarrollo y Playwright. `siigo` emite con la
+    # API de Siigo y pide las siete SIIGO_* de abajo menos la URL base.
+    invoice_issuer: Literal["none", "fake", "siigo"] = "none"
+    siigo_api_base_url: str = "https://api.siigo.com"
+    siigo_username: str = ""
+    siigo_access_key: str = ""
+    # El nombre de la aplicacion registrado en Siigo: va en la cabecera
+    # Partner-Id de cada peticion.
+    siigo_partner_id: str = ""
+    # Los ids de la cuenta en Siigo Nube (scripts/siigo_catalogs.py los lista):
+    # el tipo de comprobante de factura electronica, el vendedor, la forma de
+    # pago y el codigo del producto "suscripcion".
+    siigo_document_type_id: int = 0
+    siigo_seller_id: int = 0
+    siigo_payment_type_id: int = 0
+    siigo_product_code: str = ""
+    # El centro de costo, si el tipo de comprobante lo pide (su `cost_center`
+    # en /v1/document-types). 0 = no se manda.
+    siigo_cost_center_id: int = 0
+    # Espera minima entre peticiones a Siigo. La empresa de pruebas no admite
+    # rafagas (10 por minuto): alli conviene 8. En produccion, 100 por minuto.
+    siigo_min_interval_seconds: float = 1.0
+
     # Verificacion contra bots con Cloudflare Turnstile (core/bot_check.py). Van
     # las dos o ninguna; sin ninguna, la verificacion queda apagada.
     turnstile_site_key: str = ""
