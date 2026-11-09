@@ -36,6 +36,8 @@ const ACTION_LABEL: Record<string, string> = {
   "subscription.cancel_at_period_end": "Canceló la renovación al final del período",
   "subscription.cancel_now": "Canceló la suscripción de inmediato",
   "payment.requery": "Reconsultó un pago en la pasarela",
+  "invoice.retry": "Reintentó la emisión de una factura",
+  "invoice.refresh": "Reconsultó una factura en Siigo",
   "payment.refund.record": "Registró un reembolso",
   "user.password.force_reset": "Forzó el restablecimiento de la contraseña",
   "user.verification.resend": "Reenvió el correo de confirmación",
@@ -89,9 +91,40 @@ export function formatCalendarDate(isoDate: string): string {
   });
 }
 
-/** La factura electrónica de un pago (§3.17). La emisión con Siigo es del paso 5.4. */
+/** La factura electrónica de un pago (§3.17, "Paso 5.4", punto 3). */
 export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: "Pendiente de emitir",
+  sending: "Enviándose a Siigo",
+  issued: "Emitida: espera a la DIAN",
+  accepted: "Aceptada por la DIAN",
+  rejected: "Rechazada por la DIAN",
+  failed: "Falló la emisión",
+};
+
+export const INVOICE_STATUS_TONE: Record<InvoiceStatus, "ok" | "off" | "neutral"> = {
+  pending: "neutral",
+  sending: "neutral",
+  issued: "neutral",
+  accepted: "ok",
+  rejected: "off",
+  failed: "off",
+};
+
+/** Por qué una factura todavía no sale (`invoices.waiting_reason`). */
+export const INVOICE_WAITING_LABEL: Record<string, string> = {
+  billing_profile_missing: "Falta: la cuenta no tiene datos de facturación",
+  rates_pending: "Esperando: la tasa del día del pago todavía no está publicada",
+  rates_unavailable: "Esperando: la fuente de las tasas no respondió",
+  payment_not_approved: "No se emite: el pago ya no está aprobado",
+};
+
+/** Los tipos de documento de Siigo (`billing/billing_profile.py`). */
+export const ID_TYPE_LABEL: Record<string, string> = {
+  "13": "Cédula de ciudadanía",
+  "22": "Cédula de extranjería",
+  "50": "NIT de otro país",
+  "41": "Pasaporte",
+  "42": "Documento de identificación extranjero",
 };
 
 /** `{a: 1, b: null}` → `a: 1 · b: —`, para leer un antes/después de un vistazo. */

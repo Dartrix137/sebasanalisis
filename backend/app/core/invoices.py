@@ -452,3 +452,40 @@ def emit_in_background(bind: Engine, payment_id: object) -> None:
 
 def pesos_of(invoice: Invoice) -> Decimal | None:
     return pesos(invoice.cop_cents) if invoice.cop_cents else None
+
+
+# ---------- Acciones del admin (§3.17, "Paso 5.4", punto 13) ----------
+
+#: Desde donde se puede reintentar la emision.
+RETRYABLE = (FAILED, PENDING, SENDING)
+#: Desde donde se puede volver a consultar en el emisor.
+REFRESHABLE = (ISSUED, REJECTED)
+
+
+def reset_for_retry(invoice: Invoice) -> None:
+    """Deja la factura lista para otro intento ya. NO hace commit.
+
+    Una fallida que nunca llego al emisor (sin `provider_id`) se vuelve a
+    preparar: asi toma los datos de facturacion corregidos. Una que pudo
+    llegar (`sending`) conserva lo congelado, porque el reintento manda la
+    misma llave y el emisor devuelve la que ya creo con esos datos.
+    """
+    if invoice.status not in RETRYABLE:
+        raise ValueError(f"Una factura {invoice.status} no se reintenta")
+    if invoice.status == FAILED and invoice.provider_id is None:
+        invoice.prepared_at = None
+    invoice.status = PENDING
+    invoice.attempts = 0
+    invoice.next_attempt_at = None
+    invoice.waiting_reason = None
+    invoice.last_error_codes = None
+    invoice.last_error_message = None
+
+
+def refresh(db: Session, issuer: InvoiceIssuer, invoice: Invoice, now: datetime) -> str:
+    """Vuelve a consultar en el emisor una factura emitida o rechazada (por
+    ejemplo, despues de corregirla en Siigo Nube). NO hace commit: el admin
+    deja su fila de bitacora en la misma transaccion."""
+    if invoice.status not in REFRESHABLE or invoice.provider_id is None:
+        raise ValueError(f"Una factura {invoice.status} no se reconsulta")
+    return _apply(db, issuer, invoice, issuer.fetch(invoice.provider_id), now)

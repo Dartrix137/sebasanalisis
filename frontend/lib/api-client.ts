@@ -17,6 +17,7 @@ import type {
   AdminUserListResponse,
   AuditLogListResponse,
   ForcePasswordResetRequest,
+  InvoiceActionRequest,
   RecordRefundRequest,
   RequeryPaymentRequest,
   SubscriptionFilter,
@@ -988,6 +989,22 @@ export const adminApi = {
   /** Vuelve a preguntarle a la pasarela. Es la misma función del webhook. */
   requeryPayment: (token: string, paymentId: UUID, body: RequeryPaymentRequest) =>
     apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/requery`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Reintenta la emisión de la factura de un pago (pendiente, en envío o fallida). */
+  retryInvoice: (token: string, paymentId: UUID, body: InvoiceActionRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/invoice/retry`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Vuelve a consultar en Siigo una factura emitida o rechazada. */
+  refreshInvoice: (token: string, paymentId: UUID, body: InvoiceActionRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/invoice/refresh`, {
       method: "POST",
       body: JSON.stringify(body),
       token,

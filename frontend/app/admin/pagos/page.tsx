@@ -20,7 +20,7 @@ import { SelectField } from "@/components/admin/SelectField";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge, Button, Card, Checkbox, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
-import { formatDateTime } from "@/lib/admin";
+import { INVOICE_STATUS_LABEL, formatDateTime } from "@/lib/admin";
 import { PAYMENT_KIND_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/lib/billing";
 import { formatMoney } from "@/lib/money";
 import { useSession } from "@/lib/session";
@@ -201,6 +201,9 @@ export default function AdminPaymentsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       {p.reversed_at ? <Badge>Anulado después</Badge> : null}
                       {p.refunded_cents > 0 ? <Badge>Con reembolso</Badge> : null}
+                      {p.invoice_status === "failed" || p.invoice_status === "rejected" ? (
+                        <Badge tone="off">{`Factura: ${INVOICE_STATUS_LABEL[p.invoice_status]}`}</Badge>
+                      ) : null}
                       <Badge tone={PAYMENT_STATUS_TONE[p.status]}>
                         {PAYMENT_STATUS_LABEL[p.status]}
                       </Badge>

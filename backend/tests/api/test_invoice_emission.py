@@ -295,3 +295,85 @@ def test_un_comprobante_con_centro_de_costo_lo_pide_en_la_configuracion(
     assert _factura(db, pago.id).status == "accepted"
     [crear] = siigo.pedidos_a("POST", "/v1/invoices")
     assert siigo.cuerpo(crear)["cost_center"] == 1028
+
+
+# ---------- El admin (§3.17, "Paso 5.4", punto 13) ----------
+
+MOTIVO = "El cliente corrigió su documento"
+
+
+def _detalle(client, admin_token, pago):
+    from tests.api.conftest import auth
+
+    r = client.get(f"/admin/payments/{pago.id}", headers=auth(admin_token))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _accion(client, admin_token, pago, accion: str, motivo: str = MOTIVO):
+    from tests.api.conftest import auth
+
+    return client.post(
+        f"/admin/payments/{pago.id}/invoice/{accion}", json={"reason": motivo},
+        headers=auth(admin_token),
+    )
+
+
+def test_el_admin_ve_la_factura_emitida_con_sus_tasas(client, db, tipster, siigo, admin_token) -> None:
+    pago, _ = _pago_aprobado(client, db, tipster)
+    detalle = _detalle(client, admin_token, pago)
+    factura = detalle["invoice"]
+    assert detalle["invoice_issuer_enabled"] is True
+    assert factura["status"] == "accepted" and factura["provider_name"] == "FV-4-1"
+    assert factura["cufe"] and factura["cop_cents"] == CENTAVOS
+    assert (factura["usd_cop"], factura["eur_usd"]) == ("3228.26", "1.1165")
+    assert factura["buyer_name"] == "Cliente De Prueba" and factura["buyer_id_number"] == "1234567890"
+    lista = client.get("/admin/payments", headers={"Authorization": f"Bearer {admin_token}"}).json()
+    assert next(p for p in lista["items"] if p["id"] == str(pago.id))["invoice_status"] == "accepted"
+
+
+def test_reintentar_una_fallida_toma_los_datos_corregidos(client, db, tipster, siigo, admin_token) -> None:
+    siigo.fallar("POST", "/v1/invoices",
+                 Falla(400, ["invalid_identification"], "La identificacion no vale"))
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _factura(db, pago.id).status == "failed"
+
+    db.execute(text("UPDATE billing_profiles SET id_number = '9876543210' WHERE user_id = :id"),
+               {"id": pago.user_id})
+    db.commit()
+    r = _accion(client, admin_token, pago, "retry")
+    assert r.status_code == 200, r.text
+    factura = r.json()["invoice"]
+    assert factura["status"] == "accepted" and factura["buyer_id_number"] == "9876543210"
+    [fila] = [a for a in r.json()["audit"] if a["action"] == "invoice.retry"]
+    assert fila["reason"] == MOTIVO and fila["before"]["status"] == "failed"
+
+
+def test_una_aceptada_no_se_reintenta_y_sin_motivo_no_hay_accion(
+    client, db, tipster, siigo, admin_token
+) -> None:
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _accion(client, admin_token, pago, "retry").status_code == 409
+    assert _accion(client, admin_token, pago, "refresh").status_code == 409
+    assert _accion(client, admin_token, pago, "retry", motivo="").status_code == 422
+
+
+def test_reconsultar_una_rechazada_corregida_en_siigo_nube(client, db, tipster, siigo, admin_token) -> None:
+    siigo.estado_nuevo = "Draft"
+    pago, _ = _pago_aprobado(client, db, tipster)
+    siigo.estado_al_consultar = "Rejected"
+    _correr(db, siigo)
+    assert _factura(db, pago.id).status == "rejected"
+
+    siigo.estado_al_consultar = "Accepted"  # la corrigieron y reenviaron desde Siigo Nube
+    r = _accion(client, admin_token, pago, "refresh")
+    assert r.status_code == 200, r.text
+    assert r.json()["invoice"]["status"] == "accepted"
+    [fila] = [a for a in r.json()["audit"] if a["action"] == "invoice.refresh"]
+    assert fila["before"]["status"] == "rejected" and fila["after"]["status"] == "accepted"
+
+
+def test_con_la_emision_apagada_las_acciones_responden_503(client, db, tipster, admin_token) -> None:
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _detalle(client, admin_token, pago)["invoice_issuer_enabled"] is False
+    assert _accion(client, admin_token, pago, "retry").status_code == 503

@@ -289,6 +289,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/payments/{payment_id}/invoice/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Invoice
+         * @description Vuelve a consultar en Siigo una factura emitida o rechazada: por
+         *     ejemplo, despues de corregirla y reenviarla a la DIAN desde Siigo Nube.
+         */
+        post: operations["refresh_invoice_admin_payments__payment_id__invoice_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/invoice/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Invoice
+         * @description Reintenta la emision de una factura pendiente, en envio o fallida
+         *     (§3.17, "Paso 5.4", puntos 3 y 13), y la intenta enseguida.
+         *
+         *     Una fallida que nunca llego a Siigo se vuelve a preparar, para tomar los
+         *     datos de facturacion corregidos. Deja fila en la bitacora, con el motivo,
+         *     en la misma transaccion que la deja lista; el intento va despues.
+         */
+        post: operations["retry_invoice_admin_payments__payment_id__invoice_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/payments/{payment_id}/refunds": {
         parameters: {
             query?: never;
@@ -2099,6 +2145,11 @@ export interface components {
             /** Events */
             events: components["schemas"]["PaymentEventResponse"][];
             invoice: components["schemas"]["InvoiceResponse"] | null;
+            /**
+             * Invoice Issuer Enabled
+             * @default false
+             */
+            invoice_issuer_enabled: boolean;
             payment: components["schemas"]["AdminPaymentResponse"];
             /** Refunds */
             refunds: components["schemas"]["PaymentRefundResponse"][];
@@ -2137,6 +2188,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            invoice_status: components["schemas"]["InvoiceStatus"] | null;
             kind: components["schemas"]["PaymentKind"];
             /** Period End */
             period_end: string | null;
@@ -3377,27 +3429,85 @@ export interface components {
             name: string;
         };
         /**
+         * InvoiceActionRequest
+         * @description POST /admin/payments/:id/invoice/retry y /refresh.
+         */
+        InvoiceActionRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * InvoiceResponse
-         * @description La factura electronica de un pago aprobado (§3.17; paso 5.2).
+         * @description La factura electronica de un pago aprobado (§3.17; pasos 5.2 y 5.4).
          */
         InvoiceResponse: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /** Buyer Id Number */
+            buyer_id_number: string | null;
+            /** Buyer Id Type */
+            buyer_id_type: string | null;
+            /** Buyer Name */
+            buyer_name: string | null;
+            /** Cop Cents */
+            cop_cents: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Cufe */
+            cufe: string | null;
+            /** Dian Errors */
+            dian_errors: string[] | null;
+            /** Eur Usd */
+            eur_usd: string | null;
+            /** Eur Usd Date */
+            eur_usd_date: string | null;
+            /** Eur Usd Source */
+            eur_usd_source: string | null;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Last Error Codes */
+            last_error_codes: string[] | null;
+            /** Last Error Message */
+            last_error_message: string | null;
+            /** Mail Status */
+            mail_status: string | null;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
             /**
              * Operation Date
              * Format: date
              */
             operation_date: string;
+            /** Prepared At */
+            prepared_at: string | null;
+            /** Provider Name */
+            provider_name: string | null;
+            /** Stamp Status */
+            stamp_status: string | null;
             status: components["schemas"]["InvoiceStatus"];
+            /** Usd Cop */
+            usd_cop: string | null;
+            /** Usd Cop Date */
+            usd_cop_date: string | null;
+            /** Usd Cop Source */
+            usd_cop_source: string | null;
+            /** Waiting Reason */
+            waiting_reason: string | null;
         };
         /**
          * InvoiceStatus
+         * @description Los estados de la factura (`core/invoices.py`; §3.17, "Paso 5.4", punto 3).
          * @enum {string}
          */
-        InvoiceStatus: "pending";
+        InvoiceStatus: "pending" | "sending" | "issued" | "accepted" | "rejected" | "failed";
         /**
          * LegalDocumentResponse
          * @description Una version publicada, con su texto en Markdown.
@@ -5414,6 +5524,76 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_invoice_admin_payments__payment_id__invoice_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_invoice_admin_payments__payment_id__invoice_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -11,7 +11,7 @@ from pydantic import ConfigDict, Field
 
 from app.schemas.auth import AccessType, UserResponse, UserRole
 from app.schemas.base import ApiModel, Reason
-from app.schemas.billing import AdminPaymentResponse, SubscriptionResponse
+from app.schemas.billing import AdminPaymentResponse, InvoiceStatus, SubscriptionResponse
 from app.schemas.legal import ConsentResponse
 
 
@@ -181,25 +181,48 @@ class AdminPaymentListResponse(ApiModel):
     offset: int
 
 
-class InvoiceStatus(str, Enum):
-    # Hoy solo `pending`: la emision con Siigo es del paso 5.4.
-    pending = "pending"
-
-
 class InvoiceResponse(ApiModel):
-    """La factura electronica de un pago aprobado (§3.17; paso 5.2)."""
+    """La factura electronica de un pago aprobado (§3.17; pasos 5.2 y 5.4)."""
     status: InvoiceStatus
     # El dia de la aprobacion del pago, en hora de Colombia.
     operation_date: date
     created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
+    # Por que todavia no sale (`billing_profile_missing`, `rates_pending`...).
+    waiting_reason: str | None = None
+    attempts: int = 0
+    next_attempt_at: datetime | None = None
+    # Lo congelado: el monto en pesos y las tasas, como texto para no perder
+    # decimales.
+    prepared_at: datetime | None = None
+    cop_cents: int | None = None
+    eur_usd: str | None = None
+    eur_usd_date: date | None = None
+    eur_usd_source: str | None = None
+    usd_cop: str | None = None
+    usd_cop_date: date | None = None
+    usd_cop_source: str | None = None
+    # A quien va (la copia congelada).
+    buyer_name: str | None = None
+    buyer_id_type: str | None = None
+    buyer_id_number: str | None = None
+    # La emision.
+    issue_date: date | None = None
+    provider_name: str | None = None
+    stamp_status: str | None = None
+    cufe: str | None = None
+    mail_status: str | None = None
+    last_error_codes: list[str] | None = None
+    last_error_message: str | None = None
+    dian_errors: list[str] | None = None
+    accepted_at: datetime | None = None
 
 
 class AdminPaymentDetailResponse(ApiModel):
     payment: AdminPaymentResponse
     # Null mientras el pago no este aprobado.
     invoice: InvoiceResponse | None = None
+    # Si la emision de facturas esta encendida (INVOICE_ISSUER).
+    invoice_issuer_enabled: bool = False
     # Lo que llego del proveedor sobre este pago, en orden de llegada.
     events: list[PaymentEventResponse]
     refunds: list[PaymentRefundResponse]
@@ -208,6 +231,11 @@ class AdminPaymentDetailResponse(ApiModel):
 
 class RequeryPaymentRequest(ApiModel):
     """POST /admin/payments/:id/requery."""
+    reason: str = Reason
+
+
+class InvoiceActionRequest(ApiModel):
+    """POST /admin/payments/:id/invoice/retry y /refresh."""
     reason: str = Reason
 
 

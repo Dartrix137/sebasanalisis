@@ -28,6 +28,7 @@ export type AdminPaymentListResponse = S["AdminPaymentListResponse"];
 export type AdminPaymentDetailResponse = S["AdminPaymentDetailResponse"];
 export type InvoiceResponse = S["InvoiceResponse"];
 export type InvoiceStatus = S["InvoiceStatus"];
+export type InvoiceActionRequest = S["InvoiceActionRequest"];
 export type RequeryPaymentRequest = S["RequeryPaymentRequest"];
 export type RecordRefundRequest = S["RecordRefundRequest"];
 export type ForcePasswordResetRequest = S["ForcePasswordResetRequest"];

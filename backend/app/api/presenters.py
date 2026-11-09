@@ -11,7 +11,7 @@ from app.billing.schedule import first_charge_at
 from app.core import price_changes, subscriptions
 from app.core.access import has_access
 from app.core.accounts import is_last_active_admin
-from app.models import Payment, PaymentRefund, Subscription, User
+from app.models import Invoice, Payment, PaymentRefund, Subscription, User
 from app.schemas.admin import AdminSubscriptionResponse
 from app.schemas.auth import AccessInfo, UserAccount, UserResponse
 from app.schemas.billing import (
@@ -123,6 +123,11 @@ def admin_payment_responses(db: Session, payments: Iterable[Payment]) -> list[Ad
             .group_by(PaymentRefund.payment_id)
         ).all()
     ) if ids else {}
+    invoice_statuses: dict[object, str] = dict(
+        db.execute(  # type: ignore[arg-type]
+            select(Invoice.payment_id, Invoice.status).where(Invoice.payment_id.in_(ids))
+        ).all()
+    ) if ids else {}
     user_ids = {p.user_id for p in rows if p.user_id is not None}
     emails: dict[object, str] = dict(
         db.execute(select(User.id, User.email).where(User.id.in_(user_ids))).all()  # type: ignore[arg-type]
@@ -140,6 +145,7 @@ def admin_payment_responses(db: Session, payments: Iterable[Payment]) -> list[Ad
             reversed_at=p.reversed_at,
             reversal_note=p.reversal_note,
             refunded_cents=int(refunded.get(p.id, 0)),
+            invoice_status=invoice_statuses.get(p.id),  # type: ignore[arg-type]
         )
         for p in rows
     ]

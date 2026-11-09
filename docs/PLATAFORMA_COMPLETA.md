@@ -1024,7 +1024,22 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
   - **Cambios por la prueba:**
     - `documents_service` deja de tratarse como pasajero: llegó por un dato, no por una caída, así que la factura queda `failed` y no se reintenta sola.
     - Se agregó `SIIGO_COST_CENTER_ID` (opcional), que va en la factura si está puesto. `check_ready` lo exige si el tipo de comprobante maneja centro de costo, como dice la documentación ("obligatorio según la configuración del comprobante"); la prueba no lo confirmó.
-- **Faltan**: el admin (punto 13), la nota crédito (punto 12, espera a la contadora) y la prueba con la cuenta de la empresa en Siigo (punto 15).
+- **Entrega 4, el admin (2026-11-09).**
+  - **El detalle de un pago** (`/admin/pagos`, sección "Factura electrónica") muestra:
+    - el estado, el número de Siigo, la fecha de emisión y el CUFE;
+    - el valor en pesos, la TRM y la tasa EUR/USD con su día;
+    - a nombre de quién va (la copia congelada);
+    - el estado y el correo según Siigo, los intentos y el próximo intento;
+    - el motivo de espera, el último error con sus códigos y los motivos de la DIAN.
+
+    Si la emisión está apagada, lo dice ("Emisión apagada") y no ofrece acciones.
+  - **Dos acciones con motivo y fila en la bitácora:**
+    - **"Reintentar la emisión"** (`POST /admin/payments/:id/invoice/retry`), sobre una factura pendiente, en envío o fallida. Una fallida que nunca llegó a Siigo se vuelve a preparar, con los datos de facturación actuales de la cuenta. Una en `sending` conserva lo congelado, porque la llave devuelve la que Siigo ya creó. La bitácora se escribe en la misma transacción que la deja lista; el intento va enseguida y su resultado se ve en el detalle.
+    - **"Reconsultar en Siigo"** (`POST /admin/payments/:id/invoice/refresh`), sobre una emitida o rechazada: por ejemplo, después de corregirla y reenviarla desde Siigo Nube. El cambio y su fila de bitácora van en la misma transacción.
+  - **La lista de pagos** trae `invoice_status`, y marca las facturas fallidas o rechazadas.
+  - Tests: cinco casos de admin en `tests/api/test_invoice_emission.py` (lo que muestra, reintentar con los datos corregidos, lo que no se reintenta ni se reconsulta, la rechazada corregida en Siigo Nube, la emisión apagada), y las dos rutas nuevas en la prueba de permisos del admin.
+  - Playwright corre con `INVOICE_ISSUER=none` (`e2e/start-api.mjs`): emitir pediría las tasas reales a datos.gov.co y al BCE. `e2e/admin-billing.spec.ts` ve la factura pendiente, con la emisión apagada y sin acciones.
+- **Faltan**: la nota crédito (punto 12, espera a la contadora) y la prueba con la cuenta de la empresa en Siigo (punto 15).
 
 *Lo que hay que pedir o decidir para construirlo:*
 

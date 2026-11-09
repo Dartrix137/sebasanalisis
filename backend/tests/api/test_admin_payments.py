@@ -108,6 +108,8 @@ _RUTAS = [
     ("GET", "/admin/payments", None),
     ("GET", "/admin/payments/{id}", None),
     ("POST", "/admin/payments/{id}/requery", {"reason": MOTIVO}),
+    ("POST", "/admin/payments/{id}/invoice/retry", {"reason": MOTIVO}),
+    ("POST", "/admin/payments/{id}/invoice/refresh", {"reason": MOTIVO}),
     (
         "POST",
         "/admin/payments/{id}/refunds",

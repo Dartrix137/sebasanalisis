@@ -230,6 +230,16 @@ class PaymentListResponse(ApiModel):
     offset: int
 
 
+class InvoiceStatus(str, Enum):
+    """Los estados de la factura (`core/invoices.py`; §3.17, "Paso 5.4", punto 3)."""
+    pending = "pending"
+    sending = "sending"
+    issued = "issued"
+    accepted = "accepted"
+    rejected = "rejected"
+    failed = "failed"
+
+
 class AdminPaymentResponse(PaymentResponse):
     """Un intento de cobro visto por el administrador."""
     # La pasarela por la que se cobro (`payments.provider`). Las filas de
@@ -250,6 +260,8 @@ class AdminPaymentResponse(PaymentResponse):
     reversal_note: str | None = None
     # Lo reembolsado en el panel del proveedor y registrado en el admin.
     refunded_cents: int
+    # El estado de su factura electronica, o null si no tiene (no aprobado).
+    invoice_status: InvoiceStatus | None = None
 
 
 class UpcomingPriceChange(ApiModel):
