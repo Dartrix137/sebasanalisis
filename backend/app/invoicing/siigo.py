@@ -72,7 +72,7 @@ from typing import Any
 
 import httpx
 
-from app.billing.invoice_document import classify
+from app.billing.invoice_document import CONFIG_CODES, classify
 from app.core.config import Settings
 from app.invoicing.base import (
     Buyer,
@@ -395,6 +395,17 @@ class SiigoIssuer:
             # Otra emision lo creo entre la busqueda y la creacion.
             if "already_exists" not in exc.codes:
                 raise
+        except IssuerMisconfigured as exc:
+            # Al crear el tercero, `invalid_reference` es de los datos de ese
+            # comprador, no de la cuenta: es lo que responde Siigo a una ciudad
+            # que no reconoce (probado en la empresa de pruebas el 2026-11-10:
+            # Us/32/3298 rechazada con 400 `invalid_reference`, la 3299 creada en
+            # Siigo Nube aceptada). Lo demas del tercero es fijo. Como error de
+            # configuracion frenaria la emision de todas las facturas por los
+            # datos de una; asi queda fallida solo la suya (§3.17).
+            if set(exc.codes) & CONFIG_CODES == {"invalid_reference"}:
+                raise IssuerRejected(str(exc), exc.codes) from exc
+            raise
 
     # ---------- Facturas ----------
 

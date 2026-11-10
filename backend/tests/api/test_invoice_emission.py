@@ -244,6 +244,39 @@ def test_documents_service_frena_la_corrida(client, db, tipster, siigo) -> None:
     assert factura.last_error_codes == ["documents_service"]
 
 
+def test_una_ciudad_que_siigo_no_reconoce_deja_fallida_solo_esa_factura(
+    client, db, tipster, siigo
+) -> None:
+    """`invalid_reference` al crear el tercero es de los datos de ese comprador
+    (una ciudad que Siigo no reconoce, probado el 2026-11-10): no frena la corrida."""
+    siigo.tasas.publicadas = False  # que las dos queden pendientes
+    primero, _ = _pago_aprobado(client, db, tipster)
+    segundo, _ = _pago_aprobado(client, db, tipster)
+    siigo.tasas.publicadas = True
+    siigo.fallar("POST", "/v1/customers", Falla(400, ["invalid_reference"], "City not found"))
+
+    report = _correr(db, siigo)
+    assert report.stopped is None
+    a, b = _factura(db, primero.id), _factura(db, segundo.id)
+    assert a.status == "failed" and a.last_error_codes == ["invalid_reference"]
+    assert b.status == "accepted"
+    assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 1
+
+    _correr(db, siigo, now=datetime.now(UTC) + timedelta(days=2))
+    assert _factura(db, primero.id).status == "failed"  # no se reintenta sola
+
+
+def test_invalid_reference_en_la_factura_sigue_frenando(client, db, tipster, siigo) -> None:
+    """En la factura, `invalid_reference` es de la cuenta (comprobante, forma de
+    pago, vendedor, impuesto): se repetiria en todas."""
+    siigo.fallar("POST", "/v1/invoices",
+                 Falla(400, ["invalid_reference"], "Payment type not found"))
+    pago, _ = _pago_aprobado(client, db, tipster)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.attempts == 0
+    assert factura.last_error_codes == ["invalid_reference"]
+
+
 def test_un_tipo_de_comprobante_que_no_es_electronico_no_deja_emitir(
     client, db, tipster, siigo
 ) -> None:
