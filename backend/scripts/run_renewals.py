@@ -27,7 +27,7 @@ from app.core.email import get_email_sender, send_safely  # noqa: E402
 from app.core.exchange_rates import get_rate_sources  # noqa: E402
 from app.core.invoices import run_emission  # noqa: E402
 from app.core.legal_notices import send_legal_notices  # noqa: E402
-from app.core.monitoring import init_monitoring  # noqa: E402
+from app.core.monitoring import init_monitoring, quiet_http_client_logs  # noqa: E402
 from app.core.price_changes import send_notices as send_price_notices  # noqa: E402
 from app.core.renewals import advisory_lock, run_renewals  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
@@ -39,6 +39,9 @@ logger = logging.getLogger("app.renewals")
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(name)s - %(message)s")
+    # Sin esto, httpx escribe aqui cada URL de Siigo, y la de buscar un tercero
+    # lleva el documento del comprador (§3.17).
+    quiet_http_client_logs()
     init_monitoring(get_settings().sentry_dsn)
     provider = get_payment_provider()
     logger.info("Renovaciones: pagos %s", provider.describe())

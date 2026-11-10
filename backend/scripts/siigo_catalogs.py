@@ -10,7 +10,8 @@ el .env):
 Solo lee: no crea nada en Siigo. No imprime el token ni las credenciales. Imprime
 los tipos de comprobante de factura electronica (SIIGO_DOCUMENT_TYPE_ID), las
 formas de pago (SIIGO_PAYMENT_TYPE_ID), los usuarios activos (SIIGO_SELLER_ID),
-los productos de tipo servicio (SIIGO_PRODUCT_CODE) y los grupos de inventario
+los productos de tipo servicio (SIIGO_PRODUCT_CODE), los impuestos de IVA
+(SIIGO_TAX_ID: el del 0 %) y los grupos de inventario
 (que pide Siigo para crear un producto). Respeta la espera entre peticiones
 (`SIIGO_MIN_INTERVAL_SECONDS`; en la empresa de pruebas, 8).
 """
@@ -59,6 +60,11 @@ CATALOGS = {
         "/v1/products", None,
         lambda r: (r.get("type") or "").lower() == "service",
         ("code", "name", "type", "tax_classification", "active"),
+    ),
+    "impuestos": (
+        "/v1/taxes", None,
+        lambda r: r.get("type") == "IVA",
+        ("id", "name", "type", "percentage", "active"),
     ),
     "grupos": ("/v1/account-groups", None, lambda r: r.get("active"), ("id", "name")),
 }

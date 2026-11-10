@@ -68,9 +68,9 @@ def test_la_lista_de_paises_trae_los_tipos_de_documento(client, db) -> None:
     assert paises[0]["code"] == "Co" and paises[0]["default_id_type"] == "13"
     assert [t["code"] for t in paises[0]["id_types"]] == ["13", "22"]
     espana = next(p for p in paises if p["code"] == "Es")
-    assert espana["default_id_type"] == "50"
+    assert espana["default_id_type"] == "42"
     assert [t["name"] for t in espana["id_types"]] == [
-        "NIT de otro país", "Pasaporte", "Documento de identificación extranjero"
+        "Documento de identificación extranjero", "Pasaporte", "NIT de otro país"
     ]
 
 

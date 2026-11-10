@@ -9,8 +9,16 @@ autenticacion, cuerpos de `/auth/*` y `/billing/*` (con los datos del comprador
 que pide un medio de pago), el cuerpo crudo de los webhooks y el token del
 enlace de la pagina de pago. Ni contrasenas, ni tokens, ni referencias de pago
 llegan al monitoreo.
+
+Tampoco la query de una peticion que la API le hace a otro servicio: el SDK deja
+un breadcrumb por cada peticion de httpx con su query (`http.query`), y uno por
+cada linea de log con la URL completa. `GET /v1/customers?identification=` de
+Siigo lleva el documento del comprador (§3.17), y un breadcrumb viaja con el
+siguiente error que se reporte.
 """
 
+import logging
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -62,6 +70,41 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any] | None = None) -> di
     return event
 
 
+# La query de una URL dentro de un texto: hasta un espacio, una comilla o el #.
+_URL_QUERY = re.compile(r"(https?://[^\s?#\"']+)\?[^\s#\"']*")
+
+
+def _strip_query(text: str) -> str:
+    return _URL_QUERY.sub(lambda m: f"{m.group(1)}?{FILTERED}", text)
+
+
+def scrub_breadcrumb(
+    crumb: dict[str, Any], hint: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """`before_breadcrumb`: quita la query de las URL de un breadcrumb.
+
+    El de una peticion de httpx trae `http.query` y la `url`; el de una linea de
+    log, el mensaje ya formateado (httpx escribe la URL completa en INFO).
+    Funcion pura, como `scrub_event`.
+    """
+    data = crumb.get("data")
+    if isinstance(data, dict):
+        if data.get("http.query"):
+            data["http.query"] = FILTERED
+        if isinstance(data.get("url"), str):
+            data["url"] = _strip_query(data["url"])
+    message = crumb.get("message")
+    if isinstance(message, str):
+        crumb["message"] = _strip_query(message)
+    return crumb
+
+
+def quiet_http_client_logs() -> None:
+    """httpx escribe en INFO cada peticion con la URL completa, query incluida.
+    Quien configure el log en INFO (el job de cada hora) llama a esta funcion."""
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def init_monitoring(dsn: str) -> bool:
     """Activa el monitoreo si hay DSN. Devuelve si quedo activo."""
     if not dsn:
@@ -73,6 +116,7 @@ def init_monitoring(dsn: str) -> bool:
         # un token tal como llegaron al endpoint.
         include_local_variables=False,
         before_send=scrub_event,  # type: ignore[arg-type]
+        before_breadcrumb=scrub_breadcrumb,  # type: ignore[arg-type]
         # Solo errores: sin trazas de rendimiento.
         traces_sample_rate=0.0,
     )

@@ -324,8 +324,8 @@ export interface paths {
          * @description Reintenta la emision de una factura pendiente, en envio o fallida
          *     (§3.17, "Paso 5.4", puntos 3 y 13), y la intenta enseguida.
          *
-         *     Una fallida que nunca llego a Siigo se vuelve a preparar, para tomar los
-         *     datos de facturacion corregidos. Deja fila en la bitacora, con el motivo,
+         *     Una fallida se vuelve a preparar, para tomar los datos de facturacion
+         *     corregidos, con una llave nueva (`core/invoices.reset_for_retry`). Deja fila en la bitacora, con el motivo,
          *     en la misma transaccion que la deja lista; el intento va despues.
          */
         post: operations["retry_invoice_admin_payments__payment_id__invoice_retry_post"];

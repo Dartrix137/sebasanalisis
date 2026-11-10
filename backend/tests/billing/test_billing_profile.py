@@ -63,7 +63,7 @@ def test_el_codigo_de_pais_se_compara_sin_mayusculas_y_se_devuelve_como_viene() 
 
 def test_los_tipos_de_documento_dependen_del_pais() -> None:
     assert id_types_for("Co") == ("13", "22") and default_id_type("Co") == "13"
-    assert id_types_for("Es") == ("50", "41", "42") and default_id_type("Es") == "50"
+    assert id_types_for("Es") == ("42", "41", "50") and default_id_type("Es") == "42"
 
 
 # ---------- Validacion ----------

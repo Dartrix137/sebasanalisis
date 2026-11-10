@@ -15,7 +15,16 @@ from app.billing import fx
 from app.billing.invoice_document import VAT_EXCLUSION_NOTE, idempotency_key
 from app.core.invoices import MAX_ATTEMPTS, run_emission
 from app.models import Invoice
-from tests.api.siigo_sandbox import DOCUMENTO, FORMA_DE_PAGO, PARTNER, PRODUCTO, VENDEDOR, Falla
+from tests.api.siigo_sandbox import (
+    DOCUMENTO,
+    FORMA_DE_PAGO,
+    IVA_0,
+    IVA_19,
+    PARTNER,
+    PRODUCTO,
+    VENDEDOR,
+    Falla,
+)
 from tests.api.test_subscriptions import _abrir_pago, _aprobar, _cuenta, _pagos
 
 # 32 EUR con la TRM 3.228,26 y el EUR/USD 1,1165 de las tasas simuladas.
@@ -85,6 +94,33 @@ def test_un_pago_aprobado_sale_facturado_enseguida(client, db, tipster, siigo) -
                                           "city_code": "11001"}
     assert cliente["contacts"][0]["email"] == email
     assert cliente["fiscal_responsibilities"] == [{"code": "R-99-PN"}]
+
+
+def test_con_siigo_tax_id_el_item_lleva_el_iva_del_0(client, db, tipster, siigo) -> None:
+    """Soporte de Siigo (2026-11-09): para que la factura muestre el IVA del 0 %
+    se informa `taxes` con el id del impuesto. El total no cambia."""
+    siigo.issuer.tax_id = IVA_0
+    pago, _ = _pago_aprobado(client, db, tipster)
+    factura = _factura(db, pago.id)
+    assert factura.status == "accepted" and factura.provider_total == PESOS
+    [crear] = siigo.pedidos_a("POST", "/v1/invoices")
+    item = siigo.cuerpo(crear)["items"][0]
+    assert item["taxes"] == [{"id": IVA_0}] and item["price"] == float(PESOS)
+    assert siigo.pedidos_a("GET", "/v1/taxes")
+
+
+def test_un_impuesto_que_no_es_iva_del_0_no_deja_emitir(client, db, tipster, siigo) -> None:
+    siigo.issuer.tax_id = IVA_19
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _factura(db, pago.id).status == "pending"
+    assert siigo.pedidos_a("POST", "/v1/invoices") == []
+
+    siigo.impuestos[1]["active"] = False
+    siigo.issuer.tax_id = IVA_0
+    siigo.issuer._ready_until = 0
+    report = _correr(db, siigo)
+    assert report.stopped and "SIIGO_TAX_ID" in report.stopped
+    assert siigo.pedidos_a("POST", "/v1/invoices") == []
 
 
 def test_el_mismo_cliente_no_se_vuelve_a_crear(client, db, tipster, siigo) -> None:
@@ -197,6 +233,50 @@ def test_un_error_de_configuracion_frena_la_corrida(client, db, tipster, siigo) 
     assert b.status == "pending"
 
 
+def test_documents_service_frena_la_corrida(client, db, tipster, siigo) -> None:
+    """Soporte de Siigo (2026-11-09): sale de la configuracion del tipo de
+    comprobante (centro de costo inactivo, cuentas contables), no de la factura."""
+    siigo.fallar("POST", "/v1/invoices",
+                 Falla(400, ["documents_service"], "Your request could not be completed"))
+    pago, _ = _pago_aprobado(client, db, tipster)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.attempts == 0
+    assert factura.last_error_codes == ["documents_service"]
+
+
+def test_una_ciudad_que_siigo_no_reconoce_deja_fallida_solo_esa_factura(
+    client, db, tipster, siigo
+) -> None:
+    """`invalid_reference` al crear el tercero es de los datos de ese comprador
+    (una ciudad que Siigo no reconoce, probado el 2026-11-10): no frena la corrida."""
+    siigo.tasas.publicadas = False  # que las dos queden pendientes
+    primero, _ = _pago_aprobado(client, db, tipster)
+    segundo, _ = _pago_aprobado(client, db, tipster)
+    siigo.tasas.publicadas = True
+    siigo.fallar("POST", "/v1/customers", Falla(400, ["invalid_reference"], "City not found"))
+
+    report = _correr(db, siigo)
+    assert report.stopped is None
+    a, b = _factura(db, primero.id), _factura(db, segundo.id)
+    assert a.status == "failed" and a.last_error_codes == ["invalid_reference"]
+    assert b.status == "accepted"
+    assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 1
+
+    _correr(db, siigo, now=datetime.now(UTC) + timedelta(days=2))
+    assert _factura(db, primero.id).status == "failed"  # no se reintenta sola
+
+
+def test_invalid_reference_en_la_factura_sigue_frenando(client, db, tipster, siigo) -> None:
+    """En la factura, `invalid_reference` es de la cuenta (comprobante, forma de
+    pago, vendedor, impuesto): se repetiria en todas."""
+    siigo.fallar("POST", "/v1/invoices",
+                 Falla(400, ["invalid_reference"], "Payment type not found"))
+    pago, _ = _pago_aprobado(client, db, tipster)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.attempts == 0
+    assert factura.last_error_codes == ["invalid_reference"]
+
+
 def test_un_tipo_de_comprobante_que_no_es_electronico_no_deja_emitir(
     client, db, tipster, siigo
 ) -> None:
@@ -244,6 +324,20 @@ def test_una_factura_en_borrador_se_confirma_en_otra_corrida(client, db, tipster
     _correr(db, siigo)
     factura = _factura(db, pago.id)
     assert factura.status == "accepted" and factura.cufe
+
+
+def test_una_factura_enviandose_a_la_dian_se_confirma_en_otra_corrida(
+    client, db, tipster, siigo
+) -> None:
+    """`Sending` es el estado que devolvio la empresa de pruebas al crearla
+    (2026-11-09); soporte da Draft, Sending, Rejected y Accepted."""
+    siigo.estado_nuevo = "Sending"
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _factura(db, pago.id).status == "issued"
+
+    siigo.estado_al_consultar = "Accepted"
+    _correr(db, siigo)
+    assert _factura(db, pago.id).status == "accepted"
 
 
 def test_una_rechazada_por_la_dian_guarda_sus_motivos(client, db, tipster, siigo) -> None:
@@ -347,6 +441,41 @@ def test_reintentar_una_fallida_toma_los_datos_corregidos(client, db, tipster, s
     assert factura["status"] == "accepted" and factura["buyer_id_number"] == "9876543210"
     [fila] = [a for a in r.json()["audit"] if a["action"] == "invoice.retry"]
     assert fila["reason"] == MOTIVO and fila["before"]["status"] == "failed"
+    # Sale con otra llave: una llave usada queda usada en Siigo (soporte, 2026-11-09).
+    primero, segundo = siigo.pedidos_a("POST", "/v1/invoices")
+    assert primero.headers["Idempotency-Key"] != segundo.headers["Idempotency-Key"]
+    assert segundo.headers["Idempotency-Key"] == fila["after"]["idempotency_key"]
+    assert len(segundo.headers["Idempotency-Key"]) <= 30
+
+
+def test_reintentar_un_total_que_no_cuadro_crea_otra_si_no_tiene_cufe(
+    client, db, tipster, siigo, admin_token
+) -> None:
+    siigo.estado_nuevo = "Draft"
+    siigo.total_distinto = Decimal("115339.30")
+    pago, _ = _pago_aprobado(client, db, tipster)
+    mala = _factura(db, pago.id)
+    assert mala.status == "failed" and mala.provider_name == "FV-4-1" and not mala.cufe
+
+    siigo.total_distinto = None
+    siigo.estado_nuevo = "Accepted"
+    r = _accion(client, admin_token, pago, "retry", "Anulada en Siigo Nube la FV-4-1")
+    assert r.status_code == 200, r.text
+    assert r.json()["invoice"]["status"] == "accepted"
+    assert r.json()["invoice"]["provider_name"] == "FV-4-2"
+    [fila] = [a for a in r.json()["audit"] if a["action"] == "invoice.retry"]
+    assert fila["before"]["provider_name"] == "FV-4-1"
+
+
+def test_un_total_que_no_cuadro_con_cufe_no_se_reintenta(
+    client, db, tipster, siigo, admin_token
+) -> None:
+    siigo.total_distinto = Decimal("115339.30")
+    pago, _ = _pago_aprobado(client, db, tipster)
+    assert _factura(db, pago.id).cufe
+    r = _accion(client, admin_token, pago, "retry")
+    assert r.status_code == 409 and "nota credito" in r.json()["detail"]
+    assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 1
 
 
 def test_una_aceptada_no_se_reintenta_y_sin_motivo_no_hay_accion(

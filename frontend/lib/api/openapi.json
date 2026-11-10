@@ -8816,7 +8816,7 @@
     },
     "/admin/payments/{payment_id}/invoice/retry": {
       "post": {
-        "description": "Reintenta la emision de una factura pendiente, en envio o fallida\n(§3.17, \"Paso 5.4\", puntos 3 y 13), y la intenta enseguida.\n\nUna fallida que nunca llego a Siigo se vuelve a preparar, para tomar los\ndatos de facturacion corregidos. Deja fila en la bitacora, con el motivo,\nen la misma transaccion que la deja lista; el intento va despues.",
+        "description": "Reintenta la emision de una factura pendiente, en envio o fallida\n(§3.17, \"Paso 5.4\", puntos 3 y 13), y la intenta enseguida.\n\nUna fallida se vuelve a preparar, para tomar los datos de facturacion\ncorregidos, con una llave nueva (`core/invoices.reset_for_retry`). Deja fila en la bitacora, con el motivo,\nen la misma transaccion que la deja lista; el intento va despues.",
         "operationId": "retry_invoice_admin_payments__payment_id__invoice_retry_post",
         "parameters": [
           {

@@ -31,6 +31,7 @@ de configuracion frena la corrida entera.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -197,7 +198,10 @@ def prepare(db: Session, invoice: Invoice, sources: RateSources, now: datetime) 
     invoice.buyer_state_code = profile.state_code
     invoice.buyer_city_code = profile.city_code
     invoice.buyer_address = profile.address
-    invoice.idempotency_key = idempotency_key(invoice.id)
+    if invoice.idempotency_key is None:
+        # La primera vez, el id de la factura. Un reintento del admin sobre una
+        # fallida ya dejo una llave nueva (`reset_for_retry`).
+        invoice.idempotency_key = idempotency_key(invoice.id)
     invoice.prepared_at = now
     invoice.waiting_reason = None
     return True
@@ -268,6 +272,8 @@ def _apply(db: Session, issuer: InvoiceIssuer, invoice: Invoice, result: IssuedI
             invoice.dian_errors = None
         logger.error("Factura %s: la DIAN la rechazo", invoice.id)
         return REJECTED
+    # Draft o Sending (los otros dos estados ante la DIAN, segun soporte de
+    # Siigo), o uno que no conocemos: espera y se vuelve a consultar.
     invoice.status = ISSUED
     return ISSUED
 
@@ -465,15 +471,30 @@ REFRESHABLE = (ISSUED, REJECTED)
 def reset_for_retry(invoice: Invoice) -> None:
     """Deja la factura lista para otro intento ya. NO hace commit.
 
-    Una fallida que nunca llego al emisor (sin `provider_id`) se vuelve a
-    preparar: asi toma los datos de facturacion corregidos. Una que pudo
-    llegar (`sending`) conserva lo congelado, porque el reintento manda la
-    misma llave y el emisor devuelve la que ya creo con esos datos.
+    Una fallida se vuelve a preparar, para tomar los datos de facturacion
+    corregidos, y sale con una llave de idempotencia nueva: soporte de Siigo
+    (2026-11-09) dice que una llave usada queda usada para siempre, "aunque se
+    borre el documento", asi que con la misma Siigo devolveria lo de antes.
+    Una fallida que si llego a Siigo (el total no cuadro) se reintenta solo si
+    no tiene CUFE, y despues de anularla en Siigo Nube: si no, quedarian dos.
+    Con CUFE, la DIAN ya la acepto y se corrige con nota credito.
+
+    Una que pudo llegar (`sending`) conserva lo congelado y su llave: el
+    emisor devuelve la que ya creo con esos datos.
     """
     if invoice.status not in RETRYABLE:
         raise ValueError(f"Una factura {invoice.status} no se reintenta")
-    if invoice.status == FAILED and invoice.provider_id is None:
+    if invoice.status == FAILED:
+        if invoice.cufe:
+            raise ValueError("La DIAN ya acepto esa factura: se corrige con nota credito")
         invoice.prepared_at = None
+        invoice.idempotency_key = idempotency_key(uuid.uuid4())
+        invoice.provider_id = None
+        invoice.provider_name = None
+        invoice.provider_total = None
+        invoice.stamp_status = None
+        invoice.mail_status = None
+        invoice.dian_errors = None
     invoice.status = PENDING
     invoice.attempts = 0
     invoice.next_attempt_at = None

@@ -332,7 +332,11 @@ function InvoiceSection({
           paymentId={paymentId}
           action="retry"
           title="Reintentar la emisión"
-          subtitle="La intenta otra vez ahora. Si falló sin llegar a Siigo, toma los datos de facturación actuales de la cuenta."
+          subtitle={
+            invoice.status === "failed" && invoice.provider_name
+              ? `La vuelve a crear ahora, con los datos de facturación actuales de la cuenta. Antes anula en Siigo Nube la ${invoice.provider_name}, que quedó mal: si no, el pago quedaría con dos facturas.`
+              : "La intenta otra vez ahora. Si falló, toma los datos de facturación actuales de la cuenta."
+          }
           onDone={onDone}
         />
       ) : null}
