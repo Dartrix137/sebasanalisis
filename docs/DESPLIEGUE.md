@@ -222,8 +222,10 @@ Que pasa al desplegar (`PLATAFORMA_COMPLETA.md` §6.8):
 
 El dia de la vigencia, en `/admin/legal`:
 
-1. Revisar cada borrador con "Vista previa". En la politica de datos, completar
-   el pais del centro de datos de Hostinger (`[PENDIENTE]`) y "Guardar borrador".
+1. Revisar cada borrador con "Vista previa". ~~En la politica de datos, completar
+   el pais del centro de datos de Hostinger~~ (hecho el 2026-11-11 en el borrador
+   de produccion: Estados Unidos). En una base nueva, el texto de la migracion
+   todavia dice `[PENDIENTE]`.
 2. Si hacen falta mas de 40 avisos al dia, pasar antes a Resend Pro y subir
    `EMAIL_DAILY_LIMIT` (ver arriba).
 3. Publicar los tres. Terminos y datos ya vienen con "exigir aceptacion" (se le
