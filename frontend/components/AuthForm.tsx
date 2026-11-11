@@ -22,8 +22,6 @@ import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from "./AuthShell";
 import { useBotCheck } from "./BotCheck";
 import { BrandMark, Button, Card, Checkbox, ErrorBox, Field, PasswordField } from "./ui";
 
-const SUBTITLE = "Registra los números de tu mesa y revisa lo que ya salió. Tu progreso queda guardado en tu cuenta.";
-
 /** Cómo empieza la frase de cada casilla; el enlace al documento la termina. */
 const CONSENT_LEAD: Partial<Record<LegalDocumentResponse["kind"], string>> = {
   terms: "Acepto los",
@@ -104,7 +102,6 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       <h1 className="mt-5 font-display text-5xl font-semibold leading-none tracking-tight">
         Sebas<span className="text-gold">análisis</span>
       </h1>
-      <p className="mt-3 max-w-sm text-center text-sm leading-relaxed text-muted">{SUBTITLE}</p>
 
       <Card className="mt-7 w-full max-w-md">
         <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-ink-sunken p-1">

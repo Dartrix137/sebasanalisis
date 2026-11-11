@@ -314,8 +314,8 @@ test("el administrador ve los planes sin la opción de suscribirse", async ({ pa
   await expect(page.getByText("Tu cuenta no tiene acceso activo.")).toHaveCount(0);
   const mensual = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(mensual.getByText("32 EUR", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Suscribirme|Pagar|Elegir plan/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Suscribirme|Pagar|Elegir plan/ })).toHaveCount(0);
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
 });
 
