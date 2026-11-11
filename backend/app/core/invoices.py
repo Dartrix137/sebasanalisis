@@ -25,13 +25,24 @@ Estados: `pending` -> `sending` -> `issued` -> `accepted`, o `rejected` (la
 DIAN) o `failed` (Siigo rechazo los datos, o el total no cuadra; no se
 reintenta sola). Un error pasajero vuelve a `pending` con un proximo intento;
 un tiempo agotado deja `sending` y el reintento manda la misma llave. Un error
-de configuracion frena la corrida entera.
+de configuracion frena la corrida entera. `cancelled`: no se emite, porque el
+pago se reembolso entero o se anulo antes (`core/credit_notes.py`).
+
+**La espera de la contadora** (2026-11-11): "que no se realice la factura de
+la venta hasta que no este la aceptacion del pago". La factura ya nace solo con
+el pago aprobado y reconsultado; ademas, `INVOICE_HOLD_HOURS` la hace esperar
+ese tiempo despues de la aprobacion. Un reembolso o una anulacion en ese plazo
+la cancela, sin nota credito. Con 0 (por defecto) sale enseguida.
+
+La misma corrida emite las notas credito (`core/credit_notes.py`), despues de
+las facturas: una factura que acaba de quedar aceptada deja salir su nota.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -42,6 +53,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.billing import checkout_text, fx
 from app.billing.invoice_document import FrozenRates, idempotency_key, observations, pesos
 from app.core import billing_profiles
+from app.core.config import get_settings
 from app.core.exchange_rates import RateSources, RateUnavailable, rates_for
 from app.invoicing.base import (
     Buyer,
@@ -53,7 +65,7 @@ from app.invoicing.base import (
     IssuerRejected,
     IssuerTransient,
 )
-from app.models import Invoice, Payment, Plan, User
+from app.models import CreditNote, Invoice, Payment, Plan, User
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +75,7 @@ ISSUED = "issued"
 ACCEPTED = "accepted"
 REJECTED = "rejected"
 FAILED = "failed"
+CANCELLED = "cancelled"
 
 #: Intentos de envio antes de darla por fallida (los pasajeros).
 MAX_ATTEMPTS = 8
@@ -84,6 +97,7 @@ WAITING_PROFILE = "billing_profile_missing"
 WAITING_RATES = "rates_pending"
 WAITING_RATES_SOURCE = "rates_unavailable"
 WAITING_PAYMENT = "payment_not_approved"
+WAITING_HOLD = "payment_hold"
 
 
 def create_pending(db: Session, payment: Payment) -> Invoice:
@@ -116,6 +130,8 @@ class EmissionReport:
     failed: int = 0
     waiting: int = 0
     retried: int = 0
+    credit_notes_sent: int = 0
+    credit_notes_failed: int = 0
     #: Por que se detuvo la corrida, si se detuvo (configuracion o caida).
     stopped: str | None = None
     errors: list[str] = field(default_factory=list)
@@ -124,14 +140,27 @@ class EmissionReport:
         return (
             f"preparadas={self.prepared} emitidas={self.issued} aceptadas={self.accepted}"
             f" rechazadas={self.rejected} fallidas={self.failed} en_espera={self.waiting}"
-            f" a_reintentar={self.retried}" + (f" detenida={self.stopped}" if self.stopped else "")
+            f" a_reintentar={self.retried} notas_credito={self.credit_notes_sent}"
+            f" notas_fallidas={self.credit_notes_failed}"
+            + (f" detenida={self.stopped}" if self.stopped else "")
         )
 
 
 # ---------- Preparar: congelar lo que lleva ----------
 
 
-def prepare(db: Session, invoice: Invoice, sources: RateSources, now: datetime) -> bool:
+def hold_period() -> timedelta:
+    """La espera despues de aprobado el pago (`INVOICE_HOLD_HOURS`)."""
+    return timedelta(hours=get_settings().invoice_hold_hours)
+
+
+def prepare(
+    db: Session,
+    invoice: Invoice,
+    sources: RateSources,
+    now: datetime,
+    hold: timedelta | None = None,
+) -> bool:
     """Congela la factura si todavia no lo esta. True si quedo lista para
     enviar; si no, deja el motivo en `waiting_reason`. NO hace commit."""
     if invoice.prepared_at is not None:
@@ -139,6 +168,11 @@ def prepare(db: Session, invoice: Invoice, sources: RateSources, now: datetime) 
     payment = db.get(Payment, invoice.payment_id)
     if payment is None or payment.status != "approved":
         invoice.waiting_reason = WAITING_PAYMENT
+        return False
+    hold = hold_period() if hold is None else hold
+    if hold and payment.resolved_at is not None and payment.resolved_at + hold > now:
+        invoice.waiting_reason = WAITING_HOLD
+        invoice.next_attempt_at = payment.resolved_at + hold
         return False
     profile = billing_profiles.get(db, payment.user_id) if payment.user_id else None
     user = db.get(User, payment.user_id) if payment.user_id else None
@@ -232,9 +266,9 @@ def _draft(invoice: Invoice, now: datetime) -> InvoiceDraft:
 # ---------- Enviar y confirmar ----------
 
 
-def _record_error(invoice: Invoice, exc: IssuerError) -> None:
-    invoice.last_error_codes = exc.codes or None
-    invoice.last_error_message = str(exc)[:500]
+def _record_error(doc: Invoice | CreditNote, exc: IssuerError) -> None:
+    doc.last_error_codes = exc.codes or None
+    doc.last_error_message = str(exc)[:500]
 
 
 def _apply(db: Session, issuer: InvoiceIssuer, invoice: Invoice, result: IssuedInvoice,
@@ -278,51 +312,71 @@ def _apply(db: Session, issuer: InvoiceIssuer, invoice: Invoice, result: IssuedI
     return ISSUED
 
 
-def _send(db: Session, issuer: InvoiceIssuer, invoice: Invoice, now: datetime) -> str:
-    """Un intento de envio. Confirma en la base antes y despues de llamar."""
-    invoice.status = SENDING
-    invoice.attempts += 1
-    invoice.sent_at = now
-    invoice.issue_date = fx.operation_date(now)
-    # Otra corrida no la toca mientras sale; si el proceso muere aqui, el
+def attempt(
+    db: Session,
+    doc: Invoice | CreditNote,
+    now: datetime,
+    call: Callable[[], IssuedInvoice],
+    apply: Callable[[IssuedInvoice], str],
+    label: str,
+) -> str:
+    """Un intento de envio de una factura o una nota credito. Confirma en la
+    base antes y despues de llamar al emisor."""
+    doc.status = SENDING
+    doc.attempts += 1
+    doc.sent_at = now
+    doc.issue_date = fx.operation_date(now)
+    # Otra corrida no lo toca mientras sale; si el proceso muere aqui, el
     # reintento manda la misma llave.
-    invoice.next_attempt_at = now + _SENDING_GUARD
+    doc.next_attempt_at = now + _SENDING_GUARD
     db.commit()
     try:
-        result = issuer.issue(_draft(invoice, now))
+        result = call()
     except IssuerTransient as exc:
-        _record_error(invoice, exc)
-        if invoice.attempts >= MAX_ATTEMPTS:
-            invoice.status = FAILED
-            logger.error("Factura %s: sin respuesta de Siigo tras %s intentos",
-                         invoice.id, invoice.attempts)
+        _record_error(doc, exc)
+        if doc.attempts >= MAX_ATTEMPTS:
+            doc.status = FAILED
+            logger.error("%s %s: sin respuesta de Siigo tras %s intentos",
+                         label, doc.id, doc.attempts)
             db.commit()
             return FAILED
-        invoice.status = SENDING if exc.uncertain else PENDING
-        wait = _BACKOFF[min(invoice.attempts - 1, len(_BACKOFF) - 1)]
+        doc.status = SENDING if exc.uncertain else PENDING
+        wait = _BACKOFF[min(doc.attempts - 1, len(_BACKOFF) - 1)]
         if exc.retry_after:
             wait = max(wait, timedelta(seconds=exc.retry_after))
-        invoice.next_attempt_at = now + wait
+        doc.next_attempt_at = now + wait
         db.commit()
         return "retry"
     except IssuerMisconfigured as exc:
-        _record_error(invoice, exc)
-        # No es culpa de esta factura: vuelve a esperar, sin gastar el intento.
-        invoice.status = PENDING
-        invoice.attempts -= 1
-        invoice.next_attempt_at = None
+        _record_error(doc, exc)
+        # No es culpa de este documento: vuelve a esperar, sin gastar el intento.
+        doc.status = PENDING
+        doc.attempts -= 1
+        doc.next_attempt_at = None
         db.commit()
         raise
     except IssuerRejected as exc:
-        _record_error(invoice, exc)
-        invoice.status = FAILED
-        invoice.next_attempt_at = None
-        logger.error("Factura %s: Siigo rechazo los datos (%s)", invoice.id, exc.codes or "-")
+        _record_error(doc, exc)
+        doc.status = FAILED
+        doc.next_attempt_at = None
+        logger.error("%s %s: Siigo rechazo los datos (%s)", label, doc.id, exc.codes or "-")
         db.commit()
         return FAILED
-    state = _apply(db, issuer, invoice, result, now)
+    state = apply(result)
     db.commit()
     return state
+
+
+def _send(db: Session, issuer: InvoiceIssuer, invoice: Invoice, now: datetime) -> str:
+    """Un intento de envio de la factura."""
+    return attempt(
+        db,
+        invoice,
+        now,
+        lambda: issuer.issue(_draft(invoice, now)),
+        lambda result: _apply(db, issuer, invoice, result, now),
+        "Factura",
+    )
 
 
 def _refresh(db: Session, issuer: InvoiceIssuer, invoice: Invoice, now: datetime) -> str:
@@ -347,13 +401,18 @@ def run_emission(
     *,
     limit: int = 25,
     payment_id: object | None = None,
+    hold: timedelta | None = None,
 ) -> EmissionReport:
     """Prepara y emite las facturas que tocan, y reconsulta las que esperan a
-    la DIAN. Con `payment_id`, solo la de ese pago (la tarea de fondo)."""
+    la DIAN; despues, lo mismo con las notas credito. Con `payment_id`, solo
+    las de ese pago (la tarea de fondo y las acciones del admin)."""
+    from app.core import credit_notes
+
     report = EmissionReport()
     if not issuer.enabled:
         report.stopped = "disabled"
         return report
+    hold = hold_period() if hold is None else hold
 
     due = select(Invoice.id).where(
         Invoice.status.in_((PENDING, SENDING)),
@@ -365,7 +424,8 @@ def run_emission(
         waiting_dian = waiting_dian.where(Invoice.payment_id == payment_id)
     due_ids = list(db.scalars(due.order_by(Invoice.created_at).limit(limit)))
     issued_ids = list(db.scalars(waiting_dian.order_by(Invoice.created_at).limit(limit)))
-    if not due_ids and not issued_ids:
+    notes = credit_notes.due(db, now, limit=limit, payment_id=payment_id)
+    if not due_ids and not issued_ids and not notes:
         return report
 
     try:
@@ -385,7 +445,7 @@ def run_emission(
             db.rollback()
             continue
         if invoice.prepared_at is None:
-            if not prepare(db, invoice, sources, now):
+            if not prepare(db, invoice, sources, now, hold):
                 report.waiting += 1
                 db.commit()
                 continue
@@ -421,6 +481,16 @@ def run_emission(
             continue
         if state != ISSUED:
             _count(report, state)
+
+    # Las notas credito se buscan otra vez: una factura que acaba de quedar
+    # aceptada deja salir la suya en esta misma corrida.
+    try:
+        credit_notes.process(
+            db, issuer, now, credit_notes.due(db, now, limit=limit, payment_id=payment_id), report
+        )
+    except IssuerMisconfigured as exc:
+        report.stopped = f"config: {exc}"
+        logger.error("Emision de notas credito detenida: %s", exc)
     return report
 
 

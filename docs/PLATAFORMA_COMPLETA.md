@@ -795,7 +795,7 @@ Cierra §10 n.º 4. La base (paso 5.2) está construida: ver "Paso 5.2: cómo qu
 - La llamada a Siigo **no va dentro del pago**: si Siigo está caído, el cobro no puede fallar. Las facturas pendientes las emite el job que ya corre cada hora (`scripts/run_renewals.py`), con reintentos y sin cola (§13.5).
 - Siigo queda detrás de una interfaz, como `PaymentProvider` y `EmailSender`; los tests de API usan el proveedor real con un transporte HTTP simulado.
 - Las facturas no se borran al eliminar una cuenta: son documentos tributarios. Hoy no guardan datos del comprador; si se decide pedir nombre e identificación, hay que decidir también qué pasa con ellos al eliminar la cuenta (`core/payment_privacy.py`).
-- Una anulación de Wompi, o un reembolso, probablemente pida una nota crédito en Siigo. Por confirmar con el contador.
+- Una anulación de Wompi, o un reembolso, probablemente pida una nota crédito en Siigo. Por confirmar con el contador. (Respondido el 2026-11-11: ver "Respuestas de la contadora sobre la nota crédito" en el diseño del 5.4.)
 - Credenciales de Siigo solo por variable de entorno, como las de Wompi.
 
 **Pendiente antes de construir**
@@ -833,7 +833,7 @@ Rama `fase-5-facturacion-base`. La base de la facturación, sin proveedor: **la 
   - No entra todavía (5.4): buscar la TRM por su vigencia, el formato de fecha que pida Siigo y guardar las tasas con su fuente.
 - **Tabla `invoices`** (migración `5dc9670480c1`, solo DDL): `id`, `payment_id` (único, llave a `payments` con `RESTRICT`), `status` (hoy solo `pending`), `operation_date` y `created_at`. Sin datos del comprador (a quién va la factura está por definir, pendiente n.º 5 de arriba) y sin tasas ni monto en pesos: entran en el 5.4 con su propia migración. **Sin backfill**: los pagos aprobados que había eran del sandbox de Wompi y no se facturan.
 - **Dónde nace**: `core/invoices.create_pending(db, payment)`, que no hace commit, se llama solo desde la rama de aprobación de `core/subscriptions.apply_transaction`. Cubre todos los caminos que aprueban: webhook, `GET /billing/payments/:id`, cobro de la renovación automática y "Reconsultar" en el admin. Idempotencia: `apply_transaction` aprueba un pago una vez, la fila del pago está bloqueada mientras se aplica, y la base no admite dos facturas por pago.
-- Un pago declinado, en error o pendiente no deja factura. **Un pago anulado después de aprobado conserva su factura pendiente**: si se emite con nota crédito o no se emite lo decide el contador (5.4).
+- Un pago declinado, en error o pendiente no deja factura. **Un pago anulado después de aprobado conserva su factura pendiente**: si se emite con nota crédito o no se emite lo decide el contador (5.4). (Desde el 2026-11-11 queda `cancelled` y no se emite: entrega 5 del 5.4.)
 - La factura sobrevive a la eliminación de la cuenta: el pago queda sin cuenta y la factura sigue.
 - **Admin**: el detalle de un pago trae `invoice` (`status`, `operation_date`, `created_at`; null si no hay) y lo muestra como "Factura electrónica: Pendiente de emitir: la emisión todavía no está encendida" y "Día de la operación". La fecha se formatea en UTC (`formatCalendarDate`, `frontend/lib/admin.ts`) para que no se corra un día. El cliente no ve nada nuevo: el recibo sigue diciendo que no es una factura.
 - **Tests**: `tests/api/test_invoices.py` (15 casos: aprobado, día en hora de Colombia, webhook repetido, webhook más consulta, pasarela simulada, declinado, error y pendiente, monto distinto, renovación, anulación, cuenta eliminada, unicidad en la base, llave al pago, detalle del admin), y en Playwright, `e2e/admin-billing.spec.ts` ve "Pendiente de emitir". Los fixtures que vacían `payments` entre tests vacían antes `invoices`.
@@ -853,7 +853,30 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 - **El tipo de documento** (aprobado por el usuario): ver el punto 8.
 - **Las credenciales de la empresa de pruebas de Siigo llegaron el 2026-11-09** (el usuario). Van solo en `backend/.env`.
 - **La tasa de euros a dólares es la del Banco Central Europeo** (decidido por el usuario el 2026-11-09; punto 5).
-- **Queda para la contadora**: el motivo de la nota crédito y lo que pasa con su valor en pesos (punto 12).
+- ~~**Queda para la contadora**: el motivo de la nota crédito y lo que pasa con su valor en pesos (punto 12).~~ Respondido el 2026-11-11 (abajo).
+
+*Respuestas de la contadora sobre la nota crédito (2026-11-11), con lo que decidió el usuario:*
+
+| Caso | Respuesta | Cómo quedó (`core/credit_notes.py`) |
+|---|---|---|
+| Reembolso de todo el valor | Motivo **2**, "Anulación de factura electrónica" | Nota crédito con motivo 2 |
+| Reembolso de una parte (los días que no usó) | Motivo **1**, "Devolución parcial… no aceptación parcial del servicio" | Nota crédito con motivo 1 |
+| La pasarela anula un pago aprobado | "Solo si la factura quedó aceptada por la DIAN, porque si no se anula contará como ingreso, aunque no esté el dinero en el banco" | Con la factura aceptada, nota crédito por lo que falte devolver (motivo 2 si es todo). Si no se emitió, la factura se cancela. Si está en Siigo sin aceptar, se anula en Siigo Nube y el admin la marca |
+| Reembolso o anulación antes de emitir | "Lo mejor sería no emitir la factura", y que pueda quedar un parámetro para no facturar la venta hasta que el pago esté aceptado | Con todo devuelto, la factura queda `cancelled` y no se emite. El parámetro es `INVOICE_HOLD_HOURS` (por defecto 0): la factura espera ese tiempo después de aprobado el pago |
+| Reembolso **parcial** antes de emitir | (No se le preguntó.) Decidido por el usuario: la factura por el total y después la nota con motivo 1 | Sin factura, la parte no devuelta quedaría sin facturar |
+| Valor y fecha de la nota | "El valor en la nota crédito debe ser la misma que en la factura y el mismo en la transferencia, sin importar el cambio". La fecha es la del día en que se genera | Las tasas congeladas de la factura, nunca las del día del reembolso. La fecha es la del envío |
+| La factura en camino (`sending`, `issued`) | — | La nota espera a la DIAN. Si la acepta, sale |
+
+*Forma de pago (2026-11-11, el usuario)*: en la cuenta de la empresa hay una forma de pago "Pagos en línea", con el código 5 en Siigo Nube, que sirve para `SIIGO_PAYMENT_TYPE_ID`. El código de Siigo Nube no es necesariamente el `id` de la API, como pasó con el IVA: se busca con `python scripts/siigo_catalogs.py pagos pagos_nc`, en solo lectura, con las credenciales de la empresa confirmadas con el usuario. No estaba entre las siete activas sin vencimiento del 2026-11-10: está inactiva, tiene vencimiento o se creó después. Tiene que estar activa y sin vencimiento para facturas y para notas crédito.
+
+*Consulta en la cuenta de la empresa (2026-11-11, solo lectura, con las credenciales confirmadas por el usuario)*: `python scripts/siigo_catalogs.py pagos pagos_nc notas`.
+- **"Pagos en línea" no aparece por la API**, ni con `document_type=FV` ni con `NC`. Las dos consultas devuelven las mismas 10 formas de pago, todas activas:
+  - con vencimiento (no sirven): `10228` Clientes Extranjero, `10227` Clientes Nacionales y `2720` Crédito;
+  - sin vencimiento: `2722` Tarjeta Crédito, `2721` Tarjeta Débito, `2719` Efectivo, `8369` Bancolombia, `8370` DaviPlata, `8371` Nequi y `8372` Paypal.
+- Lo probable es que "Pagos en línea" no esté habilitada para el comprobante de factura de venta. Se revisa en Siigo Nube y se vuelve a correr el script. `SIIGO_PAYMENT_TYPE_ID` sigue sin valor: no se elige otra en silencio.
+- **La forma de pago queda en `21632`** (2026-11-11): el usuario creó en Siigo Nube una forma de pago nueva, "sebasanalisis", con el código 10, en lugar de "Pagos en línea". Al volver a correr `scripts/siigo_catalogs.py pagos pagos_nc` aparece con el `id` `21632`, tipo `CarteraProveedor`, activa y sin vencimiento, igual para facturas (`FV`) y para notas crédito (`NC`). En producción, `SIIGO_PAYMENT_TYPE_ID=21632`.
+- **Tipo de nota crédito: `11817`** ("Nota Crédito", código 1): activo, sin centro de costo y con numeración automática. `DocumentTypeNC` no dice si es electrónico: se confirma en Siigo Nube antes de poner `SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID=11817`.
+
 
 *Fuentes.* Se citan en el módulo al construir, y se vuelven a leer entonces:
 - Portal oficial, `developers.siigo.com/docs/siigoapi/`: Introducción, Partner Id, Idempotencia, Bloqueo de usuarios, Manejo de errores, Facturación electrónica, Crear factura (`invoice/1-create-invoice/`) y Crear nota crédito (`credit-note/1-create-credit-note/`).
@@ -890,7 +913,7 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 - **Catálogos para la configuración**: hay varios tipos de comprobante con `electronic_type: ElectronicInvoice` ("Factura electrónica de venta"), uno de exportación (`ExportInvoice`) y otros no electrónicos. Qué tipo, vendedor, forma de pago y grupo de inventario usar en la empresa de pruebas se elige al construir, con `scripts/siigo_catalogs.py`. En producción salen de la cuenta de la empresa, no de estos.
 - `GET /v1/products` respondió `429` incluso después de esperar: queda para la próxima prueba.
 
-*Contradicciones de la documentación (se resuelven probando):* ~~el largo máximo de la `Idempotency-Key`~~ (30, lo confirmó soporte el 2026-11-09; usamos 25); ~~el `expires_in` del token~~ (son segundos: 24 horas, probado el 2026-11-09); los motivos de la nota crédito (1 a 5 contra 1 a 6); y si `stamp` y `mail` son objetos o booleanos.
+*Contradicciones de la documentación (se resuelven probando):* ~~el largo máximo de la `Idempotency-Key`~~ (30, lo confirmó soporte el 2026-11-09; usamos 25); ~~el `expires_in` del token~~ (son segundos: 24 horas, probado el 2026-11-09); ~~los motivos de la nota crédito (1 a 5 contra 1 a 6)~~ (la tabla trae 1, 2, 3, 4, 6 y 7; usamos el 1 y el 2, leído el 2026-11-11); y si `stamp` y `mail` son objetos o booleanos (el esquema de Apiary los da como objetos `{send}`, y así van).
 
 *El diseño:*
 
@@ -951,7 +974,7 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
 9. **Cómo le llega al cliente.** Como cada factura va a su comprador, el correo de la cuenta va en el contacto del tercero (`contacts[].email`), y `mail.send: true` se la envía. `POST /v1/invoices/{id}/mail` (hasta 5 direcciones) sirve para reenviarla. El correo de la cuenta pasa a Siigo, y eso va en la política de datos v2 (5.5). Qué manda Siigo en ese correo (PDF, XML) se ve en la empresa de pruebas.
 10. **Configuración en variables de entorno.** Secretos: `SIIGO_USERNAME` y `SIIGO_ACCESS_KEY`. No secretos: `SIIGO_API_BASE_URL` y `SIIGO_PARTNER_ID`. Ids de Siigo Nube: `SIIGO_DOCUMENT_TYPE_ID`, `SIIGO_SELLER_ID`, `SIIGO_PAYMENT_TYPE_ID`, `SIIGO_PRODUCT_CODE`. ~~No hay `SIIGO_TAX_ID`: la suscripción va excluida de IVA.~~ Desde el 2026-11-09 hay `SIIGO_TAX_ID`, opcional, para el IVA del 0 % (respuesta 2 de soporte, abajo). Un script (`scripts/siigo_catalogs.py`) lista los catálogos de la cuenta para elegir los ids. Al arrancar con `INVOICE_ISSUER=siigo`, la API verifica que el tipo de comprobante sea electrónico y que existan los demás; si no, no arranca, como con las llaves de Tipster Page.
 11. **El token** se pide al empezar y se guarda en memoria, con su vencimiento. Se renueva antes de vencer, o una sola vez ante un 401. Nunca va a un log ni a GlitchTip.
-12. **Nota crédito: cuando se reembolsa una suscripción** (la contadora). Al registrar el reembolso en el admin (`payment_refunds`, §4.8; las devoluciones de Tipster Page se anotan a mano desde el 2026-11-06) se emite la nota crédito de la factura de ese pago, con su propia `Idempotency-Key`. Motivo (`reason`, contador): se propone `2` ("Anulación de factura electrónica") si se reembolsa el total y `1` ("Devolución parcial… no aceptación parcial del servicio") si es una parte; y tratar como reembolso total un pago que la pasarela anula después de aprobado. Lo que sigue era la propuesta anterior: una acción del admin, "Emitir nota crédito", con motivo y bitácora, total o parcial, sobre una factura `accepted`; no automática. Las devoluciones de Tipster Page ya son manuales, y una anulación es rara. Una factura que no salió de `pending` cuando su pago se anula no se emite (contador). Tabla nueva `credit_notes`, con la misma idempotencia.
+12. **Nota crédito: cuando se reembolsa una suscripción** (la contadora). **Construido el 2026-11-11** con sus respuestas: ver "Respuestas de la contadora sobre la nota crédito" y la entrega 5. Lo que sigue es el diseño anterior. Al registrar el reembolso en el admin (`payment_refunds`, §4.8; las devoluciones de Tipster Page se anotan a mano desde el 2026-11-06) se emite la nota crédito de la factura de ese pago, con su propia `Idempotency-Key`. Motivo (`reason`, contador): se propone `2` ("Anulación de factura electrónica") si se reembolsa el total y `1` ("Devolución parcial… no aceptación parcial del servicio") si es una parte; y tratar como reembolso total un pago que la pasarela anula después de aprobado. Lo que sigue era la propuesta anterior: una acción del admin, "Emitir nota crédito", con motivo y bitácora, total o parcial, sobre una factura `accepted`; no automática. Las devoluciones de Tipster Page ya son manuales, y una anulación es rara. Una factura que no salió de `pending` cuando su pago se anula no se emite (contador). Tabla nueva `credit_notes`, con la misma idempotencia.
 13. **Admin.** En el detalle del pago: estado, número (`FV-…`), CUFE, estado ante la DIAN, errores, tasas y monto en pesos, más "Reintentar emisión" y "Reconsultar". El recibo del cliente sigue diciendo que no es una factura, y puede avisar que la factura llega aparte.
 14. **Tests.** `SiigoIssuer` sobre un transporte HTTP simulado (`tests/api/siigo_sandbox.py`, como el de Tipster Page): token, `Partner-Id`, `Idempotency-Key` en el reintento, timeout, errores pasajeros contra errores de configuración, freno, `Rejected`, total que no cuadra y fecha. `fake` en Playwright. Puro: el cálculo del precio con IVA y la búsqueda de la TRM por vigencia.
 15. **Prueba real.** En la empresa de pruebas que da soporte de Siigo: una factura de un pago en euros, aceptada, vista en Siigo Nube y en el admin; una rechazada a propósito; una nota crédito. Después, la prueba en producción del 5.6.
@@ -1039,7 +1062,48 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
   - **La lista de pagos** trae `invoice_status`, y marca las facturas fallidas o rechazadas.
   - Tests: cinco casos de admin en `tests/api/test_invoice_emission.py` (lo que muestra, reintentar con los datos corregidos, lo que no se reintenta ni se reconsulta, la rechazada corregida en Siigo Nube, la emisión apagada), y las dos rutas nuevas en la prueba de permisos del admin.
   - Playwright corre con `INVOICE_ISSUER=none` (`e2e/start-api.mjs`): emitir pediría las tasas reales a datos.gov.co y al BCE. `e2e/admin-billing.spec.ts` ve la factura pendiente, con la emisión apagada y sin acciones.
-- **Faltan**: la nota crédito (punto 12, espera a la contadora) y la prueba con la cuenta de la empresa en Siigo (punto 15).
+- **Entrega 5, la nota crédito (2026-11-11; rama `fase-5-siigo-nota-credito`).** Sobre las respuestas de la contadora del 2026-11-11 (arriba, "Respuestas de la contadora sobre la nota crédito") y la documentación oficial, leída ese día: "Crear nota crédito" del portal y, en Apiary, `CreditNoteIn`, `CreditNoteOut`, `StampOutDianNC`, `DocumentNC`, consulta por id y anulación de factura.
+  - **Lo que dice la API de la nota crédito**:
+    - `POST /v1/credit-notes`, con `Idempotency-Key` como la factura.
+    - Lleva `document.id`, que es un tipo de comprobante de `GET /v1/document-types?type=NC`.
+    - Lleva `date`, que no puede ser anterior a hoy.
+    - Lleva `invoice`, el UUID de la factura en Siigo, obligatorio en una nota electrónica.
+    - Lleva `reason`, obligatorio en un documento electrónico.
+    - Lleva `items` y `payments` (forma de pago de `GET /v1/payment-types?document_type=NC`), y `stamp` y `mail` como objetos `{send}`.
+    - Responde con `id`, `name` ("NC-…"), `total` y `stamp` con `status` y `cude`.
+    - Se consulta con `GET /v1/credit-notes/{id}`.
+    - No tiene endpoint de errores de la DIAN ni de reenvío por correo.
+    - La factura tiene que estar "enviada" a la DIAN (`invalid_document`).
+    - Los motivos de la tabla son 1, 2, 3, 4, 6 y 7. El texto del campo dice "del 1 al 5" y el OpenAPI "1 a 6": usamos solo el 1 y el 2.
+  - **`billing/credit_note.py`** (puro):
+    - `reason_for`: 2 si la nota devuelve todo lo pagado, 1 si es una parte. Varias parciales que terminan sumando el total van todas con el 1.
+    - `cop_cents_for`: el valor en pesos con las tasas congeladas de la factura, calculado sobre lo acumulado (`pesos(antes + esta) − pesos(antes)`). Así la suma de las notas nunca pasa de la factura y la iguala al centavo cuando se devolvió todo.
+    - `observations`: a qué factura corrige y por qué, lo devuelto en euros, las tasas de la factura y la referencia del pago.
+  - **Tabla `credit_notes`** (migración `b5e2d8c41f07`, solo DDL):
+    - Una fila por reembolso (`refund_id`, único) o por anulación (`refund_id` null).
+    - Guarda el motivo, el monto en la moneda del pago, y lo congelado y la emisión como la factura, con el CUDE.
+    - La misma migración agrega a `invoices` el estado **`cancelled`**, con `cancelled_at` y `cancel_reason` (`refunded`, `voided`, `annulled_in_siigo`).
+  - **`core/credit_notes.on_reversal`** es lo único que crea notas crédito. Va en la misma transacción que `POST /admin/payments/:id/refunds` y que la rama de `apply_transaction` que anula un pago aprobado. La tabla de arriba es lo que hace en cada caso.
+  - **La emisión de la nota** va en la misma corrida que la de las facturas (`run_emission`), después de ellas: una factura que acaba de quedar aceptada deja salir su nota en esa corrida.
+    - Comparte el envío con la factura (`invoices.attempt`): reintentos con espera, freno por configuración y tope de intentos.
+    - Un reembolso registrado la intenta enseguida. La de una anulación la toma el job de cada hora.
+    - La fecha es la del día del envío.
+  - **`SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID`** (opcional). Sin él, las notas quedan pendientes (`credit_note_type_missing`) y las facturas salen igual. Con él, `check_ready` exige que el tipo de nota exista y esté activo, que tenga centro de costo si lo pide, y que la forma de pago esté activa para notas crédito.
+  - **`INVOICE_HOLD_HOURS`** (por defecto 0): las horas que espera la factura después de aprobado el pago antes de emitirse (`payment_hold`). Es el "parámetro" que propuso la contadora. Un reembolso total o una anulación en ese plazo la cancela sin nota crédito.
+  - **Admin**: el detalle del pago trae `credit_notes`, cada una con su estado, motivo, valor, número, CUDE y último error. Tres acciones nuevas, con motivo y bitácora:
+    - "Reintentar" una nota (`POST /admin/payments/:id/credit-notes/:id/retry`).
+    - "Reconsultar" una nota (`.../refresh`).
+    - "Marcar anulada en Siigo Nube" una factura (`POST /admin/payments/:id/invoice/cancel`): solo una rechazada o fallida que llegó a Siigo, de un pago anulado o reembolsado entero. Sus notas pendientes se cancelan con ella.
+  - `scripts/siigo_catalogs.py` lista además los tipos de nota crédito (`notas`) y las formas de pago para notas crédito (`pagos_nc`). El listado `pagos` ahora muestra también las formas de pago inactivas o con vencimiento.
+  - **Tests**:
+    - `tests/billing/test_credit_note.py`: 10 casos puros.
+    - `tests/api/test_credit_notes.py`: 18 casos, con el emisor de verdad sobre el Siigo simulado. Cubren cada fila de la tabla, la espera de la contadora, el tipo de nota sin configurar, el tiempo agotado con la misma llave, el error de datos con su reintento, la nota rechazada que se reconsulta, el aviso de anulación repetido que no deja dos notas y la nota de otro pago.
+    - `test_invoices.py`: un pago anulado antes de emitir ahora cancela la factura.
+  - **Sin probar en Siigo**:
+    - La empresa de pruebas no envía a la DIAN, y toda factura termina `Rejected` (respuesta 8 de soporte). Es probable que Siigo no acepte allí una nota sobre una factura rechazada (`invalid_document`).
+    - Que `reason` vaya como número y no como texto se ve en la primera nota real.
+    - La prueba real es el reembolso del pago real del lanzamiento (5.6).
+- **Faltan**: ~~la nota crédito (punto 12)~~ (entrega 5) y la prueba con la cuenta de la empresa en Siigo (punto 15).
 
 *Respuestas de soporte de Siigo (2026-11-09; rama `fase-5-siigo-respuestas-soporte`):*
 
@@ -1142,7 +1206,7 @@ Se citan en los módulos que tocan (`invoicing/siigo.py`, `billing/invoice_docum
 
 | Quién | Qué |
 |---|---|
-| Contador | ~~Moneda~~ (pesos), ~~IVA~~ (excluido), ~~la fecha~~ (la de emisión, con la TRM del día del pago), ~~nota crédito por reembolso~~ (sí) y ~~el valor en euros~~ (va en la factura): respondidos. ~~La fuente de la tasa de euros a dólares~~ (el BCE, decidido por el usuario). **Queda**: el motivo de la nota crédito, total y parcial; si una anulación de la pasarela cuenta como reembolso; qué pasa si se reembolsa antes de emitir la factura; y si la nota crédito lleva el valor en pesos de la factura o se recalcula con la TRM del día del reembolso (punto 12). Lo que sigue es la lista original: Moneda de la factura (A o B); fuente de la tasa de euros a dólares; IVA y si los precios lo incluyen; qué tipo de documento y qué responsabilidad fiscal lleva cada comprador, sobre todo uno de fuera de Colombia (pasaporte, documento extranjero, NIT de otro país); **la fecha de la factura cuando se emite otro día que el pago**: Siigo no deja una fecha anterior a hoy, y un pago aprobado a las 23:50 puede facturarse al día siguiente (¿fecha de emisión con la tasa del día del pago?); nota crédito por anulación y por reembolso; qué pasa con un pago anulado antes de emitir su factura; la TRM de datos.gov.co como fuente |
+| Contador | ~~Moneda~~ (pesos), ~~IVA~~ (excluido), ~~la fecha~~ (la de emisión, con la TRM del día del pago), ~~nota crédito por reembolso~~ (sí) y ~~el valor en euros~~ (va en la factura): respondidos. ~~La fuente de la tasa de euros a dólares~~ (el BCE, decidido por el usuario). ~~El motivo de la nota crédito, total y parcial; si una anulación de la pasarela cuenta como reembolso; qué pasa si se reembolsa antes de emitir la factura; y el valor en pesos de la nota~~ (respondidos el 2026-11-11). **Queda**: el redondeo, y si el "IVA 0%" usa las mismas cuentas contables que el IVA del 19 %. Lo que sigue es la lista original: Moneda de la factura (A o B); fuente de la tasa de euros a dólares; IVA y si los precios lo incluyen; qué tipo de documento y qué responsabilidad fiscal lleva cada comprador, sobre todo uno de fuera de Colombia (pasaporte, documento extranjero, NIT de otro país); **la fecha de la factura cuando se emite otro día que el pago**: Siigo no deja una fecha anterior a hoy, y un pago aprobado a las 23:50 puede facturarse al día siguiente (¿fecha de emisión con la tasa del día del pago?); nota crédito por anulación y por reembolso; qué pasa con un pago anulado antes de emitir su factura; la TRM de datos.gov.co como fuente |
 | Usuario con Siigo | Confirmar que el plan incluye la API; crear la aplicación (Desarrollo propio, Facturación de ventas) y pasar `username` y `access_key`; configurar la resolución de la DIAN y un tipo de comprobante electrónico; crear el producto "suscripción" y el impuesto si aplica; habilitar la moneda extranjera si se elige B; ~~**pedir a soporte la empresa de pruebas**~~ (las credenciales llegaron el 2026-11-09) |
 | Soporte de Siigo | ~~La empresa de pruebas~~ (2026-11-09). ~~El tipo de documento de un cliente de fuera, la ciudad que falta en la lista, cuánto tiempo guarda la `Idempotency-Key`, los estados intermedios~~ (respondidos el 2026-11-09: ver "Respuestas de soporte de Siigo"). ~~Si el reporte de la empresa trae más ciudades que el archivo público~~ (sí: comparado el 2026-11-10). ~~Si el IVA del 0 % choca con un producto excluido~~ (la API lo acepta: probado el 2026-11-10; lo fiscal es de la contadora). **Queda**: si el correo al cliente sale solo cuando la DIAN acepta; ~~si `POST /v1/customers` acepta una ciudad creada en Siigo Nube~~ (sí: probado el 2026-11-10); el cuerpo de `POST /v1/invoices/{id}/mail` |
 

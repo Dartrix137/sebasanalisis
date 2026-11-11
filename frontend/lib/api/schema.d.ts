@@ -289,6 +289,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/payments/{payment_id}/credit-notes/{credit_note_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Credit Note
+         * @description Vuelve a consultar en Siigo una nota credito emitida o rechazada.
+         */
+        post: operations["refresh_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/credit-notes/{credit_note_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Credit Note
+         * @description Reintenta una nota credito pendiente, en envio o fallida, y la intenta
+         *     enseguida (`core/credit_notes.reset_for_retry`).
+         */
+        post: operations["retry_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/payments/{payment_id}/invoice/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Invoice
+         * @description Marca anulada en Siigo Nube la factura de un pago que se devolvio entero
+         *     y que la DIAN no acepto (rechazada, o fallida despues de llegar a Siigo):
+         *     la contadora pide nota credito solo sobre una aceptada (2026-11-11). La
+         *     anulacion se hace en Siigo Nube; aqui solo queda constancia, y las notas
+         *     credito pendientes se cancelan con ella.
+         */
+        post: operations["cancel_invoice_admin_payments__payment_id__invoice_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/payments/{payment_id}/invoice/refresh": {
         parameters: {
             query?: never;
@@ -349,6 +414,10 @@ export interface paths {
          * @description Registra un reembolso ya hecho en el panel del proveedor. No mueve el
          *     pago ni el acceso: si ademas hay que quitar el acceso, se cancela la
          *     suscripcion de inmediato.
+         *
+         *     Mueve la factura (§3.17, "Paso 5.4", punto 12): si no se emitio y con
+         *     este reembolso se devolvio todo, ya no se emite; si no, el reembolso lleva
+         *     nota credito, que sale cuando la DIAN haya aceptado la factura.
          */
         post: operations["record_refund_admin_payments__payment_id__refunds_post"];
         delete?: never;
@@ -2147,6 +2216,11 @@ export interface components {
         AdminPaymentDetailResponse: {
             /** Audit */
             audit: components["schemas"]["AuditLogEntry"][];
+            /**
+             * Credit Notes
+             * @default []
+             */
+            credit_notes: components["schemas"]["CreditNoteResponse"][];
             /** Events */
             events: components["schemas"]["PaymentEventResponse"][];
             invoice: components["schemas"]["InvoiceResponse"] | null;
@@ -3118,6 +3192,67 @@ export interface components {
             /** @default manual */
             source: components["schemas"]["SpinSource"];
         };
+        /**
+         * CreditNoteResponse
+         * @description Una nota credito de la factura (§3.17, "Paso 5.4", punto 12).
+         */
+        CreditNoteResponse: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Cop Cents */
+            cop_cents: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Cude */
+            cude: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date: string | null;
+            /** Last Error Codes */
+            last_error_codes: string[] | null;
+            /** Last Error Message */
+            last_error_message: string | null;
+            /** Mail Status */
+            mail_status: string | null;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
+            /** Provider Name */
+            provider_name: string | null;
+            /** Reason */
+            reason: number;
+            /** Refund Id */
+            refund_id: string | null;
+            /** Stamp Status */
+            stamp_status: string | null;
+            status: components["schemas"]["CreditNoteStatus"];
+            /** Waiting Reason */
+            waiting_reason: string | null;
+        };
+        /**
+         * CreditNoteStatus
+         * @description Los estados de la nota credito (`core/credit_notes.py`): los de la
+         *     factura, con `cancelled` si su factura no se emitio.
+         * @enum {string}
+         */
+        CreditNoteStatus: "pending" | "sending" | "issued" | "accepted" | "rejected" | "failed" | "cancelled";
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
             /** Password */
@@ -3435,7 +3570,8 @@ export interface components {
         };
         /**
          * InvoiceActionRequest
-         * @description POST /admin/payments/:id/invoice/retry y /refresh.
+         * @description POST /admin/payments/:id/invoice/retry, /refresh y /cancel, y
+         *     /admin/payments/:id/credit-notes/:id/retry y /refresh.
          */
         InvoiceActionRequest: {
             /** Reason */
@@ -3459,6 +3595,10 @@ export interface components {
             buyer_id_type: string | null;
             /** Buyer Name */
             buyer_name: string | null;
+            /** Cancel Reason */
+            cancel_reason: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
             /** Cop Cents */
             cop_cents: number | null;
             /**
@@ -3512,7 +3652,7 @@ export interface components {
          * @description Los estados de la factura (`core/invoices.py`; §3.17, "Paso 5.4", punto 3).
          * @enum {string}
          */
-        InvoiceStatus: "pending" | "sending" | "issued" | "accepted" | "rejected" | "failed";
+        InvoiceStatus: "pending" | "sending" | "issued" | "accepted" | "rejected" | "failed" | "cancelled";
         /**
          * LegalDocumentResponse
          * @description Una version publicada, con su texto en Markdown.
@@ -5538,6 +5678,113 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+                credit_note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+                credit_note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_invoice_admin_payments__payment_id__invoice_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceActionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

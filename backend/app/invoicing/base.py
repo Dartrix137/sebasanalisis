@@ -46,8 +46,24 @@ class InvoiceDraft:
 
 
 @dataclass(frozen=True)
+class CreditNoteDraft:
+    """Una nota credito a mandar, ya congelada (§3.17, "Paso 5.4", punto 12)."""
+
+    idempotency_key: str
+    issue_date: date
+    #: El id de la factura en el emisor (en Siigo, su UUID).
+    invoice_provider_id: str
+    #: El motivo de la DIAN: 2 (anulacion de la factura) o 1 (devolucion parcial).
+    reason: int
+    description: str
+    amount: Decimal  # en pesos, con 2 decimales
+    observations: str
+
+
+@dataclass(frozen=True)
 class IssuedInvoice:
-    """Una factura en el emisor, como la devolvio."""
+    """Una factura o una nota credito en el emisor, como la devolvio. En una
+    nota credito, `cufe` lleva su CUDE."""
 
     provider_id: str
     name: str | None
@@ -118,6 +134,15 @@ class InvoiceIssuer(Protocol):
 
     def stamp_errors(self, provider_id: str) -> list[str]: ...
 
+    @property
+    def credit_notes_enabled(self) -> bool:
+        """Si puede emitir notas credito (en Siigo, con su tipo de comprobante)."""
+        ...
+
+    def issue_credit_note(self, draft: CreditNoteDraft) -> IssuedInvoice: ...
+
+    def fetch_credit_note(self, provider_id: str) -> IssuedInvoice: ...
+
 
 class DisabledIssuer:
     """`INVOICE_ISSUER=none`: la emision esta apagada."""
@@ -138,6 +163,14 @@ class DisabledIssuer:
         raise IssuerMisconfigured("La emision de facturas esta apagada")
 
     def stamp_errors(self, provider_id: str) -> list[str]:
+        raise IssuerMisconfigured("La emision de facturas esta apagada")
+
+    credit_notes_enabled = False
+
+    def issue_credit_note(self, draft: CreditNoteDraft) -> IssuedInvoice:
+        raise IssuerMisconfigured("La emision de facturas esta apagada")
+
+    def fetch_credit_note(self, provider_id: str) -> IssuedInvoice:
         raise IssuerMisconfigured("La emision de facturas esta apagada")
 
 

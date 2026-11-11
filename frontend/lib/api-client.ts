@@ -1010,6 +1010,28 @@ export const adminApi = {
       token,
     }),
 
+  /** Marca anulada en Siigo Nube una factura no aceptada de un pago devuelto entero. */
+  cancelInvoice: (token: string, paymentId: UUID, body: InvoiceActionRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/invoice/cancel`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  /** Reintenta la emisión de una nota crédito pendiente, en envío o fallida. */
+  retryCreditNote: (token: string, paymentId: UUID, creditNoteId: UUID, body: InvoiceActionRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(
+      `/admin/payments/${paymentId}/credit-notes/${creditNoteId}/retry`,
+      { method: "POST", body: JSON.stringify(body), token },
+    ),
+
+  /** Vuelve a consultar en Siigo una nota crédito emitida o rechazada. */
+  refreshCreditNote: (token: string, paymentId: UUID, creditNoteId: UUID, body: InvoiceActionRequest) =>
+    apiFetch<AdminPaymentDetailResponse>(
+      `/admin/payments/${paymentId}/credit-notes/${creditNoteId}/refresh`,
+      { method: "POST", body: JSON.stringify(body), token },
+    ),
+
   /** Registra un reembolso hecho en el panel de la pasarela. No mueve el pago ni el acceso. */
   recordRefund: (token: string, paymentId: UUID, body: RecordRefundRequest) =>
     apiFetch<AdminPaymentDetailResponse>(`/admin/payments/${paymentId}/refunds`, {

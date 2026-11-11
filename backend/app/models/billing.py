@@ -285,7 +285,11 @@ class SubscriptionPriceChange(Base):
 
 
 # Deben coincidir con los estados de `core/invoices.py`.
-INVOICE_STATUSES = ("pending", "sending", "issued", "accepted", "rejected", "failed")
+INVOICE_STATUSES = (
+    "pending", "sending", "issued", "accepted", "rejected", "failed", "cancelled"
+)
+#: Por que una factura no se emite (`invoices.cancel_reason`).
+INVOICE_CANCEL_REASONS = ("refunded", "voided", "annulled_in_siigo")
 
 
 class Invoice(Base):
@@ -305,7 +309,9 @@ class Invoice(Base):
     Estados (§3.17, "Paso 5.4", punto 3): `pending` (sin enviar), `sending`
     (salio y no se sabe el resultado), `issued` (creada en Siigo, esperando a
     la DIAN), `accepted` (con CUFE), `rejected` (la DIAN la rechazo) y
-    `failed` (Siigo rechazo los datos: no se reintenta sola).
+    `failed` (Siigo rechazo los datos: no se reintenta sola). Y `cancelled`
+    (2026-11-11, la contadora): no se emite, porque su pago se reembolso entero
+    o se anulo antes de que la DIAN la aceptara (`core/credit_notes.py`).
 
     Es un documento tributario: no se borra al eliminar la cuenta, y por eso la
     llave al pago es RESTRICT (los pagos tampoco se borran).
@@ -366,6 +372,91 @@ class Invoice(Base):
     dian_errors: Mapped[list[str] | None] = mapped_column(JSONB)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cuando y por que no se emite (`cancelled`).
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(
+        enum_col(*INVOICE_CANCEL_REASONS, name="invoice_cancel_reason", length=20)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+# Deben coincidir con los estados de `core/credit_notes.py`.
+CREDIT_NOTE_STATUSES = (
+    "pending", "sending", "issued", "accepted", "rejected", "failed", "cancelled"
+)
+#: Los motivos de la DIAN que usamos (Siigo, crear nota credito; la contadora,
+#: 2026-11-11): 2 si devuelve la factura entera, 1 si una parte.
+CREDIT_NOTE_REASONS = (1, 2)
+
+
+class CreditNote(Base):
+    """La nota credito electronica de un reembolso o una anulacion (§3.17,
+    "Paso 5.4", punto 12; Fase 5, paso 5.4).
+
+    La crea `core/credit_notes.py` en la misma transaccion en que se registra
+    el reembolso (`payment_refunds`) o en que la pasarela anula el pago. Se
+    emite solo sobre una factura aceptada por la DIAN (la contadora): mientras
+    tanto espera. Lleva el valor en pesos de la factura, con sus tasas
+    congeladas, sin importar la tasa del dia del reembolso (la contadora).
+
+    Estados, como los de la factura: `pending`, `sending`, `issued`,
+    `accepted`, `rejected`, `failed` y `cancelled` (su factura no se emitio).
+    Es un documento tributario: no se borra.
+    """
+
+    __tablename__ = "credit_notes"
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="ck_credit_notes_amount_positive"),
+        CheckConstraint("cop_cents IS NULL OR cop_cents > 0", name="ck_credit_notes_cop_positive"),
+        CheckConstraint("reason IN (1, 2)", name="ck_credit_notes_reason"),
+        # Un reembolso tiene a lo sumo una nota credito.
+        UniqueConstraint("refund_id", name="uq_credit_notes_refund_id"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    invoice_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("invoices.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    # El reembolso que la origino; null si fue una anulacion de la pasarela.
+    refund_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("payment_refunds.id", ondelete="RESTRICT")
+    )
+    status: Mapped[str] = mapped_column(
+        enum_col(*CREDIT_NOTE_STATUSES, name="credit_note_status", length=20), nullable=False
+    )
+    #: 2 (anulacion de la factura) o 1 (devolucion parcial).
+    reason: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Lo devuelto, en la moneda del pago.
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+
+    # --- Lo congelado antes del primer envio ---
+    prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str | None] = mapped_column(String(30), unique=True)
+    cop_cents: Mapped[int | None] = mapped_column(BigInteger)
+    observations: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(String(500))
+
+    # --- La emision ---
+    waiting_reason: Mapped[str | None] = mapped_column(String(40))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    issue_date: Mapped[date | None] = mapped_column(Date)
+    provider_id: Mapped[str | None] = mapped_column(String(64))
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_total: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    stamp_status: Mapped[str | None] = mapped_column(String(20))
+    # El CUDE de la nota (la factura lleva CUFE).
+    cude: Mapped[str | None] = mapped_column(String(200))
+    mail_status: Mapped[str | None] = mapped_column(String(20))
+    last_error_codes: Mapped[list[str] | None] = mapped_column(JSONB)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

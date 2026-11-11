@@ -150,8 +150,15 @@ test("desde el detalle de la cuenta: cancelar de inmediato quita el acceso; en P
   await detalle.getByLabel("Fecha en la pasarela").fill(new Date().toISOString().slice(0, 10));
   await detalle.getByLabel("Motivo del reembolso").fill(`Devolución parcial (${email})`);
   await detalle.getByRole("button", { name: "Registrar reembolso" }).click();
-  // Queda en la lista de reembolsos y en lo reembolsado del pago.
-  await expect(detalle.getByText("10 EUR", { exact: true })).toHaveCount(2);
+  // Queda en la lista de reembolsos, en lo reembolsado del pago y en su nota
+  // crédito (motivo 1), que espera a que la DIAN acepte la factura (§3.17,
+  // "Paso 5.4", entrega 5): una devolución parcial no cancela la factura.
+  await expect(detalle.getByText("10 EUR", { exact: true })).toHaveCount(3);
+  const notas = detalle.getByTestId("notas-credito");
+  await expect(notas.getByText("Pendiente de emitir")).toBeVisible();
+  await expect(notas.getByText("1 · Devolución parcial", { exact: false })).toBeVisible();
+  await expect(notas.getByText("Esperando: la DIAN todavía no aceptó la factura")).toBeVisible();
+  await expect(notas.getByRole("button", { name: "Reintentar la nota crédito" })).toHaveCount(0);
   await expect(detalle.getByText("Reembolsado", { exact: true })).toBeVisible();
   await expect(detalle.getByText("Registró un reembolso")).toBeVisible();
   await close();

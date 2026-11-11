@@ -16,6 +16,12 @@
  * punto 13): estado, número, CUFE, monto en pesos con sus tasas, a quién va y
  * el último error, con dos acciones más, con motivo y bitácora: reintentar la
  * emisión y reconsultar en Siigo.
+ *
+ * Y sus notas crédito (§3.17, "Paso 5.4", punto 12): un reembolso registrado o
+ * una anulación de la pasarela crea una, que sale cuando la DIAN aceptó la
+ * factura; si la factura no se había emitido y se devolvió todo, ya no se
+ * emite. Cada nota se puede reintentar o reconsultar, y una factura rechazada
+ * de un pago devuelto entero se marca anulada en Siigo Nube.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -24,7 +30,12 @@ import { SuccessBox } from "@/components/AuthShell";
 import { Badge, Button, CardHeader, ErrorBox, Field } from "@/components/ui";
 import { ApiError, adminApi } from "@/lib/api-client";
 import {
+  CREDIT_NOTE_REASON_LABEL,
+  CREDIT_NOTE_STATUS_LABEL,
+  CREDIT_NOTE_STATUS_TONE,
+  CREDIT_NOTE_WAITING_LABEL,
   ID_TYPE_LABEL,
+  INVOICE_CANCEL_LABEL,
   INVOICE_STATUS_LABEL,
   INVOICE_STATUS_TONE,
   INVOICE_WAITING_LABEL,
@@ -40,6 +51,7 @@ import { formatMoney, parseMoneyToCents } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import type {
   AdminPaymentDetailResponse,
+  CreditNoteResponse,
   InvoiceResponse,
   PaymentEventResponse,
 } from "@/lib/types/admin";
@@ -118,6 +130,16 @@ export function PaymentDetail({
       {detail.invoice ? (
         <InvoiceSection
           invoice={detail.invoice}
+          enabled={detail.invoice_issuer_enabled}
+          paymentId={paymentId}
+          fullyReversed={p.status === "voided" || p.refunded_cents >= p.amount_cents}
+          onDone={applied}
+        />
+      ) : null}
+
+      {detail.credit_notes.length > 0 ? (
+        <CreditNotesSection
+          notes={detail.credit_notes}
           enabled={detail.invoice_issuer_enabled}
           paymentId={paymentId}
           onDone={applied}
@@ -253,15 +275,23 @@ function InvoiceSection({
   invoice,
   enabled,
   paymentId,
+  fullyReversed,
   onDone,
 }: {
   invoice: InvoiceResponse;
   enabled: boolean;
   paymentId: string;
+  fullyReversed: boolean;
   onDone: (detail: AdminPaymentDetailResponse) => void;
 }) {
   const retryable = ["pending", "sending", "failed"].includes(invoice.status);
   const refreshable = ["issued", "rejected"].includes(invoice.status);
+  // En Siigo sin aceptar, de un pago devuelto entero: no lleva nota crédito
+  // (la contadora), se anula en Siigo Nube.
+  const cancellable =
+    fullyReversed &&
+    invoice.provider_name !== null &&
+    (invoice.status === "rejected" || invoice.status === "failed");
   return (
     <section className="space-y-3" data-testid="factura-electronica">
       <div className="flex flex-wrap items-center gap-2">
@@ -317,6 +347,12 @@ function InvoiceSection({
           {INVOICE_WAITING_LABEL[invoice.waiting_reason] ?? invoice.waiting_reason}
         </p>
       ) : null}
+      {invoice.status === "cancelled" ? (
+        <p className="text-sm text-muted">
+          {INVOICE_CANCEL_LABEL[invoice.cancel_reason ?? ""] ?? invoice.cancel_reason}
+          {invoice.cancelled_at ? ` · ${formatDateTime(invoice.cancelled_at)}` : ""}
+        </p>
+      ) : null}
       {invoice.last_error_message ? (
         <ErrorBox
           message={`Último error de Siigo${
@@ -349,19 +385,140 @@ function InvoiceSection({
           onDone={onDone}
         />
       ) : null}
+      {cancellable ? (
+        <InvoiceActionForm
+          paymentId={paymentId}
+          action="cancel"
+          title="Marcar anulada en Siigo Nube"
+          subtitle={`El pago se devolvió entero y la DIAN no aceptó la ${invoice.provider_name}: no lleva nota crédito. Anúlala primero en Siigo Nube; aquí solo queda constancia, y sus notas crédito pendientes se cancelan.`}
+          onDone={onDone}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function CreditNotesSection({
+  notes,
+  enabled,
+  paymentId,
+  onDone,
+}: {
+  notes: CreditNoteResponse[];
+  enabled: boolean;
+  paymentId: string;
+  onDone: (detail: AdminPaymentDetailResponse) => void;
+}) {
+  return (
+    <section className="space-y-3" data-testid="notas-credito">
+      <h3 className="text-sm font-bold text-white">Notas crédito</h3>
+      <ul className="space-y-3">
+        {notes.map((note) => (
+          <CreditNoteItem
+            key={note.id}
+            note={note}
+            enabled={enabled}
+            paymentId={paymentId}
+            onDone={onDone}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function CreditNoteItem({
+  note,
+  enabled,
+  paymentId,
+  onDone,
+}: {
+  note: CreditNoteResponse;
+  enabled: boolean;
+  paymentId: string;
+  onDone: (detail: AdminPaymentDetailResponse) => void;
+}) {
+  const retryable =
+    note.status === "pending" ||
+    note.status === "sending" ||
+    (note.status === "failed" && note.provider_name === null);
+  const refreshable = note.status === "issued" || note.status === "rejected";
+  return (
+    <li className="space-y-3 rounded-lg border border-edge p-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={CREDIT_NOTE_STATUS_TONE[note.status]}>
+          {CREDIT_NOTE_STATUS_LABEL[note.status]}
+        </Badge>
+        <span className="text-sm text-muted">
+          {CREDIT_NOTE_REASON_LABEL[note.reason] ?? `Motivo ${note.reason}`}
+          {note.refund_id ? " · por un reembolso" : " · por una anulación de la pasarela"}
+        </span>
+      </div>
+      <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <Data label="Devuelto" value={formatMoney(note.amount_cents, note.currency)} />
+        {note.cop_cents !== null ? (
+          <Data label="Valor en pesos" value={formatMoney(note.cop_cents, "COP")} />
+        ) : null}
+        {note.provider_name ? <Data label="Número" value={note.provider_name} /> : null}
+        {note.issue_date ? (
+          <Data label="Fecha de emisión" value={formatCalendarDate(note.issue_date)} />
+        ) : null}
+        {note.cude ? <Data label="CUDE" value={note.cude} /> : null}
+        {note.stamp_status ? <Data label="Estado en Siigo" value={note.stamp_status} /> : null}
+        {note.mail_status ? <Data label="Correo de Siigo" value={note.mail_status} /> : null}
+        {note.attempts > 0 ? <Data label="Intentos" value={String(note.attempts)} /> : null}
+        {note.next_attempt_at && note.status !== "failed" ? (
+          <Data label="Próximo intento" value={formatDateTime(note.next_attempt_at)} />
+        ) : null}
+      </dl>
+      {note.waiting_reason ? (
+        <p className="text-sm text-muted">
+          {CREDIT_NOTE_WAITING_LABEL[note.waiting_reason] ?? note.waiting_reason}
+        </p>
+      ) : null}
+      {note.last_error_message ? (
+        <ErrorBox
+          message={`Último error de Siigo${
+            note.last_error_codes?.length ? ` (${note.last_error_codes.join(", ")})` : ""
+          }: ${note.last_error_message}`}
+        />
+      ) : null}
+      {enabled && retryable ? (
+        <InvoiceActionForm
+          paymentId={paymentId}
+          creditNoteId={note.id}
+          action="retry"
+          title="Reintentar la nota crédito"
+          subtitle="La intenta otra vez ahora, si su factura ya está aceptada por la DIAN."
+          onDone={onDone}
+        />
+      ) : null}
+      {enabled && refreshable ? (
+        <InvoiceActionForm
+          paymentId={paymentId}
+          creditNoteId={note.id}
+          action="refresh"
+          title="Reconsultar la nota en Siigo"
+          subtitle="Pregunta a Siigo por su estado ante la DIAN."
+          onDone={onDone}
+        />
+      ) : null}
+    </li>
   );
 }
 
 function InvoiceActionForm({
   paymentId,
+  creditNoteId,
   action,
   title,
   subtitle,
   onDone,
 }: {
   paymentId: string;
-  action: "retry" | "refresh";
+  /** Si va, la acción es sobre esa nota crédito, no sobre la factura. */
+  creditNoteId?: string;
+  action: "retry" | "refresh" | "cancel";
   title: string;
   subtitle: string;
   onDone: (detail: AdminPaymentDetailResponse) => void;
@@ -378,11 +535,17 @@ function InvoiceActionForm({
     setError(null);
     setSaved(false);
     try {
-      const next = await withToken((t) =>
-        action === "retry"
+      const next = await withToken((t) => {
+        if (creditNoteId) {
+          return action === "retry"
+            ? adminApi.retryCreditNote(t, paymentId, creditNoteId, { reason })
+            : adminApi.refreshCreditNote(t, paymentId, creditNoteId, { reason });
+        }
+        if (action === "cancel") return adminApi.cancelInvoice(t, paymentId, { reason });
+        return action === "retry"
           ? adminApi.retryInvoice(t, paymentId, { reason })
-          : adminApi.refreshInvoice(t, paymentId, { reason }),
-      );
+          : adminApi.refreshInvoice(t, paymentId, { reason });
+      });
       setReason("");
       setSaved(true);
       onDone(next);
@@ -398,7 +561,7 @@ function InvoiceActionForm({
       <CardHeader title={title} subtitle={subtitle} />
       <Field
         label={`Motivo (${title.toLowerCase()})`}
-        name={`motivo-${action}`}
+        name={`motivo-${action}${creditNoteId ? `-${creditNoteId}` : ""}`}
         required
         minLength={3}
         maxLength={500}

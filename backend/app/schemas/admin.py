@@ -11,7 +11,12 @@ from pydantic import ConfigDict, Field
 
 from app.schemas.auth import AccessType, UserResponse, UserRole
 from app.schemas.base import ApiModel, Reason
-from app.schemas.billing import AdminPaymentResponse, InvoiceStatus, SubscriptionResponse
+from app.schemas.billing import (
+    AdminPaymentResponse,
+    CreditNoteStatus,
+    InvoiceStatus,
+    SubscriptionResponse,
+)
 from app.schemas.legal import ConsentResponse
 
 
@@ -215,6 +220,39 @@ class InvoiceResponse(ApiModel):
     last_error_message: str | None = None
     dian_errors: list[str] | None = None
     accepted_at: datetime | None = None
+    # Por que no se emite (`cancelled`): `refunded`, `voided` o
+    # `annulled_in_siigo`.
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
+
+
+class CreditNoteResponse(ApiModel):
+    """Una nota credito de la factura (§3.17, "Paso 5.4", punto 12)."""
+    id: UUID
+    status: CreditNoteStatus
+    # El motivo de la DIAN: 2 anulacion de la factura, 1 devolucion parcial.
+    reason: int
+    # Lo devuelto, en la moneda del pago.
+    amount_cents: int
+    currency: str
+    # El reembolso que la origino; null si fue una anulacion de la pasarela.
+    refund_id: UUID | None = None
+    created_at: datetime
+    # Por que todavia no sale (`invoice_not_accepted`, `credit_note_type_missing`).
+    waiting_reason: str | None = None
+    attempts: int = 0
+    next_attempt_at: datetime | None = None
+    # El valor en pesos, con las tasas de la factura.
+    cop_cents: int | None = None
+    issue_date: date | None = None
+    provider_name: str | None = None
+    stamp_status: str | None = None
+    cude: str | None = None
+    mail_status: str | None = None
+    last_error_codes: list[str] | None = None
+    last_error_message: str | None = None
+    accepted_at: datetime | None = None
+    cancelled_at: datetime | None = None
 
 
 class AdminPaymentDetailResponse(ApiModel):
@@ -223,6 +261,8 @@ class AdminPaymentDetailResponse(ApiModel):
     invoice: InvoiceResponse | None = None
     # Si la emision de facturas esta encendida (INVOICE_ISSUER).
     invoice_issuer_enabled: bool = False
+    # Las notas credito de la factura, en orden de creacion.
+    credit_notes: list[CreditNoteResponse] = []
     # Lo que llego del proveedor sobre este pago, en orden de llegada.
     events: list[PaymentEventResponse]
     refunds: list[PaymentRefundResponse]
@@ -235,7 +275,8 @@ class RequeryPaymentRequest(ApiModel):
 
 
 class InvoiceActionRequest(ApiModel):
-    """POST /admin/payments/:id/invoice/retry y /refresh."""
+    """POST /admin/payments/:id/invoice/retry, /refresh y /cancel, y
+    /admin/payments/:id/credit-notes/:id/retry y /refresh."""
     reason: str = Reason
 
 

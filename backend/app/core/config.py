@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -93,6 +94,15 @@ class Settings(BaseSettings):
     # El impuesto de IVA del 0 % de la operacion excluida (su id en /v1/taxes),
     # para que la factura lo muestre. 0 = el item va sin impuestos.
     siigo_tax_id: int = 0
+    # El tipo de comprobante de nota credito electronica (su id en
+    # /v1/document-types?type=NC). 0 = las notas credito esperan (pendientes)
+    # hasta que se configure; las facturas salen igual.
+    siigo_credit_note_document_type_id: int = 0
+    # Cuantas horas espera la factura despues de aprobado el pago antes de
+    # emitirse (la contadora, 2026-11-11: que no se facture hasta que el pago
+    # este aceptado; un reembolso o una anulacion en ese plazo cancela la
+    # factura sin nota credito). 0 = enseguida, como hasta ahora.
+    invoice_hold_hours: int = Field(default=0, ge=0, le=24 * 30)
     # Espera minima entre peticiones a Siigo. La empresa de pruebas no admite
     # rafagas (10 por minuto): alli conviene 8. En produccion, 100 por minuto.
     siigo_min_interval_seconds: float = 1.0

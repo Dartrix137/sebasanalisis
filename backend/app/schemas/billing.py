@@ -238,6 +238,20 @@ class InvoiceStatus(str, Enum):
     accepted = "accepted"
     rejected = "rejected"
     failed = "failed"
+    #: No se emite: su pago se devolvio entero o se anulo antes (2026-11-11).
+    cancelled = "cancelled"
+
+
+class CreditNoteStatus(str, Enum):
+    """Los estados de la nota credito (`core/credit_notes.py`): los de la
+    factura, con `cancelled` si su factura no se emitio."""
+    pending = "pending"
+    sending = "sending"
+    issued = "issued"
+    accepted = "accepted"
+    rejected = "rejected"
+    failed = "failed"
+    cancelled = "cancelled"
 
 
 class AdminPaymentResponse(PaymentResponse):

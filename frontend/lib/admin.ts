@@ -1,6 +1,6 @@
 /** Textos y formato compartidos por las páginas de administración. */
 
-import type { AuditLogEntry, InvoiceStatus } from "./types/admin";
+import type { AuditLogEntry, CreditNoteStatus, InvoiceStatus } from "./types/admin";
 import type { AccessReason, AccessType } from "./types/auth";
 import type { GameIcon, GameModule, GameStatus } from "./types/games";
 
@@ -38,6 +38,9 @@ const ACTION_LABEL: Record<string, string> = {
   "payment.requery": "Reconsultó un pago en la pasarela",
   "invoice.retry": "Reintentó la emisión de una factura",
   "invoice.refresh": "Reconsultó una factura en Siigo",
+  "invoice.cancel": "Marcó una factura como anulada en Siigo Nube",
+  "credit_note.retry": "Reintentó la emisión de una nota crédito",
+  "credit_note.refresh": "Reconsultó una nota crédito en Siigo",
   "payment.refund.record": "Registró un reembolso",
   "user.password.force_reset": "Forzó el restablecimiento de la contraseña",
   "user.verification.resend": "Reenvió el correo de confirmación",
@@ -99,6 +102,7 @@ export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   accepted: "Aceptada por la DIAN",
   rejected: "Rechazada por la DIAN",
   failed: "Falló la emisión",
+  cancelled: "No se emite",
 };
 
 export const INVOICE_STATUS_TONE: Record<InvoiceStatus, "ok" | "off" | "neutral"> = {
@@ -108,6 +112,46 @@ export const INVOICE_STATUS_TONE: Record<InvoiceStatus, "ok" | "off" | "neutral"
   accepted: "ok",
   rejected: "off",
   failed: "off",
+  cancelled: "neutral",
+};
+
+/** Por qué una factura no se emite (`invoices.cancel_reason`). */
+export const INVOICE_CANCEL_LABEL: Record<string, string> = {
+  refunded: "Se reembolsó todo antes de emitirla",
+  voided: "La pasarela anuló el pago antes de emitirla",
+  annulled_in_siigo: "Anulada en Siigo Nube: la DIAN no la aceptó",
+};
+
+export const CREDIT_NOTE_STATUS_LABEL: Record<CreditNoteStatus, string> = {
+  pending: "Pendiente de emitir",
+  sending: "Enviándose a Siigo",
+  issued: "Emitida: espera a la DIAN",
+  accepted: "Aceptada por la DIAN",
+  rejected: "Rechazada por la DIAN",
+  failed: "Falló la emisión",
+  cancelled: "Cancelada con su factura",
+};
+
+export const CREDIT_NOTE_STATUS_TONE: Record<CreditNoteStatus, "ok" | "off" | "neutral"> = {
+  pending: "neutral",
+  sending: "neutral",
+  issued: "neutral",
+  accepted: "ok",
+  rejected: "off",
+  failed: "off",
+  cancelled: "neutral",
+};
+
+/** Los motivos de la DIAN de una nota crédito. */
+export const CREDIT_NOTE_REASON_LABEL: Record<number, string> = {
+  1: "1 · Devolución parcial",
+  2: "2 · Anulación de la factura",
+};
+
+/** Por qué una nota crédito todavía no sale (`credit_notes.waiting_reason`). */
+export const CREDIT_NOTE_WAITING_LABEL: Record<string, string> = {
+  invoice_not_accepted: "Esperando: la DIAN todavía no aceptó la factura",
+  credit_note_type_missing: "Falta: SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID no está configurado",
 };
 
 /** Por qué una factura todavía no sale (`invoices.waiting_reason`). */
@@ -116,6 +160,7 @@ export const INVOICE_WAITING_LABEL: Record<string, string> = {
   rates_pending: "Esperando: la tasa del día del pago todavía no está publicada",
   rates_unavailable: "Esperando: la fuente de las tasas no respondió",
   payment_not_approved: "No se emite: el pago ya no está aprobado",
+  payment_hold: "Esperando: el plazo después del pago (INVOICE_HOLD_HOURS)",
 };
 
 /** Los tipos de documento de Siigo (`billing/billing_profile.py`). */
