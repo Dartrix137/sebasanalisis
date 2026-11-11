@@ -875,7 +875,7 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
   - sin vencimiento: `2722` Tarjeta Crédito, `2721` Tarjeta Débito, `2719` Efectivo, `8369` Bancolombia, `8370` DaviPlata, `8371` Nequi y `8372` Paypal.
 - Lo probable es que "Pagos en línea" no esté habilitada para el comprobante de factura de venta. Se revisa en Siigo Nube y se vuelve a correr el script. `SIIGO_PAYMENT_TYPE_ID` sigue sin valor: no se elige otra en silencio.
 - **La forma de pago queda en `21632`** (2026-11-11): el usuario creó en Siigo Nube una forma de pago nueva, "sebasanalisis", con el código 10, en lugar de "Pagos en línea". Al volver a correr `scripts/siigo_catalogs.py pagos pagos_nc` aparece con el `id` `21632`, tipo `CarteraProveedor`, activa y sin vencimiento, igual para facturas (`FV`) y para notas crédito (`NC`). En producción, `SIIGO_PAYMENT_TYPE_ID=21632`.
-- **Tipo de nota crédito: `11817`** ("Nota Crédito", código 1): activo, sin centro de costo y con numeración automática. `DocumentTypeNC` no dice si es electrónico: se confirma en Siigo Nube antes de poner `SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID=11817`.
+- **Tipo de nota crédito: `11817`** ("Nota Crédito", código 1): activo, sin centro de costo y con numeración automática. `DocumentTypeNC` no dice si es electrónico: se confirma en Siigo Nube antes de poner `SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID=11817`. **Confirmado el 2026-11-11**: el usuario marcó "Usar como documento electrónico" en ese comprobante (Configuración → Ventas → Documentos → Notas crédito), y es el que se usa. En producción, `SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID=11817`.
 
 
 *Fuentes.* Se citan en el módulo al construir, y se vuelven a leer entonces:
