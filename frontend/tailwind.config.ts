@@ -19,6 +19,7 @@ const config: Config = {
         gold: {
           DEFAULT: "#dda520", // acento primario (boton, marca, pestana activa)
           soft: "#f0c95a",
+          deep: "#a8791c", // dorado apagado: boton secundario, con texto blanco
           ink: "#3a2b05", // texto sobre dorado
         },
         muted: "#8d9ab4", // texto secundario

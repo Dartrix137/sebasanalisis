@@ -29,11 +29,12 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(plan.getByRole("heading", { name: "Acceso Mensual" })).toBeVisible();
   // Lo que se cobra es el protagonista y va con su moneda.
   await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
-  await expect(plan.getByText("/ mes")).toBeVisible();
+  await expect(plan.getByText("/ 1 mes")).toBeVisible();
   // Un solo precio: no se muestra ninguna cifra en otra moneda.
   await expect(plan.getByText(/USD/)).toHaveCount(0);
+  // La nota de la moneda va una vez, debajo de los planes.
   await expect(
-    plan.getByText(
+    page.getByText(
       "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
     ),
   ).toBeVisible();
@@ -44,6 +45,12 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   const bimestral = page.getByRole("article", { name: "Acceso Bimestral" });
   await expect(bimestral.getByText("46 EUR", { exact: true })).toBeVisible();
   await expect(bimestral.getByText("/ 2 meses")).toBeVisible();
+  // Va destacado, con lo que ahorra frente a pagar el mensual dos veces
+  // (64 - 46 = 18 EUR, el 28 %) y lo que equivale al mes. El mensual, no.
+  await expect(bimestral.getByText("Promoción bimestral")).toBeVisible();
+  await expect(bimestral.getByText("Ahorras 18 EUR (28 %)")).toBeVisible();
+  await expect(bimestral.getByText(/Equivale a solo 23 EUR al mes\./)).toBeVisible();
+  await expect(plan.getByText(/Promoción|Ahorras|Equivale/)).toHaveCount(0);
   // Cada plan lleva su enlace de pago (el flujo completo está en subscribe.spec.ts).
   await expect(bimestral.getByRole("link", { name: "Suscribirme" })).toBeVisible();
   await expect(plan.getByRole("link", { name: "Suscribirme" })).toBeVisible();
@@ -55,7 +62,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(page).toHaveURL(/\/planes/);
 });
 
-test("sin renovación automática (Tipster Page) el botón dice Pagar", async ({ page, request }) => {
+test("sin renovación automática (Tipster Page) el botón dice Elegir plan", async ({ page, request }) => {
   // La pasarela simulada ofrece los dos modos; Tipster Page responde así.
   await page.route("**/billing/availability", (route) =>
     route.fulfill({ json: { enabled: true, tokenizer: null } }),
@@ -66,7 +73,10 @@ test("sin renovación automática (Tipster Page) el botón dice Pagar", async ({
   await expect(page).toHaveURL(/\/planes/);
 
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
-  await expect(plan.getByRole("link", { name: "Pagar", exact: true })).toBeVisible();
+  await expect(plan.getByRole("link", { name: "Elegir plan mensual" })).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Acceso Bimestral" }).getByRole("link", { name: "Elegir plan bimestral" }),
+  ).toBeVisible();
   await expect(plan.getByText("Pago único: no se renueva solo.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Suscribirme" })).toHaveCount(0);
 });
@@ -93,7 +103,7 @@ test("cuenta con acceso: /planes la devuelve a la mesa", async ({ page, request 
   // Con acceso manual no hay nada que pagar: los planes se ven sin botón.
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Suscribirme|Pagar/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Suscribirme|Pagar|Elegir plan/ })).toHaveCount(0);
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
   await page.getByRole("link", { name: "Ir a la mesa" }).click();
   await expect(page).toHaveURL(/\/dashboard/);

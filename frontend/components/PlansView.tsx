@@ -7,6 +7,13 @@
  * moneda. No hay precio de referencia en otra moneda (descartado el
  * 2026-10-09): mostrar una cifra que no se cobra presta a confusión.
  *
+ * Diseño de las tarjetas (2026-11-11, imagen del usuario): nombre, precio,
+ * descripción y un botón de ancho completo. El plan de varios meses que sale
+ * más barato que pagar el mensual cada mes va destacado, con su promoción, lo
+ * que se ahorra y lo que equivale al mes. Esas cifras son una comparación en
+ * la misma moneda, no otro precio: se derivan de los precios que manda el
+ * servidor (`planSavings`), y lo que se cobra lo sigue calculando él.
+ *
  * Qué botón lleva cada plan (decidido el 2026-10-13) depende de la cuenta, y
  * es solo presentación: quien acepta o rechaza el pago es el servidor.
  *
@@ -20,7 +27,8 @@
  *   Los demás planes no llevan botón.
  *   Si esa suscripción se renueva sola, no hay botón: se gestiona en la cuenta.
  * - Sin acceso: "Suscribirme" si la pasarela ofrece la renovación automática;
- *   si no (Tipster Page, o sin pasarela), "Pagar": es un pago único por período.
+ *   si no (Tipster Page, o sin pasarela), "Elegir plan mensual" (o el período
+ *   del plan): es un pago único por período.
  */
 
 import Link from "next/link";
@@ -28,15 +36,59 @@ import { useEffect, useState } from "react";
 
 import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
-import { CURRENCY_NOTE, formatMoney, intervalLabel } from "@/lib/money";
+import { CURRENCY_NOTE, formatMoney } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import type { PlanResponse, SubscriptionResponse } from "@/lib/types/billing";
+import type { PlanInterval, PlanResponse, SubscriptionResponse } from "@/lib/types/billing";
 
 import { InlineSkeleton } from "./PageSkeleton";
-import { Badge, Card, ErrorBox } from "./ui";
+import { Badge, ErrorBox } from "./ui";
 
-const PAY_LINK =
-  "rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-gold-ink transition-colors hover:bg-gold-soft";
+const BUTTON =
+  "block w-full rounded-xl px-4 py-3.5 text-center text-lg font-bold transition-colors";
+const BUTTON_FEATURED = `${BUTTON} bg-gold text-gold-ink hover:bg-gold-soft`;
+const BUTTON_PLAIN = `${BUTTON} bg-gold-deep text-white hover:bg-gold hover:text-gold-ink`;
+
+/** `/ 1 mes`, `/ 2 meses`, `/ 1 año`: el período que compra un pago. */
+function perPeriod(interval: PlanInterval, count: number): string {
+  if (interval === "month") return `/ ${count} ${count === 1 ? "mes" : "meses"}`;
+  return `/ ${count} ${count === 1 ? "año" : "años"}`;
+}
+
+/** `mensual`, `bimestral`… o null si el período no tiene nombre corriente. */
+function periodAdjective(interval: PlanInterval, count: number): string | null {
+  if (interval === "year") return count === 1 ? "anual" : null;
+  return { 1: "mensual", 2: "bimestral", 3: "trimestral", 6: "semestral" }[count] ?? null;
+}
+
+type Savings = {
+  /** Lo que se ahorra frente a pagar el plan mensual cada mes. */
+  cents: number;
+  /** El ahorro en porcentaje, redondeado hacia abajo: nunca se exagera. */
+  percent: number;
+  /** El precio del plan repartido entre sus meses. */
+  perMonthCents: number;
+};
+
+/**
+ * Lo que ahorra un plan de varios meses frente al plan mensual de la misma
+ * moneda, pagado cada mes. Null si no hay mensual con qué comparar o si no se
+ * ahorra nada.
+ */
+export function planSavings(plan: PlanResponse, plans: PlanResponse[]): Savings | null {
+  if (plan.interval !== "month" || plan.interval_count < 2) return null;
+  const monthly = plans.find(
+    (p) => p.interval === "month" && p.interval_count === 1 && p.currency === plan.currency,
+  );
+  if (!monthly) return null;
+  const full = monthly.price_cents * plan.interval_count;
+  const cents = full - plan.price_cents;
+  if (cents <= 0) return null;
+  return {
+    cents,
+    percent: Math.floor((cents * 100) / full),
+    perMonthCents: Math.round(plan.price_cents / plan.interval_count),
+  };
+}
 
 export function PlansView() {
   const { user, loading, withToken } = useSession();
@@ -77,51 +129,117 @@ export function PlansView() {
 
   // La suscripción con un período pagado que todavía no vence (lo dice el servidor).
   const current = userId && subscription?.in_force ? subscription : null;
+  // Se destaca un solo plan: el que más ahorra frente al mensual.
+  const savings = new Map(plans.map((p) => [p.id, planSavings(p, plans)]));
+  const featuredId =
+    plans
+      .filter((p) => savings.get(p.id))
+      .sort((a, b) => savings.get(b.id)!.percent - savings.get(a.id)!.percent)[0]?.id ?? null;
+
   // Una al lado de la otra; en pantallas angostas, una debajo de la otra.
   return (
-    <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
-      {plans.map((plan) => (
-        <PlanCard
-          key={plan.id}
-          plan={plan}
-          paymentsEnabled={paymentsEnabled}
-          automaticOffered={automaticOffered}
-          current={current}
-        />
-      ))}
-    </div>
+    <>
+      <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
+        {plans.map((plan) => (
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            savings={savings.get(plan.id) ?? null}
+            featured={plan.id === featuredId}
+            paymentsEnabled={paymentsEnabled}
+            automaticOffered={automaticOffered}
+            current={current}
+          />
+        ))}
+      </div>
+      <p className="mt-5 max-w-prose text-xs leading-relaxed text-muted">{CURRENCY_NOTE}</p>
+    </>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="m8 12.5 2.7 2.7L16.2 9.5" />
+    </svg>
   );
 }
 
 function PlanCard({
   plan,
+  savings,
+  featured,
   paymentsEnabled,
   automaticOffered,
   current,
 }: {
   plan: PlanResponse;
+  savings: Savings | null;
+  featured: boolean;
   paymentsEnabled: boolean;
   automaticOffered: boolean;
   current: SubscriptionResponse | null;
 }) {
   const price = formatMoney(plan.price_cents, plan.currency);
   const isCurrent = current?.plan.id === plan.id;
+  const adjective = periodAdjective(plan.interval, plan.interval_count);
 
   return (
-    <Card className="h-full">
+    <section
+      className={`h-full rounded-2xl bg-ink-raised p-5 shadow-card sm:p-6 ${
+        featured ? "border-2 border-gold" : "border border-edge"
+      }`}
+    >
       {/* Columna de alto completo: el botón queda alineado entre tarjetas. */}
       <article
         aria-label={plan.name}
         data-testid={`plan-${plan.code}`}
         className="flex h-full flex-col"
       >
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-2xl font-semibold leading-tight text-white">
             {plan.name}
           </h2>
+          {featured ? (
+            <span className="rounded-lg bg-gold px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-gold-ink">
+              {adjective ? `Promoción ${adjective}` : "Promoción"}
+            </span>
+          ) : null}
           {isCurrent ? <Badge tone="ok">Tu plan actual</Badge> : null}
         </div>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">{plan.description}</p>
+
+        <p className="mt-4 flex flex-wrap items-baseline gap-x-2">
+          <span className="font-display text-5xl font-semibold leading-none text-white">
+            {price}
+          </span>
+          <span className="text-lg text-muted">
+            {perPeriod(plan.interval, plan.interval_count)}
+          </span>
+        </p>
+
+        {featured && savings ? (
+          <p className="mt-4 flex items-center gap-2 text-lg font-bold text-gold">
+            <CheckIcon />
+            Ahorras {formatMoney(savings.cents, plan.currency)} ({savings.percent} %)
+          </p>
+        ) : null}
+
+        <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted">
+          {plan.description}
+          {savings
+            ? ` Equivale a solo ${formatMoney(savings.perMonthCents, plan.currency)} al mes.`
+            : ""}
+        </p>
         {/*
           Un plan con lista de juegos dice cuáles incluye: quien paga tiene que
           saberlo antes (§7.4). Sin lista, el plan incluye todos y no se dice nada.
@@ -131,17 +249,6 @@ function PlanCard({
             Incluye: {plan.games.map((g) => g.name).join(", ")}
           </p>
         ) : null}
-
-        <p className="mt-5 flex flex-wrap items-baseline gap-x-2">
-          <span className="font-display text-4xl font-semibold leading-none text-white">
-            {price}
-          </span>
-          <span className="text-sm text-muted">
-            / {intervalLabel(plan.interval, plan.interval_count)}
-          </span>
-        </p>
-
-        <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">{CURRENCY_NOTE}</p>
 
         {isCurrent && current?.current_period_end ? (
           <p className="mt-4 text-sm text-white">
@@ -154,24 +261,30 @@ function PlanCard({
 
         <PlanAction
           plan={plan}
+          buttonClass={featured ? BUTTON_FEATURED : BUTTON_PLAIN}
+          choiceLabel={adjective ? `Elegir plan ${adjective}` : "Elegir este plan"}
           paymentsEnabled={paymentsEnabled}
           automaticOffered={automaticOffered}
           current={current}
           isCurrent={isCurrent}
         />
       </article>
-    </Card>
+    </section>
   );
 }
 
 function PlanAction({
   plan,
+  buttonClass,
+  choiceLabel,
   paymentsEnabled,
   automaticOffered,
   current,
   isCurrent,
 }: {
   plan: PlanResponse;
+  buttonClass: string;
+  choiceLabel: string;
   paymentsEnabled: boolean;
   automaticOffered: boolean;
   current: SubscriptionResponse | null;
@@ -179,8 +292,8 @@ function PlanAction({
 }) {
   const { user } = useSession();
   // Sin renovación automática no hay suscripción que se renueve: es un pago por período.
-  const payLabel = automaticOffered ? "Suscribirme" : "Pagar";
-  const row = "mt-auto flex flex-wrap items-center gap-3 pt-5";
+  const payLabel = automaticOffered ? "Suscribirme" : choiceLabel;
+  const row = "mt-auto flex flex-col gap-2 pt-5";
   const note = "text-xs text-muted";
 
   if (!paymentsEnabled) {
@@ -190,7 +303,7 @@ function PlanAction({
           type="button"
           disabled
           aria-describedby={`pago-${plan.id}`}
-          className={`${PAY_LINK} cursor-not-allowed opacity-60`}
+          className={`${buttonClass} cursor-not-allowed opacity-60`}
         >
           {payLabel}
         </button>
@@ -204,7 +317,7 @@ function PlanAction({
   if (!user) {
     return (
       <div className={row}>
-        <Link href="/register" className={PAY_LINK}>
+        <Link href="/register" className={buttonClass}>
           Crear cuenta para suscribirme
         </Link>
       </div>
@@ -256,7 +369,7 @@ function PlanAction({
     }
     return (
       <div className={row}>
-        <Link href={`/planes/pagar?plan=${plan.id}`} className={PAY_LINK}>
+        <Link href={`/planes/pagar?plan=${plan.id}`} className={buttonClass}>
           Pagar el siguiente período
         </Link>
         <p className={note}>
@@ -268,7 +381,7 @@ function PlanAction({
 
   return (
     <div className={row}>
-      <Link href={`/planes/pagar?plan=${plan.id}`} className={PAY_LINK}>
+      <Link href={`/planes/pagar?plan=${plan.id}`} className={buttonClass}>
         {payLabel}
       </Link>
       {automaticOffered ? null : (
