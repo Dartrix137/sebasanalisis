@@ -10,7 +10,9 @@ Reglas:
 - Extender y cancelar una suscripcion estan en `core/subscription_admin`. No
   tocan ningun pago.
 - Un reembolso se registra, no se ejecuta: se hace en el panel del proveedor
-  (§10 n.º 7) y aqui no cambia el estado del pago ni el acceso.
+  (§10 n.º 7) y aqui no cambia el estado del pago ni el acceso. Si mueve la
+  factura: la cancela si no se emitio y se devolvio todo, o crea su nota
+  credito (`core/credit_notes.on_reversal`, en la misma transaccion).
 - El acceso lo decide `core/access.has_access`; aqui no se repite.
 """
 
@@ -29,6 +31,7 @@ from app.api.v1.legal import client_ip
 from app.core import (
     audit,
     billing_emails,
+    credit_notes,
     exchange_rates,
     invoices,
     subscription_admin,
@@ -39,6 +42,7 @@ from app.invoicing import base as invoicing
 from app.invoicing.base import InvoiceIssuer, IssuerError, IssuerMisconfigured
 from app.models import (
     AdminAuditLog,
+    CreditNote,
     Invoice,
     Payment,
     PaymentEvent,
@@ -53,6 +57,7 @@ from app.schemas.admin import (
     AdminSubscriptionDetailResponse,
     AdminSubscriptionListResponse,
     AuditLogEntry,
+    CreditNoteResponse,
     InvoiceActionRequest,
     InvoiceResponse,
     PaymentEventResponse,
@@ -319,6 +324,33 @@ def _invoice_response(invoice: Invoice) -> InvoiceResponse:
         last_error_message=invoice.last_error_message,
         dian_errors=invoice.dian_errors,
         accepted_at=invoice.accepted_at,
+        cancelled_at=invoice.cancelled_at,
+        cancel_reason=invoice.cancel_reason,
+    )
+
+
+def _credit_note_response(note: CreditNote) -> CreditNoteResponse:
+    return CreditNoteResponse(
+        id=note.id,
+        status=note.status,  # type: ignore[arg-type]
+        reason=note.reason,
+        amount_cents=note.amount_cents,
+        currency=note.currency,
+        refund_id=note.refund_id,
+        created_at=note.created_at,
+        waiting_reason=note.waiting_reason,
+        attempts=note.attempts,
+        next_attempt_at=note.next_attempt_at,
+        cop_cents=note.cop_cents,
+        issue_date=note.issue_date,
+        provider_name=note.provider_name,
+        stamp_status=note.stamp_status,
+        cude=note.cude,
+        mail_status=note.mail_status,
+        last_error_codes=note.last_error_codes,
+        last_error_message=note.last_error_message,
+        accepted_at=note.accepted_at,
+        cancelled_at=note.cancelled_at,
     )
 
 
@@ -356,11 +388,23 @@ def _payment_detail(db: DbSession, payment: Payment) -> AdminPaymentDetailRespon
         .order_by(PaymentRefund.refunded_at, PaymentRefund.id)
     )
     invoice = db.scalar(select(Invoice).where(Invoice.payment_id == payment.id))
+    notes = (
+        list(
+            db.scalars(
+                select(CreditNote)
+                .where(CreditNote.invoice_id == invoice.id)
+                .order_by(CreditNote.created_at, CreditNote.id)
+            )
+        )
+        if invoice is not None
+        else []
+    )
     [response] = admin_payment_responses(db, [payment])
     return AdminPaymentDetailResponse(
         payment=response,
         invoice=_invoice_response(invoice) if invoice is not None else None,
         invoice_issuer_enabled=_issuer().enabled,
+        credit_notes=[_credit_note_response(n) for n in notes],
         events=[
             PaymentEventResponse(
                 id=e.id,
@@ -470,7 +514,11 @@ def record_refund(
 ) -> AdminPaymentDetailResponse:
     """Registra un reembolso ya hecho en el panel del proveedor. No mueve el
     pago ni el acceso: si ademas hay que quitar el acceso, se cancela la
-    suscripcion de inmediato."""
+    suscripcion de inmediato.
+
+    Mueve la factura (§3.17, "Paso 5.4", punto 12): si no se emitio y con
+    este reembolso se devolvio todo, ya no se emite; si no, el reembolso lleva
+    nota credito, que sale cuando la DIAN haya aceptado la factura."""
     payment = db.scalar(select(Payment).where(Payment.id == payment_id).with_for_update())
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
@@ -510,6 +558,7 @@ def record_refund(
     )
     db.add(refund)
     db.flush()
+    outcome = credit_notes.on_reversal(db, payment, refund=refund, now=datetime.now(UTC))
     audit.record(
         db,
         admin,
@@ -522,12 +571,26 @@ def record_refund(
             "amount_cents": payload.amount_cents,
             "currency": payment.currency,
             "provider_refund_id": refund.provider_refund_id,
+            "invoice": outcome.action,
+            "credit_note_id": str(outcome.credit_note_id) if outcome.credit_note_id else None,
         },
         reason=refund.reason,
         ip=client_ip(request),
     )
     db.commit()
-    return _payment_detail(db, payment)
+    issuer = _issuer()
+    if outcome.action == "credit_note" and issuer.enabled:
+        # Si la factura ya esta aceptada, la nota sale ahora; si no, la toma
+        # el job de cada hora cuando lo este. Un fallo aqui no deshace nada.
+        try:
+            invoices.run_emission(
+                db, issuer, exchange_rates.get_rate_sources(), datetime.now(UTC),
+                payment_id=payment.id,
+            )
+        except Exception:  # noqa: BLE001 - el reembolso ya quedo registrado
+            db.rollback()
+            logger.exception("No se pudo emitir la nota credito del pago %s", payment.id)
+    return _payment_detail(db, _get_payment(db, payment_id))
 
 
 def _invoice_for_action(db: DbSession, payment_id: UUID) -> tuple[Payment, Invoice]:
@@ -647,6 +710,158 @@ def refresh_invoice(
         after={"status": state, "stamp_status": invoice.stamp_status},
         reason=reason,
         ip=ip,
+    )
+    db.commit()
+    return _payment_detail(db, _get_payment(db, payment_id))
+
+
+@router.post("/payments/{payment_id}/invoice/cancel", response_model=AdminPaymentDetailResponse)
+def cancel_invoice(
+    payment_id: UUID,
+    payload: InvoiceActionRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> AdminPaymentDetailResponse:
+    """Marca anulada en Siigo Nube la factura de un pago que se devolvio entero
+    y que la DIAN no acepto (rechazada, o fallida despues de llegar a Siigo):
+    la contadora pide nota credito solo sobre una aceptada (2026-11-11). La
+    anulacion se hace en Siigo Nube; aqui solo queda constancia, y las notas
+    credito pendientes se cancelan con ella."""
+    payment, invoice = _invoice_for_action(db, payment_id)
+    before = {"status": invoice.status, "provider_name": invoice.provider_name}
+    try:
+        credit_notes.cancel_in_siigo(db, invoice, datetime.now(UTC))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    audit.record(
+        db,
+        admin,
+        action="invoice.cancel",
+        target_type="payment",
+        target_id=payment.id,
+        before=before,
+        after={"status": invoice.status, "cancel_reason": invoice.cancel_reason},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    return _payment_detail(db, _get_payment(db, payment_id))
+
+
+def _credit_note_for_action(
+    db: DbSession, payment_id: UUID, credit_note_id: UUID
+) -> tuple[Payment, CreditNote]:
+    payment = _get_payment(db, payment_id)
+    note = db.scalar(
+        select(CreditNote)
+        .join(Invoice, Invoice.id == CreditNote.invoice_id)
+        .where(CreditNote.id == credit_note_id, Invoice.payment_id == payment.id)
+        .with_for_update(of=CreditNote)
+    )
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Nota crédito no encontrada"
+        )
+    return payment, note
+
+
+@router.post(
+    "/payments/{payment_id}/credit-notes/{credit_note_id}/retry",
+    response_model=AdminPaymentDetailResponse,
+)
+def retry_credit_note(
+    payment_id: UUID,
+    credit_note_id: UUID,
+    payload: InvoiceActionRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> AdminPaymentDetailResponse:
+    """Reintenta una nota credito pendiente, en envio o fallida, y la intenta
+    enseguida (`core/credit_notes.reset_for_retry`)."""
+    issuer = _issuer_or_503()
+    payment, note = _credit_note_for_action(db, payment_id, credit_note_id)
+    before = {
+        "credit_note_id": str(note.id),
+        "status": note.status,
+        "errors": note.last_error_codes,
+        "idempotency_key": note.idempotency_key,
+    }
+    try:
+        credit_notes.reset_for_retry(note)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    audit.record(
+        db,
+        admin,
+        action="credit_note.retry",
+        target_type="payment",
+        target_id=payment.id,
+        before=before,
+        after={"status": note.status, "idempotency_key": note.idempotency_key},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    report = invoices.run_emission(
+        db, issuer, exchange_rates.get_rate_sources(), datetime.now(UTC), payment_id=payment.id
+    )
+    if report.stopped:
+        logger.warning("Reintento de la nota credito del pago %s: %s", payment.id, report.stopped)
+    return _payment_detail(db, _get_payment(db, payment_id))
+
+
+@router.post(
+    "/payments/{payment_id}/credit-notes/{credit_note_id}/refresh",
+    response_model=AdminPaymentDetailResponse,
+)
+def refresh_credit_note(
+    payment_id: UUID,
+    credit_note_id: UUID,
+    payload: InvoiceActionRequest,
+    db: DbSession,
+    admin: AdminUser,
+    request: Request,
+) -> AdminPaymentDetailResponse:
+    """Vuelve a consultar en Siigo una nota credito emitida o rechazada."""
+    issuer = _issuer_or_503()
+    payment, note = _credit_note_for_action(db, payment_id, credit_note_id)
+    if note.status not in credit_notes.REFRESHABLE or note.provider_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se reconsulta una nota crédito emitida o rechazada por la DIAN",
+        )
+    before = {
+        "credit_note_id": str(note.id),
+        "status": note.status,
+        "stamp_status": note.stamp_status,
+    }
+    try:
+        state = credit_notes.refresh(issuer, note, datetime.now(UTC))
+    except IssuerMisconfigured as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Siigo no acepta la configuración: {exc}",
+        ) from None
+    except IssuerError as exc:
+        db.rollback()
+        logger.warning("No se pudo reconsultar la nota credito del pago %s", payment.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Siigo no respondió. Intenta de nuevo en unos minutos.",
+        ) from exc
+    audit.record(
+        db,
+        admin,
+        action="credit_note.refresh",
+        target_type="payment",
+        target_id=payment.id,
+        before=before,
+        after={"status": state, "stamp_status": note.stamp_status},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
     )
     db.commit()
     return _payment_detail(db, _get_payment(db, payment_id))

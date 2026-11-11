@@ -9,7 +9,8 @@ el .env):
 
 Solo lee: no crea nada en Siigo. No imprime el token ni las credenciales. Imprime
 los tipos de comprobante de factura electronica (SIIGO_DOCUMENT_TYPE_ID), las
-formas de pago (SIIGO_PAYMENT_TYPE_ID), los usuarios activos (SIIGO_SELLER_ID),
+formas de pago de factura y de nota credito (SIIGO_PAYMENT_TYPE_ID), los tipos de
+nota credito (SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID), los usuarios activos (SIIGO_SELLER_ID),
 los productos de tipo servicio (SIIGO_PRODUCT_CODE), los impuestos de IVA
 (SIIGO_TAX_ID: el del 0 %) y los grupos de inventario
 (que pide Siigo para crear un producto). Respeta la espera entre peticiones
@@ -50,10 +51,24 @@ CATALOGS = {
         lambda r: r.get("electronic_type") == "ElectronicInvoice" and r.get("active"),
         ("id", "code", "name", "electronic_type", "cost_center", "automatic_number"),
     ),
+    # Todas, tambien las inactivas o con vencimiento: la factura necesita una
+    # activa y sin vencimiento (check_ready lo exige).
     "pagos": (
         "/v1/payment-types", {"document_type": "FV"},
-        lambda r: r.get("active") and not r.get("due_date"),
-        ("id", "name", "type"),
+        lambda r: True,
+        ("id", "name", "type", "active", "due_date"),
+    ),
+    # El tipo de comprobante de nota credito (SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID).
+    "notas": (
+        "/v1/document-types", {"type": "NC"},
+        lambda r: True,
+        ("id", "code", "name", "active", "cost_center", "automatic_number"),
+    ),
+    # La forma de pago tiene que estar habilitada tambien para notas credito.
+    "pagos_nc": (
+        "/v1/payment-types", {"document_type": "NC"},
+        lambda r: True,
+        ("id", "name", "type", "active", "due_date"),
     ),
     "usuarios": ("/v1/users", None, lambda r: r.get("active"), ("id", "first_name", "last_name")),
     "productos": (

@@ -181,6 +181,7 @@ def siigo(db, monkeypatch) -> Iterator[object]:
     monkeypatch.setattr(base, "get_invoice_issuer", lambda: sandbox.issuer)
     monkeypatch.setattr(exchange_rates, "get_rate_sources", lambda: sandbox.tasas)
     # Una corrida emite todo lo pendiente: las facturas de otros tests no entran.
+    db.execute(sql("DELETE FROM credit_notes"))
     db.execute(sql("DELETE FROM invoices"))
     db.execute(sql("DELETE FROM exchange_rates"))
     db.commit()

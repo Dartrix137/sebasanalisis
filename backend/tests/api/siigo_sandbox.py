@@ -25,6 +25,7 @@ from app.billing.exchange_rates import ECB_SOURCE, TRM_SOURCE, RatePeriod
 from app.invoicing.siigo import SiigoIssuer
 
 DOCUMENTO = 27860
+NOTA_CREDITO = 27870
 VENDEDOR = 916
 FORMA_DE_PAGO = 11143
 PRODUCTO = "SUSCRIPCION"
@@ -48,6 +49,10 @@ class SiigoSandbox:
         self.pedidos: list[httpx.Request] = []
         self.clientes: dict[str, dict[str, Any]] = {}
         self.facturas: dict[str, dict[str, Any]] = {}
+        self.notas: dict[str, dict[str, Any]] = {}
+        #: Estado ante la DIAN con que nacen las notas credito.
+        self.estado_nota = "Accepted"
+        self.estado_nota_al_consultar: str | None = None
         self.por_llave: dict[str, str] = {}
         self.tokens = 0
         self.token_valido: str | None = None
@@ -61,6 +66,11 @@ class SiigoSandbox:
         self.tipo_de_comprobante = {
             "id": DOCUMENTO, "code": "4", "name": "Factura electrónica de venta",
             "type": "FV", "active": True, "electronic_type": "ElectronicInvoice",
+        }
+        #: `DocumentTypeNC` de Apiary: sin `electronic_type`.
+        self.tipo_de_nota = {
+            "id": NOTA_CREDITO, "code": "1", "name": "Nota crédito electrónica",
+            "type": "NC", "active": True, "cost_center": False,
         }
         #: El catalogo de `GET /v1/taxes` (forma de `Tax` en Apiary).
         self.impuestos = [
@@ -76,6 +86,7 @@ class SiigoSandbox:
             seller_id=VENDEDOR,
             payment_type_id=FORMA_DE_PAGO,
             product_code=PRODUCTO,
+            credit_note_document_type_id=NOTA_CREDITO,
             min_interval_seconds=0,
             transport=httpx.MockTransport(self),
             sleep=self.dormido.append,
@@ -116,6 +127,8 @@ class SiigoSandbox:
                     # La peticion llego y Siigo la proceso, pero la respuesta no.
                     if path == "/v1/invoices":
                         self._crear_factura(request)
+                    if path == "/v1/credit-notes":
+                        self._crear_nota(request)
                     raise httpx.ReadTimeout("tiempo agotado", request=request)
                 return self._error(falla)
 
@@ -133,6 +146,8 @@ class SiigoSandbox:
             return self._error(Falla(401, ["unauthorized"]))
 
         if path == "/v1/document-types":
+            if request.url.params.get("type") == "NC":
+                return httpx.Response(200, json=[self.tipo_de_nota])
             return httpx.Response(200, json=[self.tipo_de_comprobante])
         if path == "/v1/payment-types":
             return httpx.Response(200, json=[{"id": FORMA_DE_PAGO, "name": "Cuenta por cobrar API",
@@ -167,7 +182,43 @@ class SiigoSandbox:
                 if self.estado_al_consultar == "Accepted":
                     factura["stamp"]["cufe"] = "cufe-" + factura["id"]
             return httpx.Response(200, json=factura)
+        if path == "/v1/credit-notes" and request.method == "POST":
+            return httpx.Response(201, json=self._crear_nota(request))
+        if path.startswith("/v1/credit-notes/") and request.method == "GET":
+            nota = self.notas.get(path.split("/")[3])
+            if nota is None:
+                return httpx.Response(404)
+            if self.estado_nota_al_consultar:
+                nota["stamp"]["status"] = self.estado_nota_al_consultar
+                if self.estado_nota_al_consultar == "Accepted":
+                    nota["stamp"]["cude"] = "cude-" + nota["id"]
+            return httpx.Response(200, json=nota)
         return httpx.Response(404)
+
+    def _crear_nota(self, request: httpx.Request) -> dict[str, Any]:
+        """`CreditNoteOut` de Apiary: `stamp` con `status` y `cude`."""
+        llave = request.headers.get("Idempotency-Key", "")
+        if llave in self.por_llave:
+            return self.notas[self.por_llave[llave]]
+        body = self.cuerpo(request)
+        factura = self.facturas.get(body["invoice"])
+        if factura is None or factura["stamp"]["status"] != "Accepted":
+            raise AssertionError("La nota credito se mando sobre una factura no aceptada")
+        nid = str(uuid.uuid4())
+        numero = len(self.notas) + 1
+        aceptada = self.estado_nota == "Accepted"
+        nota = {
+            "id": nid, "name": f"NC-1-{numero}", "number": numero, "date": body["date"],
+            "invoice": {"id": factura["id"], "name": factura["name"]},
+            "total": float(Decimal(str(body["payments"][0]["value"]))),
+            "stamp": {"status": self.estado_nota, "cude": f"cude-{nid}" if aceptada else None,
+                      "observations": "", "errors": ""},
+            "mail": {"status": "sent", "observations": ""},
+            "cuerpo": body,
+        }
+        self.notas[nid] = nota
+        self.por_llave[llave] = nid
+        return nota
 
     def _crear_factura(self, request: httpx.Request) -> dict[str, Any]:
         llave = request.headers.get("Idempotency-Key", "")

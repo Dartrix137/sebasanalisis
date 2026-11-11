@@ -380,6 +380,14 @@
             "title": "Audit",
             "type": "array"
           },
+          "credit_notes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CreditNoteResponse"
+            },
+            "title": "Credit Notes",
+            "type": "array"
+          },
           "events": {
             "items": {
               "$ref": "#/components/schemas/PaymentEventResponse"
@@ -417,6 +425,7 @@
           "payment",
           "invoice",
           "invoice_issuer_enabled",
+          "credit_notes",
           "events",
           "refunds",
           "audit"
@@ -2909,6 +2918,230 @@
         "title": "CreateSpinRequest",
         "type": "object"
       },
+      "CreditNoteResponse": {
+        "description": "Una nota credito de la factura (§3.17, \"Paso 5.4\", punto 12).",
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "cop_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cop Cents"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "cude": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cude"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "last_error_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Codes"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "mail_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Status"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "integer"
+          },
+          "refund_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Id"
+          },
+          "stamp_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stamp Status"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CreditNoteStatus"
+          },
+          "waiting_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Reason"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "reason",
+          "amount_cents",
+          "currency",
+          "refund_id",
+          "created_at",
+          "waiting_reason",
+          "attempts",
+          "next_attempt_at",
+          "cop_cents",
+          "issue_date",
+          "provider_name",
+          "stamp_status",
+          "cude",
+          "mail_status",
+          "last_error_codes",
+          "last_error_message",
+          "accepted_at",
+          "cancelled_at"
+        ],
+        "title": "CreditNoteResponse",
+        "type": "object"
+      },
+      "CreditNoteStatus": {
+        "description": "Los estados de la nota credito (`core/credit_notes.py`): los de la\nfactura, con `cancelled` si su factura no se emitio.",
+        "enum": [
+          "pending",
+          "sending",
+          "issued",
+          "accepted",
+          "rejected",
+          "failed",
+          "cancelled"
+        ],
+        "title": "CreditNoteStatus",
+        "type": "string"
+      },
       "DeleteAccountRequest": {
         "properties": {
           "password": {
@@ -3587,7 +3820,7 @@
         "type": "object"
       },
       "InvoiceActionRequest": {
-        "description": "POST /admin/payments/:id/invoice/retry y /refresh.",
+        "description": "POST /admin/payments/:id/invoice/retry, /refresh y /cancel, y\n/admin/payments/:id/credit-notes/:id/retry y /refresh.",
         "properties": {
           "reason": {
             "maxLength": 500,
@@ -3654,6 +3887,29 @@
               }
             ],
             "title": "Buyer Name"
+          },
+          "cancel_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
           },
           "cop_cents": {
             "anyOf": [
@@ -3904,7 +4160,9 @@
           "last_error_codes",
           "last_error_message",
           "dian_errors",
-          "accepted_at"
+          "accepted_at",
+          "cancelled_at",
+          "cancel_reason"
         ],
         "title": "InvoiceResponse",
         "type": "object"
@@ -3917,7 +4175,8 @@
           "issued",
           "accepted",
           "rejected",
-          "failed"
+          "failed",
+          "cancelled"
         ],
         "title": "InvoiceStatus",
         "type": "string"
@@ -8755,6 +9014,203 @@
         ]
       }
     },
+    "/admin/payments/{payment_id}/credit-notes/{credit_note_id}/refresh": {
+      "post": {
+        "description": "Vuelve a consultar en Siigo una nota credito emitida o rechazada.",
+        "operationId": "refresh_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credit_note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Credit Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Refresh Credit Note",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}/credit-notes/{credit_note_id}/retry": {
+      "post": {
+        "description": "Reintenta una nota credito pendiente, en envio o fallida, y la intenta\nenseguida (`core/credit_notes.reset_for_retry`).",
+        "operationId": "retry_credit_note_admin_payments__payment_id__credit_notes__credit_note_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credit_note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Credit Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retry Credit Note",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/payments/{payment_id}/invoice/cancel": {
+      "post": {
+        "description": "Marca anulada en Siigo Nube la factura de un pago que se devolvio entero\ny que la DIAN no acepto (rechazada, o fallida despues de llegar a Siigo):\nla contadora pide nota credito solo sobre una aceptada (2026-11-11). La\nanulacion se hace en Siigo Nube; aqui solo queda constancia, y las notas\ncredito pendientes se cancelan con ella.",
+        "operationId": "cancel_invoice_admin_payments__payment_id__invoice_cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPaymentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Invoice",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/payments/{payment_id}/invoice/refresh": {
       "post": {
         "description": "Vuelve a consultar en Siigo una factura emitida o rechazada: por\nejemplo, despues de corregirla y reenviarla a la DIAN desde Siigo Nube.",
@@ -8875,7 +9331,7 @@
     },
     "/admin/payments/{payment_id}/refunds": {
       "post": {
-        "description": "Registra un reembolso ya hecho en el panel del proveedor. No mueve el\npago ni el acceso: si ademas hay que quitar el acceso, se cancela la\nsuscripcion de inmediato.",
+        "description": "Registra un reembolso ya hecho en el panel del proveedor. No mueve el\npago ni el acceso: si ademas hay que quitar el acceso, se cancela la\nsuscripcion de inmediato.\n\nMueve la factura (§3.17, \"Paso 5.4\", punto 12): si no se emitio y con\neste reembolso se devolvio todo, ya no se emite; si no, el reembolso lleva\nnota credito, que sale cuando la DIAN haya aceptado la factura.",
         "operationId": "record_refund_admin_payments__payment_id__refunds_post",
         "parameters": [
           {

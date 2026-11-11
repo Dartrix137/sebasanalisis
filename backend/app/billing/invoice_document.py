@@ -83,6 +83,12 @@ def _day(value: date) -> str:
     return value.strftime("%d/%m/%Y")
 
 
+# La nota credito escribe los montos, las tasas y las fechas igual que la factura.
+format_money = _money
+format_rate = _rate
+format_day = _day
+
+
 @dataclass(frozen=True)
 class FrozenRates:
     """Las tasas que la factura congelo, con el dia y la fuente de cada una."""

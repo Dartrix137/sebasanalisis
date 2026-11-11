@@ -56,6 +56,20 @@ Lo que importa aqui:
 - La empresa de pruebas no tiene habilitado el envio a la DIAN (soporte,
   2026-11-09): alli toda factura termina Rejected. La aceptacion solo se ve
   con la cuenta de la empresa.
+- Notas credito (leido el 2026-11-11: portal, "Crear nota credito",
+  `developers.siigo.com/docs/siigoapi/credit-note/1-create-credit-note/`, y
+  en Apiary `CreditNoteIn`, `CreditNoteOut`, `StampOutDianNC`, `DocumentNC`):
+  `POST /v1/credit-notes` con `document.id` (un tipo de comprobante de
+  `GET /v1/document-types?type=NC`), `date` (en una electronica, no anterior a
+  hoy), `invoice` (el UUID de la factura en Siigo; obligatorio si la nota es
+  electronica), `reason` (obligatorio en un documento electronico), `items`,
+  `payments` (`id` de `GET /v1/payment-types?document_type=NC`), `stamp` y
+  `mail` (objetos `{send}`), con `Idempotency-Key` como la factura. Responde
+  201 con `id`, `name` ("NC-2-22"), `total` y `stamp` con `status` y `cude`.
+  Se consulta con `GET /v1/credit-notes/{id}`. No hay endpoint de errores de
+  la DIAN para una nota (solo para facturas). La factura tiene que estar
+  "enviada" a la DIAN (`invalid_document`). `reason` va como numero: el
+  esquema lo da numerico, aunque el ejemplo del portal lo manda como texto.
 """
 
 from __future__ import annotations
@@ -76,6 +90,7 @@ from app.billing.invoice_document import CONFIG_CODES, classify
 from app.core.config import Settings
 from app.invoicing.base import (
     Buyer,
+    CreditNoteDraft,
     InvoiceDraft,
     IssuedInvoice,
     IssuerConfigError,
@@ -118,7 +133,7 @@ def _results(body: Any) -> list[dict[str, Any]]:
 
 def _invoice(body: Any) -> IssuedInvoice:
     if not isinstance(body, dict) or not body.get("id"):
-        raise IssuerTransient("Siigo respondio una factura sin id", uncertain=True)
+        raise IssuerTransient("Siigo respondio un documento sin id", uncertain=True)
     stamp = body.get("stamp") if isinstance(body.get("stamp"), dict) else {}
     mail = body.get("mail") if isinstance(body.get("mail"), dict) else {}
     return IssuedInvoice(
@@ -126,7 +141,11 @@ def _invoice(body: Any) -> IssuedInvoice:
         name=str(body["name"]) if body.get("name") else None,
         total=_number(body.get("total")),
         stamp_status=str(stamp.get("status")) if stamp.get("status") else None,
-        cufe=str(stamp.get("cufe")) if stamp.get("cufe") else None,
+        # Una nota credito trae `cude` (`StampOutDianNC`); el ejemplo del
+        # portal trae los dos.
+        cufe=str(stamp.get("cufe") or stamp.get("cude"))
+        if stamp.get("cufe") or stamp.get("cude")
+        else None,
         mail_status=str(mail.get("status")) if mail.get("status") else None,
     )
 
@@ -155,6 +174,7 @@ class SiigoIssuer:
         product_code: str,
         cost_center_id: int = 0,
         tax_id: int = 0,
+        credit_note_document_type_id: int = 0,
         base_url: str = BASE_URL,
         min_interval_seconds: float = 1.0,
         transport: httpx.BaseTransport | None = None,
@@ -170,6 +190,7 @@ class SiigoIssuer:
         self.product_code = product_code
         self.cost_center_id = cost_center_id
         self.tax_id = tax_id
+        self.credit_note_document_type_id = credit_note_document_type_id
         self.base_url = base_url.rstrip("/")
         self._min_interval = min_interval_seconds
         self._clock = clock
@@ -354,7 +375,35 @@ class SiigoIssuer:
                 raise IssuerMisconfigured(
                     f"SIIGO_TAX_ID={self.tax_id} no es un impuesto de IVA del 0 % activo"
                 )
+        if self.credit_note_document_type_id:
+            self._check_credit_note_type()
         self._ready_until = self._clock() + _READY_TTL_SECONDS
+
+    def _check_credit_note_type(self) -> None:
+        """El tipo de comprobante de nota credito, activo, y la forma de pago
+        habilitada para notas credito. `DocumentTypeNC` no trae
+        `electronic_type`: que sea electronica lo dice la configuracion en
+        Siigo Nube."""
+        types = _results(self._request("GET", "/v1/document-types", params={"type": "NC"}))
+        document = next((t for t in types if t.get("id") == self.credit_note_document_type_id), None)
+        if document is None or not document.get("active"):
+            raise IssuerMisconfigured(
+                f"SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID={self.credit_note_document_type_id}"
+                " no es un tipo de nota credito activo"
+            )
+        if document.get("cost_center") and not self.cost_center_id:
+            raise IssuerMisconfigured(
+                f"SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID={self.credit_note_document_type_id} pide"
+                " centro de costo: falta SIIGO_COST_CENTER_ID"
+            )
+        payments = _results(
+            self._request("GET", "/v1/payment-types", params={"document_type": "NC"})
+        )
+        if not any(p.get("id") == self.payment_type_id and p.get("active") for p in payments):
+            raise IssuerMisconfigured(
+                f"SIIGO_PAYMENT_TYPE_ID={self.payment_type_id} no es una forma de pago activa"
+                " para notas credito"
+            )
 
     # ---------- Terceros ----------
 
@@ -451,6 +500,45 @@ class SiigoIssuer:
         ]
 
 
+    # ---------- Notas credito ----------
+
+    @property
+    def credit_notes_enabled(self) -> bool:
+        return bool(self.credit_note_document_type_id)
+
+    def issue_credit_note(self, draft: CreditNoteDraft) -> IssuedInvoice:
+        if not self.credit_note_document_type_id:
+            raise IssuerMisconfigured("Falta SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID")
+        item: dict[str, Any] = {
+            "code": self.product_code,
+            "description": draft.description,
+            "quantity": 1,
+            "price": draft.amount,
+        }
+        if self.tax_id:
+            item["taxes"] = [{"id": self.tax_id}]
+        payload: dict[str, Any] = {
+            "document": {"id": self.credit_note_document_type_id},
+            "date": draft.issue_date.isoformat(),
+            "invoice": draft.invoice_provider_id,
+            "reason": draft.reason,
+            "stamp": {"send": True},
+            "mail": {"send": True},
+            "observations": draft.observations,
+            "items": [item],
+            "payments": [{"id": self.payment_type_id, "value": draft.amount}],
+        }
+        if self.cost_center_id:
+            payload["cost_center"] = self.cost_center_id
+        body = self._request(
+            "POST", "/v1/credit-notes", payload=payload, idempotency_key=draft.idempotency_key
+        )
+        return _invoice(body)
+
+    def fetch_credit_note(self, provider_id: str) -> IssuedInvoice:
+        return _invoice(self._request("GET", f"/v1/credit-notes/{provider_id}"))
+
+
 _REQUIRED = (
     "siigo_username",
     "siigo_access_key",
@@ -482,6 +570,7 @@ def from_settings(settings: Settings, **kwargs: Any) -> SiigoIssuer:
         product_code=settings.siigo_product_code,
         cost_center_id=settings.siigo_cost_center_id,
         tax_id=settings.siigo_tax_id,
+        credit_note_document_type_id=settings.siigo_credit_note_document_type_id,
         base_url=settings.siigo_api_base_url,
         min_interval_seconds=settings.siigo_min_interval_seconds,
         **kwargs,

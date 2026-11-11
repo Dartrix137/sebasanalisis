@@ -39,7 +39,7 @@ from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
 from app.billing.schedule import first_charge_at
-from app.core import billing_profiles, invoices, legal, price_changes
+from app.core import billing_profiles, credit_notes, invoices, legal, price_changes
 from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
 from app.models.user import LIVE_SUBSCRIPTION_STATUSES
@@ -692,6 +692,9 @@ def apply_transaction(
         return None
     if _reversible(payment, transaction):
         _reverse_period(db, payment, transaction, now)
+        # Su factura: si no se emitio, ya no se emite; si la DIAN la acepto,
+        # lleva nota credito (la contadora, 2026-11-11; core/credit_notes).
+        credit_notes.on_reversal(db, payment, refund=None, now=now)
         _commit(db, payment, before_commit)
         return Settlement(payment=payment, changed=True, reversed=True)
     # Idempotencia: un pago resuelto no se vuelve a tocar.

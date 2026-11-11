@@ -161,7 +161,15 @@ def test_aprobado_por_otro_monto_no_deja_factura(client, db, tipster) -> None:
 @pytest.fixture
 def sin_suscripciones_de_otros_tests(db) -> None:
     """El job recorre todas las suscripciones de la base."""
-    for tabla in ("invoices", "payment_events", "payments", "coupon_redemptions", "subscriptions"):
+    for tabla in (
+        "credit_notes",
+        "invoices",
+        "payment_refunds",
+        "payment_events",
+        "payments",
+        "coupon_redemptions",
+        "subscriptions",
+    ):
         db.execute(text(f"DELETE FROM {tabla}"))
     db.commit()
 
@@ -183,8 +191,9 @@ def test_la_renovacion_automatica_aprobada_deja_su_factura(
     assert factura.operation_date == fx.operation_date(vence - 48 * H)
 
 
-def test_un_pago_anulado_despues_conserva_su_factura_pendiente(client, db, pasarela) -> None:
-    """Que hacer con ella (nota credito o no emitirla) lo decide el paso 5.4."""
+def test_un_pago_anulado_antes_de_emitir_cancela_su_factura(client, db, pasarela) -> None:
+    """La contadora (2026-11-11): si no se emitio, ya no se emite
+    (core/credit_notes.py; los demas casos, en test_credit_notes.py)."""
     token, user_id, _ = _cuenta(client, db)
     pago = _abrir_pago(client, db, token)
     tx = pasarela.transaccion(pago, "APPROVED")
@@ -196,7 +205,7 @@ def test_un_pago_anulado_despues_conserva_su_factura_pendiente(client, db, pasar
     [pago] = _pagos(db, user_id)
     assert pago.status == "voided"
     [factura] = _facturas(db, pago.id)
-    assert factura.status == "pending"
+    assert factura.status == "cancelled" and factura.cancel_reason == "voided"
 
 
 def test_la_factura_sobrevive_a_la_cuenta_eliminada(client, db, tipster) -> None:
