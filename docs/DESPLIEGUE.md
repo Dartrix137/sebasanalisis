@@ -360,7 +360,7 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 | `SIIGO_PARTNER_ID` | El nombre registrado de la aplicacion (`sebasanalisisp`) |
 | `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica |
 | `SIIGO_SELLER_ID` | El usuario vendedor |
-| `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, activa y sin vencimiento, para facturas y para notas crédito. En la empresa, `21632`: la forma "sebasanalisis" (código 10 en Siigo Nube), activa y sin vencimiento para facturas y notas crédito (consultado el 2026-11-11 con `scripts/siigo_catalogs.py pagos pagos_nc`) |
+| `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, activa y sin vencimiento, para facturas y para notas crédito. En la empresa, `8369`: Bancolombia (código 6 en Siigo Nube), activa y sin vencimiento para facturas y notas crédito (consultado el 2026-11-11 con `scripts/siigo_catalogs.py pagos pagos_nc`) |
 | `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
 | `SIIGO_COST_CENTER_ID` | Opcional. El centro de costo, si el tipo de comprobante lo maneja: sin el, la emision no arranca |
 | `SIIGO_TAX_ID` | Opcional. El impuesto de IVA del 0 % (su `id` en `/v1/taxes`, no el código de Siigo Nube), para que la factura muestre el IVA en 0 %. Tiene que ser de IVA, activo y del 0 %: si no, la emisión no arranca. Sin él, el ítem va sin impuestos. En la cuenta de la empresa es `13963` ("IVA 0%", código 22 en Siigo Nube; consultado el 2026-11-10) |
