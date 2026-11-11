@@ -13,9 +13,9 @@ Python puro: sin FastAPI, sin SQLAlchemy, sin red.
   enteros. De donde salen las tasas, como se buscan por su vigencia y como se
   guardan en la factura es del paso 5.4.
 
-**Provisional hasta que hable el contador**: el redondeo (`ROUNDING`) y que se
-redondee una sola vez, al final. Cambiarlo es cambiar estas constantes y sus
-tests.
+**El redondeo lo confirmo la contadora (2026-11-11)**: una sola vez, al final y
+al centavo, con la mitad exacta hacia arriba (`ROUNDING`). Cambiarlo es cambiar
+estas constantes y sus tests.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from decimal import ROUND_HALF_UP, Decimal
 #: (el mismo criterio de `app/emails/render.py`) y no hace falta `tzdata`.
 COLOMBIA = timezone(timedelta(hours=-5))
 
-#: PROVISIONAL (lo confirma el contador): la mitad exacta sube.
+#: La mitad exacta sube (confirmado por la contadora el 2026-11-11).
 ROUNDING = ROUND_HALF_UP
 
 #: La moneda de la factura.
@@ -77,7 +77,7 @@ def to_cop_cents(amount_cents: int, currency: str, rates: Rates) -> int:
     """El monto del pago en centavos de peso.
 
     Se multiplica en `Decimal`, sin redondear en el camino, y se redondea una
-    sola vez, al centavo (PROVISIONAL, ver el encabezado del modulo).
+    sola vez, al centavo (ver el encabezado del modulo).
     """
     if isinstance(amount_cents, bool) or not isinstance(amount_cents, int):
         raise TypeError("El monto va en centavos enteros")
