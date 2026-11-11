@@ -358,14 +358,14 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 | `INVOICE_ISSUER` | `siigo` |
 | `SIIGO_USERNAME`, `SIIGO_ACCESS_KEY` | Las credenciales de la API ("Alianzas" > "Mi Credencial API" en Siigo Nube). Secretas |
 | `SIIGO_PARTNER_ID` | El nombre registrado de la aplicacion (`sebasanalisisp`) |
-| `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica |
+| `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica. En la empresa, `38043`. Antes de emitir, tiene que tener asociada en Siigo Nube una resolución de la DIAN vigente: la del 2026-11-11 estaba vencida |
 | `SIIGO_SELLER_ID` | El usuario vendedor |
 | `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, activa y sin vencimiento, para facturas y para notas crédito. En la empresa, `8369`: Bancolombia (código 6 en Siigo Nube), activa y sin vencimiento para facturas y notas crédito (consultado el 2026-11-11 con `scripts/siigo_catalogs.py pagos pagos_nc`) |
 | `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
 | `SIIGO_COST_CENTER_ID` | Opcional. El centro de costo, si el tipo de comprobante lo maneja: sin el, la emision no arranca |
 | `SIIGO_TAX_ID` | Opcional. El impuesto de IVA del 0 % (su `id` en `/v1/taxes`, no el código de Siigo Nube), para que la factura muestre el IVA en 0 %. Tiene que ser de IVA, activo y del 0 %: si no, la emisión no arranca. Sin él, el ítem va sin impuestos. En la cuenta de la empresa es `13963` ("IVA 0%", código 22 en Siigo Nube; consultado el 2026-11-10) |
 | `SIIGO_CREDIT_NOTE_DOCUMENT_TYPE_ID` | Opcional. El tipo de comprobante de nota crédito electrónica (`scripts/siigo_catalogs.py notas`). En la empresa, `11817` ("Nota Crédito", marcado como documento electrónico en Siigo Nube el 2026-11-11). Sin él, las notas crédito quedan pendientes y las facturas salen igual |
-| `INVOICE_HOLD_HOURS` | Opcional, 0 por defecto. Horas que espera la factura después de aprobado el pago (lo propuso la contadora): un reembolso total o una anulación en ese plazo la cancela sin nota crédito |
+| `INVOICE_HOLD_HOURS` | Opcional, 0 por defecto. Horas que espera la factura después de aprobado el pago (lo propuso la contadora): un reembolso total o una anulación en ese plazo la cancela sin nota crédito. En producción, 0 (2026-11-11) |
 | `SIIGO_MIN_INTERVAL_SECONDS` | Opcional. Espera entre peticiones: 1 por defecto; 8 en la empresa de pruebas (aun asi responde 429 de vez en cuando) |
 
   Los ids salen de `python scripts/siigo_catalogs.py` (solo lee). Sin una de las siete obligatorias, la API no arranca y el error dice cual. La linea de arranque dice `Factura electronica: Siigo (https://api.siigo.com)`.
