@@ -1622,6 +1622,7 @@ user_tokens (
 - `POST /auth/reset-password {token, new_password}`.
 - `POST /auth/change-password {current_password, new_password}` con la sesión iniciada.
 - **Revocación de sesiones**: `users.token_version` (entero) viaja en el JWT. Restablecer o cambiar la contraseña, o que un admin fuerce el restablecimiento, la incrementa; `get_current_user` y `/auth/refresh` rechazan tokens con versión vieja. Cierra todas las demás sesiones sin necesitar una tabla de refresh tokens.
+- **Enlaces pendientes al cambiar la contraseña** (auditoría de seguridad del 2026-11-12): los tres caminos anulan el cambio de correo pendiente (`core/user_tokens.revoke_pending`), y cambiar la contraseña anula además el enlace de restablecimiento pendiente. Sin esto, quien conocía la contraseña podía pedir el cambio de correo a su dirección, guardar el enlace y confirmarlo después de que la víctima recuperara la cuenta, que es justo lo que le pide hacer el aviso del cambio.
 - Política mínima de contraseña: 10 caracteres; se rechazan las contraseñas más comunes con una lista local (sin llamadas a servicios externos).
 - Correo de aviso "tu contraseña cambió" tras cada cambio.
 

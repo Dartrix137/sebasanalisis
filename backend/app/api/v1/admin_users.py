@@ -26,7 +26,7 @@ from app.core import audit, billing_emails, rate_limit, subscriptions
 from app.core.config import get_settings
 from app.core.email import send_safely
 from app.core.security import hash_password
-from app.core.user_tokens import TOKEN_TTL, issue_token
+from app.core.user_tokens import TOKEN_TTL, issue_token, revoke_pending
 from app.emails import build_email
 from app.models import AdminAuditLog, GameSession, Payment, Subscription, User
 from app.schemas.admin import (
@@ -376,6 +376,8 @@ def force_password_reset(
     # Un hash de un secreto que nadie conoce: ninguna contrasena coincide con el.
     user.password_hash = hash_password(secrets.token_urlsafe(32))
     user.token_version += 1
+    # Un cambio de correo pendiente lo pudo pedir quien tomo la cuenta.
+    revoke_pending(db, user, ("change_email",), now=now)
     raw_token = issue_token(db, user, "reset_password", now=now)
     audit.record(
         db,

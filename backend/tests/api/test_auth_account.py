@@ -534,6 +534,83 @@ def test_cambio_de_correo_se_aplica_solo_al_confirmar(
     ).status_code == 401
 
 
+def _pedir_cambio_de_correo(
+    client: TestClient, outbox: list[EmailMessage], tokens: dict, nuevo: str
+) -> str:
+    """Pide el cambio de correo y devuelve el token del enlace, sin usarlo."""
+    outbox.clear()
+    r = client.post(
+        "/auth/change-email",
+        json={"new_email": nuevo, "password": PASSWORD},
+        headers=_auth(tokens),
+    )
+    assert r.status_code == 202, r.text
+    return _token_in(_last(outbox, "Confirma tu nuevo correo"))
+
+
+def test_restablecer_la_contrasena_anula_un_cambio_de_correo_pendiente(
+    client: TestClient, outbox: list[EmailMessage]
+) -> None:
+    """Auditoria del 2026-11-12: quien conoce la contrasena pide el cambio a su
+    correo y guarda el enlace. El aviso le dice a la victima que restablezca la
+    contrasena; si ese enlace siguiera valiendo, el atacante volveria a quedarse
+    con la cuenta despues de que la victima la recupero."""
+    tokens = _register(client)
+    original = tokens["user"]["email"]
+    atacante = _email()
+    pendiente = _pedir_cambio_de_correo(client, outbox, tokens, atacante)
+
+    client.post("/auth/forgot-password", json={"email": original})
+    reset = _token_in(_last(outbox, "Restablece"))
+    r = client.post("/auth/reset-password", json={"token": reset, "new_password": NEW_PASSWORD})
+    assert r.status_code == 200, r.text
+
+    assert client.post("/auth/verify-email", json={"token": pendiente}).status_code == 400
+    assert client.post(
+        "/auth/login", json={"email": original, "password": NEW_PASSWORD}
+    ).status_code == 200
+    assert client.post(
+        "/auth/login", json={"email": atacante, "password": NEW_PASSWORD}
+    ).status_code == 401
+
+
+def test_cambiar_la_contrasena_anula_un_cambio_de_correo_pendiente(
+    client: TestClient, outbox: list[EmailMessage]
+) -> None:
+    tokens = _register(client)
+    original = tokens["user"]["email"]
+    pendiente = _pedir_cambio_de_correo(client, outbox, tokens, _email())
+
+    r = client.post(
+        "/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+        headers=_auth(tokens),
+    )
+    assert r.status_code == 200, r.text
+
+    assert client.post("/auth/verify-email", json={"token": pendiente}).status_code == 400
+    assert client.get("/auth/me", headers=_auth(r.json())).json()["email"] == original
+
+
+def test_cambiar_la_contrasena_anula_un_enlace_de_restablecimiento_pendiente(
+    client: TestClient, outbox: list[EmailMessage]
+) -> None:
+    tokens = _register(client)
+    client.post("/auth/forgot-password", json={"email": tokens["user"]["email"]})
+    reset = _token_in(_last(outbox, "Restablece"))
+
+    r = client.post(
+        "/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+        headers=_auth(tokens),
+    )
+    assert r.status_code == 200, r.text
+
+    assert client.post(
+        "/auth/reset-password", json={"token": reset, "new_password": "una-tercera-clave-789"}
+    ).status_code == 400
+
+
 def test_cambio_de_correo_exige_la_contrasena(
     client: TestClient, outbox: list[EmailMessage]
 ) -> None:
