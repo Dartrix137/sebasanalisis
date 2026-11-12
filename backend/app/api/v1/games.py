@@ -10,16 +10,21 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, DbSession, RequireAccess
+from app.api.deps import CurrentUser, DbSession, RequireAccess, require_game_access
 from app.api.v1.admin_users import Limit, Offset
 from app.core.access import has_access
+from app.core.config import get_settings
+from app.core.guides import guides_for
 from app.models import Game, GameVariant
 from app.schemas.games import (
     GameAccess,
+    GameGuidesResponse,
     GameMenuItem,
     GameMenuResponse,
     GameResponse,
     GameVariantResponse,
+    GuidePdfResponse,
+    GuideVideoResponse,
 )
 
 router = APIRouter(tags=["games"], dependencies=[RequireAccess])
@@ -79,6 +84,32 @@ def get_variant(variant_id: UUID, db: DbSession, user: CurrentUser) -> GameVaria
             status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada"
         )
     return variant
+
+
+@router.get("/games/{slug}/guides", response_model=GameGuidesResponse)
+def get_guides(slug: str, db: DbSession, user: CurrentUser) -> GameGuidesResponse:
+    """Las guias de uso de un juego: sus videos y su PDF (`core/guides.py`).
+
+    Pide acceso al juego, como abrir una mesa: fuera del plan responde
+    `403 game_not_in_plan`. Un juego oculto no existe para un cliente.
+    """
+    game = db.scalar(select(Game).where(Game.slug == slug))
+    if game is None or (game.status == "hidden" and user.role != "admin"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Juego no encontrado")
+    require_game_access(db, user, game)
+    if not get_settings().guides_enabled:
+        return GameGuidesResponse(videos=[], pdf=None)
+    guides = guides_for(game.type)
+    return GameGuidesResponse(
+        videos=[
+            GuideVideoResponse(title=v.title, youtube_id=v.youtube_id) for v in guides.videos
+        ],
+        pdf=(
+            GuidePdfResponse(title=guides.pdf.title, url=guides.pdf.url)
+            if guides.pdf is not None
+            else None
+        ),
+    )
 
 
 @router.get("/games/{game_id}/variants", response_model=list[GameVariantResponse])

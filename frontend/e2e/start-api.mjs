@@ -30,6 +30,9 @@ const env = {
   FRONTEND_BASE_URL: process.env.E2E_WEB_ORIGIN,
   // Todas las peticiones salen de la misma IP: el limite por IP las cortaria.
   RATE_LIMIT_ENABLED: "false",
+  // Sin guias: su ventana taparia el inicio de cada cuenta registrada por la
+  // interfaz. `guias.spec.ts` simula la respuesta de `GET /games/*/guides`.
+  GUIDES_ENABLED: "false",
   // El administrador que siembra prepare_e2e_db.py, con credenciales fijas de
   // esta base desechable (las mismas de e2e/helpers.ts). Sin esto valdrian las
   // del .env local, que los tests no conocen.

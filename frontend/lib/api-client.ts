@@ -86,6 +86,7 @@ import type {
   AdminGameListResponse,
   CreateGameRequest,
   CreateGameVariantRequest,
+  GameGuidesResponse,
   GameMenuResponse,
   GameModule,
   GameResponse,
@@ -309,6 +310,10 @@ export const authApi = {
   completeOnboarding: (token: string) =>
     apiFetch<UserResponse>("/auth/me/onboarding", { method: "POST", token }),
 
+  /** Anota que la cuenta cerró la ventana de las guías del inicio. */
+  guidesSeen: (token: string) =>
+    apiFetch<UserResponse>("/auth/me/guides-seen", { method: "POST", token }),
+
   /** Todos los datos de la cuenta, para descargarlos (§6.4). */
   exportData: (token: string) => apiFetch<ExportResponse>("/auth/me/export", { token }),
 };
@@ -456,6 +461,10 @@ export const gamesApi = {
    */
   variant: (token: string, variantId: UUID) =>
     apiFetch<GameVariantResponse>(`/games/variants/${variantId}`, { token }),
+
+  /** Las guías de uso de un juego: sus videos de YouTube y su PDF. */
+  guides: (token: string, slug: string) =>
+    apiFetch<GameGuidesResponse>(`/games/${encodeURIComponent(slug)}/guides`, { token }),
 };
 
 export const sessionsApi = {
