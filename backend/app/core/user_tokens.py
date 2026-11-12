@@ -50,15 +50,7 @@ def issue_token(
     Emitir uno nuevo invalida los anteriores sin usar del mismo proposito y
     usuario: pedir el correo dos veces deja valido solo el ultimo enlace.
     """
-    db.execute(
-        update(UserToken)
-        .where(
-            UserToken.user_id == user.id,
-            UserToken.purpose == purpose,
-            UserToken.used_at.is_(None),
-        )
-        .values(used_at=now)
-    )
+    revoke_pending(db, user, (purpose,), now=now)
     raw_token = secrets.token_urlsafe(32)
     db.add(
         UserToken(
@@ -70,6 +62,28 @@ def issue_token(
         )
     )
     return raw_token
+
+
+def revoke_pending(
+    db: Session, user: User, purposes: Iterable[str], *, now: datetime
+) -> None:
+    """Deja sin efecto los tokens sin usar de esos propositos.
+
+    Al cambiar la contrasena (restablecerla, cambiarla o el restablecimiento
+    forzado del admin) se anula el cambio de correo pendiente: lo pudo pedir
+    quien tenia la contrasena anterior, y si su enlace siguiera valiendo
+    volveria a quedarse con la cuenta despues de que la victima la recupero
+    (auditoria del 2026-11-12).
+    """
+    db.execute(
+        update(UserToken)
+        .where(
+            UserToken.user_id == user.id,
+            UserToken.purpose.in_(tuple(purposes)),
+            UserToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
 
 
 def consume_token(

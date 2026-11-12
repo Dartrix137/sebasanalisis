@@ -38,7 +38,13 @@ from app.core.security import (
     needs_rehash,
     verify_password,
 )
-from app.core.user_tokens import TOKEN_TTL, InvalidTokenError, consume_token, issue_token
+from app.core.user_tokens import (
+    TOKEN_TTL,
+    InvalidTokenError,
+    consume_token,
+    issue_token,
+    revoke_pending,
+)
 from app.emails import build_email
 from app.models import Bet, GameSession, Payment, Spin, User
 from app.schemas.auth import (
@@ -587,8 +593,9 @@ def reset_password(
 ) -> MessageResponse:
     _limit(f"reset-password:{_client_ip(request)}", limit=10, window=15 * _MINUTE)
 
+    now = _now()
     try:
-        token = consume_token(db, payload.token, ("reset_password",), now=_now())
+        token = consume_token(db, payload.token, ("reset_password",), now=now)
     except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=_INVALID_LINK
@@ -602,8 +609,10 @@ def reset_password(
     _check_new_password(payload.new_password, user.email)
     user.password_hash = hash_password(payload.new_password)
     # Cierra todas las sesiones abiertas: quien pide restablecer puede haber
-    # perdido el control de la cuenta.
+    # perdido el control de la cuenta. Por lo mismo anula el cambio de correo
+    # pendiente, que pudo pedirlo quien tenia la contrasena anterior.
     user.token_version += 1
+    revoke_pending(db, user, ("change_email",), now=now)
     db.commit()
 
     _queue_password_changed_email(user, background, sender)
@@ -633,6 +642,9 @@ def change_password(
 
     user.password_hash = hash_password(payload.new_password)
     user.token_version += 1
+    # Un enlace de restablecimiento o un cambio de correo pedidos antes del
+    # cambio no deben sobrevivirlo.
+    revoke_pending(db, user, ("change_email", "reset_password"), now=_now())
     db.commit()
     db.refresh(user)
 

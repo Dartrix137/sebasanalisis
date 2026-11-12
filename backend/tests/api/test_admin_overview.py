@@ -217,6 +217,33 @@ def test_forzar_el_restablecimiento_cierra_sesiones_y_anula_la_contrasena(
     assert client.post("/auth/login", json=nueva).status_code == 200
 
 
+def test_forzar_el_restablecimiento_anula_un_cambio_de_correo_pendiente(
+    client, db, admin_token: str, outbox
+) -> None:
+    """Auditoria del 2026-11-12: el restablecimiento forzado es el remedio para una
+    cuenta tomada, y no puede dejar vivo el cambio de correo que pidio el atacante."""
+    token, user_id, correo = _cuenta(client, db)
+    outbox.clear()
+    r = client.post(
+        "/auth/change-email",
+        json={"new_email": f"otro-{uuid.uuid4().hex[:10]}@ejemplo.com", "password": "clave-segura-123"},
+        headers=auth(token),
+    )
+    assert r.status_code == 202, r.text
+    [confirmacion] = [m for m in outbox if "Confirma tu nuevo correo" in m.subject]
+
+    r = client.post(
+        f"/admin/users/{user_id}/force-password-reset",
+        json={"reason": MOTIVO},
+        headers=auth(admin_token),
+    )
+    assert r.status_code == 200, r.text
+
+    assert client.post(
+        "/auth/verify-email", json={"token": _link(confirmacion)}
+    ).status_code == 400
+
+
 @pytest.mark.parametrize("cuerpo", [{}, {"reason": ""}, {"reason": "no"}])
 def test_forzar_el_restablecimiento_sin_motivo_se_rechaza(
     client, db, admin_token: str, cuerpo
