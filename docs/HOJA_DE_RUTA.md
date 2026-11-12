@@ -149,7 +149,7 @@ No se avanza a un paso de código sin que el anterior tenga tests o una verifica
 
 | Punto | Estado | Tipo |
 |---|---|---|
-| Respaldos de la base y una restauración probada en una base aparte | ~~Activar Cloudflare R2~~ (tarjeta puesta en la cuenta de Cloudflare el 2026-11-12). Falta configurarlo: el bucket privado, su token, el destino y el respaldo diario en Dokploy, y la prueba de restauración en una base aparte (`DESPLIEGUE.md`, "Respaldos de la base y prueba de restauracion") | Operativo (usuario) |
+| Respaldos de la base y una restauración probada en una base aparte | **Hecho el 2026-11-12** (`DESPLIEGUE.md`, "Respaldos de la base y prueba de restauracion"): bucket privado `sebasanalisis-respaldos` en Cloudflare R2, con un Account API token limitado a él; destino `r2-respaldos` en Dokploy; respaldo diario de la base `sebasanalisis-db` a las 8:00 UTC con el prefijo `produccion/`, conservando los 14 más recientes (*Keep the latest*; los que se corren a mano también cuentan). **Restauración probada ese día** en el servicio aparte `sebasanalisis-restauracion`, borrado después: misma migración (`b5e2d8c41f07`) y mismos conteos que producción (11 usuarios, 6 suscripciones, 15 pagos, 725 giros, último pago el 2026-11-05). Se repite si cambia la versión de PostgreSQL o el destino | Operativo (usuario) |
 | Resend Pro y `EMAIL_DAILY_LIMIT` (propuesta: 1500) | ~~Resend Pro~~ (pagado el 2026-11-12, US$20 al mes) y ~~`EMAIL_DAILY_LIMIT=1500` en Dokploy~~ (puesto por el usuario el 2026-11-12). Queda la comprobación de `DESPLIEGUE.md`, "Resend Pro y `EMAIL_DAILY_LIMIT`": un registro con un correo propio que aparezca en *Emails* de Resend, sin "Tope diario de correos alcanzado" en el log | Operativo (usuario) |
 | Descripciones de los planes en `/admin/planes` ("un mes", no "30 días") | Hecho por el usuario el 2026-11-12 | Operativo (usuario) |
 | Revisar un correo de cada tipo en modo claro y oscuro | Pendiente (`DESPLIEGUE.md`, "Correo") | Operativo (usuario) |
@@ -273,7 +273,7 @@ Mientras tanto, el paso 5.3 deja lista la entrada de una segunda pasarela: cada 
 | Usuario con Siigo | ~~La cuenta~~ (existe desde el 2026-11-05). Plan con API, credenciales de la API (Desarrollo propio, Facturación de ventas), resolución de la DIAN y un tipo de comprobante electrónico configurados en Siigo, el producto "suscripción", el impuesto si aplica, y **la empresa de pruebas, que se le pide a soporte con el NIT** | 5.4 |
 | Soporte de Siigo | ~~La empresa de pruebas~~ (credenciales recibidas el 2026-11-09). ~~La ciudad que falta, el documento de un cliente de fuera, la `Idempotency-Key` y los estados~~ (respondidos el 2026-11-09: `PLATAFORMA_COMPLETA.md` §3.17, "Respuestas de soporte de Siigo"). ~~Si el IVA del 0 % choca con un producto excluido~~ (la API lo acepta, probado el 2026-11-10). Queda: si el correo sale solo con la DIAN aceptada, ~~si la API acepta una ciudad creada en Siigo Nube~~ (sí, 2026-11-10) y el cuerpo del envío por correo | 5.4 (no frena el diseño) |
 | Abogado | Textos legales revisados, datos del responsable del tratamiento, precio en pantalla, frase de "apostar el mínimo" | 5.5 y 5.6 |
-| Usuario | Respaldos con Cloudflare R2 (activado el 2026-11-12; falta configurarlo en Dokploy) y su prueba de restauración; ~~Resend Pro y `EMAIL_DAILY_LIMIT=1500`~~ (2026-11-12) | 5.6 |
+| Usuario | ~~Respaldos con Cloudflare R2 y su prueba de restauración~~ (2026-11-12); ~~Resend Pro y `EMAIL_DAILY_LIMIT=1500`~~ (2026-11-12) | 5.6 |
 
 ---
 
