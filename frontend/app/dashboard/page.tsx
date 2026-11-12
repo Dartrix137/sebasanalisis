@@ -14,20 +14,21 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AccessGate } from "@/components/AccessGate";
 import { GameMenu } from "@/components/GameMenu";
+import { GuidesModal } from "@/components/guides/GuidesModal";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { STRATEGY_LABEL } from "@/components/mesa/BankrollPanel";
 import { NumberChip, variantLabel } from "@/components/mesa/VariantChoice";
 import { Button, ErrorBox } from "@/components/ui";
 import { VerifyEmailNotice } from "@/components/VerifyEmailNotice";
-import { gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
+import { authApi, gamesApi, sessionsApi, spinsApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
-import type { GameMenuItem, GameVariantResponse } from "@/lib/types/games";
+import type { GameGuidesResponse, GameMenuItem, GameVariantResponse } from "@/lib/types/games";
 import type { SessionResponse } from "@/lib/types/sessions";
 
 const CURRENCY = new Intl.NumberFormat("es-CO", {
@@ -55,7 +56,7 @@ export default function DashboardPage() {
 }
 
 function Dashboard() {
-  const { user, loading, withToken } = useSession();
+  const { user, loading, withToken, updateUser } = useSession();
   const router = useRouter();
 
   const [games, setGames] = useState<GameMenuItem[]>([]);
@@ -66,6 +67,13 @@ function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [verTodas, setVerTodas] = useState(false);
+  // La ventana de las guías: sale una vez, a la cuenta con acceso que no la ha
+  // cerrado, con las guías del primer juego que puede jugar (hoy, la ruleta).
+  const [guias, setGuias] = useState<{ game: GameMenuItem; guides: GameGuidesResponse } | null>(
+    null,
+  );
+  const guiasPedidas = useRef(false);
+  const guiasAnotadas = useRef(false);
 
   const load = useCallback(async () => {
     const [g, abiertas, cerradas] = await Promise.all([
@@ -108,6 +116,32 @@ function Dashboard() {
       .finally(() => setReady(true));
   }, [loading, user, router, load]);
 
+  const debeVerGuias = Boolean(user && user.access.granted && !user.guides_seen_at);
+  useEffect(() => {
+    if (!ready || !debeVerGuias || guiasPedidas.current) return;
+    const juego = games.find(
+      (g) => g.status === "active" && g.access.granted && g.variants.length > 0,
+    );
+    if (!juego) return;
+    guiasPedidas.current = true;
+    withToken((t) => gamesApi.guides(t, juego.slug))
+      .then((g) => {
+        if (g.videos.length > 0) setGuias({ game: juego, guides: g });
+      })
+      // Sin guías no hay ventana: el inicio sigue igual.
+      .catch(() => undefined);
+  }, [ready, debeVerGuias, games, withToken]);
+
+  function cerrarGuias() {
+    setGuias(null);
+    if (guiasAnotadas.current) return;
+    guiasAnotadas.current = true;
+    withToken((t) => authApi.guidesSeen(t))
+      .then(updateUser)
+      // Si no se pudo anotar, la ventana vuelve a salir en la próxima visita.
+      .catch(() => undefined);
+  }
+
   if (loading || !user) return <PageSkeleton />;
 
   const variants = new Map(games.flatMap((g) => g.variants).map((v) => [v.id, v]));
@@ -117,6 +151,14 @@ function Dashboard() {
   return (
     <div className="flex-1">
       <AppHeader />
+      {guias ? (
+        <GuidesModal
+          gameName={guias.game.name}
+          guides={guias.guides}
+          guidesHref={`/juegos/${guias.game.slug}/guias`}
+          onClose={cerrarGuias}
+        />
+      ) : null}
 
       <main className="mx-auto max-w-5xl px-4 pb-12 pt-8 sm:px-6">
         <h1 className="font-display text-4xl font-semibold leading-none tracking-tight sm:text-5xl">

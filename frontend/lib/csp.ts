@@ -19,10 +19,15 @@
  * - Formularios: solo a este sitio. El envío al procesador de pagos (Redsys,
  *   EBANX) sale de la página de pago que sirve la API, con su propia CSP
  *   (`backend/app/core/checkout_pages.py`); al frontend no le hace falta.
- * - Marcos: solo el widget de Turnstile. Nadie puede meter el sitio en un marco.
+ * - Marcos: el widget de Turnstile y los videos de las guías, que se incrustan
+ *   desde `www.youtube-nocookie.com` (modo de privacidad mejorada de YouTube,
+ *   decidido el 2026-11-12). El PDF de las guías es un enlace a Cloudinary: una
+ *   navegación, que no pide directiva. Nadie puede meter el sitio en un marco.
  */
 
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+/** Los videos de las guías (`components/guides/GuideVideo.tsx`). */
+export const YOUTUBE_EMBED_ORIGIN = "https://www.youtube-nocookie.com";
 /** El CDN de los logos de los medios de pago de Tipster Page. */
 const PAYMENT_LOGOS_ORIGIN = "https://cdntpfiles86236.tipsterpage.com";
 
@@ -57,7 +62,7 @@ export function buildCsp({
     `img-src 'self' blob: data: ${PAYMENT_LOGOS_ORIGIN}`,
     "font-src 'self'",
     `connect-src ${connect.join(" ")}`,
-    `frame-src ${TURNSTILE_ORIGIN}`,
+    `frame-src ${TURNSTILE_ORIGIN} ${YOUTUBE_EMBED_ORIGIN}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

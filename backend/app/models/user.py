@@ -98,6 +98,9 @@ class User(Base):
     # Cuando leyo hasta el final la pantalla que explica que hace y que no hace
     # la plataforma. Es informativa: no es un consentimiento legal.
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cuando cerro la ventana de las guias del inicio (videos y PDF). Despues
+    # siguen en el apartado "Guias" del juego.
+    guides_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
 
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")

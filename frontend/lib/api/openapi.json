@@ -3424,6 +3424,34 @@
         "title": "GameCategory",
         "type": "object"
       },
+      "GameGuidesResponse": {
+        "description": "Las guias de uso de un juego (`core/guides.py`). Sin guias, `videos`\nllega vacio y `pdf` en null.",
+        "properties": {
+          "pdf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidePdfResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "videos": {
+            "items": {
+              "$ref": "#/components/schemas/GuideVideoResponse"
+            },
+            "title": "Videos",
+            "type": "array"
+          }
+        },
+        "required": [
+          "videos",
+          "pdf"
+        ],
+        "title": "GameGuidesResponse",
+        "type": "object"
+      },
       "GameMenuItem": {
         "description": "Un juego del menú. Solo trae las variantes activas.",
         "properties": {
@@ -3787,6 +3815,44 @@
           "active"
         ],
         "title": "GameVariantResponse",
+        "type": "object"
+      },
+      "GuidePdfResponse": {
+        "description": "El PDF de la guia, en Cloudinary.",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "GuidePdfResponse",
+        "type": "object"
+      },
+      "GuideVideoResponse": {
+        "description": "Un video de la guia, en YouTube. El frontend lo incrusta desde\n`www.youtube-nocookie.com/embed/<youtube_id>`.",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "youtube_id": {
+            "title": "Youtube Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "youtube_id"
+        ],
+        "title": "GuideVideoResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -7710,6 +7776,18 @@
             "title": "Email Verified",
             "type": "boolean"
           },
+          "guides_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guides Seen At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -7760,6 +7838,7 @@
           "adult_confirmed_at",
           "loss_risk_acknowledged_at",
           "onboarding_completed_at",
+          "guides_seen_at",
           "access",
           "can_delete_account"
         ],
@@ -11104,6 +11183,33 @@
         ]
       }
     },
+    "/auth/me/guides-seen": {
+      "post": {
+        "description": "Anota que la cuenta cerro la ventana de las guias del inicio.\n\nIdempotente: la fecha es la de la primera vez. Las guias siguen en el\napartado \"Guias\" del juego.",
+        "operationId": "mark_guides_seen_auth_me_guides_seen_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Guides Seen",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/me/onboarding": {
       "post": {
         "description": "Anota que la cuenta leyo la pantalla de bienvenida de la mesa (§6.3).\n\nEs informativa, no un consentimiento legal: por eso vive aqui y no en\n`user_consents`, y por eso no decide el acceso.",
@@ -12224,6 +12330,54 @@
           }
         ],
         "summary": "List Variants",
+        "tags": [
+          "games"
+        ]
+      }
+    },
+    "/games/{slug}/guides": {
+      "get": {
+        "description": "Las guias de uso de un juego: sus videos y su PDF (`core/guides.py`).\n\nPide acceso al juego, como abrir una mesa: fuera del plan responde\n`403 game_not_in_plan`. Un juego oculto no existe para un cliente.",
+        "operationId": "get_guides_games__slug__guides_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameGuidesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Guides",
         "tags": [
           "games"
         ]

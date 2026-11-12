@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # salen de la misma IP y el limite por IP las cortaria. Nunca en produccion.
     rate_limit_enabled: bool = True
 
+    # Las guias de uso de los juegos (`core/guides.py`). Solo se apagan en los
+    # tests de punta a punta: con guias, la ventana del inicio taparia la
+    # pantalla de cada cuenta registrada por la interfaz. El test de las guias
+    # simula la respuesta. Nunca en produccion.
+    guides_enabled: bool = True
+
     # Base de los enlaces que viajan en los correos (verificar, restablecer).
     frontend_base_url: str = "http://localhost:3000"
 

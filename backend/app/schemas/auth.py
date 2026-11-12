@@ -160,6 +160,8 @@ class UserAccount(ApiModel):
     loss_risk_acknowledged_at: datetime | None = None
     # Null hasta que lee la pantalla de bienvenida de la mesa (§6.3).
     onboarding_completed_at: datetime | None = None
+    # Null hasta que cierra la ventana de las guias del inicio.
+    guides_seen_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

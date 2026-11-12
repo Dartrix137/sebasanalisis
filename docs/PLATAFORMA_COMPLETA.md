@@ -2077,6 +2077,17 @@ Paso 7, entrega 2 (rama `fase-4-paso-7b-mesa-y-menu`). Con ella está construido
 
 **Paso 7 cerrado el 2026-10-14**: el usuario lo desplegó y lo probó en el VPS con la ruleta (menú, mesa en la ruta nueva, redirección de la ruta vieja, mesas ya abiertas, `/admin/juegos` y los juegos incluidos de los planes).
 
+### 7.10 Guías de uso de un juego (2026-11-12)
+
+Decidido por el usuario: dos videos de unos 18 minutos (el segundo continúa el primero) y un PDF que enseñan a usar la ruleta.
+
+- **Dónde están**: los videos en YouTube, como *no listados*, incrustados desde `www.youtube-nocookie.com` (modo de privacidad mejorada); el PDF en Cloudinary. Los dos son terceros: van en las políticas de cookies y de datos, y cambiar de proveedor pide una versión nueva de las dos.
+- **Catálogo**: en código, en `core/guides.py`, por el `type` del juego (no por `module`, que la ruleta comparte con los juegos discretos futuros). Solo viajan por `GET /games/{slug}/guides`, que pide acceso al juego, igual que abrir una mesa (fuera del plan, `403 game_not_in_plan`): los ids no quedan en el bundle público. `validate` revisa que cada id de YouTube y la URL del PDF (`https://res.cloudinary.com/`) tengan la forma esperada, y un test la corre sobre todo el catálogo.
+- **La ventana del inicio**: sale una sola vez, a la cuenta con acceso, con las guías del primer juego activo que puede jugar. Al cerrarla, con la X, con Esc, con "Ver después" o con el enlace a Guías, se anota `users.guides_seen_at` (`POST /auth/me/guides-seen`, idempotente). Queda en el servidor, así que no vuelve a salir en otro dispositivo, y la ven una vez también las cuentas que ya existían. Es un `<dialog>` nativo con `showModal()`.
+- **El apartado "Guías"**: una tarjeta en la página del juego (`/juegos/<slug>`), que solo sale si el juego tiene guías, y la página `/juegos/<slug>/guias`, con los videos en orden y el PDF.
+- **CSP**: `frame-src` suma `https://www.youtube-nocookie.com` (`lib/csp.ts`). El PDF es un enlace, una navegación, y no pide directiva.
+- **Tests**: `tests/api/test_guides.py` cubre el acceso, el 404 de un juego oculto, la lista vacía y la anotación única. Playwright corre con `GUIDES_ENABLED=false`, porque la ventana taparía el inicio de cada cuenta registrada por la interfaz; `e2e/guias.spec.ts` simula la respuesta de las guías y responde el marco de YouTube con una página vacía.
+
 ---
 
 ## 8. Base para apuestas deportivas

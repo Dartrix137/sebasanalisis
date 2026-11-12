@@ -28,7 +28,7 @@ test("cada página lleva su CSP con un nonce nuevo y las cabeceras de seguridad"
   const csp = primera.headers()["content-security-policy"];
   expect(csp).toContain("'strict-dynamic'");
   expect(csp).toContain("frame-ancestors 'none'");
-  expect(csp).toContain("frame-src https://challenges.cloudflare.com");
+  expect(csp).toContain("frame-src https://challenges.cloudflare.com https://www.youtube-nocookie.com");
   const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
   expect(nonce).toBeTruthy();
   expect(segunda.headers()["content-security-policy"]).not.toContain(nonce);

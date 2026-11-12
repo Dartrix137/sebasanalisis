@@ -346,6 +346,20 @@ def complete_onboarding(user: CurrentUser, db: DbSession) -> UserResponse:
     return user_response(db, user)
 
 
+@router.post("/me/guides-seen", response_model=UserResponse)
+def mark_guides_seen(user: CurrentUser, db: DbSession) -> UserResponse:
+    """Anota que la cuenta cerro la ventana de las guias del inicio.
+
+    Idempotente: la fecha es la de la primera vez. Las guias siguen en el
+    apartado "Guias" del juego.
+    """
+    if user.guides_seen_at is None:
+        user.guides_seen_at = _now()
+        db.commit()
+        db.refresh(user)
+    return user_response(db, user)
+
+
 @router.get("/me/export", response_model=ExportResponse)
 def export_my_data(user: CurrentUser, db: DbSession) -> ExportResponse:
     """Todos los datos de la cuenta en un JSON (derecho de consulta, §6.4).

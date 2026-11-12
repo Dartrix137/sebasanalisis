@@ -31,6 +31,7 @@ export function GamePage({ slug }: { slug: string }) {
 
   const [game, setGame] = useState<GameMenuItem | null | undefined>(undefined);
   const [hasOpenTable, setHasOpenTable] = useState(false);
+  const [hasGuides, setHasGuides] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<GameVariantResponse | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -49,6 +50,14 @@ export function GamePage({ slug }: { slug: string }) {
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : "Error inesperado"));
   }, [load]);
+
+  // Las guías son aparte: si fallan (o el juego no está en el plan), la página
+  // sigue sin la tarjeta en vez de mostrar un error.
+  useEffect(() => {
+    withToken((t) => gamesApi.guides(t, slug))
+      .then((g) => setHasGuides(g.videos.length > 0 || g.pdf !== null))
+      .catch(() => setHasGuides(false));
+  }, [withToken, slug]);
 
   useEffect(() => {
     if (starting) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -187,6 +196,24 @@ export function GamePage({ slug }: { slug: string }) {
           </div>
         ) : null}
       </section>
+
+      {hasGuides ? (
+        <section className="mt-10" aria-labelledby="guias">
+          <h2 id="guias" className="font-display text-2xl font-semibold leading-tight">
+            Guías
+          </h2>
+          <Link
+            href={`/juegos/${slug}/guias`}
+            data-testid="guias-enlace"
+            className="mt-4 block rounded-card border border-edge bg-ink-raised p-5 transition-colors hover:border-gold/60"
+          >
+            <span className="font-bold text-white">Cómo usar la mesa</span>
+            <span className="mt-1 block text-sm text-muted">
+              Los videos de la guía, en orden, y la guía en PDF para descargar.
+            </span>
+          </Link>
+        </section>
+      ) : null}
     </Pantalla>
   );
 }

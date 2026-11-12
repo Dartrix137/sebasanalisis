@@ -977,6 +977,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/me/guides-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Guides Seen
+         * @description Anota que la cuenta cerro la ventana de las guias del inicio.
+         *
+         *     Idempotente: la fecha es la de la primera vez. Las guias siguen en el
+         *     apartado "Guias" del juego.
+         */
+        post: operations["mark_guides_seen_auth_me_guides_seen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me/onboarding": {
         parameters: {
             query?: never;
@@ -1484,6 +1507,29 @@ export interface paths {
         };
         /** List Variants */
         get: operations["list_variants_games__game_id__variants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/games/{slug}/guides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Guides
+         * @description Las guias de uso de un juego: sus videos y su PDF (`core/guides.py`).
+         *
+         *     Pide acceso al juego, como abrir una mesa: fuera del plan responde
+         *     `403 game_not_in_plan`. Un juego oculto no existe para un cliente.
+         */
+        get: operations["get_guides_games__slug__guides_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3391,6 +3437,16 @@ export interface components {
             shrinkage_alpha: number;
         };
         /**
+         * GameGuidesResponse
+         * @description Las guias de uso de un juego (`core/guides.py`). Sin guias, `videos`
+         *     llega vacio y `pdf` en null.
+         */
+        GameGuidesResponse: {
+            pdf: components["schemas"]["GuidePdfResponse"] | null;
+            /** Videos */
+            videos: components["schemas"]["GuideVideoResponse"][];
+        };
+        /**
          * GameMenuItem
          * @description Un juego del menú. Solo trae las variantes activas.
          */
@@ -3556,6 +3612,27 @@ export interface components {
             name: string;
             /** Sort Order */
             sort_order: number;
+        };
+        /**
+         * GuidePdfResponse
+         * @description El PDF de la guia, en Cloudinary.
+         */
+        GuidePdfResponse: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * GuideVideoResponse
+         * @description Un video de la guia, en YouTube. El frontend lo incrusta desde
+         *     `www.youtube-nocookie.com/embed/<youtube_id>`.
+         */
+        GuideVideoResponse: {
+            /** Title */
+            title: string;
+            /** Youtube Id */
+            youtube_id: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -5073,6 +5150,8 @@ export interface components {
             email: string;
             /** Email Verified */
             email_verified: boolean;
+            /** Guides Seen At */
+            guides_seen_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -6851,6 +6930,26 @@ export interface operations {
             };
         };
     };
+    mark_guides_seen_auth_me_guides_seen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
     complete_onboarding_auth_me_onboarding_post: {
         parameters: {
             query?: never;
@@ -7539,6 +7638,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameVariantResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_guides_games__slug__guides_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameGuidesResponse"];
                 };
             };
             /** @description Validation Error */

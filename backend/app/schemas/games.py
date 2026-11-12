@@ -237,6 +237,26 @@ class GameMenuResponse(ApiModel):
     offset: int
 
 
+class GuideVideoResponse(ApiModel):
+    """Un video de la guia, en YouTube. El frontend lo incrusta desde
+    `www.youtube-nocookie.com/embed/<youtube_id>`."""
+    title: str
+    youtube_id: str
+
+
+class GuidePdfResponse(ApiModel):
+    """El PDF de la guia, en Cloudinary."""
+    title: str
+    url: str
+
+
+class GameGuidesResponse(ApiModel):
+    """Las guias de uso de un juego (`core/guides.py`). Sin guias, `videos`
+    llega vacio y `pdf` en null."""
+    videos: list[GuideVideoResponse]
+    pdf: GuidePdfResponse | None = None
+
+
 class AdminGameListResponse(ApiModel):
     """Lista del admin: todos los juegos y todas sus variantes."""
     items: list[GameResponse]

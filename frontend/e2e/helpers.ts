@@ -62,6 +62,8 @@ export async function registerViaApi(
   email: string,
   options: {
     onboarding?: "leido" | "pendiente";
+    /** La ventana de las guías del inicio. Por defecto, ya cerrada. */
+    guias?: "vistas" | "pendiente";
     access?: "otorgado" | "ninguno";
     /** Los datos de facturación que pide el pago (§3.17, "Paso 5.4"). Por defecto, sí. */
     facturacion?: boolean;
@@ -88,6 +90,12 @@ export async function registerViaApi(
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(done.ok()).toBeTruthy();
+  }
+  if (options.guias !== "pendiente") {
+    const seen = await request.post(`${API_URL}/auth/me/guides-seen`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(seen.ok()).toBeTruthy();
   }
   if (options.access !== "ninguno") await grantAccess(request, email);
   if (options.facturacion !== false) await saveBillingProfile(request, token);
