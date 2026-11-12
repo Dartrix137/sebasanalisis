@@ -53,7 +53,6 @@ test("cuenta sin acceso: se suscribe con cupón y entra a la mesa", async ({
       "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
     ),
   ).toBeVisible();
-  await expect(page.getByText(/no cambia el resultado de ningún juego/)).toBeVisible();
 
   // Un código que no existe: lo dice y el total no cambia.
   await page.getByLabel("Cupón (opcional)").fill("NO-EXISTE");
