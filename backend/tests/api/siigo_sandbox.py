@@ -159,7 +159,7 @@ class SiigoSandbox:
                 {"id": VENDEDOR, "first_name": "Pruebas Api", "active": True}]})
         if path == "/v1/customers" and request.method == "GET":
             ident = request.url.params.get("identification", "")
-            found = [self.clientes[ident]] if ident in self.clientes else []
+            found = [self._cliente_como_lo_devuelve(self.clientes[ident])] if ident in self.clientes else []
             return httpx.Response(200, json={"pagination": {"page": 1}, "results": found})
         if path == "/v1/customers" and request.method == "POST":
             body = self.cuerpo(request)
@@ -219,6 +219,15 @@ class SiigoSandbox:
         self.notas[nid] = nota
         self.por_llave[llave] = nid
         return nota
+
+    @staticmethod
+    def _cliente_como_lo_devuelve(cliente: dict[str, Any]) -> dict[str, Any]:
+        """Al listar, Siigo devuelve `id_type` como objeto `{code, name}` (CustomerOut
+        de la referencia de la API), no como el texto con que se creo."""
+        id_type = cliente.get("id_type")
+        if isinstance(id_type, str):
+            return {**cliente, "id_type": {"code": id_type, "name": "Cédula de ciudadanía"}}
+        return cliente
 
     def _crear_factura(self, request: httpx.Request) -> dict[str, Any]:
         llave = request.headers.get("Idempotency-Key", "")

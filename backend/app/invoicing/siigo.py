@@ -79,6 +79,7 @@ import logging
 import re
 import threading
 import time
+import unicodedata
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -122,6 +123,44 @@ def _number(value: object) -> Decimal | None:
         return Decimal(str(value))
     except InvalidOperation:
         return None
+
+
+CUSTOMER_MISMATCH = "customer_mismatch"
+CUSTOMER_MISMATCH_MESSAGE = (
+    "El cliente de Siigo con el documento de este comprador tiene otro tipo de documento,"
+    " nombre o correo. Revísalo en Siigo Nube y reintenta la emisión."
+)
+
+
+def _plain(text: str) -> str:
+    """Para comparar nombres y correos: sin tildes, sin mayusculas, sin espacios de mas."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return " ".join(
+        "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold().split()
+    )
+
+
+def _same_buyer(customer: dict[str, Any], buyer: Buyer) -> bool:
+    """El tercero de Siigo es este comprador: mismo tipo de documento, mismo nombre
+    y su correo entre los contactos (a donde Siigo manda la factura).
+
+    Al listar terceros, Siigo devuelve `id_type` como objeto `{code, name}` y
+    `name` como lista (CustomerOut en la referencia de la API, leida el 2026-11-12).
+    """
+    raw_type = customer.get("id_type")
+    id_type = raw_type.get("code") if isinstance(raw_type, dict) else raw_type
+    names = customer.get("name") or []
+    contacts = customer.get("contacts") or []
+    emails = {
+        _plain(str(c.get("email") or "")) for c in contacts if isinstance(c, dict)
+    }
+    return (
+        str(id_type) == buyer.id_type
+        and isinstance(names, list)
+        and _plain(" ".join(str(n) for n in names))
+        == _plain(f"{buyer.first_names} {buyer.last_names}")
+        and _plain(buyer.email) in emails
+    )
 
 
 def _results(body: Any) -> list[dict[str, Any]]:
@@ -407,11 +446,11 @@ class SiigoIssuer:
 
     # ---------- Terceros ----------
 
-    def _customer_exists(self, buyer: Buyer) -> bool:
+    def _existing_customer(self, buyer: Buyer) -> dict[str, Any] | None:
         found = _results(
             self._request("GET", "/v1/customers", params={"identification": buyer.id_number})
         )
-        return any(str(c.get("identification")) == buyer.id_number for c in found)
+        return next((c for c in found if str(c.get("identification")) == buyer.id_number), None)
 
     def _create_customer(self, buyer: Buyer) -> None:
         payload = {
@@ -459,8 +498,17 @@ class SiigoIssuer:
     # ---------- Facturas ----------
 
     def issue(self, draft: InvoiceDraft) -> IssuedInvoice:
-        if not self._customer_exists(draft.buyer):
+        customer = self._existing_customer(draft.buyer)
+        if customer is None:
             self._create_customer(draft.buyer)
+        elif not _same_buyer(customer, draft.buyer):
+            # Siigo identifica al tercero solo por el numero de documento. Si el
+            # que ya existe es de otra persona (otra cuenta escribio ese numero, o
+            # el comprador cambio su nombre o correo), la factura saldria a su
+            # nombre y Siigo la mandaria a su correo. Se aparta para el admin
+            # (auditoria del 2026-11-12, decidido por el usuario). Ni el mensaje
+            # ni el log llevan el documento.
+            raise IssuerRejected(CUSTOMER_MISMATCH_MESSAGE, [CUSTOMER_MISMATCH])
         item: dict[str, Any] = {
             "code": self.product_code,
             "description": draft.description,
