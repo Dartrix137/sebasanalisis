@@ -1122,6 +1122,108 @@ def test_coupon_no_se_reutiliza_en_dos_cuentas_mas_alla_del_tope(client, db, tip
     assert db.get(Coupon, cupon.id).redemptions_count == 1
 
 
+# ---------- Cupones y pagos abiertos a la vez (auditoria del 2026-11-12) ----------
+
+_LOGGER = "app.core.subscriptions"
+
+
+def _abandonar(db, payment: Payment) -> None:
+    """Deja el pago como una orden abandonada: mas vieja que la ventana de pagos
+    pendientes (`schedule.PENDING_PAYMENT_WINDOW`)."""
+    db.execute(
+        text("UPDATE payments SET created_at = now() - interval '8 days' WHERE id = :id"),
+        {"id": payment.id},
+    )
+    db.commit()
+
+
+def test_un_pago_abierto_con_cupon_reserva_un_cupo_del_tope(client, db, tipster) -> None:
+    """Decidido por el usuario el 2026-11-12: un pago abierto con cupon reserva
+    un cupo del tope. La misma cuenta puede reintentar con el cupon (el pago
+    nuevo reemplaza al abandonado); otra cuenta no, hasta que la orden venza."""
+    cupon = _cupon(db, max_redemptions=1)
+    token_a, _, _ = _cuenta(client, db)
+    primero = _abrir_pago(client, db, token_a, codigo=cupon.code)
+
+    token_b, user_b, _ = _cuenta(client, db)
+    r = _suscribir(client, token_b, _mensual(db).id, cupon.code)
+    assert (r.status_code, r.json()["detail"]["reason"]) == (400, "exhausted")
+    assert client.post(
+        "/billing/quote",
+        json={"plan_id": str(_mensual(db).id), "coupon_code": cupon.code},
+        headers=auth(token_b),
+    ).json()["coupon"]["reason"] == "exhausted"
+
+    # La misma cuenta reintenta con el mismo cupon: se le deja.
+    assert _abrir_pago(client, db, token_a, codigo=cupon.code).discount_cents > 0
+
+    # Vencida la orden de la primera cuenta, el cupo vuelve a estar libre.
+    for pago in _pagos(db, str(primero.user_id)):
+        _abandonar(db, pago)
+    assert _abrir_pago(client, db, token_b, codigo=cupon.code).discount_cents > 0
+    db.expire_all()
+    assert db.get(Coupon, cupon.id).redemptions_count == 0
+
+
+def test_dos_pagos_aprobados_con_el_mismo_cupon_avisan(client, db, tipster, caplog) -> None:
+    """Si aun asi se pagan los dos, el dinero salio: se concede el periodo, el
+    cupon se cuenta una vez y queda un error para que lo revise el admin."""
+    token, user_id, _ = _cuenta(client, db)
+    cupon = _cupon(db, value=50)
+    a = _abrir_pago(client, db, token, codigo=cupon.code)
+    b = _abrir_pago(client, db, token, codigo=cupon.code)
+
+    _aprobar(client, tipster, a)
+    with caplog.at_level("ERROR", logger=_LOGGER):
+        _aprobar(client, tipster, b)
+
+    assert [p.status for p in _pagos(db, user_id)] == ["approved", "approved"]
+    db.expire_all()
+    assert db.get(Coupon, cupon.id).redemptions_count == 1
+    assert any(
+        str(b.id) in r.getMessage() and cupon.code in r.getMessage() for r in caplog.records
+    ), caplog.text
+
+
+def test_un_cupon_que_pasa_su_tope_al_aprobarse_avisa(client, db, tipster, caplog) -> None:
+    """Una orden dada por abandonada que la pasarela aprueba despues: el cupon
+    ya se reservo para otra cuenta. Se cuenta igual y queda el aviso."""
+    cupon = _cupon(db, max_redemptions=1)
+    token_a, _, _ = _cuenta(client, db)
+    tardio = _abrir_pago(client, db, token_a, codigo=cupon.code)
+    _abandonar(db, tardio)
+    token_b, _, _ = _cuenta(client, db)
+    _aprobar(client, tipster, _abrir_pago(client, db, token_b, codigo=cupon.code))
+
+    with caplog.at_level("ERROR", logger=_LOGGER):
+        _aprobar(client, tipster, tardio)
+
+    db.expire_all()
+    assert db.get(Coupon, cupon.id).redemptions_count == 2
+    assert any(
+        str(tardio.id) in r.getMessage() and cupon.code in r.getMessage() for r in caplog.records
+    ), caplog.text
+
+
+def test_una_renovacion_con_descuento_agotado_avisa(client, db, tipster, caplog) -> None:
+    """Dos renovaciones manuales abiertas con el ultimo periodo con descuento:
+    las dos se cotizan con el; la segunda que se aprueba deja el aviso."""
+    token, user_id, _ = _cuenta(client, db)
+    cupon = _cupon(db, value=50, duration="repeating", duration_periods=2)
+    _aprobar(client, tipster, _abrir_pago(client, db, token, codigo=cupon.code))
+    [suscripcion] = _suscripciones(db, user_id)
+    assert suscripcion.discount_periods_remaining == 1
+
+    r1 = _abrir_pago(client, db, token)
+    r2 = _abrir_pago(client, db, token)
+    assert r1.discount_cents > 0 and r2.discount_cents > 0
+    _aprobar(client, tipster, r1)
+    with caplog.at_level("ERROR", logger=_LOGGER):
+        _aprobar(client, tipster, r2)
+
+    assert any(str(r2.id) in r.getMessage() for r in caplog.records), caplog.text
+
+
 # ---------- Historial de pagos de la cuenta (GET /billing/payments) ----------
 
 

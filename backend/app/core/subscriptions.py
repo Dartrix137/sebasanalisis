@@ -31,14 +31,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.billing import checkout_text, pricing
 from app.billing.coupon_codes import normalize_code
 from app.billing.periods import next_period
 from app.billing.pricing import CouponRejection
-from app.billing.schedule import first_charge_at
+from app.billing.schedule import PENDING_PAYMENT_WINDOW, first_charge_at
 from app.core import billing_profiles, credit_notes, invoices, legal, price_changes
 from app.core.access import has_access
 from app.models import Coupon, CouponRedemption, Payment, Plan, Subscription, User
@@ -175,8 +175,18 @@ def current_subscription(db: Session, user_id: uuid.UUID) -> Subscription | None
     )
 
 
-def coupon_terms(db: Session, coupon: Coupon, user: User) -> pricing.CouponTerms:
-    """Lo que `pricing.quote` necesita saber de un cupon para esta cuenta."""
+def coupon_terms(
+    db: Session, coupon: Coupon, user: User, now: datetime
+) -> pricing.CouponTerms:
+    """Lo que `pricing.quote` necesita saber de un cupon para esta cuenta.
+
+    Un pago abierto con el cupon por otra cuenta le reserva un cupo del tope
+    hasta que se resuelve o se da por abandonado (decidido por el usuario el
+    2026-11-12, auditoria de seguridad): sin la reserva, varias cuentas abrian
+    pagos a la vez y todas recibian el descuento al aprobarse. Los pagos
+    abiertos de esta misma cuenta no cuentan: reintentar con el cupon reemplaza
+    al pago abandonado.
+    """
     already_used = (
         db.scalar(
             select(CouponRedemption.id).where(
@@ -184,6 +194,19 @@ def coupon_terms(db: Session, coupon: Coupon, user: User) -> pricing.CouponTerms
             )
         )
         is not None
+    )
+    redeemed_by = select(CouponRedemption.user_id).where(
+        CouponRedemption.coupon_id == coupon.id
+    )
+    reserved = db.scalar(
+        select(func.count(func.distinct(Payment.user_id))).where(
+            Payment.coupon_id == coupon.id,
+            Payment.status == "pending",
+            Payment.created_at > now - PENDING_PAYMENT_WINDOW,
+            Payment.user_id.is_not(None),
+            Payment.user_id != user.id,
+            Payment.user_id.not_in(redeemed_by),
+        )
     )
     return pricing.CouponTerms(
         kind=pricing.CouponKind(coupon.kind),
@@ -193,7 +216,7 @@ def coupon_terms(db: Session, coupon: Coupon, user: User) -> pricing.CouponTerms
         valid_from=coupon.valid_from,
         valid_until=coupon.valid_until,
         max_redemptions=coupon.max_redemptions,
-        redemptions_count=coupon.redemptions_count,
+        redemptions_count=coupon.redemptions_count + (reserved or 0),
         plan_ids=frozenset(str(p.id) for p in coupon.plans),
         already_used_by_user=already_used,
     )
@@ -475,12 +498,18 @@ def start_payment(
             raise SubscribeError(404, "plan_not_found", "Plan no encontrado")
         plan = found
         kind = "initial"
-        coupon = db.scalar(select(Coupon).where(Coupon.code == code)) if code else None
+        # Bloqueado: dos cuentas no pueden tomar a la vez el ultimo cupo del
+        # tope (la reserva de `coupon_terms` cuenta los pagos abiertos).
+        coupon = (
+            db.scalar(select(Coupon).where(Coupon.code == code).with_for_update())
+            if code
+            else None
+        )
         if code and coupon is None:
             raise _coupon_rejected(CouponRejection.not_found)
         quote = pricing.quote(
             pricing.PlanPrice(id=str(plan.id), price_cents=plan.price_cents, currency=plan.currency),
-            coupon_terms(db, coupon, user) if coupon is not None else None,
+            coupon_terms(db, coupon, user, now) if coupon is not None else None,
             now,
         )
         # Al cotizar, un cupon que no aplica no es un error. Al pagar si: cobrar
@@ -936,6 +965,15 @@ def _grant_period(db: Session, payment: Payment, now: datetime) -> bool:
         if subscription.current_period_end is None or subscription.current_period_end <= now:
             subscription.current_period_start = period.start
         if payment.kind == "renewal":
+            if payment.discount_cents > 0 and subscription.discount_periods_remaining == 0:
+                # Dos renovaciones abiertas con el ultimo periodo con descuento:
+                # el dinero salio y el periodo se da, pero alguien lo revisa.
+                logger.error(
+                    "Pago %s: renovacion aprobada con descuento cuando la suscripcion ya "
+                    "no tenia periodos con descuento; revisar si corresponde reembolsar "
+                    "la diferencia",
+                    payment.id,
+                )
             # Cada renovacion aprobada gasta un periodo con descuento (§3.5).
             subscription.discount_periods_remaining = pricing.periods_remaining_after_renewal(
                 subscription.discount_periods_remaining
@@ -954,8 +992,18 @@ def _grant_period(db: Session, payment: Payment, now: datetime) -> bool:
             first_charge_at(period.end) if subscription.renewal_mode == "automatic" else None
         )
 
-    if coupon is not None and first_activation:
-        _redeem_coupon(db, coupon, payment.user_id, subscription.id)
+    if coupon is not None and payment.kind == "initial":
+        if not first_activation:
+            # Otro pago abierto con cupon se aprobo antes (auditoria del
+            # 2026-11-12): el dinero salio y el periodo se da, pero el cupon ya
+            # no correspondia. Queda registrado para que el admin lo revise.
+            logger.error(
+                "Pago %s: se aprobo con el cupon %s cuando la cuenta ya tenia un "
+                "periodo pagado; revisar si corresponde reembolsar la diferencia",
+                payment.id,
+                coupon.code,
+            )
+        _redeem_coupon(db, coupon, payment.user_id, subscription.id, payment.id)
     return first_activation
 
 
@@ -969,9 +1017,17 @@ def _discount_periods_after_first(coupon: Coupon | None) -> int | None:
 
 
 def _redeem_coupon(
-    db: Session, coupon: Coupon, user_id: uuid.UUID, subscription_id: uuid.UUID
+    db: Session,
+    coupon: Coupon,
+    user_id: uuid.UUID,
+    subscription_id: uuid.UUID,
+    payment_id: uuid.UUID,
 ) -> None:
-    """Una sola redencion por cuenta, y el contador sube con ella."""
+    """Una sola redencion por cuenta, y el contador sube con ella.
+
+    Si el contador pasa el tope (una orden dada por abandonada que la pasarela
+    aprueba despues), se cuenta igual: el pago ya se cobro. Queda el error.
+    """
     already = db.scalar(
         select(CouponRedemption.id).where(
             CouponRedemption.coupon_id == coupon.id, CouponRedemption.user_id == user_id
@@ -983,11 +1039,21 @@ def _redeem_coupon(
         CouponRedemption(coupon_id=coupon.id, user_id=user_id, subscription_id=subscription_id)
     )
     # En SQL y no en Python: dos pagos aprobados a la vez no pierden una cuenta.
-    db.execute(
+    count = db.scalar(
         update(Coupon)
         .where(Coupon.id == coupon.id)
         .values(redemptions_count=Coupon.redemptions_count + 1)
+        .returning(Coupon.redemptions_count)
     )
+    if coupon.max_redemptions is not None and count is not None and count > coupon.max_redemptions:
+        logger.error(
+            "Pago %s: el cupon %s quedo con %s usos y su tope es %s; revisar si corresponde "
+            "reembolsar la diferencia",
+            payment_id,
+            coupon.code,
+            count,
+            coupon.max_redemptions,
+        )
 
 
 # ---------- Cancelar y reanudar la renovacion automatica (§3.6) ----------

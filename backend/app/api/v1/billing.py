@@ -257,9 +257,10 @@ def quote(
         id=str(plan.id), price_cents=plan.price_cents, currency=plan.currency
     )
 
+    now = datetime.now(UTC)
     coupon = db.scalar(select(Coupon).where(Coupon.code == code)) if code else None
-    terms = coupon_terms(db, coupon, user) if coupon is not None else None
-    result = pricing.quote(plan_price, terms, datetime.now(UTC))
+    terms = coupon_terms(db, coupon, user, now) if coupon is not None else None
+    result = pricing.quote(plan_price, terms, now)
 
     quote_coupon: QuoteCoupon | None = None
     if code:
