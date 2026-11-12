@@ -135,11 +135,11 @@ export function GamePage({ slug }: { slug: string }) {
 
   return (
     <Pantalla>
-      <header className="flex items-start gap-4">
+      <header className="flex flex-wrap items-start gap-4">
         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-gold/40 text-gold">
           <GameIcon icon={game.icon} className="h-8 w-8" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="font-display text-4xl font-semibold leading-none tracking-tight sm:text-5xl">
             {game.name}
           </h1>
@@ -147,6 +147,22 @@ export function GamePage({ slug }: { slug: string }) {
             <p className="mt-2 max-w-prose text-sm text-muted">{game.description}</p>
           ) : null}
         </div>
+        {/* En el celular va debajo de la descripción, alineado con ella (el
+            ícono mide 3.5rem y el espacio 1rem); desde `sm`, al lado del título. */}
+        {hasGuides ? (
+          <div className="-mt-1 basis-full pl-[4.5rem] sm:mt-0 sm:basis-auto sm:pl-0">
+            <Link
+              href={`/juegos/${slug}/guias`}
+              data-testid="guias-enlace"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-edge bg-ink-sunken px-3 py-2 text-sm font-bold text-muted transition-colors hover:border-gold/50 hover:text-white"
+            >
+              <svg aria-hidden viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-gold">
+                <path d="M6.3 3.2A1 1 0 0 0 4.8 4v12a1 1 0 0 0 1.5.8l10-6a1 1 0 0 0 0-1.7l-10-6Z" />
+              </svg>
+              Guías de uso
+            </Link>
+          </div>
+        ) : null}
       </header>
 
       <section className="mt-10" aria-labelledby="abrir-mesa">
@@ -196,24 +212,6 @@ export function GamePage({ slug }: { slug: string }) {
           </div>
         ) : null}
       </section>
-
-      {hasGuides ? (
-        <section className="mt-10" aria-labelledby="guias">
-          <h2 id="guias" className="font-display text-2xl font-semibold leading-tight">
-            Guías
-          </h2>
-          <Link
-            href={`/juegos/${slug}/guias`}
-            data-testid="guias-enlace"
-            className="mt-4 block rounded-card border border-edge bg-ink-raised p-5 transition-colors hover:border-gold/60"
-          >
-            <span className="font-bold text-white">Cómo usar la mesa</span>
-            <span className="mt-1 block text-sm text-muted">
-              Los videos de la guía, en orden, y la guía en PDF para descargar.
-            </span>
-          </Link>
-        </section>
-      ) : null}
     </Pantalla>
   );
 }
