@@ -360,7 +360,7 @@ Diseno y estado: `PLATAFORMA_COMPLETA.md` §3.17, "Paso 5.4". Lo que ya va en el
 | `INVOICE_ISSUER` | `siigo` |
 | `SIIGO_USERNAME`, `SIIGO_ACCESS_KEY` | Las credenciales de la API ("Alianzas" > "Mi Credencial API" en Siigo Nube). Secretas |
 | `SIIGO_PARTNER_ID` | El nombre registrado de la aplicacion (`sebasanalisisp`) |
-| `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica. En la empresa, `38043`. Antes de emitir, tiene que tener asociada en Siigo Nube una resolución de la DIAN vigente: la del 2026-11-11 estaba vencida |
+| `SIIGO_DOCUMENT_TYPE_ID` | El tipo de comprobante de factura electronica. En la empresa, `38043`. Tiene que tener asociada en Siigo Nube una resolución de la DIAN vigente. Desde el 2026-11-12 es la `18764084810641` (FV 501-1000), vigente hasta el 5 dic 2026; antes de esa fecha se asocia la `18764107841164` (FV 1001-1600, hasta el 29 mar 2028). Con una vencida, las facturas se quedan en `pending` |
 | `SIIGO_SELLER_ID` | El usuario vendedor |
 | `SIIGO_PAYMENT_TYPE_ID` | La forma de pago, activa y sin vencimiento, para facturas y para notas crédito. En la empresa, `8369`: Bancolombia (código 6 en Siigo Nube), activa y sin vencimiento para facturas y notas crédito (consultado el 2026-11-11 con `scripts/siigo_catalogs.py pagos pagos_nc`) |
 | `SIIGO_PRODUCT_CODE` | El codigo del producto "suscripcion" (servicio, excluido de IVA) |
