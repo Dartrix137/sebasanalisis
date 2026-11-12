@@ -951,6 +951,7 @@ Escrito sobre la documentación oficial leída el 2026-11-06. **No se construye 
    - La actividad económica (CIIU 6311 en el modelo) y los datos del emisor son de la configuración de la empresa en Siigo, no del código.
 8. **A quién va: a cada comprador, nunca a consumidor final** (decidido por el usuario el 2026-11-06; pendiente n.º 5).
    - El tercero se crea en Siigo, desde la factura o con `POST /v1/customers`, y se reutiliza en las facturas siguientes del mismo cliente.
+   - **Que sea el mismo cliente** (auditoría de seguridad del 2026-11-12, decidido por el usuario ese día): Siigo busca el tercero solo por el número de documento, y ese número lo escribe cada cuenta sin que nada lo ate a ella. Antes de emitir se compara el tercero que ya existe con el comprador congelado en la factura: el tipo de documento, el nombre (sin tildes ni mayúsculas) y que el correo de la cuenta esté entre sus contactos, que es a donde Siigo manda la factura. Si no coinciden, la factura no se emite: queda `failed` con el código `customer_mismatch` y un mensaje sin el documento. El admin revisa el tercero en Siigo Nube, lo corrige si es la misma persona (por ejemplo, cambió su correo) y pulsa "Reintentar". No se actualiza el tercero desde la API: su `PUT` reemplaza el registro entero.
    - Lo que pide Siigo para crear un tercero (referencia de Apiary, `POST /v1/customers`):
      - `person_type`: `Person` o `Company`.
      - `id_type` y `identification`.

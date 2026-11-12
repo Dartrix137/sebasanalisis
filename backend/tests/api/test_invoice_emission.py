@@ -132,6 +132,70 @@ def test_el_mismo_cliente_no_se_vuelve_a_crear(client, db, tipster, siigo) -> No
     assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 2
 
 
+def _otro_comprador(db, user_id) -> None:
+    """Datos de facturacion con el mismo documento que los de `_cuenta`, de otra persona."""
+    db.execute(
+        text("UPDATE billing_profiles SET first_names = 'Otra', last_names = 'Persona'"
+             " WHERE user_id = :id"),
+        {"id": user_id},
+    )
+    db.commit()
+
+
+def _pago_aprobado_de(client, db, tipster, *, otro_comprador: bool):
+    token, user_id, email = _cuenta(client, db)
+    if otro_comprador:
+        _otro_comprador(db, user_id)
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
+    [pago] = _pagos(db, user_id)
+    return pago, email
+
+
+def test_un_cliente_de_siigo_de_otra_persona_aparta_la_factura(
+    client, db, tipster, siigo, caplog
+) -> None:
+    """Auditoria del 2026-11-12, decidido por el usuario: Siigo reutiliza el
+    tercero por el numero de documento. Si el que ya existe tiene otro nombre o
+    correo, la factura no se emite a nombre de otro: queda fallida para el admin."""
+    primero, _ = _pago_aprobado(client, db, tipster)
+    segundo, _ = _pago_aprobado_de(client, db, tipster, otro_comprador=True)
+
+    assert _factura(db, primero.id).status == "accepted"
+    factura = _factura(db, segundo.id)
+    assert factura.status == "failed"
+    assert factura.last_error_codes == ["customer_mismatch"]
+    assert "Siigo Nube" in factura.last_error_message
+    assert "1234567890" not in factura.last_error_message
+    assert "1234567890" not in caplog.text
+    assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 1
+    assert len(siigo.pedidos_a("POST", "/v1/customers")) == 1
+
+
+def test_el_mismo_nombre_con_otro_correo_tambien_se_aparta(client, db, tipster, siigo) -> None:
+    """El correo del tercero es a donde Siigo manda la factura."""
+    _pago_aprobado(client, db, tipster)
+    segundo, _ = _pago_aprobado_de(client, db, tipster, otro_comprador=False)
+    factura = _factura(db, segundo.id)
+    assert (factura.status, factura.last_error_codes) == ("failed", ["customer_mismatch"])
+
+
+def test_corregido_el_cliente_en_siigo_nube_el_reintento_la_emite(
+    client, db, tipster, siigo, admin_token
+) -> None:
+    _pago_aprobado(client, db, tipster)
+    segundo, email = _pago_aprobado_de(client, db, tipster, otro_comprador=True)
+    assert _factura(db, segundo.id).status == "failed"
+
+    # El admin revisa y corrige el tercero en Siigo Nube.
+    tercero = siigo.clientes["1234567890"]
+    tercero["name"] = ["Otra", "Persona"]
+    tercero["contacts"] = [{"first_name": "Otra", "last_name": "Persona", "email": email}]
+    r = _accion(client, admin_token, segundo, "retry")
+    assert r.status_code == 200, r.text
+    assert r.json()["invoice"]["status"] == "accepted"
+
+
 def test_cambiar_los_datos_despues_no_altera_una_factura_emitida(client, db, tipster, siigo) -> None:
     pago, _ = _pago_aprobado(client, db, tipster)
     db.execute(text("UPDATE billing_profiles SET address = 'Otra 9'"))
@@ -194,13 +258,18 @@ def test_un_limite_corto_se_espera_y_uno_largo_queda_para_despues(
 ) -> None:
     siigo.fallar("POST", "/v1/invoices",
                  Falla(429, ["requests_limit"], "Rate limit is exceeded. Try again in 5 seconds."))
-    pago, _ = _pago_aprobado(client, db, tipster)
+    # Los dos pagos de la misma cuenta: la cedula de `_cuenta` es la misma para
+    # todas, y una cuenta distinta apartaria la factura por otro motivo.
+    token, _, _ = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
     assert _factura(db, pago.id).status == "accepted"
     assert 6.0 in siigo.dormido  # espero los 5 s y uno mas
 
     siigo.fallar("POST", "/v1/invoices",
                  Falla(429, ["requests_limit"], "Rate limit is exceeded. Try again in 120 seconds."))
-    pago, _ = _pago_aprobado(client, db, tipster)
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
     factura = _factura(db, pago.id)
     assert factura.status == "pending" and factura.last_error_codes == ["requests_limit"]
     assert factura.next_attempt_at is not None
