@@ -1021,11 +1021,14 @@ version de Dokploy del VPS muestra otros nombres, valen los de la pantalla.
 1. **En Cloudflare**: *R2 Object Storage* -> *Create bucket*, con un nombre como
    `sebasanalisis-respaldos`. Sin acceso publico: el respaldo tiene correos,
    pagos y datos personales.
-2. *R2 Object Storage* -> *Manage API tokens* -> crear un *User API Token* con
-   permiso **Object Read & Write**, **limitado a ese bucket**. Copiar el
-   *Access Key ID*, el *Secret Access Key* y el *Endpoint*
-   (`https://<id de la cuenta>.r2.cloudflarestorage.com`): el secreto se muestra
-   una sola vez. No pegarlos en ningun chat ni archivo del repositorio.
+2. *R2 Object Storage* -> *Manage API tokens* -> crear un **Account API
+   token** (no el *User API token*: el de cuenta no depende de que un usuario
+   siga en la cuenta) con permiso **Object Read & Write**, **limitado a ese
+   bucket**, sin vencimiento o con uno anotado en el calendario. Copiar el
+   *Access Key ID* y el *Secret Access Key* (los de "S3 clients"; el *Token
+   value* no se usa) y el *Endpoint* (`https://<id de la cuenta>.r2.cloudflarestorage.com`,
+   sin `eu` ni el nombre del bucket): el secreto se muestra una sola vez. No
+   pegar las llaves en ningun chat ni archivo del repositorio.
 3. **En Dokploy**, en los destinos S3 (`/dashboard/settings/destinations`):
    *Access Key Id*, *Secret Access Key*, *Endpoint*, *Bucket* y *Region*. La
    guia de Dokploy pide la region de R2 (`WNAM`, `ENAM`...); si la prueba de
@@ -1033,7 +1036,9 @@ version de Dokploy del VPS muestra otros nombres, valen los de la pantalla.
 4. **En la base de Sebasanalisis** (el servicio PostgreSQL de Dokploy, no la de
    GlitchTip) -> pestana *Backup* -> crear el respaldo:
    - *Select Destination S3 Bucket*: el destino del paso 3.
-   - *Database Name*: `sebasanalisis`.
+   - *Database Name*: `sebasanalisis-db` (el nombre de la base en el VPS, el
+     final de su `DATABASE_URL`; con `sebasanalisis` falla con "database does
+     not exist").
    - *Schedule Cron*: `0 8 * * *` (todos los dias a las 8:00 UTC, las 3 a. m.
      en Colombia).
    - *Prefix*: `produccion/`.
@@ -1056,14 +1061,14 @@ base aparte y se comparan cifras. **Nunca se usa *Restore* desde la pestana
 2. En **ese** servicio nuevo: pestana *Backup* -> *Restore*:
    - *Select Source S3 Bucket*: el destino de R2.
    - *Search for Backup File*: escribir `produccion/` y elegir el mas reciente.
-   - *Database Name*: `sebasanalisis`.
+   - *Database Name*: `sebasanalisis-db`.
    - *Restore*.
 3. En la terminal de cada una de las dos bases (produccion y la restaurada),
    correr lo mismo y comparar:
 
    ```
-   psql -U <usuario> -d sebasanalisis -c "select version_num from alembic_version;"
-   psql -U <usuario> -d sebasanalisis -c "select (select count(*) from users) usuarios, (select count(*) from subscriptions) suscripciones, (select count(*) from payments) pagos, (select count(*) from spins) giros, (select max(created_at) from payments) ultimo_pago;"
+   psql -U <usuario> -d sebasanalisis-db -c "select version_num from alembic_version;"
+   psql -U <usuario> -d sebasanalisis-db -c "select (select count(*) from users) usuarios, (select count(*) from subscriptions) suscripciones, (select count(*) from payments) pagos, (select count(*) from spins) giros, (select max(created_at) from payments) ultimo_pago;"
    ```
 
    Tiene que coincidir la version de la migracion, y las cifras tienen que ser
