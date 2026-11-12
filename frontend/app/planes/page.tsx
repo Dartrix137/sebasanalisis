@@ -39,10 +39,6 @@ export default function PlansPage() {
         <h1 className="font-display text-4xl font-semibold leading-none tracking-tight">
           Planes
         </h1>
-        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
-          La suscripción da acceso a la plataforma. No cambia el resultado de ningún juego ni la
-          ventaja de la casa.
-        </p>
 
         {user ? <AccountStatus user={user} /> : null}
         {user && !user.access.granted ? <VerifyEmailNotice /> : null}

@@ -471,8 +471,7 @@ function Checkout() {
           {chosen === "automatic"
             ? null
             : "Al continuar vas a la página del procesador de pagos del medio que elegiste, donde completas el pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
-          La suscripción da acceso a la plataforma: no cambia el resultado de ningún juego ni la
-          ventaja de la casa. Consulta los{" "}
+          Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>
             Términos y Condiciones
           </Link>
