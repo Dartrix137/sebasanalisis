@@ -112,6 +112,19 @@ CATALOGO: list[dict[str, Any]] = [
         "countries": ["PE"],
         "fields": ["firstName", "phone"],
     },
+    # Esta en el catalogo real del sandbox desde la v2.2; es de cripto y no se
+    # ofrece (`tipsterpage.EXCLUDED_METHODS`).
+    {
+        "key": "binancepay",
+        "name": "Binance Pay",
+        "provider": "IBIS",
+        "translations": {"en": "Binance Pay"},
+        "logoUrl": "https://cdntpfiles86236.tipsterpage.com/images/payment_methods/binance.png",
+        "priceMin": 1,
+        "priceMax": 400,
+        "countries": [],
+        "fields": [],
+    },
 ]
 
 

@@ -330,6 +330,8 @@ def test_el_catalogo_sin_pasarela(client, db) -> None:
     [
         ({"metodo": None}, "payment_method_required"),
         ({"metodo": "paypal"}, "payment_method_unavailable"),
+        # De cripto: la pasarela lo ofrece, nosotros no (2026-11-13).
+        ({"metodo": "binancepay"}, "payment_method_unavailable"),
         # Un medio local sin pais, o con el de otro pais.
         ({"metodo": "ebanxpsecolombia"}, "payment_method_unavailable"),
         ({"metodo": "ebanxpsecolombia", "pais": "MX"}, "payment_method_unavailable"),
