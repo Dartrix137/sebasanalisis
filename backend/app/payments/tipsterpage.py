@@ -81,6 +81,24 @@ PRODUCTION_BASE_URL = "https://paymentsv2.ttpgpay.com/tspayv2"
 #: (`core/subscriptions`). Un medio de cripto nuevo hay que sumarlo aqui.
 EXCLUDED_METHODS = frozenset({"payid19", "binancepay"})
 
+#: Los siete medios de Stripe Checkout (OpenAPI, `payment_method`:
+#: `PAYMENT_METHODS_STRIPE_IDS`): cobran en EUR a un comprador de la zona euro y
+#: en USD a los demas. Se firman y se reconsultan en EUR igual que el resto.
+STRIPE_METHODS = frozenset({
+    "stripe",
+    "klarna-stripe",
+    "google-pay",
+    "apple-pay",
+    "stripe-amazon-pay",
+    "revolut-stripe",
+    "multibanco-stripe",
+})
+
+#: El catalogo trae dos medios con el mismo nombre, "Tarjeta de credito/debito":
+#: `cardtpv` (Redsys) y `stripe`. El de Stripe se distingue (decidido por el
+#: usuario el 2026-11-13).
+DISPLAY_NAMES = {"stripe": "Tarjeta de crédito/débito (Stripe)"}
+
 #: Manual §7.1: el orden fijo de los campos que entran en `tspay_signature`.
 ORDER_SIGNATURE_FIELDS = (
     "order_id",
@@ -502,13 +520,14 @@ def _method(item: Any) -> PaymentMethodOption | None:
     logo = item.get("logoUrl")
     return PaymentMethodOption(
         key=key,
-        name=name,
+        name=DISPLAY_NAMES.get(key, name),
         logo_url=logo if isinstance(logo, str) and logo.startswith("https://") else None,
         min_cents=low,
         max_cents=high,
         currency=CURRENCY,
         countries=tuple(c.upper() for c in countries if isinstance(c, str)),
         fields=tuple(known),
+        usd_outside_eurozone=key in STRIPE_METHODS,
     )
 
 

@@ -1,6 +1,7 @@
 """Envio de correo y plantillas (§5.5). Sin red ni base."""
 
 import json
+import re
 import smtplib
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -145,7 +146,10 @@ def test_el_recibo_dice_cuanto_se_cobro_y_en_que_moneda() -> None:
         assert "tu banco aplica su tasa de cambio" in cuerpo
         assert "la pasarela hace la conversión y puede sumar un recargo" in cuerpo
         # Un solo precio, en la moneda en que se cobra.
-        assert "USD" not in cuerpo
+        # Sin precio de referencia en dolares (descartado el 2026-10-09): ningun
+        # monto en USD. La nota si nombra el USD de los medios de Stripe.
+        assert not re.search(r"\d\s*USD|USD\s*\d|US\$", cuerpo)
+        assert "cobran en dólares (USD) si pagas desde fuera de la zona euro" in cuerpo
 
     sin_descuento = build_email(
         "payment_receipt", to="ana@ejemplo.com", **{**CONTEXT, "discount_cents": 0}

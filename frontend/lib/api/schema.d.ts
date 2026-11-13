@@ -2954,6 +2954,11 @@ export interface components {
             min_cents: number;
             /** Name */
             name: string;
+            /**
+             * Usd Outside Eurozone
+             * @default false
+             */
+            usd_outside_eurozone: boolean;
         };
         /** CityResponse */
         CityResponse: {

@@ -301,6 +301,23 @@ def test_el_catalogo_exige_sesion_y_dice_que_pedir(client, db, tipster) -> None:
     assert peru[1]["fields"] == ["first_name", "phone"]
 
 
+def test_la_tarjeta_de_stripe_se_distingue_y_avisa_el_cobro_en_usd(client, db, tipster) -> None:
+    """Decidido por el usuario el 2026-11-13: las dos "Tarjeta de credito/debito"
+    del catalogo (Redsys y Stripe) se ven distintas, y los medios de Stripe
+    avisan que fuera de la zona euro cobran en USD (OpenAPI de Tipster Page)."""
+    tarjeta = next(m for m in tipster.catalogo if m["key"] == "cardtpv")
+    tipster.catalogo.append({**tarjeta, "key": "stripe", "provider": "Stripe"})
+    tipster.catalogo.append({**tarjeta, "key": "google-pay", "name": "Google Pay", "provider": "Stripe"})
+    token, _, _ = _cuenta(client, db)
+    r = client.get("/billing/payment-methods", params={"country": "CO"}, headers=auth(token))
+    assert r.status_code == 200, r.text
+    medios = {m["key"]: (m["name"], m["usd_outside_eurozone"]) for m in r.json()}
+    assert medios["cardtpv"] == ("Tarjeta de crédito/débito", False)
+    assert medios["stripe"] == ("Tarjeta de crédito/débito (Stripe)", True)
+    assert medios["google-pay"] == ("Google Pay", True)
+    assert medios["ebanxpsecolombia"][1] is False
+
+
 def test_sin_pais_solo_los_medios_que_no_dependen_del_pais(client, db, tipster) -> None:
     """"Otro pais": de todo el catalogo, solo los medios sin restriccion."""
     token, _, _ = _cuenta(client, db)

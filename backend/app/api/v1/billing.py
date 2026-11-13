@@ -214,6 +214,7 @@ def payment_methods(
             max_cents=m.max_cents,
             currency=m.currency,
             fields=[_BUYER_NAMES[f] for f in m.fields],
+            usd_outside_eurozone=m.usd_outside_eurozone,
         )
         for m in methods
     ]

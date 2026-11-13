@@ -227,6 +227,16 @@ export function CheckoutMethodPicker({
         )
       ) : null}
 
+      {method && method.usd_outside_eurozone ? (
+        // Los medios de Stripe cobran en USD fuera de la zona euro (OpenAPI de
+        // Tipster Page; decidido por el usuario el 2026-11-13).
+        <p className="text-xs leading-relaxed text-muted" data-testid="aviso-usd">
+          Con {method.name}, si pagas desde fuera de la zona euro, el cobro es en dólares (USD): el
+          precio en euros se convierte a dólares, y tu banco puede aplicar su tasa de cambio y
+          comisiones.
+        </p>
+      ) : null}
+
       {method && method.fields.length > 0 ? (
         <div className="space-y-3">
           <p className="text-xs leading-relaxed text-muted">
