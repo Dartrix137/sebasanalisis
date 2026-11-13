@@ -15,7 +15,7 @@ from argon2 import PasswordHasher
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import EXAMPLE_ADMIN_PASSWORDS, InsecureConfiguration, get_settings
 from app.db.session import SessionLocal
 from app.models import Game, GameVariant, User
 from app.schemas.auth import RegisterRequest
@@ -58,22 +58,24 @@ def load_config(filename: str) -> GameVariantConfig:
 
 def seed_admin(db: Session) -> User:
     settings = get_settings()
-    # Se valida con el mismo schema del registro: si el correo del .env no pasa
-    # EmailStr, el admin sembrado jamas podria iniciar sesion. Falla aqui, no en
-    # el primer intento de login.
-    email = str(
-        RegisterRequest(
-            email=settings.seed_admin_email, password=settings.seed_admin_password
-        ).email
-    ).lower()
     # Si ya hay un administrador, no se crea otro, tenga el correo que tenga.
     # Antes se buscaba por el correo del .env: bastaba con que el administrador
     # cambiara su correo desde "Mi cuenta" para que volver a correr el seed
-    # creara un segundo administrador con la clave del .env.
+    # creara un segundo administrador con la clave del .env. Va antes de leer
+    # la clave: con el administrador creado, SEED_ADMIN_PASSWORD ya no se usa.
     existing = db.scalar(select(User).where(User.role == "admin").order_by(User.created_at))
     if existing:
         print(f"  ya hay un administrador ({existing.email}): no se crea otro")
         return existing
+    password = settings.seed_admin_password
+    if not password.strip():
+        raise InsecureConfiguration("SEED_ADMIN_PASSWORD no esta definida")
+    if password.strip() in EXAMPLE_ADMIN_PASSWORDS:
+        raise InsecureConfiguration("SEED_ADMIN_PASSWORD tiene el valor de ejemplo publico")
+    # Se valida con el mismo schema del registro: si el correo del .env no pasa
+    # EmailStr, el admin sembrado jamas podria iniciar sesion. Falla aqui, no en
+    # el primer intento de login.
+    email = str(RegisterRequest(email=settings.seed_admin_email, password=password).email).lower()
     user = db.scalar(select(User).where(User.email == email))
     if user:
         # Una cuenta comun con el correo del .env no se promueve sola: el seed
@@ -82,7 +84,7 @@ def seed_admin(db: Session) -> User:
         return user
     user = User(
         email=email,
-        password_hash=PasswordHasher().hash(settings.seed_admin_password),
+        password_hash=PasswordHasher().hash(password),
         display_name="Administrador",
         access_type="full",
         role="admin",

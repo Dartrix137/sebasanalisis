@@ -923,3 +923,33 @@ def test_el_seed_no_crea_un_segundo_administrador(
         )
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("clave", ["", "cambia-esta-clave"])
+def test_el_seed_no_crea_el_administrador_con_una_clave_que_no_sirve(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch, clave: str
+) -> None:
+    """Sin administrador, el seed exige SEED_ADMIN_PASSWORD y rechaza la de
+    ejemplo (auditoria del 2026-11-12, pista 1). Con el administrador ya
+    creado, no la pide: vuelve a correr sin ella."""
+    from app.core.config import InsecureConfiguration, get_settings
+    from app.db.seed import seed_admin
+
+    admin_id = db.execute(text("SELECT id FROM users WHERE role = 'admin'")).scalar()
+    monkeypatch.setenv("SEED_ADMIN_EMAIL", f"semilla-{uuid.uuid4().hex[:10]}@ejemplo.com")
+    monkeypatch.setenv("SEED_ADMIN_PASSWORD", clave)
+    get_settings.cache_clear()
+    try:
+        db.execute(text("UPDATE users SET role = 'user' WHERE role = 'admin'"))
+        db.commit()
+        with pytest.raises(InsecureConfiguration, match="SEED_ADMIN_PASSWORD"):
+            seed_admin(db)
+        db.rollback()
+        assert db.execute(text("SELECT count(*) FROM users WHERE role = 'admin'")).scalar_one() == 0
+
+        if admin_id is not None:
+            db.execute(text("UPDATE users SET role = 'admin' WHERE id = :u"), {"u": admin_id})
+            db.commit()
+            assert seed_admin(db).id == admin_id
+    finally:
+        get_settings.cache_clear()
