@@ -280,6 +280,10 @@ def test_admin_otorga_y_retira_acceso_y_queda_en_la_bitacora(
     [
         {"access_type": "invited"},  # sin motivo
         {"access_type": "invited", "reason": "  "},  # motivo vacio
+        # Solo espacios, o menos de tres letras entre espacios: antes pasaban
+        # y la bitacora guardaba un motivo vacio (auditoria del 2026-11-12).
+        {"access_type": "invited", "reason": "          "},
+        {"access_type": "invited", "reason": " \n ab \t "},
         {"access_type": "premium", "reason": MOTIVO},
         {"access_type": "trial", "reason": MOTIVO},  # ya no existe
         # El vencimiento solo aplica a `invited`, y tiene que ser futuro.

@@ -65,7 +65,7 @@ from app.invoicing.base import (
     IssuerRejected,
     IssuerTransient,
 )
-from app.models import CreditNote, Invoice, Payment, Plan, User
+from app.models import BillingProfile, CreditNote, Invoice, Payment, Plan, User
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +117,35 @@ def create_pending(db: Session, payment: Payment) -> Invoice:
         status=PENDING,
         operation_date=fx.operation_date(payment.resolved_at),
     )
+    # El comprador se copia ya, con el pago aprobado: si la cuenta se elimina
+    # antes de preparar la factura, sus datos de facturacion se borran con
+    # ella y el pago se quedaria sin factura (auditoria del 2026-11-12,
+    # decidido por el usuario el 2026-11-13). `prepare` vuelve a copiarlo de
+    # los datos vigentes si la cuenta sigue: asi un reintento del admin toma
+    # lo que el cliente haya corregido.
+    profile = billing_profiles.get(db, payment.user_id) if payment.user_id else None
+    user = db.get(User, payment.user_id) if payment.user_id else None
+    if profile is not None and user is not None:
+        _copy_buyer(invoice, profile, user)
     db.add(invoice)
     return invoice
+
+
+def _copy_buyer(invoice: Invoice, profile: BillingProfile, user: User) -> None:
+    invoice.buyer_first_names = profile.first_names
+    invoice.buyer_last_names = profile.last_names
+    invoice.buyer_id_type = profile.id_type
+    invoice.buyer_id_number = profile.id_number
+    invoice.buyer_email = user.email
+    invoice.buyer_country_code = profile.country_code
+    invoice.buyer_state_code = profile.state_code
+    invoice.buyer_city_code = profile.city_code
+    invoice.buyer_address = profile.address
+
+
+def _has_buyer(invoice: Invoice) -> bool:
+    """La factura ya trae al comprador copiado al aprobar el pago."""
+    return bool(invoice.buyer_id_type and invoice.buyer_id_number and invoice.buyer_email)
 
 
 @dataclass
@@ -176,7 +203,9 @@ def prepare(
         return False
     profile = billing_profiles.get(db, payment.user_id) if payment.user_id else None
     user = db.get(User, payment.user_id) if payment.user_id else None
-    if profile is None or user is None:
+    # Sin la cuenta (o sin sus datos de facturacion) sirve la copia hecha al
+    # aprobar el pago; las facturas anteriores a esa copia no la tienen.
+    if (profile is None or user is None) and not _has_buyer(invoice):
         invoice.waiting_reason = WAITING_PROFILE
         return False
 
@@ -223,15 +252,8 @@ def prepare(
         rates=rates,
         payment_reference=payment.reference,
     )
-    invoice.buyer_first_names = profile.first_names
-    invoice.buyer_last_names = profile.last_names
-    invoice.buyer_id_type = profile.id_type
-    invoice.buyer_id_number = profile.id_number
-    invoice.buyer_email = user.email
-    invoice.buyer_country_code = profile.country_code
-    invoice.buyer_state_code = profile.state_code
-    invoice.buyer_city_code = profile.city_code
-    invoice.buyer_address = profile.address
+    if profile is not None and user is not None:
+        _copy_buyer(invoice, profile, user)
     if invoice.idempotency_key is None:
         # La primera vez, el id de la factura. Un reintento del admin sobre una
         # fallida ya dejo una llave nueva (`reset_for_retry`).
@@ -268,7 +290,8 @@ def _draft(invoice: Invoice, now: datetime) -> InvoiceDraft:
 
 def _record_error(doc: Invoice | CreditNote, exc: IssuerError) -> None:
     doc.last_error_codes = exc.codes or None
-    doc.last_error_message = str(exc)[:500]
+    # El texto completo, solo a la base; el log y GlitchTip, `str(exc)`.
+    doc.last_error_message = exc.detail[:500]
 
 
 def _apply(db: Session, issuer: InvoiceIssuer, invoice: Invoice, result: IssuedInvoice,

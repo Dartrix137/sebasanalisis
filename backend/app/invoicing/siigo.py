@@ -303,18 +303,24 @@ class SiigoIssuer:
                     codes.append(str(item["Code"]))
                 if item.get("Message"):
                     messages.append(str(item["Message"]))
-        # El mensaje puede nombrar datos del comprador: al log van solo los codigos.
-        logger.warning("Siigo respondio %s a %s: %s", response.status_code, what, codes or "-")
+        # El mensaje de Siigo puede nombrar datos del comprador: al log, y al
+        # texto de la excepcion (que puede acabar en GlitchTip), van solo el
+        # estado y los codigos. El mensaje completo va en `detail`, a la base.
+        summary = f"Siigo respondio {response.status_code} a {what}: {', '.join(codes) or '-'}"
+        logger.warning("%s", summary)
         text = "; ".join(messages)[:500] or f"HTTP {response.status_code}"
         kind = classify(response.status_code, codes)
         if kind == "transient":
             match = _RETRY_IN.search(" ".join(messages))
             raise IssuerTransient(
-                text, codes, retry_after=float(match.group(1)) if match else None
+                summary,
+                codes,
+                retry_after=float(match.group(1)) if match else None,
+                detail=text,
             )
         if kind == "config":
-            raise IssuerMisconfigured(text, codes)
-        raise IssuerRejected(text, codes)
+            raise IssuerMisconfigured(summary, codes, detail=text)
+        raise IssuerRejected(summary, codes, detail=text)
 
     def _request(
         self,
@@ -492,7 +498,7 @@ class SiigoIssuer:
             # configuracion frenaria la emision de todas las facturas por los
             # datos de una; asi queda fallida solo la suya (§3.17).
             if set(exc.codes) & CONFIG_CODES == {"invalid_reference"}:
-                raise IssuerRejected(str(exc), exc.codes) from exc
+                raise IssuerRejected(str(exc), exc.codes, detail=exc.detail) from exc
             raise
 
     # ---------- Facturas ----------

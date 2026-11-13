@@ -49,19 +49,19 @@ class UpdateUserAccessRequest(ApiModel):
     access_type: AccessType
     # Solo con `invited`. Null = sin vencimiento.
     access_expires_at: datetime | None = None
-    reason: str = Reason
+    reason: Reason
 
 
 class UpdateUserStatusRequest(ApiModel):
     """PATCH /admin/users/:id/status: suspende o reactiva la cuenta."""
     is_active: bool
-    reason: str = Reason
+    reason: Reason
 
 
 class UpdateUserRoleRequest(ApiModel):
     """PATCH /admin/users/:id/role: nombra un administrador o le quita el rol."""
     role: UserRole
-    reason: str = Reason
+    reason: Reason
 
 
 class AuditLogEntry(ApiModel):
@@ -147,7 +147,7 @@ class UpdateSubscriptionRequest(ApiModel):
     action: SubscriptionAdminAction
     # Solo con `extend`.
     days: int | None = Field(default=None, ge=1, le=90)
-    reason: str = Reason
+    reason: Reason
 
 
 class PaymentEventResponse(ApiModel):
@@ -271,13 +271,13 @@ class AdminPaymentDetailResponse(ApiModel):
 
 class RequeryPaymentRequest(ApiModel):
     """POST /admin/payments/:id/requery."""
-    reason: str = Reason
+    reason: Reason
 
 
 class InvoiceActionRequest(ApiModel):
     """POST /admin/payments/:id/invoice/retry, /refresh y /cancel, y
     /admin/payments/:id/credit-notes/:id/retry y /refresh."""
-    reason: str = Reason
+    reason: Reason
 
 
 class RecordRefundRequest(ApiModel):
@@ -286,12 +286,12 @@ class RecordRefundRequest(ApiModel):
     # Cuando se hizo en el panel del proveedor.
     refunded_at: datetime
     provider_refund_id: str | None = Field(default=None, max_length=255)
-    reason: str = Reason
+    reason: Reason
 
 
 class ForcePasswordResetRequest(ApiModel):
     """POST /admin/users/:id/force-password-reset."""
-    reason: str = Reason
+    reason: Reason
 
 
 # ---------- Resumen (§4.7, paso 6) ----------

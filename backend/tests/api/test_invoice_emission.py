@@ -286,6 +286,61 @@ def test_un_error_de_datos_la_deja_fallida_y_no_se_reintenta_sola(client, db, ti
     assert len(siigo.pedidos_a("POST", "/v1/invoices")) == 1
 
 
+def test_la_cuenta_eliminada_antes_de_preparar_la_factura_no_la_deja_sin_salir(
+    client, db, tipster, siigo
+) -> None:
+    """Auditoria del 2026-11-12 (§5 del reporte), decidido por el usuario el
+    2026-11-13: el comprador se copia a la factura al aprobar el pago. Si la
+    cuenta se elimina mientras la factura espera (aqui, las tasas del dia), sus
+    datos de facturacion se borran con ella y la factura sale igual."""
+    siigo.tasas.publicadas = False
+    token, user_id, email = _cuenta(client, db)
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
+    [pago] = _pagos(db, user_id)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.prepared_at is None
+    assert (factura.buyer_id_number, factura.buyer_email) == ("1234567890", email)
+
+    r = client.request(
+        "DELETE", "/auth/me", json={"password": "clave-segura-123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 204, r.text
+    perfiles = text("SELECT count(*) FROM billing_profiles WHERE user_id = :u")
+    assert db.execute(perfiles, {"u": user_id}).scalar_one() == 0
+
+    siigo.tasas.publicadas = True
+    _correr(db, siigo)
+    factura = _factura(db, pago.id)
+    assert factura.status == "accepted" and factura.cop_cents == CENTAVOS
+    [creado] = siigo.pedidos_a("POST", "/v1/customers")
+    cuerpo = siigo.cuerpo(creado)
+    assert cuerpo["identification"] == "1234567890"
+    assert cuerpo["name"] == ["Cliente", "De Prueba"]
+
+
+def test_sin_la_copia_y_sin_la_cuenta_la_factura_espera(client, db, tipster, siigo) -> None:
+    """Una factura anterior a la copia al aprobar, de una cuenta ya
+    eliminada: no hay de donde sacar al comprador y queda esperando, con su
+    motivo, para el admin."""
+    siigo.tasas.publicadas = False
+    pago, _ = _pago_aprobado(client, db, tipster)
+    db.execute(
+        text("UPDATE invoices SET buyer_id_type = NULL, buyer_id_number = NULL,"
+             " buyer_email = NULL WHERE payment_id = :p"),
+        {"p": pago.id},
+    )
+    db.execute(text("DELETE FROM users WHERE id = :u"), {"u": pago.user_id})
+    db.commit()
+
+    siigo.tasas.publicadas = True
+    _correr(db, siigo)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.waiting_reason == "billing_profile_missing"
+    assert siigo.pedidos_a("POST", "/v1/invoices") == []
+
+
 def test_un_error_de_configuracion_frena_la_corrida(client, db, tipster, siigo) -> None:
     siigo.tasas.publicadas = False  # que las dos queden pendientes
     primero, _ = _pago_aprobado(client, db, tipster)
@@ -300,6 +355,39 @@ def test_un_error_de_configuracion_frena_la_corrida(client, db, tipster, siigo) 
     a, b = _factura(db, primero.id), _factura(db, segundo.id)
     assert a.status == "pending" and a.attempts == 0 and a.last_error_codes
     assert b.status == "pending"
+
+
+def test_el_mensaje_de_siigo_va_a_la_base_y_no_al_log(client, db, tipster, siigo, caplog) -> None:
+    """Auditoria del 2026-11-12 (§5 del reporte): el mensaje de un error de
+    Siigo puede nombrar al comprador. Lo ve el admin en la factura; al log, al
+    texto de la excepcion y a GlitchTip van solo el estado y los codigos."""
+    # Los de la app; httpx en INFO escribe la URL de la busqueda del cliente,
+    # y fuera de los tests va en WARNING (`monitoring.quiet_http_client_logs`).
+    caplog.set_level("DEBUG", logger="app")
+    mensaje = "El tercero Cliente De Prueba (1234567890) tiene la ciudad mal"
+    # Los dos pagos de la misma cuenta: otra cuenta con la misma cedula
+    # apartaria la factura por otro motivo (`customer_mismatch`).
+    token, _, _ = _cuenta(client, db)
+
+    # Un error de los datos de la factura: queda fallida.
+    siigo.fallar("POST", "/v1/invoices", Falla(400, ["invalid_total_payments"], mensaje))
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
+    factura = _factura(db, pago.id)
+    assert factura.status == "failed" and factura.last_error_message == mensaje
+
+    # Uno de la configuracion: frena la corrida, y el motivo va al log.
+    siigo.fallar("POST", "/v1/invoices", Falla(400, ["invalid_dian_resolution"], mensaje))
+    pago = _abrir_pago(client, db, token)
+    _aprobar(client, tipster, pago)
+    factura = _factura(db, pago.id)
+    assert factura.status == "pending" and factura.last_error_message == mensaje
+    assert "detenida=config: Siigo respondio 400 a POST /v1/invoices: invalid_dian_resolution" in (
+        caplog.text
+    )
+
+    for dato in ("1234567890", "Cliente De Prueba", "ciudad mal"):
+        assert dato not in caplog.text
 
 
 def test_documents_service_frena_la_corrida(client, db, tipster, siigo) -> None:
