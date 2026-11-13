@@ -110,6 +110,9 @@ class PaymentMethodOption:
     countries: tuple[str, ...] = ()
     #: Los datos del comprador que pide.
     fields: tuple[BuyerField, ...] = ()
+    #: Fuera de la zona euro cobra en dolares (USD), no en `currency`: la
+    #: pantalla de pago lo avisa al elegirlo.
+    usd_outside_eurozone: bool = False
 
 
 @dataclass(frozen=True)

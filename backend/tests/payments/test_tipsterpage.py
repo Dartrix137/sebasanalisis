@@ -265,8 +265,14 @@ def test_los_medios_de_cripto_no_se_ofrecen() -> None:
         for k in ("cardtpv", "binancepay", "stripe", "payid19", "apple-pay")
     ]
     respuestas = Respuestas(payment_methods=httpx.Response(200, json=catalogo))
-    assert [m.key for m in _proveedor(respuestas).payment_methods("CO")] == [
-        "cardtpv", "stripe", "apple-pay",
+    metodos = _proveedor(respuestas).payment_methods("CO")
+    assert [m.key for m in metodos] == ["cardtpv", "stripe", "apple-pay"]
+    # Los de Stripe cobran en USD fuera de la zona euro; la tarjeta de Stripe
+    # lleva un nombre propio (2026-11-13).
+    assert [(m.name, m.usd_outside_eurozone) for m in metodos] == [
+        ("cardtpv", False),
+        ("Tarjeta de crédito/débito (Stripe)", True),
+        ("apple-pay", True),
     ]
 
 

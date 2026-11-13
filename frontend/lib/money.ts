@@ -48,8 +48,10 @@ export function periodLabel(interval: PlanInterval, count: number): string {
  * La nota que acompaña al precio en /planes, en la pantalla de pago y en los
  * correos de cobro (decidido el 2026-10-13; reescrita para Tipster Page el
  * 2026-11-04). Con EBANX la pasarela cobra en moneda local con su tasa y un
- * recargo por la conversión (OpenAPI de Tipster Page, flujo EBANX). Pendiente
- * de la revisión del abogado.
+ * recargo por la conversión (OpenAPI de Tipster Page, flujo EBANX). Los medios
+ * de Stripe cobran en USD fuera de la zona euro (OpenAPI, 2026-11-13). Va igual
+ * en las plantillas de correo (`backend/app/emails/templates`). Pendiente de la
+ * revisión del abogado.
  */
 export const CURRENCY_NOTE =
-  "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.";
+  "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Los medios de Stripe (como la tarjeta de Stripe, Apple Pay o Google Pay) cobran en dólares (USD) si pagas desde fuera de la zona euro. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.";

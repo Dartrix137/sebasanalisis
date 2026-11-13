@@ -120,6 +120,8 @@ export const INVOICE_CANCEL_LABEL: Record<string, string> = {
   refunded: "Se reembolsó todo antes de emitirla",
   voided: "La pasarela anuló el pago antes de emitirla",
   annulled_in_siigo: "Anulada en Siigo Nube: la DIAN no la aceptó",
+  // `scripts/cancel_test_invoices.py` (2026-11-13).
+  test_payment: "Pago de prueba del sandbox: no se factura",
 };
 
 export const CREDIT_NOTE_STATUS_LABEL: Record<CreditNoteStatus, string> = {

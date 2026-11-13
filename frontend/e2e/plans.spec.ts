@@ -35,7 +35,7 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   // La nota de la moneda va una vez, debajo de los planes.
   await expect(
     page.getByText(
-      "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
+      "Cobro en euros (EUR). Con tarjeta o Bizum pagas en euros; si tu tarjeta es de otro país, tu banco aplica su tasa de cambio y puede cobrar comisiones. Los medios de Stripe (como la tarjeta de Stripe, Apple Pay o Google Pay) cobran en dólares (USD) si pagas desde fuera de la zona euro. Con un medio de pago local pagas en la moneda de tu país: la pasarela hace la conversión y puede sumar un recargo por ella.",
     ),
   ).toBeVisible();
   // La descripción no promete resultados.
@@ -85,7 +85,9 @@ test("/planes es pública: se ve sin sesión", async ({ page }) => {
   await page.goto("/planes");
   const plan = page.getByRole("article", { name: "Acceso Mensual" });
   await expect(plan.getByText("32 EUR", { exact: true })).toBeVisible();
-  await expect(page.getByText(/USD/)).toHaveCount(0);
+  // Sin precio de referencia en dolares (2026-10-09): ningun monto en USD. La
+  // nota de moneda si nombra el USD de los medios de Stripe (2026-11-13).
+  await expect(page.getByText(/\d\s*USD|USD\s*\d|US\$/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Crear cuenta", exact: true })).toBeVisible();
   // Sin sesión no hay a quién cobrarle: el plan invita a crear la cuenta.
   await expect(plan.getByRole("link", { name: "Crear cuenta para suscribirme" })).toBeVisible();

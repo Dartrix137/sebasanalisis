@@ -157,6 +157,8 @@ class CheckoutMethodResponse(ApiModel):
     currency: str
     # Los datos del comprador que hay que pedir para este medio.
     fields: list[BuyerFieldName]
+    # Fuera de la zona euro cobra en dolares (USD): los medios de Stripe.
+    usd_outside_eurozone: bool = False
 
 
 class BuyerData(ApiModel):

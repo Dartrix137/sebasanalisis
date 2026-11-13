@@ -2206,6 +2206,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "usd_outside_eurozone": {
+            "default": false,
+            "title": "Usd Outside Eurozone",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2215,7 +2220,8 @@
           "min_cents",
           "max_cents",
           "currency",
-          "fields"
+          "fields",
+          "usd_outside_eurozone"
         ],
         "title": "CheckoutMethodResponse",
         "type": "object"
