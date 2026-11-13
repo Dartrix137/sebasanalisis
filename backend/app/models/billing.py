@@ -289,7 +289,7 @@ INVOICE_STATUSES = (
     "pending", "sending", "issued", "accepted", "rejected", "failed", "cancelled"
 )
 #: Por que una factura no se emite (`invoices.cancel_reason`).
-INVOICE_CANCEL_REASONS = ("refunded", "voided", "annulled_in_siigo")
+INVOICE_CANCEL_REASONS = ("refunded", "voided", "annulled_in_siigo", "test_payment")
 
 
 class Invoice(Base):
