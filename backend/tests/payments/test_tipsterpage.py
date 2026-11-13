@@ -258,6 +258,18 @@ def test_el_catalogo_se_traduce_y_descarta_lo_que_no_se_sabe_pedir() -> None:
     assert (metodos[0].logo_url, metodos[1].logo_url) == ("https://cdn/t.png", None)
 
 
+def test_los_medios_de_cripto_no_se_ofrecen() -> None:
+    """Decidido por el usuario el 2026-11-13: todo menos cripto."""
+    catalogo = [
+        {"key": k, "name": k, "priceMin": 1, "priceMax": 400, "countries": [], "fields": []}
+        for k in ("cardtpv", "binancepay", "stripe", "payid19", "apple-pay")
+    ]
+    respuestas = Respuestas(payment_methods=httpx.Response(200, json=catalogo))
+    assert [m.key for m in _proveedor(respuestas).payment_methods("CO")] == [
+        "cardtpv", "stripe", "apple-pay",
+    ]
+
+
 def test_sin_pais_quedan_solo_los_medios_sin_restriccion() -> None:
     catalogo = [
         {"key": "cardtpv", "name": "T", "priceMin": 1, "priceMax": 400, "countries": [], "fields": []},

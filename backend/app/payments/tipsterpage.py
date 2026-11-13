@@ -5,7 +5,11 @@ Fuente de todo lo que sigue, leida el 2026-11-04:
 - El manual oficial "Documentacion de integracion -- Plataforma de pago
   Tipsterpage tsPay v2", v2.0 del 2026-10-29
   (`docs/docs tipsterpage/MANUAL_INTEGRACION_API_PAGOS_TSPAY_V2_NO_LANDING.pdf`,
-  fuera del repositorio). Las secciones se citan como "manual §N".
+  fuera del repositorio). Las secciones se citan como "manual §N". Revisado
+  contra la v2.2 del 2026-11-10 (`... (1).pdf`, leida el 2026-11-13): la firma,
+  el aviso y la reconsulta no cambian. Suma `GET /health` (§11), el dato
+  `email` del comprador (solo `vpay`) y medios nuevos (Stripe, IBIS, Binance
+  Pay), que se cobran en otra moneda pero se firman y se reconsultan en EUR.
 - Su OpenAPI, `https://apiekans.tipster.page/tspayv2/docs` (v2.0.0, con
   usuario y contrasena), citado como "OpenAPI".
 
@@ -69,6 +73,13 @@ CURRENCY = "EUR"
 # Manual §3: las dos URL base, con el prefijo de version incluido.
 SANDBOX_BASE_URL = "https://sandboxv2.ttpgpay.com/tspayv2"
 PRODUCTION_BASE_URL = "https://paymentsv2.ttpgpay.com/tspayv2"
+
+#: Los medios de cripto no se ofrecen (decidido por el usuario el 2026-11-13):
+#: `payid19` (factura de PayID19 en cripto) y `binancepay` (Binance Pay, en
+#: USD), segun la descripcion de `payment_method` en el OpenAPI. Se quitan del
+#: catalogo, asi que tampoco pasan la validacion de una orden
+#: (`core/subscriptions`). Un medio de cripto nuevo hay que sumarlo aqui.
+EXCLUDED_METHODS = frozenset({"payid19", "binancepay"})
 
 #: Manual §7.1: el orden fijo de los campos que entran en `tspay_signature`.
 ORDER_SIGNATURE_FIELDS = (
@@ -462,7 +473,8 @@ def _error_message(response: httpx.Response) -> str:
 
 def _method(item: Any) -> PaymentMethodOption | None:
     """Un medio del catalogo (manual §5, OpenAPI `PaymentMethod`). Uno mal
-    formado, o que pide un dato que no sabemos pedir, no se ofrece."""
+    formado, de cripto (`EXCLUDED_METHODS`) o que pide un dato que no sabemos
+    pedir, no se ofrece."""
     if not isinstance(item, dict):
         return None
     key, name = item.get("key"), item.get("name")
@@ -477,6 +489,8 @@ def _method(item: Any) -> PaymentMethodOption | None:
         or not isinstance(countries, list)
         or not isinstance(fields, list)
     ):
+        return None
+    if key in EXCLUDED_METHODS:
         return None
     known: list[BuyerField] = []
     for wanted in fields:
