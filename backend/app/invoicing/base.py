@@ -75,11 +75,20 @@ class IssuedInvoice:
 
 
 class IssuerError(Exception):
-    """Algo fallo al hablar con el emisor."""
+    """Algo fallo al hablar con el emisor.
 
-    def __init__(self, message: str, codes: list[str] | None = None) -> None:
+    `str(exc)` es lo que puede ir a un log, a un traceback y a GlitchTip.
+    `detail` es el texto completo, con lo que haya respondido el emisor, que
+    puede nombrar datos del comprador: va solo a la base (`last_error_message`,
+    que ve el admin). Sin `detail`, los dos son el mismo mensaje.
+    """
+
+    def __init__(
+        self, message: str, codes: list[str] | None = None, *, detail: str | None = None
+    ) -> None:
         super().__init__(message)
         self.codes = codes or []
+        self.detail = message if detail is None else detail
 
 
 class IssuerTransient(IssuerError):
@@ -96,8 +105,9 @@ class IssuerTransient(IssuerError):
         *,
         retry_after: float | None = None,
         uncertain: bool = False,
+        detail: str | None = None,
     ) -> None:
-        super().__init__(message, codes)
+        super().__init__(message, codes, detail=detail)
         self.retry_after = retry_after
         self.uncertain = uncertain
 

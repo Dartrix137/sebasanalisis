@@ -1,10 +1,13 @@
 """Base comun de los schemas de la API."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 # Toda accion de administrador sobre acceso o dinero lleva su motivo: es lo
-# que se lee en la bitacora.
-Reason = Field(min_length=3, max_length=500)
+# que se lee en la bitacora. Los espacios de los extremos se quitan antes de
+# contar: un motivo de solo espacios no pasa (auditoria del 2026-11-12).
+Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=500)]
 
 
 class ApiModel(BaseModel):

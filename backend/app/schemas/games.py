@@ -144,7 +144,7 @@ class CreateGameRequest(ApiModel):
     sort_order: int = Field(default=0, ge=0, le=10_000)
     # Un juego nuevo nace oculto: se publica cuando tenga sus variantes.
     status: GameStatus = "hidden"
-    reason: str = Reason
+    reason: Reason
 
 
 class UpdateGameRequest(ApiModel):
@@ -159,7 +159,7 @@ class UpdateGameRequest(ApiModel):
     icon: GameIcon | None = None
     sort_order: int | None = Field(default=None, ge=0, le=10_000)
     status: GameStatus | None = None
-    reason: str | None = Field(default=None, min_length=3, max_length=500)
+    reason: Reason | None = None
 
 
 class CreateGameVariantRequest(ApiModel):

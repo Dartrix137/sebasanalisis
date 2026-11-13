@@ -334,7 +334,7 @@ class UpdatePlanGamesRequest(ApiModel):
     despues. Quitar un juego a un plan con suscripciones vigentes se rechaza.
     """
     game_ids: list[UUID] = Field(max_length=200)
-    reason: str = Reason
+    reason: Reason
 
 
 class AdminPlanListResponse(ApiModel):
@@ -355,7 +355,7 @@ class CreatePlanRequest(ApiModel):
     interval_count: int = Field(default=1, ge=1, le=36)
     active: bool = True
     sort_order: int = Field(default=0, ge=0, le=10_000)
-    reason: str = Reason
+    reason: Reason
 
 
 class UpdatePlanRequest(ApiModel):
@@ -367,7 +367,7 @@ class UpdatePlanRequest(ApiModel):
     interval_count: int | None = Field(default=None, ge=1, le=36)
     active: bool | None = None
     sort_order: int | None = Field(default=None, ge=0, le=10_000)
-    reason: str = Reason
+    reason: Reason
 
 
 # ---------- Admin: cupones ----------
@@ -412,7 +412,7 @@ class CreateCouponRequest(ApiModel):
     valid_until: datetime | None = None
     plan_ids: list[UUID] = Field(default_factory=list, max_length=50)
     active: bool = True
-    reason: str = Reason
+    reason: Reason
 
 
 class UpdateCouponRequest(ApiModel):
@@ -431,7 +431,7 @@ class UpdateCouponRequest(ApiModel):
     valid_until: datetime | None = None
     plan_ids: list[UUID] | None = Field(default=None, max_length=50)
     active: bool | None = None
-    reason: str = Reason
+    reason: Reason
 
 
 class CouponRedemptionResponse(ApiModel):
@@ -499,4 +499,4 @@ class PriceTransferPreview(ApiModel):
 
 class PriceTransferRequest(ApiModel):
     """POST /admin/plans/:id/price-transfer y POST /admin/price-changes/:id/cancel."""
-    reason: str = Reason
+    reason: Reason
