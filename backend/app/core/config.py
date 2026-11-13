@@ -16,13 +16,17 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     database_url: str = "postgresql+psycopg://sebas:sebas@localhost:5434/sebasanalisis"
 
-    jwt_secret_key: str = "cambia-esto-en-produccion"
+    # Sin valor por defecto que sirva: con una clave vacia, corta o de ejemplo
+    # la API no arranca (`check_secrets`). Quien la conoce firma tokens de
+    # cualquier cuenta, administrador incluido.
+    jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
+    # Solo las usa el seed, y solo para crear el primer administrador.
     seed_admin_email: str = "admin@sebasanalisis.com"
-    seed_admin_password: str = "cambia-esta-clave"
+    seed_admin_password: str = ""
 
     # DSN del proyecto de la API en GlitchTip. Vacio = monitoreo desactivado.
     sentry_dsn: str = ""
@@ -122,3 +126,38 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Los valores de ejemplo que fueron publicos (estuvieron en `.env.example` y
+# como valor por defecto aqui). Se rechazan siempre, en cualquier ambiente:
+# auditoria de seguridad del 2026-11-12, pista 1.
+EXAMPLE_JWT_SECRET_KEYS = frozenset({"cambia-esto-en-produccion"})
+EXAMPLE_ADMIN_PASSWORDS = frozenset({"cambia-esta-clave"})
+# HS256 pide una clave de al menos 256 bits (RFC 7518 §3.2): 32 caracteres.
+JWT_SECRET_MIN_LENGTH = 32
+
+
+class InsecureConfiguration(RuntimeError):
+    """Un secreto del entorno no sirve. El mensaje nombra la variable, nunca
+    su valor."""
+
+
+def check_secrets(settings: Settings) -> None:
+    """Corre al levantar el servidor (`main.lifespan`), no al importar la app:
+    `gen:types` importa la app sin `.env` y no firma ningun token.
+
+    - `JWT_SECRET_KEY` vacia, corta o de ejemplo: la API no arranca.
+    - `SEED_ADMIN_PASSWORD` con la clave de ejemplo: tampoco. Vacia esta bien
+      (la API no la usa; el seed la exige al crear el administrador).
+    """
+    secret = settings.jwt_secret_key.strip()
+    if not secret:
+        raise InsecureConfiguration("JWT_SECRET_KEY no esta definida")
+    if secret in EXAMPLE_JWT_SECRET_KEYS:
+        raise InsecureConfiguration("JWT_SECRET_KEY tiene el valor de ejemplo publico")
+    if len(secret) < JWT_SECRET_MIN_LENGTH:
+        raise InsecureConfiguration(
+            f"JWT_SECRET_KEY debe tener al menos {JWT_SECRET_MIN_LENGTH} caracteres"
+        )
+    if settings.seed_admin_password.strip() in EXAMPLE_ADMIN_PASSWORDS:
+        raise InsecureConfiguration("SEED_ADMIN_PASSWORD tiene el valor de ejemplo publico")

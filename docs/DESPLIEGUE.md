@@ -36,7 +36,7 @@ con las sesiones y apuestas de los usuarios adentro.
 
 ```
 DATABASE_URL=postgresql+psycopg://USUARIO:CLAVE@HOST_INTERNO:5432/sebasanalisis
-JWT_SECRET_KEY=<cadena larga y aleatoria, distinta a la de desarrollo>
+JWT_SECRET_KEY=<cadena aleatoria de 32 caracteres o mas, distinta a la de desarrollo>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=30
@@ -57,6 +57,15 @@ EMAIL_DAILY_LIMIT=80
 TURNSTILE_SITE_KEY=<llave de sitio del widget de Cloudflare Turnstile>
 TURNSTILE_SECRET_KEY=<llave secreta del mismo widget>
 ```
+
+`JWT_SECRET_KEY` es obligatoria: vacia, de menos de 32 caracteres o con el
+valor de ejemplo que tuvo `.env.example` (`cambia-esto-en-produccion`), la API
+no arranca (`core/config.check_secrets`, auditoria del 2026-11-12). Se genera
+con `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Cambiarla
+cierra la sesion de todas las cuentas. `SEED_ADMIN_PASSWORD` puede quedar
+vacia despues de crear el administrador, pero con la clave de ejemplo
+(`cambia-esta-clave`) la API tampoco arranca, y el seed no crea el
+administrador ni sin ella ni con ella.
 
 Las dos `TURNSTILE_*` van juntas o ninguna: sin ninguna, el registro, el ingreso
 y el olvido de contrasena no piden la verificacion contra bots; con una sola, la

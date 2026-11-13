@@ -1,6 +1,8 @@
 """Punto de entrada de la API de Sebasanalisis."""
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -23,7 +25,7 @@ from app.api.v1 import (
     webhooks,
 )
 from app.core.bot_check import get_bot_checker
-from app.core.config import get_settings
+from app.core.config import check_secrets, get_settings
 from app.core.monitoring import init_monitoring
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.validation_errors import validation_exception_handler
@@ -64,7 +66,15 @@ _app_logger.info(
 # Antes de crear la app: asi el monitoreo engancha sus rutas y sus errores.
 init_monitoring(settings.sentry_dsn)
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Al levantar el servidor, no al importar: `gen:types` importa la app sin
+    # secretos. Con la clave de los JWT vacia, corta o de ejemplo, no arranca.
+    check_secrets(get_settings())
+    yield
+
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 # Los errores de validacion salen en espanol: el frontend muestra el mensaje
 # tal cual (core/validation_errors.py).
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
