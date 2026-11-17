@@ -1323,7 +1323,7 @@ Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster P
 - **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan, y desde el 2026-11-05 la página los quita de la barra de direcciones al cargar (`history.replaceState`; solo se queda el `?id=` de la pasarela simulada), para que no queden en el historial del navegador ni en una URL copiada. GlitchTip ya los quitaba por su lado (`lib/monitoring.ts` borra los parámetros de toda URL). Lo prueba `e2e/subscribe.spec.ts`.
 - **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
-### 3.20 Renovación automática con las suscripciones de Tipster Page (Fase 5, paso 5.3b; en construcción desde el 2026-11-17)
+### 3.20 Renovación automática con las suscripciones de Tipster Page (Fase 5, paso 5.3b; construida, desplegada y probada en producción el 2026-11-17)
 
 **Decidido por el usuario el 2026-11-17**: vuelve la renovación automática, ahora con las suscripciones de Tipster Page. Se construye ya y no frena el lanzamiento, porque su producción tampoco está activa. El pago manual con todos los medios sigue, y **el cliente elige** el modo en `/planes/pagar`. Si el banco pide 3DS en una renovación, al cliente se le manda un correo con el enlace; si no se autentica antes del vencimiento, cuenta como intento fallido. Un rechazo sin reintento (`retry_allowed: false`, por ejemplo una tarjeta bloqueada) no se vuelve a intentar con esa tarjeta: se le pide al cliente que la cambie, y si no la cambia, la suscripción vence en su fecha, sin gracia.
 
@@ -1378,7 +1378,8 @@ Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster P
 - **Tests:** los de cambio de medio (`test_subscription_changes.py`) usan ahora el flujo de la página. Salieron los tres que solo existían por el token, y entró "un cambio que no se termina deja todo como estaba". Playwright (`subscribe.spec.ts`, `subscription-manage.spec.ts`, `plans.spec.ts`) recorre las páginas de la pasarela simulada; los 74 pasan.
 
 **Lo que falta:**
-- **Entrega 5:** probar en el sandbox desde el VPS con las tarjetas de Solidgate, y sumar a Solidgate en la política de datos.
+- **Entrega 5, prueba real (2026-11-17):** con el PR #75 desplegado, `/billing/availability` respondió `automatic_renewal: true` en producción. El usuario hizo desde la aplicación el alta con renovación automática (pagada en la página de Solidgate y aprobada), el cambio de tarjeta y el paso a pago manual, y todo salió aprobado. La primera renovación real se cobra un mes después del alta: revisar ese día el log del job y el pago en el admin.
+- **Política de datos v2:** hay que sumar a Solidgate como tercero y mencionar el correo que ahora se envía a Tipster Page. Los fragmentos se le entregaron al usuario el 2026-11-17. Falta saber dónde procesan Solidgate y Stripe; se le pregunta a Tipster Page.
 - **Comprobado en producción el 2026-11-17**, con una suscripción de prueba de 1 EUR y la tarjeta del usuario. El sandbox seguía sin almacenamiento de medios (503). Fueron 2,50 EUR reales en cobros, más el alta:
   - **El alta:** la suscripción pasa de `PENDING_PAYMENT` a `ACTIVE`, con `payment_status` `PAID` y el `payment_method_id` guardado.
   - **El listado de cobros:** trae el estado **en minúsculas** (`paid`), sin `subscription_id`, con `order_id`, `cycle` y `occurred_at`. El código esperaba `PAID` y el alta se habría quedado pendiente; ya se corrigió.
