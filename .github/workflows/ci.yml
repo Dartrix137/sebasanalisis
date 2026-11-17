@@ -110,8 +110,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `npm audit --omit=dev` que falla con una alerta alta o critica, salvo
+      # las exceptuadas con su motivo y fecha de revision en el script.
       - name: Auditoria de dependencias de produccion
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/npm-audit.mjs
 
   e2e:
     name: Punta a punta (Playwright)
