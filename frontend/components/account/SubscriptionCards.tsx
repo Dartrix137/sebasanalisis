@@ -5,16 +5,19 @@
  *
  * Muestra lo que el servidor dice de la suscripción (`GET /billing/subscription`)
  * y del historial (`GET /billing/payments`), y deja gestionarla: cancelar o
- * reanudar la renovación automática, cambiar el medio de pago guardado y pasar
- * de un modo de pago al otro. Aquí no se calcula ningún precio ni se decide
- * ningún acceso. Un medio de pago se guarda con `PaymentSourceForm`; sus datos
- * van directo a la pasarela.
+ * reanudar la renovación automática, cambiar la tarjeta guardada y pasar de un
+ * modo de pago al otro. Aquí no se calcula ningún precio ni se decide ningún
+ * acceso.
+ *
+ * La tarjeta se guarda en la página del procesador de pagos (paso 5.3b): se
+ * abre con `startCardSetup` y, al volver aquí (`?tarjeta=`), se lee del
+ * procesador cuál quedó guardada (`syncCardSetup`). A nuestro servidor no
+ * llega ningún dato de la tarjeta.
  */
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
 import { Badge, Button, Card, CardHeader, ErrorBox, SuccessBox } from "@/components/ui";
 import { ApiError, billingApi } from "@/lib/api-client";
 import {
@@ -26,7 +29,6 @@ import {
 import { formatLegalDate } from "@/lib/legal";
 import { formatMoney, intervalLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
   BillingAvailabilityResponse,
   PaymentListResponse,
@@ -74,8 +76,27 @@ export function SubscriptionCard() {
   }, [notice]);
 
   useEffect(() => {
+    // De vuelta de la página del procesador: se lee qué tarjeta quedó guardada.
+    const params = new URLSearchParams(window.location.search);
+    const returned = params.get("tarjeta");
+    if (returned !== null) {
+      params.delete("tarjeta");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    }
     withToken((t) => billingApi.subscription(t))
-      .then(setSubscription)
+      .then(async (current) => {
+        if (returned === null || current === null) {
+          setSubscription(current);
+          return;
+        }
+        const synced = await withToken((t) => billingApi.syncCardSetup(t));
+        setSubscription(synced);
+        setNotice(syncNotice(current, synced, returned === "guardada"));
+        if (synced.card_last4 !== current.card_last4 || synced.renewal_mode !== current.renewal_mode) {
+          setSourceUpdated(true);
+        }
+      })
       .catch((err) => setError(messageOf(err)));
     // Si no responde, simplemente no se ofrece guardar un medio de pago.
     billingApi
@@ -113,27 +134,18 @@ export function SubscriptionCard() {
     return false;
   }
 
-  async function saveSource(source: TokenizedSource) {
-    const before = subscription;
-    const saved = await run(
-      (t) =>
-        billingApi.setPaymentMethod(t, {
-          payment_source_token: source.token,
-          payment_source_type: source.type,
-        }),
-      (next) => {
-        const label = sourceLabel(next) ?? "tu medio de pago";
-        if (before?.status === "past_due") {
-          return next.status === "past_due"
-            ? `Medio de pago guardado: ${label}. Volvimos a intentar el cobro pendiente y todavía no pasó; el resultado te llega por correo.`
-            : `Medio de pago guardado: ${label}. El cobro pendiente quedó aprobado.`;
-        }
-        return before?.renewal_mode === "automatic" && before.status !== "canceled"
-          ? `Medio de pago actualizado: ${label}. Hoy no se te cobró nada.`
-          : `Renovación automática activada con ${label}. Hoy no se te cobró nada.`;
-      },
-    );
-    if (saved) setSourceUpdated(true);
+  /** Abre la página del procesador para guardar la tarjeta. Vuelve a esta cuenta. */
+  async function openCardSetup() {
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { checkout_url } = await withToken((t) => billingApi.startCardSetup(t));
+      window.location.assign(checkout_url);
+    } catch (err) {
+      setError(messageOf(err));
+      setWorking(false);
+    }
   }
 
   // El acceso que no sale de una suscripción (administrador o acceso manual).
@@ -145,7 +157,7 @@ export function SubscriptionCard() {
         : "Tu cuenta tiene acceso otorgado por un administrador."
       : null;
 
-  const canSaveSource = availability?.enabled === true && availability.tokenizer !== null;
+  const canSaveSource = availability?.enabled === true && availability.automatic_renewal;
   const until = subscription?.current_period_end
     ? formatLegalDate(subscription.current_period_end)
     : "fin del período";
@@ -161,20 +173,21 @@ export function SubscriptionCard() {
       >
         <p className="mb-3 text-sm text-white">
           {automatic && !canceled
-            ? "El medio nuevo reemplaza al que tienes guardado. Hoy no se te cobra nada: el próximo cobro es el de la renovación, y antes te avisamos por correo."
-            : `Hoy no se te cobra nada: ya pagaste hasta el ${until}. Desde entonces se renueva sola con el medio que guardes, y antes de cada cobro te avisamos por correo.`}
+            ? "La tarjeta nueva reemplaza a la que tienes guardada. Hoy no se te cobra nada: el próximo cobro es el de la renovación, y antes te avisamos por correo."
+            : `Hoy no se te cobra nada: ya pagaste hasta el ${until}. Desde entonces se renueva sola con la tarjeta que guardes, y antes de cada cobro te avisamos por correo.`}
           {subscription?.status === "past_due"
-            ? " Como tienes un cobro pendiente, lo intentamos de inmediato con el medio nuevo."
+            ? " Como tienes un cobro pendiente, lo intentamos de inmediato con la tarjeta nueva."
             : ""}
         </p>
-        <PaymentSourceForm
-          availability={availability}
-          submitLabel="Guardar medio de pago"
-          busyLabel="Guardando…"
-          busy={working}
-          onSource={saveSource}
-        />
-        <div className="mt-3">
+        <p className="mb-3 text-xs leading-relaxed text-muted">
+          La tarjeta la escribes en la página del procesador de pagos, que la verifica sin
+          cobrarte nada. Sebasanálisis no recibe ni guarda sus datos: solo la referencia del
+          procesador.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button disabled={working} onClick={openCardSetup}>
+            {working ? "Abriendo…" : "Ir a guardar la tarjeta"}
+          </Button>
           <Button variant="ghost" disabled={working} onClick={() => show(null)}>
             Ahora no
           </Button>
@@ -305,7 +318,7 @@ export function SubscriptionCard() {
                   </Button>
                   {canSaveSource ? (
                     <Button variant="ghost" disabled={working} onClick={() => show("source")}>
-                      Reanudar con otro medio de pago
+                      Reanudar con otra tarjeta
                     </Button>
                   ) : null}
                 </div>
@@ -314,9 +327,11 @@ export function SubscriptionCard() {
           ) : automatic ? (
             <div className="mt-4 space-y-3">
               <p className="text-sm leading-relaxed text-muted">
-                {subscription.status === "past_due"
-                  ? "No pudimos hacer el último cobro. Lo vamos a intentar de nuevo antes de que termine tu período; si no pasa, tu suscripción vence ese día. Si el problema es tu medio de pago, cámbialo: al guardarlo intentamos el cobro de inmediato. "
-                  : "Se renueva sola. "}
+                {subscription.card_update_required
+                  ? `Tu banco rechazó el último cobro y no permite intentarlo de nuevo con esa tarjeta. Para renovar, cámbiala antes del ${until}: al guardarla intentamos el cobro de inmediato. Si no la cambias, tu suscripción vence ese día. `
+                  : subscription.status === "past_due"
+                    ? "No pudimos hacer el último cobro. Lo vamos a intentar de nuevo antes de que termine tu período; si no pasa, tu suscripción vence ese día. Si el problema es tu tarjeta, cámbiala: al guardarla intentamos el cobro de inmediato. "
+                    : "Se renueva sola. "}
                 Antes de cada cobro te avisamos por correo con el monto y la fecha. Si cancelas,
                 conservas el acceso hasta que termine el período que ya pagaste.
               </p>
@@ -354,7 +369,7 @@ export function SubscriptionCard() {
                   className="rounded-lg border border-edge p-3.5"
                 >
                   <p className="text-sm text-white">
-                    ¿Pasar a pago manual? Dejamos de guardar tu medio de pago y no se te cobra
+                    ¿Pasar a pago manual? Borramos tu tarjeta guardada y no se te cobra
                     más. Tu acceso sigue hasta el {until}; para seguir después, pagas tú el
                     siguiente período, y unos días antes te lo recordamos por correo.
                   </p>
@@ -381,8 +396,11 @@ export function SubscriptionCard() {
                 (sourceForm ?? (
                   <div className="flex flex-wrap gap-3">
                     {canSaveSource ? (
-                      <Button variant="ghost" onClick={() => show("source")}>
-                        Cambiar el medio de pago
+                      <Button
+                        variant={subscription.card_update_required ? "primary" : "ghost"}
+                        onClick={() => show("source")}
+                      >
+                        Cambiar la tarjeta
                       </Button>
                     ) : null}
                     <Button variant="ghost" onClick={() => show("manual")}>
@@ -416,6 +434,33 @@ export function SubscriptionCard() {
       ) : null}
     </Card>
   );
+}
+
+/** Lo que se le dice al volver de la página del procesador. */
+function syncNotice(
+  before: SubscriptionResponse,
+  after: SubscriptionResponse,
+  saved: boolean,
+): string {
+  const changed =
+    after.card_last4 !== before.card_last4 ||
+    after.renewal_mode !== before.renewal_mode ||
+    after.status !== before.status ||
+    after.card_update_required !== before.card_update_required;
+  if (!changed) {
+    return saved
+      ? "Todavía no vemos la tarjeta nueva: el procesador puede tardar unos minutos. Te avisamos por correo cuando quede guardada."
+      : "No se guardó ninguna tarjeta. Tu suscripción sigue como estaba.";
+  }
+  const label = sourceLabel(after) ?? "tu tarjeta";
+  if (before.status === "past_due") {
+    return after.status === "past_due"
+      ? `Tarjeta guardada: ${label}. Volvimos a intentar el cobro pendiente y todavía no pasó; el resultado te llega por correo.`
+      : `Tarjeta guardada: ${label}. El cobro pendiente quedó aprobado.`;
+  }
+  return before.renewal_mode === "automatic" && before.status !== "canceled"
+    ? `Tarjeta actualizada: ${label}. Hoy no se te cobró nada.`
+    : `Renovación automática activada con ${label}. Hoy no se te cobró nada.`;
 }
 
 export function PaymentsCard() {

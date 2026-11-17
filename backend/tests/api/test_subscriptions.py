@@ -280,9 +280,13 @@ def test_sin_pasarela_configurada_no_se_abre_un_pago(client, db) -> None:
     assert _pagos(db, user_id) == []
 
 
-def test_con_tipster_page_el_pago_esta_disponible_sin_renovacion_automatica(client, tipster) -> None:
-    """Tipster Page no tiene cobros recurrentes: no se ofrece guardar un medio."""
-    assert client.get("/billing/availability").json() == {"enabled": True, "tokenizer": None}
+def test_con_tipster_page_el_pago_esta_disponible_con_renovacion_automatica(client, tipster) -> None:
+    """Tipster Page no tokeniza en el navegador; la renovacion automatica va por
+    sus suscripciones, con la pagina de Solidgate (paso 5.3b)."""
+    assert client.get("/billing/availability").json() == {
+        "enabled": True,
+        "automatic_renewal": True,
+    }
 
 
 def test_limite_de_intentos_de_pago(client, db, tipster) -> None:

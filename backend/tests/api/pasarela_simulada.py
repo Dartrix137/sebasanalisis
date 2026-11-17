@@ -20,23 +20,18 @@ from typing import Any
 
 from app.models import Payment
 from app.payments.base import (
+    ChargePeriod,
     PaymentMethodOption,
     PaymentProviderError,
     PaymentSource,
-    PaymentSourceRejected,
-    PaymentSourceType,
     ProviderTransaction,
+    RecurringOrder,
+    RecurringStart,
     TransactionStatus,
 )
 from app.payments.fake import FAKE_SIGNATURE, FAKE_SIGNATURE_HEADER, FakePaymentProvider
 
 NOMBRE = "fake"
-
-# Tokens que el navegador obtiene del selector simulado. El de `rechazado` no
-# sirve para guardar el medio.
-TOKEN_TARJETA = "tok_test_tarjeta"
-TOKEN_OTRO_MEDIO = "tok_test_otro_medio"
-TOKEN_RECHAZADO = "tok_test_que_la_pasarela_no_acepta"
 
 #: El vocabulario de estados de la pasarela simulada en los tests.
 _ESTADOS: dict[str, TransactionStatus] = {
@@ -70,10 +65,15 @@ class PasarelaSimulada(FakePaymentProvider):
         self.consultas = 0
         #: Lo que respondera el proximo cobro a una fuente de pago.
         self.estado_del_cobro = "APPROVED"
-        #: Lo que llego a `charge` y a `create_payment_source`.
+        #: Lo que llego a `charge`, mas el primer cobro de cada alta pagada.
         self.cobros: list[dict[str, Any]] = []
-        self.fuentes_pedidas: list[dict[str, Any]] = []
+        #: El periodo de cada cobro, en el mismo orden que `cobros`.
+        self.periodos: list[ChargePeriod] = []
         self._fuentes: dict[str, str] = {}
+        #: Las altas de renovacion automatica que se abrieron.
+        self.altas: list[RecurringOrder] = []
+        #: Solo falla el alta de la renovacion automatica.
+        self.alta_caida = False
 
     @property
     def provider(self) -> "PasarelaSimulada":
@@ -130,6 +130,47 @@ class PasarelaSimulada(FakePaymentProvider):
     def aprobar(self, payment: Payment) -> Aviso:
         return self.evento(self.transaccion(payment, "APPROVED"))
 
+    def completar_alta(self, checkout_url: str, outcome: str = "approved") -> ProviderTransaction:
+        """El cliente termino en la pagina del alta de la renovacion automatica:
+        `approved`, `approved_declining` (una tarjeta que rechaza las
+        renovaciones) o `declined`."""
+        token = checkout_url.rsplit("/", 1)[1]
+        order = self.recurring_order(token)
+        transaction = self.resolve_recurring(token, outcome)
+        assert order is not None and transaction is not None, checkout_url
+        if transaction.saved_source is not None and not order.setup_only:
+            # El primer periodo se cobro en esa pagina: cuenta entre los cobros.
+            self.cobros.append(
+                {
+                    "reference": order.reference,
+                    "amount_cents": order.amount_cents,
+                    "currency": order.currency,
+                    "customer_email": order.email,
+                    "source_id": transaction.saved_source.id,
+                    "source_type": transaction.saved_source.type,
+                }
+            )
+        return transaction
+
+    def start_recurring(self, order: RecurringOrder) -> RecurringStart:
+        self._red()
+        if self.alta_caida:
+            raise PaymentProviderError("La pasarela no respondio")
+        self.altas.append(order)
+        return super().start_recurring(order)
+
+    def resolve_recurring(self, token: str, outcome: str) -> ProviderTransaction | None:
+        transaction = super().resolve_recurring(token, outcome)
+        if transaction is not None and transaction.saved_source is not None:
+            # Ids en serie, como los del medio tokenizado: el primero es "3000".
+            source = replace(transaction.saved_source, id=str(3000 + len(self._fuentes)))
+            transaction = replace(transaction, saved_source=source)
+            self.transactions[transaction.id] = transaction
+            self._fuentes[source.id] = source.type
+            if source.agreement_id is not None:
+                self.agreements[source.agreement_id] = source
+        return transaction
+
     # ---- la pasarela
 
     def payment_methods(self, country: str | None) -> list[PaymentMethodOption]:
@@ -147,20 +188,20 @@ class PasarelaSimulada(FakePaymentProvider):
         self.consultas += 1
         return super().fetch_transaction(transaction_id)
 
-    def create_payment_source(
-        self, *, source_type: PaymentSourceType, token: str, customer_email: str
-    ) -> PaymentSource:
+    def card_change_url(self, source: PaymentSource, *, recovery: bool, reference: str) -> str:
         self._red()
-        self.fuentes_pedidas.append(
-            {"type": source_type, "token": token, "customer_email": customer_email}
-        )
-        if token == TOKEN_RECHAZADO:
-            raise PaymentSourceRejected("La pasarela no acepto el medio de pago")
-        source_id = str(3000 + len(self._fuentes))
-        self._fuentes[source_id] = source_type
-        tarjeta = source_type == "CARD"
-        # La fuente trae los ultimos cuatro, no la marca: esa llega con el cobro.
-        return PaymentSource(id=source_id, type=source_type, brand=None, last4="4242" if tarjeta else None)
+        return super().card_change_url(source, recovery=recovery, reference=reference)
+
+    def resolve_card_change(self, token: str, outcome: str) -> PaymentSource | None:
+        """La tarjeta nueva, con el siguiente id de la serie ("3001", "3002"...)."""
+        source = super().resolve_card_change(token, outcome)
+        if source is None:
+            return None
+        source = replace(source, id=str(3000 + len(self._fuentes)))
+        self._fuentes[source.id] = source.type
+        if source.agreement_id is not None:
+            self.agreements[source.agreement_id] = source
+        return source
 
     def charge(
         self,
@@ -170,6 +211,7 @@ class PasarelaSimulada(FakePaymentProvider):
         currency: str,
         customer_email: str,
         source: PaymentSource,
+        period: ChargePeriod,
     ) -> ProviderTransaction:
         self._red()
         if self.cobro_caido:
@@ -184,6 +226,7 @@ class PasarelaSimulada(FakePaymentProvider):
                 "source_type": source.type,
             }
         )
+        self.periodos.append(period)
         tx_id = f"tx-{uuid.uuid4().hex[:12]}"
         tarjeta = self._fuentes.get(source.id) == "CARD"
         transaction = ProviderTransaction(

@@ -62,10 +62,10 @@ test("cuenta sin acceso: ve /planes con el precio que se cobra", async ({ page, 
   await expect(page).toHaveURL(/\/planes/);
 });
 
-test("sin renovación automática (Tipster Page) el botón dice Elegir plan", async ({ page, request }) => {
-  // La pasarela simulada ofrece los dos modos; Tipster Page responde así.
+test("sin renovación automática en la pasarela el botón dice Elegir plan", async ({ page, request }) => {
+  // La pasarela simulada ofrece los dos modos; una sin suscripciones responde así.
   await page.route("**/billing/availability", (route) =>
-    route.fulfill({ json: { enabled: true, tokenizer: null } }),
+    route.fulfill({ json: { enabled: true, automatic_renewal: false } }),
   );
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });

@@ -14,6 +14,10 @@ repite, y el id de una pasarela no choca con el de otra.
 La excepcion es un aviso que no mueve nada (`ProviderEvent.notice_only`, la
 devolucion de Tipster Page): se guarda y responde 200, con firma valida o sin
 ella, sin reconsultar.
+
+Un aviso de una suscripcion del lado de la pasarela (la renovacion automatica
+de Tipster Page, paso 5.3b) no trae una transaccion sino la suscripcion: se
+reconsultan los pagos pendientes de ella (`subscriptions.requery_agreement`).
 """
 
 import logging
@@ -26,7 +30,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession
 from app.api.v1.billing import EmailSenderDep, PaymentProviderDep, queue_payment_emails
-from app.core import payment_privacy, subscriptions
+from app.core import payment_privacy, renewals, subscriptions
+from app.core.email import send_safely
 from app.models import PaymentEvent
 from app.payments.base import PaymentProviderError, ProviderEvent
 
@@ -116,6 +121,47 @@ def payments_webhook(
 
     now = datetime.now(UTC)
     settlement = None
+    if event.agreement_id is not None or event.external_reference is not None:
+        try:
+            settlements = subscriptions.requery_agreement(
+                db,
+                provider,
+                agreement_id=event.agreement_id,
+                external_reference=event.external_reference,
+                now=now,
+            )
+        except PaymentProviderError as exc:
+            logger.warning("No se pudo reconsultar los pagos del evento %s", row.id)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="No se pudo confirmar el pago con el proveedor",
+            ) from exc
+        for found in settlements:
+            queue_payment_emails(db, found, background, sender)
+        if event.agreement_id is not None:
+            # Un cambio de tarjeta o una verificacion: lo que tenga guardado
+            # la pasarela, leido de ella.
+            try:
+                changes = subscriptions.sync_agreement(db, provider, event.agreement_id, now)
+            except PaymentProviderError as exc:
+                logger.warning("No se pudo leer la tarjeta del evento %s", row.id)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="No se pudo confirmar la tarjeta con el proveedor",
+                ) from exc
+            for change, user in changes:
+                for message in renewals.after_source_change(db, provider, change, user, now):
+                    background.add_task(send_safely, sender, message)
+        settlement = next((s for s in settlements if s.changed), None) or (
+            settlements[0] if settlements else None
+        )
+        row = db.get(PaymentEvent, row.id) or row
+        if settlement is not None:
+            row.payment_id = settlement.payment.id
+            row.subscription_id = settlement.payment.subscription_id
+        row.processed_at = now
+        db.commit()
+        return {"status": "processed"}
     if event.transaction_id is not None:
         try:
             transaction = provider.fetch_transaction(event.transaction_id)

@@ -24,8 +24,15 @@ Nunca de memoria (CLAUDE.md, "Pagos: reglas no negociables"). El flujo:
 
 Tipster Page no tiene un id de transaccion propio: la orden se identifica con
 nuestro `order_id`, que es `payments.reference` (`lookup_by_reference`). Cobra
-siempre en euros, con dos decimales (manual §7, `amount`). No tiene cobros
-recurrentes ("en desarrollo", 2026-11-03): no tokeniza.
+siempre en euros, con dos decimales (manual §7, `amount`).
+
+La renovacion automatica (paso 5.3b, 2026-11-17) va por sus suscripciones, con
+Solidgate y solo con tarjeta: `start_recurring` crea el alta y el cliente paga
+el primer periodo en la pagina de Solidgate; `charge` cobra cada renovacion
+cuando la aplicacion lo decide (modo `MERCHANT_MANAGED`). Fuente: el OpenAPI,
+rutas `/tspayv2/subscriptions...`, y `tspay-subscriptions.md` (2026-11-17),
+citado como "suscripciones §N". La firma es otra, canonica
+(`payments/tipsterpage_signing.py`). No tokeniza en el navegador.
 
 Los datos del comprador que pide un medio (`firstName`, `lastName`,
 `personalId`, `phone`) van solo en el cuerpo de la orden: nunca en un log, ni
@@ -38,7 +45,9 @@ import json
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Mapping
+from datetime import UTC
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -49,20 +58,26 @@ from app.core.config import Settings
 from app.payments.base import (
     BUYER_FIELDS,
     BuyerField,
+    ChargePeriod,
     CheckoutOrder,
     CheckoutPage,
     CheckoutRejected,
     PaymentMethodOption,
     PaymentProviderError,
     PaymentSource,
-    PaymentSourceType,
-    PaymentsUnavailable,
     ProviderEvent,
     ProviderMisconfigured,
     ProviderTransaction,
-    TokenizerInfo,
+    RecurringOrder,
+    RecurringStart,
     TransactionStatus,
     unverified_event,
+)
+from app.payments.tipsterpage_signing import (
+    Action,
+    amount_number,
+    signed_body,
+    verified_notification,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,6 +158,50 @@ MAX_NOTICE_STATUS_LENGTH = 50
 
 #: El catalogo cambia poco; con esto no se le pide en cada pantalla.
 CATALOG_TTL_SECONDS = 300.0
+
+# ---- suscripciones (paso 5.3b)
+
+#: OpenAPI, `TspaySubscriptionMethod`: el unico medio de las suscripciones.
+RECURRING_METHOD = "solidgate"
+
+#: OpenAPI, `periodicity`: la duracion de un plan en su vocabulario. Un plan
+#: con otra duracion no se ofrece con renovacion automatica.
+PERIODICITIES: dict[tuple[str, int], str] = {
+    ("month", 1): "mensual",
+    ("month", 2): "bimestral",
+    ("month", 3): "trimestral",
+    ("month", 6): "semestral",
+    ("year", 1): "anual",
+}
+
+#: OpenAPI, `TspaySubscriptionChargeResult.status`, en el vocabulario de
+#: `ProviderTransaction`. `REVIEW_REQUIRED` es un cobro con un resultado
+#: ambiguo (un timeout): sigue pendiente hasta que la reconsulta diga otra cosa.
+CHARGE_STATUS_MAP: dict[str, TransactionStatus] = {
+    "SUBMITTING": "pending",
+    "PENDING": "pending",
+    "REVIEW_REQUIRED": "pending",
+    "PAID": "approved",
+    "FAILED": "declined",
+    "REFUNDED": "voided",
+}
+
+#: Suscripciones §3.2: el primer cobro, el que se paga en la pagina de Solidgate,
+#: lleva este `period_id`.
+INITIAL_PERIOD = "initial"
+
+#: Los pagos de una suscripcion se reconsultan con un id que armamos nosotros:
+#: `sub:<suscripcion>:<pago o initial>:<nuestra referencia>`. Lo guarda
+#: `payments.provider_transaction_id`: sale siempre de nuestra base.
+SUBSCRIPTION_TX_PREFIX = "sub"
+
+#: Suscripciones §3.2: el aviso de una devolucion. No mueve nada, como la de
+#: una orden: se registra a mano en el admin (decidido el 2026-11-06).
+REFUND_EVENT = "subscription.payment_refunded"
+
+# Las claves de idempotencia salen de nuestra referencia: repetir la misma
+# llamada (un timeout) no repite la operacion (suscripciones §2.6).
+_IDEMPOTENCY_NAMESPACE = uuid.UUID("5a3e1c2b-7d4f-4b8e-9a61-3c0f2e8d7b15")
 
 _TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
@@ -225,6 +284,8 @@ class TipsterPageProvider:
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._secret_key = secret_key
+        # Suscripciones §2.1: `merchant` es el de `X-TSPAY-USER`, sin espacios.
+        self._merchant = merchant_code.strip()
         # Manual §4: las dos cabeceras de todas las llamadas.
         self._client = httpx.Client(
             base_url=self.base_url,
@@ -344,6 +405,8 @@ class TipsterPageProvider:
             return unverified_event(self.name, body, None)
         if not isinstance(raw, dict) or not isinstance(payload, dict):
             return unverified_event(self.name, body, None)
+        if "event_type" in payload:
+            return self._subscription_event(body, payload)
         paid_status = raw.get("paid_status")
         order_id = raw.get("order_id")
         amount = raw.get("amount")
@@ -396,9 +459,59 @@ class TipsterPageProvider:
             payload=payload,
         )
 
+    def _subscription_event(self, body: bytes, payload: dict[str, Any]) -> ProviderEvent:
+        """Suscripciones §3: un aviso de una suscripcion, firmado sobre su JSON
+        canonico (§3.3). Trae su propio `event_id`, el mismo en cada reintento.
+
+        Solo dice que suscripcion mirar: el webhook reconsulta sus pagos. La
+        devolucion (`REFUND_EVENT`) no mueve nada, como la de una orden.
+        """
+        verified = verified_notification(self._secret_key, body)
+        if verified is None:
+            return unverified_event(self.name, body, payload)
+        event_id = verified.get("event_id")
+        event_type = verified.get("event_type")
+        subscription_id = verified.get("subscription_id")
+        external_id = verified.get("external_id")
+        if (
+            not isinstance(event_id, str)
+            or not 0 < len(event_id) <= 200
+            or not isinstance(event_type, str)
+            or not event_type
+            or not isinstance(subscription_id, str)
+            or not _is_uuid(subscription_id)
+        ):
+            return unverified_event(self.name, body, payload)
+        data = verified.get("data")
+        data = data if isinstance(data, dict) else {}
+        status = data.get("paid_status") or data.get("status") or event_type
+        return ProviderEvent(
+            event_id=f"{self.name}:sub:{event_id}",
+            event_type=event_type[:100],
+            signature_verified=True,
+            transaction_id=None,
+            status=str(status)[:MAX_NOTICE_STATUS_LENGTH],
+            payload=verified,
+            notice_only=event_type == REFUND_EVENT,
+            agreement_id=subscription_id,
+            external_reference=(
+                external_id if isinstance(external_id, str) and 0 < len(external_id) <= 255 else None
+            ),
+        )
+
     # ---- reconsulta (manual §10)
 
     def fetch_transaction(self, transaction_id: str) -> ProviderTransaction | None:
+        """Reconsulta una orden o un pago de una suscripcion.
+
+        Un pago de una suscripcion lleva el id que armamos al crearlo
+        (`SUBSCRIPTION_TX_PREFIX`); cualquier otro es una orden.
+        """
+        if transaction_id.startswith(f"{SUBSCRIPTION_TX_PREFIX}:"):
+            return self._fetch_subscription_payment(transaction_id)
+        return self._fetch_order(transaction_id)
+
+    def _fetch_order(self, transaction_id: str) -> ProviderTransaction | None:
         """Manual §10: `GET /order-status/{orderId}`. 404 = no la conoce.
 
         El monto llega en euros (respuesta de Tipster Page, pregunta 3). Se lee
@@ -438,16 +551,94 @@ class TipsterPageProvider:
             product_code=product if isinstance(product, str) else None,
         )
 
-    # ---- lo que no tiene
+    # ---- suscripciones (paso 5.3b)
 
-    def tokenizer(self) -> TokenizerInfo | None:
-        # Sin cobros recurrentes: no se ofrece la renovacion automatica.
-        return None
+    def recurring_method(self, country: str | None) -> PaymentMethodOption | None:
+        """OpenAPI: `GET /subscriptions/payment-methods?country-code=`.
 
-    def create_payment_source(
-        self, *, source_type: PaymentSourceType, token: str, customer_email: str
-    ) -> PaymentSource:
-        raise PaymentsUnavailable("Tipster Page no guarda medios de pago")
+        El medio de Solidgate, si la pasarela lo ofrece en ese pais en el modo
+        en que nosotros decidimos cuando cobrar (`MERCHANT_MANAGED`). Se guarda
+        en memoria como el catalogo de las ordenes.
+        """
+        key = f"recurring:{country or ''}"
+        now = time.monotonic()
+        with self._lock:
+            cached = self._catalog.get(key)
+            if cached is not None and cached[0] > now:
+                return cached[1][0] if cached[1] else None
+        params = {"country-code": country} if country else None
+        response = self._request("GET", "/subscriptions/payment-methods", params=params)
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Medios de suscripcion: HTTP {response.status_code}")
+        items = _json(response)
+        if not isinstance(items, list):
+            raise PaymentProviderError("Medios de suscripcion: respuesta inesperada")
+        found = next(
+            (m for m in (_recurring_method(item, country) for item in items) if m is not None), None
+        )
+        with self._lock:
+            self._catalog[key] = (now + CATALOG_TTL_SECONDS, [found] if found else [])
+        return found
+
+    def start_recurring(self, order: RecurringOrder) -> RecurringStart:
+        """OpenAPI: `POST /subscriptions`, accion `CREATE` (suscripciones §2).
+
+        `external_id` es la referencia del pago del alta: unica por comercio
+        (§2.6) y la que trae cada aviso. El primer cobro se hace en la pagina
+        de Solidgate (`checkout_url`), por `amount`; los siguientes los pide
+        `charge`. La respuesta sola no confirma ningun pago.
+        """
+        if order.currency != CURRENCY:
+            raise CheckoutRejected("Tipster Page solo cobra en euros")
+        periodicity = PERIODICITIES.get((order.interval, order.interval_count))
+        if periodicity is None:
+            raise CheckoutRejected("La duracion del plan no tiene periodicidad en Tipster Page")
+        params: dict[str, Any] = {
+            "idempotency_key": _idempotency_key("CREATE", order.reference),
+            "product_id": order.product_code,
+            "product_name": order.product_name,
+            "amount": amount_number(order.amount_cents),
+            "periodicity": periodicity,
+            "external_id": order.reference,
+            "email": order.email,
+            "country": order.country,
+            "language": order.language,
+            "url_ok": order.url_ok,
+            "url_ko": order.url_ko,
+            "notification_url": order.notification_url,
+            "terms_accepted": True,
+        }
+        if order.setup_only:
+            # OpenAPI, `setup_only`: verifica y guarda la tarjeta por 0, sin
+            # cobrar. Pasar a renovacion automatica con un periodo ya pagado.
+            params["setup_only"] = True
+        response = self._signed("POST", "/subscriptions", "CREATE", "", params)
+        if response.status_code in (200, 201):
+            data = _json(response)
+            subscription_id = data.get("subscription_id") if isinstance(data, dict) else None
+            checkout_url = data.get("checkout_url") if isinstance(data, dict) else None
+            if (
+                not isinstance(subscription_id, str)
+                or not _is_uuid(subscription_id)
+                or not isinstance(checkout_url, str)
+                or not checkout_url.startswith("https://")
+            ):
+                raise PaymentProviderError("Alta de suscripcion: respuesta inesperada")
+            return RecurringStart(
+                checkout_url=checkout_url,
+                transaction_id=_subscription_tx(subscription_id, INITIAL_PERIOD, order.reference),
+                agreement_id=subscription_id,
+            )
+        # Sin el cuerpo de la peticion: lleva el correo del comprador.
+        logger.warning(
+            "Tipster Page no creo la suscripcion del pago %s: HTTP %s %s",
+            order.reference,
+            response.status_code,
+            _error_message(response),
+        )
+        if response.status_code == 400:
+            raise CheckoutRejected(_error_message(response) or "Suscripcion rechazada")
+        raise PaymentProviderError(f"Alta de suscripcion: HTTP {response.status_code}")
 
     def charge(
         self,
@@ -457,8 +648,237 @@ class TipsterPageProvider:
         currency: str,
         customer_email: str,
         source: PaymentSource,
+        period: ChargePeriod,
     ) -> ProviderTransaction:
-        raise PaymentsUnavailable("Tipster Page no hace cobros recurrentes")
+        """OpenAPI: `POST /subscriptions/{id}/payments`, accion `CHARGE`.
+
+        Un `period_id` por periodo, igual en todos sus intentos, y una clave de
+        idempotencia por intento (sale de `reference`): suscripciones §4 y el
+        OpenAPI ("after a retryable terminal failure, use a new key while
+        keeping the same billing period, amount and period end"). La respuesta
+        201 no confirma el pago: puede venir pendiente (§4).
+        """
+        if currency != CURRENCY:
+            raise PaymentProviderError("Tipster Page solo cobra en euros")
+        subscription_id = source.agreement_id
+        if subscription_id is None or not _is_uuid(subscription_id) or not _is_uuid(source.id):
+            raise PaymentProviderError("El medio de pago no es de una suscripcion de Tipster Page")
+        params: dict[str, Any] = {
+            "idempotency_key": _idempotency_key("CHARGE", reference),
+            "period_id": period.key,
+            "payment_method_id": source.id,
+            "amount": amount_number(amount_cents),
+            "period_end": period.end.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        response = self._signed(
+            "POST", f"/subscriptions/{subscription_id}/payments", "CHARGE", subscription_id, params
+        )
+        if response.status_code in (200, 201):
+            transaction = _charge_transaction(_json_decimal(response), subscription_id, reference)
+            if transaction is None:
+                raise PaymentProviderError("Cobro: respuesta inesperada")
+            return transaction
+        # 400 y 409: el cobro no se hizo (periodo, limite de intentos, tarjeta
+        # bloqueada...). Cuenta como un intento sin respuesta del proveedor.
+        logger.warning(
+            "Tipster Page no hizo el cobro %s: HTTP %s %s",
+            reference,
+            response.status_code,
+            _error_message(response),
+        )
+        raise PaymentProviderError(f"Cobro: HTTP {response.status_code}")
+
+    def _fetch_subscription_payment(self, transaction_id: str) -> ProviderTransaction | None:
+        """El pago de una suscripcion: el del alta o un cobro.
+
+        - El del alta: `GET /subscriptions/{id}` (que su `external_id` sea
+          nuestra referencia) y el pago de periodo `initial` en
+          `GET /subscriptions/{id}/payments`. Sin ese pago, si la suscripcion
+          paso a `EXPIRED` el primer pago se rechazo (suscripciones §3.2); si
+          no, sigue pendiente (el cliente no ha terminado de pagar).
+        - Un cobro: `GET /subscriptions/{id}/payments/{paymentId}`.
+
+        Visto en produccion el 2026-11-17 (alta de 1 EUR pagada): la suscripcion
+        pasa de `PENDING_PAYMENT` a `ACTIVE` con `payment_status` `PAID`, y cada
+        pago del listado trae `payment_id`, `order_id`, `cycle`, `period_id`,
+        `amount`, `currency`, `status` en minusculas y `occurred_at`, sin
+        `subscription_id`.
+        """
+        parts = transaction_id.split(":", 3)
+        if len(parts) != 4 or not _is_uuid(parts[1]):
+            return None
+        _, subscription_id, payment_key, reference = parts
+        if payment_key != INITIAL_PERIOD:
+            if not _is_uuid(payment_key):
+                return None
+            response = self._request(
+                "GET", f"/subscriptions/{subscription_id}/payments/{payment_key}"
+            )
+            if response.status_code == 404:
+                return None
+            if response.status_code != 200:
+                raise PaymentProviderError(f"Estado del cobro: HTTP {response.status_code}")
+            return _charge_transaction(_json_decimal(response), subscription_id, reference)
+
+        response = self._request("GET", f"/subscriptions/{subscription_id}")
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Estado de la suscripcion: HTTP {response.status_code}")
+        subscription = _json_decimal(response)
+        if not isinstance(subscription, dict) or subscription.get("external_id") != reference:
+            # No es la suscripcion de este pago: no se le cree nada.
+            logger.error(
+                "Tipster Page: la suscripcion %s no es la del pago %s", subscription_id, reference
+            )
+            return None
+        response = self._request(
+            "GET", f"/subscriptions/{subscription_id}/payments", params={"limit": 100}
+        )
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Cobros de la suscripcion: HTTP {response.status_code}")
+        page = _json_decimal(response)
+        items = page.get("items") if isinstance(page, dict) else None
+        if not isinstance(items, list):
+            raise PaymentProviderError("Cobros de la suscripcion: respuesta inesperada")
+        initial = next(
+            (i for i in items if isinstance(i, dict) and i.get("period_id") == INITIAL_PERIOD), None
+        )
+        amount = _euro_cents(subscription.get("amount")) or 0
+        if initial is not None:
+            found = _charge_transaction(initial, subscription_id, reference)
+            if found is None:
+                return None
+            transaction = found
+        elif str(subscription.get("status", "")).upper() == "EXPIRED":
+            transaction = ProviderTransaction(
+                id=transaction_id,
+                reference=reference,
+                status="declined",
+                amount_cents=amount,
+                currency=CURRENCY,
+                status_message="Tipster Page: primer pago rechazado",
+            )
+        else:
+            return ProviderTransaction(
+                id=transaction_id,
+                reference=reference,
+                status="pending",
+                amount_cents=amount,
+                currency=CURRENCY,
+            )
+        if transaction.status != "approved":
+            return transaction
+        method_id = subscription.get("payment_method_id")
+        if not isinstance(method_id, str) or not _is_uuid(method_id):
+            # Pagado pero sin tarjeta guardada: no hay con que renovar. Sigue
+            # pendiente para que alguien lo mire antes de conceder el periodo.
+            logger.error("Tipster Page: la suscripcion %s no trae medio de pago", subscription_id)
+            return ProviderTransaction(
+                id=transaction_id,
+                reference=reference,
+                status="pending",
+                amount_cents=transaction.amount_cents,
+                currency=CURRENCY,
+            )
+        return ProviderTransaction(
+            id=transaction_id,
+            reference=reference,
+            status="approved",
+            amount_cents=transaction.amount_cents,
+            currency=transaction.currency,
+            saved_source=PaymentSource(id=method_id, type="CARD", agreement_id=subscription_id),
+        )
+
+    def card_change_url(self, source: PaymentSource, *, recovery: bool, reference: str) -> str:
+        """OpenAPI: `POST /subscriptions/{id}/payment-method` (accion
+        `PAYMENT_METHOD`) o, con un cobro rechazado, `.../payment-recovery`
+        (`RECOVERY`). Un enlace privado de 48 h que verifica la tarjeta nueva
+        por 0 sin cobrar ningun periodo. La misma `reference` devuelve el mismo
+        enlace (idempotencia, suscripciones §2.6)."""
+        subscription_id = source.agreement_id
+        if subscription_id is None or not _is_uuid(subscription_id):
+            raise PaymentProviderError("El medio de pago no es de una suscripcion de Tipster Page")
+        action: Action = "RECOVERY" if recovery else "PAYMENT_METHOD"
+        path = "payment-recovery" if recovery else "payment-method"
+        params = {"idempotency_key": _idempotency_key(action, reference)}
+        response = self._signed(
+            "POST", f"/subscriptions/{subscription_id}/{path}", action, subscription_id, params
+        )
+        if response.status_code in (200, 201):
+            data = _json(response)
+            url = data.get("checkout_url") if isinstance(data, dict) else None
+            if not isinstance(url, str) or not url.startswith("https://"):
+                raise PaymentProviderError("Cambio de tarjeta: respuesta inesperada")
+            return url
+        logger.warning(
+            "Tipster Page no abrio el cambio de tarjeta de %s: HTTP %s %s",
+            subscription_id,
+            response.status_code,
+            _error_message(response),
+        )
+        raise PaymentProviderError(f"Cambio de tarjeta: HTTP {response.status_code}")
+
+    def saved_source(self, agreement_id: str) -> PaymentSource | None:
+        """OpenAPI: `GET /subscriptions/{id}`. La tarjeta que tiene guardada,
+        si sirve para cobrar: con `payment_method_id`, sin un borrado en curso y
+        con la suscripcion ni cancelada ni vencida."""
+        if not _is_uuid(agreement_id):
+            return None
+        response = self._request("GET", f"/subscriptions/{agreement_id}")
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise PaymentProviderError(f"Estado de la suscripcion: HTTP {response.status_code}")
+        data = _json(response)
+        if not isinstance(data, dict):
+            raise PaymentProviderError("Estado de la suscripcion: respuesta inesperada")
+        method_id = data.get("payment_method_id")
+        if (
+            not isinstance(method_id, str)
+            or not _is_uuid(method_id)
+            or data.get("payment_method_deletion") is not None
+            or str(data.get("status", "")).upper() in ("CANCELLED", "EXPIRED")
+        ):
+            return None
+        return PaymentSource(id=method_id, type="CARD", agreement_id=agreement_id)
+
+    def delete_saved_source(self, source: PaymentSource, *, reference: str) -> None:
+        """OpenAPI: `DELETE /subscriptions/{id}/payment-method`, accion
+        `DELETE_PAYMENT_METHOD`, con `scope: SUBSCRIPTION`: borra el token de
+        esta suscripcion y la cancela, sin tocar otras ni pedir la revocacion
+        al proveedor. 200 lo confirma; 202 es un resultado incierto que se
+        repite con la misma clave; 404, que ya no existe."""
+        subscription_id = source.agreement_id
+        if subscription_id is None or not _is_uuid(subscription_id) or not _is_uuid(source.id):
+            raise PaymentProviderError("El medio de pago no es de una suscripcion de Tipster Page")
+        params = {
+            "idempotency_key": _idempotency_key("DELETE_PAYMENT_METHOD", reference),
+            "payment_method_id": source.id,
+            "scope": "SUBSCRIPTION",
+        }
+        response = self._signed(
+            "DELETE",
+            f"/subscriptions/{subscription_id}/payment-method",
+            "DELETE_PAYMENT_METHOD",
+            subscription_id,
+            params,
+        )
+        if response.status_code in (200, 404):
+            return
+        logger.warning(
+            "Tipster Page no confirmo el borrado de la tarjeta de %s: HTTP %s %s",
+            subscription_id,
+            response.status_code,
+            _error_message(response),
+        )
+        raise PaymentProviderError(f"Borrado de la tarjeta: HTTP {response.status_code}")
+
+    def _signed(
+        self, method: str, path: str, action: Action, resource: str, params: dict[str, Any]
+    ) -> httpx.Response:
+        body = signed_body(self._secret_key, self._merchant, action, resource, params)
+        return self._request(method, path, json=body)
 
     # ---- HTTP
 
@@ -468,6 +888,120 @@ class TipsterPageProvider:
         except httpx.HTTPError as exc:
             # Sin el cuerpo ni las cabeceras: llevan las llaves y los datos del comprador.
             raise PaymentProviderError(f"Tipster Page no respondio ({type(exc).__name__})") from None
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _idempotency_key(action: str, reference: str) -> str:
+    return str(uuid.uuid5(_IDEMPOTENCY_NAMESPACE, f"{action}:{reference}"))
+
+
+def _subscription_tx(subscription_id: str, payment_key: str, reference: str) -> str:
+    return f"{SUBSCRIPTION_TX_PREFIX}:{subscription_id}:{payment_key}:{reference}"
+
+
+def _json_decimal(response: httpx.Response) -> Any:
+    """El JSON con los montos como `Decimal`, sin pasar por `float`."""
+    try:
+        return json.loads(response.content, parse_float=Decimal)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise PaymentProviderError("Respuesta que no es JSON") from exc
+
+
+def _charge_transaction(
+    data: Any, subscription_id: str, reference: str
+) -> ProviderTransaction | None:
+    """Un cobro de una suscripcion (OpenAPI, `TspaySubscriptionChargeResult`).
+
+    None si no es el cobro de esa suscripcion o no se puede leer.
+    """
+    if not isinstance(data, dict):
+        return None
+    payment_id = data.get("payment_id")
+    if not isinstance(payment_id, str) or not _is_uuid(payment_id):
+        return None
+    owner = data.get("subscription_id")
+    if owner is not None and owner != subscription_id:
+        logger.error(
+            "Tipster Page: el cobro %s no es de la suscripcion %s", payment_id, subscription_id
+        )
+        return None
+    key = INITIAL_PERIOD if data.get("period_id") == INITIAL_PERIOD else payment_id
+    raw_status = data.get("status")
+    # El cobro y su consulta lo traen en mayusculas (`PAID`), como el OpenAPI;
+    # el listado de cobros de la suscripcion, en minusculas (`paid`, visto en
+    # produccion el 2026-11-17).
+    status = CHARGE_STATUS_MAP.get(raw_status.upper()) if isinstance(raw_status, str) else None
+    error_code = data.get("error_code")
+    message = None
+    if status is None:
+        logger.warning("Tipster Page: estado desconocido del cobro %s", payment_id)
+        status = "pending"
+    elif status != "approved":
+        message = f"Tipster Page: {raw_status}" + (
+            f" ({str(error_code)[:20]})" if error_code else ""
+        )
+    cents = _euro_cents(data.get("amount"))
+    if cents is None or data.get("currency", CURRENCY) != CURRENCY:
+        status, cents = "error", 0
+        message = "Tipster Page: monto ilegible en el cobro"
+    retry = data.get("retry_allowed")
+    auth_url = data.get("authentication_url")
+    return ProviderTransaction(
+        id=_subscription_tx(subscription_id, key, reference),
+        reference=reference,
+        status=status,
+        amount_cents=cents,
+        currency=CURRENCY,
+        status_message=message,
+        retry_allowed=retry if isinstance(retry, bool) else None,
+        authentication_url=(
+            auth_url
+            if data.get("authentication_required") is True
+            and isinstance(auth_url, str)
+            and auth_url.startswith("https://")
+            else None
+        ),
+    )
+
+
+def _recurring_method(item: Any, country: str | None) -> PaymentMethodOption | None:
+    """El medio de Solidgate del catalogo de suscripciones, si sirve: en euros,
+    con los cobros a cargo nuestro y disponible en el pais."""
+    if not isinstance(item, dict) or item.get("key") != RECURRING_METHOD:
+        return None
+    capabilities = item.get("capabilities") or {}
+    low = _euro_cents(_decimal(item.get("priceMin")))
+    high = _euro_cents(_decimal(item.get("priceMax")))
+    countries = item.get("countries") or []
+    if (
+        item.get("currency") != CURRENCY
+        or item.get("billing_mode") != "MERCHANT_MANAGED"
+        or not isinstance(capabilities, dict)
+        or capabilities.get("merchant_initiated_charges") is not True
+        or low is None
+        or high is None
+        or not isinstance(countries, list)
+    ):
+        return None
+    codes = tuple(c.upper() for c in countries if isinstance(c, str))
+    if codes and (country is None or country.upper() not in codes):
+        return None
+    return PaymentMethodOption(
+        key=RECURRING_METHOD,
+        name="Tarjeta de crédito/débito",
+        logo_url=None,
+        min_cents=low,
+        max_cents=high,
+        currency=CURRENCY,
+        countries=codes,
+    )
 
 
 def _json(response: httpx.Response) -> Any:

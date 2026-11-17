@@ -3,9 +3,10 @@
 Operaciones:
 
 - `start_payment`: abre el pago de un periodo, manual (el cliente paga en la
-  pagina del proveedor) o con un medio de pago guardado (renovacion
-  automatica). El monto sale siempre de `billing/pricing`; nunca de lo que
-  mande el cliente.
+  pagina del proveedor con el medio que elija) o con renovacion automatica (el
+  cliente paga el primer periodo en la pagina de la pasarela y la tarjeta
+  queda guardada alli; paso 5.3b). El monto sale siempre de `billing/pricing`;
+  nunca de lo que mande el cliente.
 - `apply_transaction`: la UNICA funcion que mueve un pago y su suscripcion. La
   usan el webhook, la consulta del estado del pago y el job de renovaciones, y
   siempre con una transaccion que salio de la API del proveedor
@@ -18,8 +19,10 @@ Operaciones:
 - Un pago que se aprueba deja su factura pendiente (`core/invoices`), en la
   misma transaccion. Una anulacion posterior no la toca: que hacer con ella lo
   decide el paso 5.4.
-- `set_payment_source` y `switch_to_manual`: cambiar el medio de pago guardado
-  y pasar de un modo de pago al otro, sobre la misma suscripcion.
+- `start_card_setup` y `sync_saved_source`: cambiar la tarjeta guardada o
+  pasar de pago manual a renovacion automatica. La tarjeta se escribe en la
+  pagina de la pasarela (paso 5.3b): se abre esa pagina y despues se lee de la
+  pasarela que tarjeta quedo guardada. `switch_to_manual`: lo contrario.
 
 Aqui no se decide el acceso: lo decide `core/access.has_access` a partir de
 `status` y `current_period_end`.
@@ -31,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.billing import checkout_text, pricing
@@ -46,6 +49,7 @@ from app.models.user import LIVE_SUBSCRIPTION_STATUSES
 from app.payments.base import (
     BUYER_FIELDS,
     BuyerField,
+    ChargePeriod,
     CheckoutOrder,
     CheckoutPage,
     CheckoutRejected,
@@ -53,8 +57,8 @@ from app.payments.base import (
     PaymentProvider,
     PaymentProviderError,
     PaymentSource,
-    PaymentSourceRejected,
     ProviderTransaction,
+    RecurringOrder,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,17 +91,11 @@ class SubscribeError(Exception):
         self.coupon_reason = coupon_reason
 
 
-@dataclass(frozen=True)
-class SourceInput:
-    """El medio de pago que el cliente tokenizo en su navegador. Nunca trae
-    datos de tarjeta."""
-
-    type: str
-    token: str
-
-
 #: Lo que se le dice al cliente cuando la pasarela no crea la orden.
 CHECKOUT_FAILED = "No se pudo crear la orden en la pasarela"
+
+#: El idioma de la pagina de pago de la renovacion automatica.
+RECURRING_LANGUAGE = "es"
 
 #: Largo maximo de cada dato del comprador. El manual de Tipster Page no fija
 #: uno; estos alcanzan para un nombre, un documento o un telefono.
@@ -137,6 +135,12 @@ class Settlement:
     renewal_failed: bool = False
     #: Esta llamada anulo un pago que estaba aprobado y retiro su periodo.
     reversed: bool = False
+    #: El cobro sigue pendiente porque el banco pide que el titular se
+    #: autentique (3DS): el enlace para hacerlo.
+    authentication_url: str | None = None
+    #: El cobro de renovacion se rechazo sin admitir otro intento con esa
+    #: tarjeta: queda bloqueada hasta que el cliente guarde otra.
+    card_blocked: bool = False
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,9 @@ class StartedPayment:
     #: Solo en el pago manual: la pagina con la que el navegador sigue a la
     #: pasarela. Se le entrega una sola vez (`core/checkout_pages`).
     checkout: CheckoutPage | None = None
+    #: Solo en el alta de la renovacion automatica: la pagina de la pasarela
+    #: donde el cliente paga el primer periodo y guarda la tarjeta.
+    redirect_url: str | None = None
 
 
 def live_subscription(db: Session, user_id: uuid.UUID) -> Subscription | None:
@@ -276,24 +283,6 @@ def _check_can_pay(db: Session, user: User, now: datetime) -> None:
         )
 
 
-def _check_source(provider: PaymentProvider, source: SourceInput | None) -> SourceInput:
-    if provider.tokenizer() is None:
-        raise SubscribeError(
-            503, "automatic_unavailable", "La renovación automática todavía no está disponible."
-        )
-    if source is None or not source.token.strip():
-        raise SubscribeError(
-            400, "payment_source_required", "Falta el medio de pago para la renovación automática."
-        )
-    if not source.type.strip() or len(source.type) > 16:
-        raise SubscribeError(
-            400,
-            "payment_source_type_not_supported",
-            "Ese medio de pago no se puede guardar para la renovación automática.",
-        )
-    return source
-
-
 def checkout_method(
     provider: PaymentProvider, choice: CheckoutChoice | None, amount_cents: int, currency: str
 ) -> PaymentMethodOption:
@@ -334,6 +323,34 @@ def checkout_method(
                 400, "buyer_field_too_long", "Uno de los datos del medio de pago es demasiado largo."
             )
     return method
+
+
+def recurring_method(
+    provider: PaymentProvider, choice: CheckoutChoice | None, amount_cents: int, currency: str
+) -> tuple[PaymentMethodOption, str]:
+    """Valida que la pasarela ofrezca la renovacion automatica en el pais del
+    cliente y por ese monto. Se llama antes de escribir nada. Devuelve el medio
+    y el pais, que la pasarela exige en el alta."""
+    country = choice.country if choice is not None else None
+    if not country:
+        raise SubscribeError(400, "country_required", "Elige tu país.")
+    try:
+        method = provider.recurring_method(country)
+    except PaymentProviderError as exc:
+        raise SubscribeError(
+            502,
+            "provider_unavailable",
+            "No pudimos consultar los medios de pago. Intenta de nuevo en unos minutos.",
+        ) from exc
+    if method is None:
+        raise SubscribeError(
+            503, "automatic_unavailable", "La renovación automática todavía no está disponible."
+        )
+    if method.currency != currency or not method.min_cents <= amount_cents <= method.max_cents:
+        raise SubscribeError(
+            400, "amount_out_of_range", "La renovación automática no admite el monto de este pago."
+        )
+    return method, country
 
 
 def _buyer_for(method: PaymentMethodOption, choice: CheckoutChoice) -> dict[BuyerField, str]:
@@ -408,18 +425,19 @@ def start_payment(
     provider: PaymentProvider,
     now: datetime,
     renewal_mode: str = "manual",
-    source: SourceInput | None = None,
     choice: CheckoutChoice | None = None,
     urls: Callable[[Payment], CheckoutUrls] | None = None,
 ) -> StartedPayment:
     """Abre el pago de un periodo y lo confirma en la base.
 
     Sin una suscripcion vigente es el alta: precio del plan menos el cupon, si
-    aplica. Con `renewal_mode="automatic"` guarda el medio de pago en el
-    proveedor y le hace el primer cobro; con `manual`, crea la orden en la
-    pasarela con el medio que eligio el cliente (`choice`) y devuelve la pagina
-    con la que el navegador sigue a pagar. `urls` dice, para el pago ya creado,
-    a donde vuelve el navegador y a donde avisa la pasarela.
+    aplica. Con `renewal_mode="automatic"` crea el alta en la pasarela y
+    devuelve su pagina (`redirect_url`), donde el cliente paga el primer
+    periodo y guarda la tarjeta (paso 5.3b); de `choice` solo cuenta el pais.
+    Con `manual`, crea la orden en la pasarela con el medio que eligio el
+    cliente (`choice`) y devuelve la pagina con la que el navegador sigue a
+    pagar. `urls` dice, para el pago ya creado, a donde vuelve el navegador y
+    a donde avisa la pasarela.
 
     Con una suscripcion vigente de pago manual, es el pago del periodo
     siguiente del mismo plan: precio congelado, con el descuento que todavia
@@ -429,10 +447,8 @@ def start_payment(
         raise SubscribeError(503, "payments_unavailable", "El pago todavía no está disponible.")
     _check_can_pay(db, user, now)
     automatic = renewal_mode == "automatic"
-    if automatic:
-        source = _check_source(provider, source)
-    elif urls is None:
-        raise ValueError("El pago manual necesita las URL de regreso y de aviso")
+    if urls is None:
+        raise ValueError("El pago necesita las URL de regreso y de aviso")
 
     # Serializa los intentos simultaneos de la misma cuenta.
     db.execute(select(User.id).where(User.id == user.id).with_for_update())
@@ -451,7 +467,7 @@ def start_payment(
         db.flush()
         subscription = None
 
-    stored: PaymentSource | None = None
+    recurring_country: str | None = None
     if subscription is not None and subscription.status != "pending":
         # Periodo siguiente de una suscripcion pagada y todavia vigente.
         if subscription.renewal_mode == "automatic":
@@ -462,7 +478,7 @@ def start_payment(
             )
         if automatic:
             # Con un periodo ya pagado no hay nada que cobrar ahora: el cambio de
-            # modo es `set_payment_source`, sin pago.
+            # modo es `start_card_setup`, sin pago.
             raise SubscribeError(
                 409,
                 "mode_change_in_account",
@@ -517,14 +533,14 @@ def start_payment(
         if quote.coupon_rejection is not None:
             raise _coupon_rejected(quote.coupon_rejection)
         coupon_id = coupon.id if coupon is not None else None
-        method = (
-            None if automatic else checkout_method(provider, choice, quote.total_cents, quote.currency)
-        )
-
-        if automatic and source is not None:
-            # Antes de escribir nada: si el proveedor no acepta el medio de
-            # pago, no queda ni suscripcion ni pago.
-            stored = _store_source(provider, source, user)
+        if automatic:
+            # Antes de escribir nada: que la pasarela la ofrezca por ese monto.
+            method = None
+            _, recurring_country = recurring_method(
+                provider, choice, quote.total_cents, quote.currency
+            )
+        else:
+            method = checkout_method(provider, choice, quote.total_cents, quote.currency)
 
         if subscription is None:
             subscription = Subscription(user_id=user.id, status="pending")
@@ -536,10 +552,12 @@ def start_payment(
         subscription.currency = quote.currency
         subscription.coupon_id = coupon_id
         subscription.renewal_mode = "automatic" if automatic else "manual"
-        subscription.payment_source_id = stored.id if stored else None
-        subscription.payment_source_type = stored.type if stored else None
-        subscription.card_brand = stored.brand if stored else None
-        subscription.card_last4 = stored.last4 if stored else None
+        # La tarjeta llega con el primer pago aprobado (`_note_saved_source`).
+        subscription.payment_source_id = None
+        subscription.payment_source_type = None
+        subscription.provider_subscription_id = None
+        subscription.card_brand = None
+        subscription.card_last4 = None
         db.flush()
 
     payment = Payment(
@@ -560,46 +578,75 @@ def start_payment(
     db.commit()
     db.refresh(payment)
 
-    settlement: Settlement | None = None
     checkout: CheckoutPage | None = None
-    if stored is not None:
-        settlement = charge_payment(db, provider, payment, stored, user.email, now)
-        if settlement is None:
-            raise SubscribeError(
-                502,
-                "provider_unavailable",
-                "No pudimos iniciar el cobro. Intenta de nuevo en unos minutos.",
-            )
-        payment = settlement.payment
-    elif method is not None and choice is not None and urls is not None:
+    redirect_url: str | None = None
+    if recurring_country is not None:
+        redirect_url = _open_recurring(
+            db, provider, payment, plan, user, recurring_country, urls(payment), now
+        )
+    elif method is not None and choice is not None:
         checkout = _open_checkout(db, provider, payment, plan, method, choice, urls(payment), now)
     return StartedPayment(
         payment=payment,
         subtotal_cents=quote.subtotal_cents,
-        settlement=settlement,
         checkout=checkout,
+        redirect_url=redirect_url,
     )
 
 
-def _store_source(provider: PaymentProvider, source: SourceInput, user: User) -> PaymentSource:
+def _open_recurring(
+    db: Session,
+    provider: PaymentProvider,
+    payment: Payment,
+    plan: Plan,
+    user: User,
+    country: str,
+    urls: CheckoutUrls,
+    now: datetime,
+) -> str:
+    """Crea el alta de la renovacion automatica en la pasarela, una sola vez
+    por pago, y devuelve su pagina. El pago ya esta confirmado en la base.
+
+    Como en `_open_checkout`: si la pasarela no la crea, el pago queda en
+    `error` y no se cobro nada. Si la crea, el pago queda pendiente con el id
+    con que se reconsulta hasta que el cliente pague en esa pagina.
+    """
+    order = RecurringOrder(
+        reference=payment.reference,
+        amount_cents=payment.amount_cents,
+        currency=payment.currency,
+        product_code=plan.code,
+        product_name=checkout_text.product_name(plan.name),
+        interval=plan.interval,
+        interval_count=plan.interval_count,
+        email=user.email,
+        country=country,
+        language=RECURRING_LANGUAGE,
+        url_ok=urls.url_ok,
+        url_ko=urls.url_ko,
+        notification_url=urls.notification_url,
+    )
     try:
-        return provider.create_payment_source(
-            source_type=source.type.strip(),
-            token=source.token.strip(),
-            customer_email=user.email,
-        )
-    except PaymentSourceRejected as exc:
-        raise SubscribeError(
-            400,
-            "payment_source_rejected",
-            "El procesador de pagos no aceptó ese medio de pago. Intenta de nuevo o usa otro.",
-        ) from exc
+        started = provider.start_recurring(order)
     except PaymentProviderError as exc:
+        payment.status = "error"
+        payment.failure_reason = CHECKOUT_FAILED
+        payment.resolved_at = now
+        db.commit()
+        if isinstance(exc, CheckoutRejected):
+            raise SubscribeError(
+                400,
+                "checkout_rejected",
+                "La pasarela no aceptó la renovación automática con esos datos.",
+            ) from None
         raise SubscribeError(
             502,
             "provider_unavailable",
-            "No pudimos guardar tu medio de pago. Intenta de nuevo en unos minutos.",
-        ) from exc
+            "No pudimos abrir el pago. Intenta de nuevo en unos minutos.",
+        ) from None
+    payment.provider_transaction_id = started.transaction_id
+    db.commit()
+    return started.checkout_url
 
 
 def source_of(subscription: Subscription) -> PaymentSource | None:
@@ -611,6 +658,7 @@ def source_of(subscription: Subscription) -> PaymentSource | None:
         type=subscription.payment_source_type,
         brand=subscription.card_brand,
         last4=subscription.card_last4,
+        agreement_id=subscription.provider_subscription_id,
     )
 
 
@@ -620,6 +668,7 @@ def charge_payment(
     payment: Payment,
     source: PaymentSource,
     customer_email: str,
+    period: ChargePeriod,
     now: datetime,
 ) -> Settlement | None:
     """Cobra un pago ya guardado a un medio de pago y aplica lo que responda el
@@ -633,6 +682,7 @@ def charge_payment(
             currency=payment.currency,
             customer_email=customer_email,
             source=source,
+            period=period,
         )
     except PaymentProviderError:
         logger.warning("El proveedor no respondio al cobrar el pago %s", payment.id)
@@ -740,15 +790,18 @@ def apply_transaction(
         payment.failure_reason = None
         payment.resolved_at = None
         _commit(db, payment, before_commit)
-        return Settlement(payment=payment)
+        return Settlement(payment=payment, authentication_url=transaction.authentication_url)
 
     payment.resolved_at = now
     activated = False
     renewal_failed = False
+    card_blocked = False
     if transaction.status != "approved":
         payment.status = transaction.status
         payment.failure_reason = transaction.status_message
         renewal_failed = _note_failed_renewal(db, payment)
+        if renewal_failed and transaction.retry_allowed is False:
+            card_blocked = _block_source(db, payment)
     elif (transaction.amount_cents, transaction.currency) != (
         payment.amount_cents,
         payment.currency,
@@ -776,13 +829,68 @@ def apply_transaction(
         payment.status = "approved"
         payment.failure_reason = None
         activated = _grant_period(db, payment, now)
+        _note_saved_source(db, payment, transaction)
         # Su factura nace aqui, en la misma transaccion (§3.17, paso 5.2).
         invoices.create_pending(db, payment)
     _note_card_brand(db, payment, transaction)
     _commit(db, payment, before_commit)
     return Settlement(
-        payment=payment, changed=True, activated=activated, renewal_failed=renewal_failed
+        payment=payment,
+        changed=True,
+        activated=activated,
+        renewal_failed=renewal_failed,
+        card_blocked=card_blocked,
     )
+
+
+def requery_agreement(
+    db: Session,
+    provider: PaymentProvider,
+    *,
+    agreement_id: str | None,
+    external_reference: str | None,
+    now: datetime,
+) -> list[Settlement]:
+    """Reconsulta los pagos pendientes de una suscripcion de la pasarela.
+
+    Lo pide un aviso de esa suscripcion (paso 5.3b), que solo dice cual
+    mirar: el pago del alta (su `external_reference` es nuestra referencia) y
+    los cobros pendientes de la suscripcion que la tiene guardada. Lo que se
+    aplica es la reconsulta, con `apply_transaction`. Lanza
+    `PaymentProviderError` si la pasarela no responde: el aviso se reintenta.
+    """
+    conditions = []
+    if external_reference:
+        conditions.append(Payment.reference == external_reference)
+    if agreement_id:
+        conditions.append(
+            Payment.subscription_id.in_(
+                select(Subscription.id).where(Subscription.provider_subscription_id == agreement_id)
+            )
+        )
+    if not conditions:
+        return []
+    payments = list(
+        db.scalars(
+            select(Payment).where(
+                Payment.provider == provider.name,
+                Payment.status == "pending",
+                Payment.provider_transaction_id.is_not(None),
+                or_(*conditions),
+            )
+        )
+    )
+    db.rollback()
+    settlements: list[Settlement] = []
+    for payment in payments:
+        assert payment.provider_transaction_id is not None
+        transaction = provider.fetch_transaction(payment.provider_transaction_id)
+        if transaction is None or transaction.reference != payment.reference:
+            continue
+        settlement = apply_transaction(db, transaction, now)
+        if settlement is not None:
+            settlements.append(settlement)
+    return settlements
 
 
 def _plan_code(db: Session, payment: Payment) -> str | None:
@@ -882,6 +990,33 @@ def _note_card_brand(db: Session, payment: Payment, transaction: ProviderTransac
         subscription.card_brand = transaction.card_brand
 
 
+def _note_saved_source(db: Session, payment: Payment, transaction: ProviderTransaction) -> None:
+    """El alta de la renovacion automatica se aprobo: la suscripcion se renueva
+    con la tarjeta que quedo guardada en la pasarela con ese pago (paso 5.3b).
+
+    Se toma de la transaccion aprobada y no de cuando se abrio la pagina: si el
+    cliente abrio dos y pago las dos, la tarjeta es la del ultimo pago aprobado.
+    """
+    source = transaction.saved_source
+    if source is None or payment.kind != "initial" or payment.user_id is None:
+        return
+    subscription = live_subscription(db, payment.user_id)
+    if subscription is None or subscription.renewal_mode != "automatic":
+        return
+    if subscription.provider_subscription_id not in (None, source.agreement_id):
+        logger.error(
+            "Pago %s: la suscripcion %s ya tenia otra suscripcion en la pasarela; "
+            "revisar si corresponde cancelar la anterior",
+            payment.id,
+            subscription.id,
+        )
+    subscription.payment_source_id = source.id
+    subscription.payment_source_type = source.type
+    subscription.provider_subscription_id = source.agreement_id
+    subscription.card_brand = source.brand
+    subscription.card_last4 = source.last4
+
+
 def _note_failed_renewal(db: Session, payment: Payment) -> bool:
     """Un cobro automatico de renovacion que no se aprobo deja la suscripcion
     en mora (§3.5). El acceso no cambia: el periodo pagado sigue corriendo."""
@@ -898,6 +1033,17 @@ def _note_failed_renewal(db: Session, payment: Payment) -> bool:
         return False
     subscription.status = "past_due"
     subscription.retry_count += 1
+    return True
+
+
+def _block_source(db: Session, payment: Payment) -> bool:
+    """La pasarela rechazo el cobro sin admitir otro intento con esa tarjeta
+    (decidido por el usuario el 2026-11-17): no se le vuelve a cobrar hasta
+    que el cliente guarde otra. Si no la cambia, vence en su fecha."""
+    subscription = db.get(Subscription, payment.subscription_id) if payment.subscription_id else None
+    if subscription is None:
+        return False
+    subscription.payment_source_blocked = True
     return True
 
 
@@ -1175,40 +1321,19 @@ def _paid_subscription(db: Session, user: User, now: datetime) -> Subscription:
     return subscription
 
 
-def set_payment_source(
-    db: Session, *, user: User, provider: PaymentProvider, source: SourceInput, now: datetime
-) -> SourceChange:
-    """Guarda un medio de pago en la suscripcion vigente. Hace commit.
-
-    Sirve para tres cosas, y en las tres la suscripcion queda renovandose sola
-    con el medio nuevo:
-
-    - cambiar el medio guardado de una renovacion automatica;
-    - pasar de pago manual a renovacion automatica;
-    - reanudar una renovacion cancelada con otro medio de pago.
-
-    No cobra nada: el periodo vigente ya esta pagado. El primer cobro al medio
-    nuevo es el de la renovacion, con su aviso por correo antes. La excepcion
-    es la suscripcion en mora (`retry_due`): quien llama reintenta ese cobro.
-    """
-    if not provider.enabled:
-        raise SubscribeError(503, "payments_unavailable", "El pago todavía no está disponible.")
-    if not user.is_active:
-        raise SubscribeError(403, "suspended", "Tu cuenta está suspendida.")
-    checked = _check_source(provider, source)
-    subscription = _paid_subscription(db, user, now)
+def _apply_source(db: Session, subscription: Subscription, stored: PaymentSource) -> SourceChange:
+    """La suscripcion queda renovandose sola con `stored`. Hace commit."""
     reactivating = subscription.status == "canceled"
-    if reactivating:
-        _make_room(db, user.id)
-    # Antes de escribir nada: si el proveedor no acepta el medio, todo queda igual.
-    stored = _store_source(provider, checked, user)
-
     was_manual = subscription.renewal_mode != "automatic"
     subscription.renewal_mode = "automatic"
     subscription.payment_source_id = stored.id
     subscription.payment_source_type = stored.type
     subscription.card_brand = stored.brand
     subscription.card_last4 = stored.last4
+    if stored.agreement_id is not None:
+        subscription.provider_subscription_id = stored.agreement_id
+    # Una tarjeta nueva se puede volver a intentar.
+    subscription.payment_source_blocked = False
     if was_manual or reactivating:
         subscription.status = "active"
         subscription.cancel_at_period_end = False
@@ -1229,6 +1354,148 @@ def set_payment_source(
     )
 
 
+def start_card_setup(
+    db: Session, *, user: User, provider: PaymentProvider, now: datetime, urls: CheckoutUrls
+) -> str:
+    """Abre la pagina de la pasarela donde el cliente guarda una tarjeta para
+    la suscripcion vigente, sin cobrar nada (paso 5.3b). Devuelve su URL.
+
+    - Con una tarjeta ya guardada en una suscripcion de la pasarela, es el
+      cambio de tarjeta; con un cobro rechazado en el periodo, la recuperacion,
+      y la tarjeta nueva paga ese cobro.
+    - Sin ella (pago manual), es un alta que solo verifica la tarjeta, por 0,
+      con lo que costara cada renovacion.
+
+    Lo que cambie se aplica despues, al leer de la pasarela que tarjeta quedo
+    guardada (`sync_saved_source`): el aviso, la pantalla de regreso o el job.
+    """
+    if not provider.enabled:
+        raise SubscribeError(503, "payments_unavailable", "El pago todavía no está disponible.")
+    if not user.is_active:
+        raise SubscribeError(403, "suspended", "Tu cuenta está suspendida.")
+    subscription = _paid_subscription(db, user, now)
+    source = source_of(subscription)
+    day = now.strftime("%Y%m%d")
+    try:
+        if source is not None and source.agreement_id is not None:
+            recovery = subscription.status == "past_due"
+            url = provider.card_change_url(
+                source,
+                recovery=recovery,
+                reference=f"{subscription.id.hex}-{'recovery' if recovery else 'card'}-{day}",
+            )
+            db.commit()
+            return url
+        amount = pricing.renewal_quote(
+            subscription.price_cents, subscription.currency, renewal_discount(db, subscription)
+        ).total_cents
+        _, country = recurring_method(
+            provider,
+            CheckoutChoice(method="", country=_profile_country(db, user.id), buyer={}),
+            amount,
+            subscription.currency,
+        )
+        plan = subscription.plan
+        started = provider.start_recurring(
+            RecurringOrder(
+                reference=f"SA-S-{uuid.uuid4().hex}",
+                amount_cents=amount,
+                currency=subscription.currency,
+                product_code=plan.code,
+                product_name=checkout_text.product_name(plan.name),
+                interval=plan.interval,
+                interval_count=plan.interval_count,
+                email=user.email,
+                country=country,
+                language=RECURRING_LANGUAGE,
+                url_ok=urls.url_ok,
+                url_ko=urls.url_ko,
+                notification_url=urls.notification_url,
+                setup_only=True,
+            )
+        )
+    except PaymentProviderError as exc:
+        db.rollback()
+        raise SubscribeError(
+            502, "provider_unavailable", "No pudimos abrir la página de pago. Intenta de nuevo."
+        ) from exc
+    # La suscripcion sigue como esta hasta que la tarjeta quede verificada.
+    subscription.provider_subscription_id = started.agreement_id
+    db.commit()
+    return started.checkout_url
+
+
+def _profile_country(db: Session, user_id: uuid.UUID) -> str | None:
+    """El pais de los datos de facturacion, en el codigo de dos letras que
+    pide la pasarela (Siigo lo guarda como `Co`)."""
+    profile = billing_profiles.get(db, user_id)
+    code = profile.country_code.strip() if profile is not None else ""
+    return code.upper() if len(code) == 2 and code.isalpha() else None
+
+
+def sync_saved_source(
+    db: Session, provider: PaymentProvider, subscription: Subscription, now: datetime
+) -> SourceChange | None:
+    """Lee de la pasarela que tarjeta tiene guardada la suscripcion y, si es
+    otra, la suscripcion queda renovandose sola con ella. Hace commit.
+
+    La fuente de verdad es la pasarela, no el aviso ni el navegador. Una
+    suscripcion cancelada solo se reactiva si el cliente guardo otra tarjeta.
+    None si no hay nada nuevo.
+    """
+    agreement = subscription.provider_subscription_id
+    if agreement is None or subscription.current_period_end is None:
+        return None
+    if subscription.current_period_end <= now:
+        return None
+    stored = provider.saved_source(agreement)
+    if stored is None or stored.id == subscription.payment_source_id:
+        # Nada nuevo. Una tarjeta bloqueada que sigue siendo la misma, sigue
+        # bloqueada.
+        db.rollback()
+        return None
+    locked = db.scalar(
+        select(Subscription).where(Subscription.id == subscription.id).with_for_update()
+    )
+    assert locked is not None
+    if locked.status == "canceled":
+        _make_room(db, locked.user_id)
+    return _apply_source(db, locked, stored)
+
+
+def sync_agreement(
+    db: Session, provider: PaymentProvider, agreement_id: str, now: datetime
+) -> list[tuple[SourceChange, User]]:
+    """`sync_saved_source` de la suscripcion que tiene guardada esa
+    suscripcion de la pasarela, si la hay. Para el aviso de la pasarela."""
+    subscription = db.scalar(
+        select(Subscription).where(
+            Subscription.provider_subscription_id == agreement_id,
+            Subscription.status.in_(_STATUSES_WITH_PAID_PERIOD),
+        )
+    )
+    if subscription is None:
+        return []
+    user = db.get(User, subscription.user_id)
+    change = sync_saved_source(db, provider, subscription, now)
+    return [(change, user)] if change is not None and user is not None else []
+
+
+def forget_saved_source(provider: PaymentProvider, source: PaymentSource | None, reference: str) -> None:
+    """Borra en la pasarela la tarjeta que dejo de usarse (pasar a pago manual,
+    eliminar la cuenta). Lo nuestro ya se borro: si la pasarela no responde,
+    queda en el log para borrarla a mano, y nunca se le vuelve a cobrar."""
+    if source is None or source.agreement_id is None:
+        return
+    try:
+        provider.delete_saved_source(source, reference=reference)
+    except PaymentProviderError:
+        logger.error(
+            "No se pudo borrar en la pasarela la tarjeta de la suscripcion %s; borrarla a mano",
+            source.agreement_id,
+        )
+
+
 def switch_to_manual(db: Session, user: User, now: datetime) -> Subscription:
     """Pasa la renovacion automatica a pago manual. Hace commit.
 
@@ -1244,6 +1511,8 @@ def switch_to_manual(db: Session, user: User, now: datetime) -> Subscription:
     subscription.renewal_mode = "manual"
     subscription.payment_source_id = None
     subscription.payment_source_type = None
+    subscription.provider_subscription_id = None
+    subscription.payment_source_blocked = False
     subscription.card_brand = None
     subscription.card_last4 = None
     subscription.next_charge_at = None

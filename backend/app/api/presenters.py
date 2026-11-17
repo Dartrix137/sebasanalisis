@@ -65,6 +65,7 @@ def subscription_response(
         payment_source_type=subscription.payment_source_type,  # type: ignore[arg-type]
         card_brand=subscription.card_brand,
         card_last4=subscription.card_last4,
+        card_update_required=subscription.payment_source_blocked,
         next_charge_at=subscription.next_charge_at if continues else None,
         next_charge_cents=(
             pricing.renewal_quote(

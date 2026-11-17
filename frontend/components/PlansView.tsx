@@ -109,7 +109,7 @@ export function PlansView() {
       .availability()
       .then((a) => {
         setPaymentsEnabled(a.enabled);
-        setAutomaticOffered(a.enabled && a.tokenizer !== null);
+        setAutomaticOffered(a.enabled && a.automatic_renewal);
       })
       .catch(() => setPaymentsEnabled(false));
   }, []);

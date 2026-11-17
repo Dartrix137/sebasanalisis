@@ -47,6 +47,7 @@ from app.core.user_tokens import (
 )
 from app.emails import build_email
 from app.models import Bet, GameSession, Payment, Spin, User
+from app.payments.base import PaymentProvider, get_payment_provider
 from app.schemas.auth import (
     BotCheckConfigResponse,
     ChangeEmailRequest,
@@ -426,6 +427,7 @@ def delete_account(
     db: DbSession,
     background: BackgroundTasks,
     sender: EmailSenderDep,
+    provider: Annotated[PaymentProvider, Depends(get_payment_provider)],
 ) -> None:
     """Elimina la cuenta y todos sus datos (derecho de supresion, §5.4 y §6.4).
 
@@ -478,12 +480,19 @@ def delete_account(
             and subscription.status != "canceled"
         ),
     )
+    # La tarjeta guardada en la pasarela tambien se borra, despues de borrar lo
+    # nuestro (paso 5.3b).
+    source = subscriptions.source_of(subscription) if subscription is not None else None
     payment_privacy.anonymize_payment_trail(db, user.id)
     # DELETE directo y no db.delete(user): el borrado en cascada lo hace la base
     # (ON DELETE CASCADE), no el ORM cargando y anulando fila por fila.
     db.execute(delete(User).where(User.id == user.id))
     db.commit()
     background.add_task(send_safely, sender, message)
+    if provider.enabled and source is not None:
+        background.add_task(
+            subscriptions.forget_saved_source, provider, source, f"{user.id.hex}-deleted"
+        )
 
 
 # ---------- Verificacion del correo ----------

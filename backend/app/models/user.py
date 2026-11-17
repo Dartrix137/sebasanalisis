@@ -163,6 +163,14 @@ class Subscription(Base):
     payment_source_id: Mapped[str | None] = mapped_column(String(255))
     # El tipo del medio, en el vocabulario de la pasarela (`CARD` para una tarjeta).
     payment_source_type: Mapped[str | None] = mapped_column(String(16))
+    # La suscripcion del lado de la pasarela, si cobra contra una (Tipster Page
+    # con Solidgate, paso 5.3b): cada renovacion se cobra a ese id.
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    # La pasarela rechazo un cobro sin admitir reintento con esta tarjeta: no
+    # se vuelve a cobrar hasta que el cliente guarde otra (paso 5.3b).
+    payment_source_blocked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     card_brand: Mapped[str | None] = mapped_column(String(50))
     card_last4: Mapped[str | None] = mapped_column(String(4))
     next_charge_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

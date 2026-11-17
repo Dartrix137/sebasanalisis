@@ -3,8 +3,9 @@
 El precio lo calcula siempre el servidor, con `app.billing.pricing.quote`. El
 cliente manda el plan y, si tiene, un codigo: nunca un monto.
 
-Tambien la gestion de la suscripcion ya pagada: cancelar, reanudar, cambiar el
-medio de pago y pasar de un modo de pago al otro (§3.6).
+Tambien la gestion de la suscripcion ya pagada: cancelar, reanudar, cambiar la
+tarjeta en la pagina de la pasarela y pasar de un modo de pago al otro (§3.6 y
+paso 5.3b).
 
 Este router NO exige `RequireAccess`: quien cotiza y paga es justo quien todavia
 no tiene acceso. El pago en si ocurre en la pagina del procesador; aqui se
@@ -56,7 +57,6 @@ from app.core.subscriptions import (
     CheckoutChoice,
     CheckoutUrls,
     Settlement,
-    SourceInput,
     SubscribeError,
     coupon_terms,
 )
@@ -71,9 +71,9 @@ from app.schemas.billing import (
     BillingAvailabilityResponse,
     BuyerData,
     BuyerFieldName,
+    CardSetupResponse,
     CheckoutMethodResponse,
     PaymentListResponse,
-    PaymentMethodRequest,
     PaymentResponse,
     PlanResponse,
     QuoteCoupon,
@@ -170,13 +170,23 @@ def list_plans(db: DbSession) -> list[Plan]:
 
 @router.get("/billing/availability", response_model=BillingAvailabilityResponse)
 def availability(provider: PaymentProviderDep) -> BillingAvailabilityResponse:
-    """Si se puede pagar, y como se guarda un medio de pago. Publico: /planes
-    lo usa para encender el boton."""
-    tokenizer = provider.tokenizer() if provider.enabled else None
+    """Si se puede pagar, y si se ofrece la renovacion automatica. Publico:
+    /planes lo usa para encender el boton."""
     return BillingAvailabilityResponse(
         enabled=provider.enabled,
-        tokenizer=tokenizer.kind if tokenizer else None,  # type: ignore[arg-type]
+        automatic_renewal=_offers_automatic_renewal(provider),
     )
+
+
+def _offers_automatic_renewal(provider: PaymentProvider) -> bool:
+    """La pasarela tiene el medio de la renovacion automatica en algun pais.
+    Si no responde, no se ofrece: el alta lo vuelve a comprobar igual."""
+    if not provider.enabled:
+        return False
+    try:
+        return provider.recurring_method(None) is not None
+    except PaymentProviderError:
+        return False
 
 
 @router.get("/billing/payment-methods", response_model=list[CheckoutMethodResponse])
@@ -218,17 +228,6 @@ def payment_methods(
         )
         for m in methods
     ]
-
-
-def _require_tokenizer(provider: PaymentProvider) -> None:
-    if not provider.enabled or provider.tokenizer() is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "automatic_unavailable",
-                "message": "La renovación automática todavía no está disponible.",
-            },
-        )
 
 
 _PROVIDER_UNAVAILABLE = {
@@ -306,10 +305,11 @@ def subscribe(
     el enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos
     del comprador van a la pasarela y no se guardan. No se tokeniza nada.
 
-    Renovacion automatica (`automatic`): recibe el token que el procesador le
-    dio al navegador, guarda el medio de pago en el proveedor y le hace el
-    primer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la
-    referencia del proveedor, la marca y los ultimos cuatro digitos.
+    Renovacion automatica (`automatic`): crea el alta en la pasarela y
+    devuelve su pagina (`checkout_url`), donde el cliente paga el primer
+    periodo y guarda la tarjeta (paso 5.3b). Solo cuenta el pais. Por aqui
+    nunca pasan datos de tarjeta: de la tarjeta solo se guarda la referencia
+    de la pasarela.
 
     En los dos casos exige correo confirmado y documentos legales aceptados, y
     el total sale de `billing/pricing`: cualquier monto que mande el cliente se
@@ -334,22 +334,10 @@ def subscribe(
             provider=provider,
             now=datetime.now(UTC),
             renewal_mode=payload.renewal_mode.value,
-            source=(
-                SourceInput(
-                    type=payload.payment_source_type or "",
-                    token=payload.payment_source_token or "",
-                )
-                if payload.renewal_mode.value == "automatic"
-                else None
-            ),
-            choice=(
-                CheckoutChoice(
-                    method=payload.payment_method or "",
-                    country=payload.country,
-                    buyer=_buyer(payload.buyer),
-                )
-                if payload.renewal_mode.value == "manual"
-                else None
+            choice=CheckoutChoice(
+                method=payload.payment_method or "",
+                country=payload.country,
+                buyer=_buyer(payload.buyer) if payload.renewal_mode.value == "manual" else {},
             ),
             urls=_checkout_urls,
         )
@@ -358,12 +346,11 @@ def subscribe(
         raise _http_error(exc) from exc
 
     payment = started.payment
-    if started.settlement is not None:
-        # El cobro al medio guardado ya se envio; puede que ya este resuelto.
-        queue_payment_emails(db, started.settlement, background, sender)
+    if started.redirect_url is not None:
+        # La renovacion automatica: se paga en la pagina de la pasarela.
         return SubscribeResponse(
             payment_id=payment.id,
-            checkout_url=None,
+            checkout_url=started.redirect_url,
             subtotal_cents=started.subtotal_cents,
             discount_cents=payment.discount_cents,
             total_cents=payment.amount_cents,
@@ -466,7 +453,9 @@ def get_payment(
     # del pago. Con ella, un rechazo tambien se reconsulta: puede pasar a
     # aprobado si el comprador reintento (manual V2 de Tipster Page, §10).
     if provider.lookup_by_reference:
-        lookup_id: str | None = payment.reference
+        # El id guardado al abrir el pago (el de una suscripcion de la
+        # pasarela, paso 5.3b) o, en una orden, la referencia misma.
+        lookup_id: str | None = payment.provider_transaction_id or payment.reference
         open_statuses = ("pending", "declined")
     else:
         lookup_id = payment.provider_transaction_id or transaction_id
@@ -567,79 +556,104 @@ def resume_subscription(user: CurrentUser, db: DbSession) -> SubscriptionRespons
 # ---------- Medio de pago y modo de pago (§3.6 y §3.10) ----------
 
 
-@router.put("/billing/payment-method", response_model=SubscriptionResponse)
-def set_payment_method(
-    payload: PaymentMethodRequest,
-    user: CurrentUser,
-    db: DbSession,
-    provider: PaymentProviderDep,
-    background: BackgroundTasks,
-    sender: EmailSenderDep,
-) -> SubscriptionResponse:
-    """Guarda un medio de pago en la suscripcion vigente, que queda renovandose
-    sola con el: cambia el medio guardado, pasa de pago manual a renovacion
-    automatica, o reanuda una renovacion cancelada con otro medio.
+def _card_setup_urls(_: object = None) -> CheckoutUrls:
+    """A donde vuelve el navegador despues de guardar la tarjeta: la cuenta,
+    que lee de la pasarela la tarjeta nueva (`POST /billing/payment-method/sync`)."""
+    return CheckoutUrls(
+        url_ok=_frontend_url("/cuenta?tarjeta=guardada"),
+        url_ko=_frontend_url("/cuenta?tarjeta=no-guardada"),
+        notification_url=_api_url("/webhooks/payments"),
+    )
 
-    No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
-    un cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca
-    pasan datos de tarjeta: solo el token que el procesador le dio al navegador.
-    """
+
+@router.post("/billing/payment-method/checkout", response_model=CardSetupResponse)
+def start_payment_method_checkout(
+    user: CurrentUser, db: DbSession, provider: PaymentProviderDep
+) -> CardSetupResponse:
+    """Abre la pagina de la pasarela donde el cliente guarda una tarjeta para
+    su suscripcion vigente, sin cobrar nada (paso 5.3b): cambia la tarjeta,
+    recupera un cobro rechazado con una nueva, o pasa de pago manual a
+    renovacion automatica. Lo que cambie se aplica al volver, con
+    `POST /billing/payment-method/sync`, o con el aviso de la pasarela."""
     if get_settings().rate_limit_enabled and not rate_limit.hit(
         f"payment-method:user:{user.id}", limit=10, window=15 * _MINUTE
     ):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
         )
-    now = datetime.now(UTC)
     try:
-        change = subscriptions.set_payment_source(
-            db,
-            user=user,
-            provider=provider,
-            source=SourceInput(
-                type=payload.payment_source_type,
-                token=payload.payment_source_token,
-            ),
-            now=now,
+        url = subscriptions.start_card_setup(
+            db, user=user, provider=provider, now=datetime.now(UTC), urls=_card_setup_urls()
         )
     except SubscribeError as exc:
         db.rollback()
         raise _http_error(exc) from exc
+    return CardSetupResponse(checkout_url=url)
 
-    subscription = change.subscription
-    amount = pricing.renewal_quote(
-        subscription.price_cents,
-        subscription.currency,
-        subscriptions.renewal_discount(db, subscription),
-    ).total_cents
-    background.add_task(
-        send_safely,
-        sender,
-        billing_emails.payment_method_updated(
-            user, subscription, amount, activated_renewal=change.activated_renewal
-        ),
-    )
-    if change.retry_due:
-        report = renewals.retry_now(db, provider, subscription, user, now)
-        for message in report.emails:
-            background.add_task(send_safely, sender, message)
+
+@router.post("/billing/payment-method/sync", response_model=SubscriptionResponse)
+def sync_payment_method(
+    user: CurrentUser,
+    db: DbSession,
+    provider: PaymentProviderDep,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+) -> SubscriptionResponse:
+    """Lee de la pasarela que tarjeta tiene guardada la suscripcion y, si es
+    otra, la suscripcion queda renovandose sola con ella; con un cobro sin
+    aprobar en el periodo, se reintenta ya. La cuenta lo llama al volver de la
+    pagina de la pasarela. Lo que vale es lo que dice la pasarela."""
+    now = datetime.now(UTC)
+    subscription = subscriptions.current_subscription(db, user.id)
+    if subscription is None:
+        raise _http_error(
+            SubscribeError(409, "no_subscription", "No tienes una suscripción vigente.")
+        )
+    if provider.enabled and subscription.provider_subscription_id is not None:
+        if get_settings().rate_limit_enabled and not rate_limit.hit(
+            f"payment-method-sync:user:{user.id}", limit=30, window=_MINUTE
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_PAYMENTS
+            )
+        try:
+            change = subscriptions.sync_saved_source(db, provider, subscription, now)
+        except PaymentProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=_PROVIDER_UNAVAILABLE
+            ) from exc
+        if change is not None:
+            for message in renewals.after_source_change(db, provider, change, user, now):
+                background.add_task(send_safely, sender, message)
+            subscription = change.subscription
         db.refresh(subscription)
     return subscription_response(db, subscription, now)
 
 
 @router.delete("/billing/payment-method", response_model=SubscriptionResponse)
 def remove_payment_method(
-    user: CurrentUser, db: DbSession, background: BackgroundTasks, sender: EmailSenderDep
+    user: CurrentUser,
+    db: DbSession,
+    background: BackgroundTasks,
+    sender: EmailSenderDep,
+    provider: PaymentProviderDep,
 ) -> SubscriptionResponse:
     """Pasa la renovacion automatica a pago manual: deja de guardarse el medio
     de pago y no se cobra mas. La cuenta conserva el acceso hasta que termine
-    el periodo que ya pago, y paga el siguiente cuando quiera."""
+    el periodo que ya pago, y paga el siguiente cuando quiera. Si la tarjeta
+    estaba guardada en la pasarela, tambien se borra alli."""
     now = datetime.now(UTC)
+    current = subscriptions.current_subscription(db, user.id)
+    source = subscriptions.source_of(current) if current is not None else None
     try:
         subscription = subscriptions.switch_to_manual(db, user, now)
     except SubscribeError as exc:
         db.rollback()
         raise _http_error(exc) from exc
+    if provider.enabled and source is not None:
+        background.add_task(
+            subscriptions.forget_saved_source, provider, source, f"{subscription.id.hex}-manual"
+        )
     background.add_task(
         send_safely, sender, billing_emails.switched_to_manual(user, subscription)
     )

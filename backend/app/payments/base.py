@@ -13,6 +13,12 @@ Cual implementacion se usa es configuracion (`PAYMENT_PROVIDER`):
 - `fake`: pasarela simulada para desarrollo y tests de punta a punta
   (`payments/fake.py`). Nunca en produccion.
 
+La renovacion automatica (paso 5.3b, decidido el 2026-11-17) empieza en una
+pagina de la pasarela: el cliente paga ahi el primer periodo y la tarjeta queda
+guardada en una suscripcion del lado de la pasarela (`start_recurring`). Cada
+renovacion la cobra despues la aplicacion contra esa suscripcion (`charge`),
+cuando lo decide `billing/schedule.py`.
+
 Lo que el proveedor dice de una transaccion solo se cree cuando sale de
 `fetch_transaction`, que es la reconsulta contra su API (§3.1): ni el cuerpo de
 un webhook ni lo que mande el navegador mueven una suscripcion.
@@ -22,6 +28,7 @@ import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import lru_cache
 from typing import Any, Literal, Protocol
 
@@ -72,6 +79,22 @@ class PaymentSource:
     type: PaymentSourceType
     brand: str | None = None
     last4: str | None = None
+    #: La suscripcion del lado de la pasarela a la que pertenece el medio, si
+    #: cobra contra una (Tipster Page). `subscriptions.provider_subscription_id`.
+    agreement_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ChargePeriod:
+    """El periodo que paga un cobro de renovacion.
+
+    `key` es el mismo en todos los intentos del periodo y distinto en cada
+    periodo; `end` es hasta cuando vale si se aprueba. Una pasarela que
+    controla los periodos (Tipster Page) los exige iguales en cada reintento.
+    """
+
+    key: str
+    end: datetime
 
 
 @dataclass(frozen=True)
@@ -93,6 +116,16 @@ class ProviderTransaction:
     # El producto que el proveedor dice que se pago (`plans.code`), si lo
     # informa. Si no coincide con el plan del pago, no se concede nada.
     product_code: str | None = None
+    #: El medio que quedo guardado con este pago, en el alta de una renovacion
+    #: automatica que se paga en la pagina de la pasarela. Si se aprueba, la
+    #: suscripcion se renueva con el.
+    saved_source: "PaymentSource | None" = None
+    #: Un cobro rechazado que admite otro intento con la misma tarjeta. False:
+    #: hay que cambiarla antes (Tipster Page, `retry_allowed`). None: no se sabe.
+    retry_allowed: bool | None = None
+    #: El banco pide que el titular se autentique (3DS) para completar el
+    #: cobro, que queda pendiente: el enlace para hacerlo.
+    authentication_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -137,20 +170,51 @@ class CheckoutOrder:
 
 
 @dataclass(frozen=True)
+class RecurringOrder:
+    """El alta de una renovacion automatica en la pagina de la pasarela.
+
+    El cliente paga ahi el primer periodo, por `amount_cents`, y la tarjeta
+    queda guardada para los siguientes. `reference` es la del pago del alta.
+    """
+
+    reference: str
+    amount_cents: int
+    currency: str
+    #: `plans.code` y el nombre del plan, sin tildes (`billing/checkout_text`).
+    product_code: str
+    product_name: str
+    interval: str
+    interval_count: int
+    email: str
+    country: str
+    language: str
+    url_ok: str
+    url_ko: str
+    notification_url: str
+    #: Solo verifica y guarda la tarjeta, por 0, sin cobrar el primer periodo:
+    #: pasar a renovacion automatica con un periodo ya pagado (paso 5.3b).
+    #: `amount_cents` es entonces lo que costara cada renovacion.
+    setup_only: bool = False
+
+
+@dataclass(frozen=True)
+class RecurringStart:
+    """El alta ya creada en la pasarela."""
+
+    #: La pagina de la pasarela donde el cliente paga y guarda la tarjeta.
+    checkout_url: str
+    #: Con que se reconsulta el pago del alta (`fetch_transaction`).
+    transaction_id: str
+    #: La suscripcion del lado de la pasarela, si la hay.
+    agreement_id: str | None = None
+
+
+@dataclass(frozen=True)
 class CheckoutPage:
     """La pagina que el navegador abre para pagar: HTML que la API le sirve
     una sola vez (`core/checkout_pages.py`)."""
 
     html: str
-
-
-@dataclass(frozen=True)
-class TokenizerInfo:
-    """Lo que el frontend necesita para pedirle al proveedor un token."""
-
-    #: `fake`: selector de la pasarela simulada. Ninguna pasarela real tokeniza
-    #: hoy: Tipster Page no tiene cobros recurrentes (2026-11-03).
-    kind: Literal["fake"]
 
 
 @dataclass(frozen=True)
@@ -174,6 +238,11 @@ class ProviderEvent:
     # de Tipster Page): se guarda y se responde 200, sin reconsultar, para que
     # no se reintente. Vale con firma valida o sin ella.
     notice_only: bool = False
+    #: Un aviso de una suscripcion del lado de la pasarela: su id y nuestra
+    #: referencia del alta (`external_id` en Tipster Page). Solo dicen que
+    #: pagos reconsultar; lo que se aplica sale de la reconsulta.
+    agreement_id: str | None = None
+    external_reference: str | None = None
 
 
 class PaymentProvider(Protocol):
@@ -207,16 +276,32 @@ class PaymentProvider(Protocol):
         """Reconsulta una transaccion. None si el proveedor no la conoce."""
         ...
 
-    def tokenizer(self) -> TokenizerInfo | None:
-        """Como obtiene el navegador el token de un medio de pago. None si no
-        se pueden guardar medios de pago (no hay renovacion automatica)."""
+    def recurring_method(self, country: str | None) -> PaymentMethodOption | None:
+        """El medio con el que se paga una renovacion automatica en ese pais.
+        None si la pasarela no la ofrece."""
         ...
 
-    def create_payment_source(
-        self, *, source_type: PaymentSourceType, token: str, customer_email: str
-    ) -> PaymentSource:
-        """Guarda el medio de pago que el cliente tokenizo en su navegador.
-        Lanza `PaymentSourceRejected` si el proveedor no lo acepta."""
+    def start_recurring(self, order: RecurringOrder) -> RecurringStart:
+        """Crea el alta de la renovacion automatica en la pasarela. Se llama
+        una sola vez por pago. `CheckoutRejected` si no la acepta."""
+        ...
+
+    def card_change_url(self, source: PaymentSource, *, recovery: bool, reference: str) -> str:
+        """La pagina de la pasarela donde el cliente cambia la tarjeta de su
+        suscripcion, sin cobrar nada. `recovery`: hay un cobro rechazado que se
+        reintentara con la tarjeta nueva. `reference` hace idempotente la
+        llamada."""
+        ...
+
+    def saved_source(self, agreement_id: str) -> PaymentSource | None:
+        """El medio que la suscripcion de la pasarela tiene guardado ahora
+        (despues de un cambio de tarjeta o de una verificacion). None si
+        todavia no tiene uno."""
+        ...
+
+    def delete_saved_source(self, source: PaymentSource, *, reference: str) -> None:
+        """Borra el medio guardado y cancela la suscripcion de la pasarela.
+        Lanza `PaymentProviderError` si no lo confirma."""
         ...
 
     def charge(
@@ -227,9 +312,11 @@ class PaymentProvider(Protocol):
         currency: str,
         customer_email: str,
         source: PaymentSource,
+        period: ChargePeriod,
     ) -> ProviderTransaction:
-        """Cobra a un medio de pago guardado. Devuelve la transaccion tal como
-        la reporta el proveedor, casi siempre todavia `pending`."""
+        """Cobra a un medio de pago guardado el periodo `period`. Devuelve la
+        transaccion tal como la reporta el proveedor, a veces todavia
+        `pending`."""
         ...
 
 
@@ -269,12 +356,19 @@ class UnconfiguredPaymentProvider:
     def fetch_transaction(self, transaction_id: str) -> ProviderTransaction | None:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 
-    def tokenizer(self) -> TokenizerInfo | None:
+    def recurring_method(self, country: str | None) -> PaymentMethodOption | None:
         return None
 
-    def create_payment_source(
-        self, *, source_type: PaymentSourceType, token: str, customer_email: str
-    ) -> PaymentSource:
+    def start_recurring(self, order: RecurringOrder) -> RecurringStart:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def card_change_url(self, source: PaymentSource, *, recovery: bool, reference: str) -> str:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def saved_source(self, agreement_id: str) -> PaymentSource | None:
+        raise PaymentsUnavailable("No hay pasarela de pagos configurada")
+
+    def delete_saved_source(self, source: PaymentSource, *, reference: str) -> None:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 
     def charge(
@@ -285,6 +379,7 @@ class UnconfiguredPaymentProvider:
         currency: str,
         customer_email: str,
         source: PaymentSource,
+        period: ChargePeriod,
     ) -> ProviderTransaction:
         raise PaymentsUnavailable("No hay pasarela de pagos configurada")
 

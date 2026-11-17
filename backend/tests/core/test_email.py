@@ -52,6 +52,8 @@ CONTEXT: dict[str, Any] = {
     "account_url": "https://sebasanalisis.com/cuenta",
     "charge_at": datetime(2026, 11, 12, 3, 30, tzinfo=UTC),
     "source_label": "tu tarjeta Visa terminada en 4242",
+    "retry": True,
+    "authentication_url": "https://3ds.ejemplo.com/confirmar",
     # Traslado de precio (paso 6).
     "old_price_cents": 10_000_000,
     "new_price_cents": 12_000_000,

@@ -894,6 +894,11 @@
             ],
             "title": "Card Last4"
           },
+          "card_update_required": {
+            "default": false,
+            "title": "Card Update Required",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1025,6 +1030,7 @@
           "payment_source_type",
           "card_brand",
           "card_last4",
+          "card_update_required",
           "next_charge_at",
           "next_charge_cents",
           "price_change",
@@ -1749,24 +1755,19 @@
       "BillingAvailabilityResponse": {
         "description": "Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.",
         "properties": {
+          "automatic_renewal": {
+            "default": false,
+            "title": "Automatic Renewal",
+            "type": "boolean"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
-          },
-          "tokenizer": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TokenizerKind"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "enabled",
-          "tokenizer"
+          "automatic_renewal"
         ],
         "title": "BillingAvailabilityResponse",
         "type": "object"
@@ -2042,6 +2043,20 @@
         ],
         "title": "BuyerFieldName",
         "type": "string"
+      },
+      "CardSetupResponse": {
+        "description": "POST /billing/payment-method/checkout: la pagina de la pasarela donde el\ncliente guarda la tarjeta. No cobra nada.",
+        "properties": {
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout_url"
+        ],
+        "title": "CardSetupResponse",
+        "type": "object"
       },
       "CategoryGroup-Input": {
         "description": "Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.",
@@ -4815,29 +4830,6 @@
         "title": "PaymentListResponse",
         "type": "object"
       },
-      "PaymentMethodRequest": {
-        "description": "PUT /billing/payment-method: el medio de pago que el cliente tokenizo en\nla ventana del procesador. No son datos de tarjeta.",
-        "properties": {
-          "payment_source_token": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Payment Source Token",
-            "type": "string"
-          },
-          "payment_source_type": {
-            "maxLength": 16,
-            "minLength": 1,
-            "title": "Payment Source Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "payment_source_token",
-          "payment_source_type"
-        ],
-        "title": "PaymentMethodRequest",
-        "type": "object"
-      },
       "PaymentRefundResponse": {
         "description": "Un reembolso hecho en el panel del proveedor y registrado aqui.",
         "properties": {
@@ -6692,30 +6684,6 @@
             ],
             "title": "Payment Method"
           },
-          "payment_source_token": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Source Token"
-          },
-          "payment_source_type": {
-            "anyOf": [
-              {
-                "maxLength": 16,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Source Type"
-          },
           "plan_id": {
             "format": "uuid",
             "title": "Plan Id",
@@ -6733,7 +6701,7 @@
         "type": "object"
       },
       "SubscribeResponse": {
-        "description": "El pago quedo abierto. En el pago manual falta que el cliente pague en\nla pasarela; con un medio guardado, el cobro ya se envio.",
+        "description": "El pago quedo abierto: falta que el cliente pague en la pasarela.",
         "properties": {
           "checkout_url": {
             "anyOf": [
@@ -6866,6 +6834,11 @@
             ],
             "title": "Card Last4"
           },
+          "card_update_required": {
+            "default": false,
+            "title": "Card Update Required",
+            "type": "boolean"
+          },
           "currency": {
             "title": "Currency",
             "type": "string"
@@ -6975,6 +6948,7 @@
           "payment_source_type",
           "card_brand",
           "card_last4",
+          "card_update_required",
           "next_charge_at",
           "next_charge_cents",
           "price_change"
@@ -7036,13 +7010,6 @@
         ],
         "title": "TokenResponse",
         "type": "object"
-      },
-      "TokenizerKind": {
-        "enum": [
-          "fake"
-        ],
-        "title": "TokenizerKind",
-        "type": "string"
       },
       "UpcomingPriceChange": {
         "description": "Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).",
@@ -11550,7 +11517,7 @@
     },
     "/billing/availability": {
       "get": {
-        "description": "Si se puede pagar, y como se guarda un medio de pago. Publico: /planes\nlo usa para encender el boton.",
+        "description": "Si se puede pagar, y si se ofrece la renovacion automatica. Publico:\n/planes lo usa para encender el boton.",
         "operationId": "availability_billing_availability_get",
         "responses": {
           "200": {
@@ -11572,7 +11539,7 @@
     },
     "/billing/payment-method": {
       "delete": {
-        "description": "Pasa la renovacion automatica a pago manual: deja de guardarse el medio\nde pago y no se cobra mas. La cuenta conserva el acceso hasta que termine\nel periodo que ya pago, y paga el siguiente cuando quiera.",
+        "description": "Pasa la renovacion automatica a pago manual: deja de guardarse el medio\nde pago y no se cobra mas. La cuenta conserva el acceso hasta que termine\nel periodo que ya pago, y paga el siguiente cuando quiera. Si la tarjeta\nestaba guardada en la pasarela, tambien se borra alli.",
         "operationId": "remove_payment_method_billing_payment_method_delete",
         "responses": {
           "200": {
@@ -11595,20 +11562,39 @@
         "tags": [
           "billing"
         ]
-      },
-      "put": {
-        "description": "Guarda un medio de pago en la suscripcion vigente, que queda renovandose\nsola con el: cambia el medio guardado, pasa de pago manual a renovacion\nautomatica, o reanuda una renovacion cancelada con otro medio.\n\nNo cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene\nun cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca\npasan datos de tarjeta: solo el token que el procesador le dio al navegador.",
-        "operationId": "set_payment_method_billing_payment_method_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentMethodRequest"
+      }
+    },
+    "/billing/payment-method/checkout": {
+      "post": {
+        "description": "Abre la pagina de la pasarela donde el cliente guarda una tarjeta para\nsu suscripcion vigente, sin cobrar nada (paso 5.3b): cambia la tarjeta,\nrecupera un cobro rechazado con una nueva, o pasa de pago manual a\nrenovacion automatica. Lo que cambie se aplica al volver, con\n`POST /billing/payment-method/sync`, o con el aviso de la pasarela.",
+        "operationId": "start_payment_method_checkout_billing_payment_method_checkout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSetupResponse"
+                }
               }
-            }
-          },
-          "required": true
+            },
+            "description": "Successful Response"
+          }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Payment Method Checkout",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/billing/payment-method/sync": {
+      "post": {
+        "description": "Lee de la pasarela que tarjeta tiene guardada la suscripcion y, si es\notra, la suscripcion queda renovandose sola con ella; con un cobro sin\naprobar en el periodo, se reintenta ya. La cuenta lo llama al volver de la\npagina de la pasarela. Lo que vale es lo que dice la pasarela.",
+        "operationId": "sync_payment_method_billing_payment_method_sync_post",
         "responses": {
           "200": {
             "content": {
@@ -11619,16 +11605,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -11636,7 +11612,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Set Payment Method",
+        "summary": "Sync Payment Method",
         "tags": [
           "billing"
         ]
@@ -12133,7 +12109,7 @@
     },
     "/billing/subscriptions": {
       "post": {
-        "description": "Abre el pago de un periodo.\n\nPago manual (`renewal_mode: manual`): crea la orden en la pasarela con el\nmedio, el pais y los datos del comprador que mando el cliente, y devuelve\nel enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos\ndel comprador van a la pasarela y no se guardan. No se tokeniza nada.\n\nRenovacion automatica (`automatic`): recibe el token que el procesador le\ndio al navegador, guarda el medio de pago en el proveedor y le hace el\nprimer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la\nreferencia del proveedor, la marca y los ultimos cuatro digitos.\n\nEn los dos casos exige correo confirmado y documentos legales aceptados, y\nel total sale de `billing/pricing`: cualquier monto que mande el cliente se\nignora. Responde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
+        "description": "Abre el pago de un periodo.\n\nPago manual (`renewal_mode: manual`): crea la orden en la pasarela con el\nmedio, el pais y los datos del comprador que mando el cliente, y devuelve\nel enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos\ndel comprador van a la pasarela y no se guardan. No se tokeniza nada.\n\nRenovacion automatica (`automatic`): crea el alta en la pasarela y\ndevuelve su pagina (`checkout_url`), donde el cliente paga el primer\nperiodo y guarda la tarjeta (paso 5.3b). Solo cuenta el pais. Por aqui\nnunca pasan datos de tarjeta: de la tarjeta solo se guarda la referencia\nde la pasarela.\n\nEn los dos casos exige correo confirmado y documentos legales aceptados, y\nel total sale de `billing/pricing`: cualquier monto que mande el cliente se\nignora. Responde 202: la suscripcion no queda activa hasta que el proveedor\nconfirme el pago (`GET /billing/payments/:id`).",
         "operationId": "subscribe_billing_subscriptions_post",
         "requestBody": {
           "content": {
