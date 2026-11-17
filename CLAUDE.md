@@ -18,7 +18,7 @@ La recomendación sale de reglas estadísticas sobre resultados ya registrados. 
 | Fase 2 | Reglas de pagos con Wompi. | Reglas vigentes; la construcción pasó a la Fase 4 |
 | Fase 3 | Motor de recomendación. | Construido |
 | Fase 4 | Plataforma comercial: acceso, pagos, correo, legal, admin completo, multijuego. | Construida; cerrada el 2026-10-23. El cobro con Wompi se probó solo en sandbox y salió en el paso 5.1 |
-| **Fase 5** | **Salida al mercado: retiro de Wompi, Tipster Page, facturación con Siigo, textos legales v2, lanzamiento.** | **En curso** |
+| **Fase 5** | **Salida al mercado: retiro de Wompi, Tipster Page, facturación con Siigo, textos legales v2, lanzamiento.** | **Lanzada el 2026-11-17**: venta abierta. Quedan pendientes que no la frenan (`docs/HOJA_DE_RUTA.md` §5) |
 
 El detalle de cada etapa, la tabla de decisiones que cambiaron y el avance paso a paso de las Fases 4 y 5 están en `docs/HOJA_DE_RUTA.md`. **Actualiza ese documento cuando cierres un paso o cuando el usuario tome una decisión de rumbo.**
 
@@ -214,7 +214,7 @@ Decidida el 2026-10-23. El detalle, lo que bloquea cada paso y la lista del lanz
 
 - **Wompi sale del proyecto** (2026-10-22): no admite el modelo de negocio. Nunca se cobró dinero real, solo se probó con su sandbox. Lo reemplaza **Tipster Page**, que cobra en euros. Su código se retiró en el paso 5.1 (2026-10-23; §3.18 del documento de la Fase 4), y Tipster Page entró en el 5.3 (§3.19): construido y probado en su sandbox el 2026-11-05, en local y en el VPS (desplegado ese día con las llaves del sandbox, aviso real incluido); las llaves de producción, solo al lanzar. Las reglas de "Pagos: reglas no negociables" de este archivo (firma, reconsulta, idempotencia, centavos, secretos, `apply_transaction` como único camino) valen para cualquier pasarela.
 - **La facturación es con Siigo** (2026-11-05): Dataico, el proveedor elegido el 2026-10-23, queda descartado por completo. Siigo había sido el primero elegido (2026-10-20). Ya hay cuenta de Siigo para integrarlo por su API.
-- **No se vende hasta tener Tipster Page y Siigo integrados.** Mientras tanto, el acceso es solo manual (prueba o cortesía).
+- **La venta está abierta desde el 2026-11-17**, con Tipster Page y Siigo en producción. Antes la regla era no vender hasta tener los dos integrados; ya se cumplió. Un pago real es dinero real y factura real: las pruebas de pagos ya no se hacen en producción sin que el usuario lo pida.
 - Orden: 5.1 retiro de Wompi → 5.2 base de la facturación sin proveedor → 5.3 Tipster Page → 5.4 emisión con Siigo → 5.5 textos legales v2 → 5.6 lanzamiento. Los pasos 5.3, 5.4 y 5.5 esperan a terceros: Tipster Page, el contador y el abogado. No se diseña la integración de Tipster Page antes de leer su respuesta y su documentación, ni la de Siigo antes de leer la documentación oficial de su API: hacerlo antes sería adivinar.
 
 ## Convenciones de código
