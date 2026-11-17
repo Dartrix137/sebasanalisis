@@ -123,18 +123,12 @@ class PaymentStatus(str, Enum):
     error = "error"
 
 
-class TokenizerKind(str, Enum):
-    # Selector de la pasarela simulada. La pasarela nueva agrega aqui su forma
-    # de tokenizar (Fase 5, paso 5.3).
-    fake = "fake"
-
-
 class BillingAvailabilityResponse(ApiModel):
     """Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse."""
     enabled: bool
-    # Como pide el navegador el token de un medio de pago. Null = no se ofrece
-    # la renovacion automatica.
-    tokenizer: TokenizerKind | None = None
+    # La pasarela ofrece la renovacion automatica: el cliente paga el primer
+    # periodo en su pagina y la tarjeta queda guardada alli (paso 5.3b).
+    automatic_renewal: bool = False
 
 
 class BuyerFieldName(str, Enum):
@@ -177,29 +171,25 @@ class SubscribeRequest(ApiModel):
     coupon_code: str | None = Field(default=None, max_length=80)
     renewal_mode: RenewalMode = RenewalMode.manual
     # Pago manual: el medio elegido (`GET /billing/payment-methods`), el pais
-    # del comprador y los datos que pide ese medio.
+    # del comprador y los datos que pide ese medio. Renovacion automatica: solo
+    # el pais, que la pasarela exige.
     payment_method: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     country: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
     buyer: BuyerData | None = None
-    # Renovacion automatica: el token que el procesador le dio al navegador.
-    # No son datos de tarjeta.
-    payment_source_token: str | None = Field(default=None, max_length=500)
-    payment_source_type: str | None = Field(default=None, max_length=16)
 
 
-class PaymentMethodRequest(ApiModel):
-    """PUT /billing/payment-method: el medio de pago que el cliente tokenizo en
-    la ventana del procesador. No son datos de tarjeta."""
-    payment_source_token: str = Field(min_length=1, max_length=500)
-    payment_source_type: str = Field(min_length=1, max_length=16)
+class CardSetupResponse(ApiModel):
+    """POST /billing/payment-method/checkout: la pagina de la pasarela donde el
+    cliente guarda la tarjeta. No cobra nada."""
+    checkout_url: str
 
 
 class SubscribeResponse(ApiModel):
-    """El pago quedo abierto. En el pago manual falta que el cliente pague en
-    la pasarela; con un medio guardado, el cobro ya se envio."""
+    """El pago quedo abierto: falta que el cliente pague en la pasarela."""
     payment_id: UUID
-    # El enlace de un solo uso de la pagina de pago. Null con un medio de pago
-    # guardado: no hay a donde ir, solo esperar el resultado.
+    # A donde va el navegador a pagar: en el pago manual, el enlace de un solo
+    # uso de la pagina de pago; en la renovacion automatica, la pagina de la
+    # pasarela donde se paga el primer periodo y se guarda la tarjeta.
     checkout_url: str | None = None
     subtotal_cents: int
     discount_cents: int
@@ -308,6 +298,9 @@ class SubscriptionResponse(ApiModel):
     payment_source_type: str | None = None
     card_brand: str | None = None
     card_last4: str | None = None
+    # La pasarela rechazo un cobro sin admitir otro intento con esta tarjeta:
+    # hay que cambiarla para renovar (paso 5.3b).
+    card_update_required: bool = False
     # Cuando se intenta el proximo cobro automatico. Null si no hay ninguno previsto.
     next_charge_at: datetime | None = None
     # Lo que cuesta el periodo siguiente, con el descuento que todavia lleve la

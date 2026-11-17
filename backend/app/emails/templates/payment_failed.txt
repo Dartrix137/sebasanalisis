@@ -4,9 +4,10 @@ Hola{% if display_name %} {{ display_name }}{% endif %}:
 
 No pudimos cobrar {{ amount_cents | money(currency) }} a {{ source_label }} por la renovación de tu plan {{ plan_name }}.
 
-Vamos a intentarlo de nuevo antes del {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Mientras tanto conservas el acceso. Si para esa fecha el cobro no pasa, tu suscripción vence ese día.
+{% if retry %}Vamos a intentarlo de nuevo antes del {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Mientras tanto conservas el acceso. Si para esa fecha el cobro no pasa, tu suscripción vence ese día.
 
 Revisa que tu medio de pago tenga fondos y esté habilitado para compras por internet. Si prefieres no renovar, puedes cancelar la renovación desde tu cuenta.
-
+{% else %}Tu banco no permite volver a intentar el cobro con esa tarjeta. Para renovar, cambia la tarjeta desde tu cuenta antes del {{ period_end | fecha }}, que es cuando termina el período que ya pagaste: el cobro se hace al guardarla. Mientras tanto conservas el acceso. Si para esa fecha no la cambias, tu suscripción vence ese día.
+{% endif %}
 Tu suscripción: {{ url }}
 {% endblock %}

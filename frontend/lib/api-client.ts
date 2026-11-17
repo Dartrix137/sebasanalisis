@@ -63,7 +63,7 @@ import type {
   CreateCouponRequest,
   CreatePlanRequest,
   PaymentListResponse,
-  PaymentMethodRequest,
+  CardSetupResponse,
   PaymentKind,
   PaymentResponse,
   PaymentStatus,
@@ -423,15 +423,19 @@ export const billingApi = {
     apiFetch<SubscriptionResponse>("/billing/subscription/resume", { method: "POST", token }),
 
   /**
-   * Guarda un medio de pago en la suscripción vigente, que queda renovándose
-   * sola con él. No cobra nada: el período vigente ya está pagado.
+   * La página de la pasarela donde se guarda una tarjeta para la suscripción
+   * vigente, sin cobrar nada: cambiarla, recuperar un cobro rechazado o pasar
+   * de pago manual a renovación automática (paso 5.3b).
    */
-  setPaymentMethod: (token: string, body: PaymentMethodRequest) =>
-    apiFetch<SubscriptionResponse>("/billing/payment-method", {
-      method: "PUT",
-      body: JSON.stringify(body),
-      token,
-    }),
+  startCardSetup: (token: string) =>
+    apiFetch<CardSetupResponse>("/billing/payment-method/checkout", { method: "POST", token }),
+
+  /**
+   * Lee de la pasarela qué tarjeta quedó guardada y la aplica: la cuenta lo
+   * llama al volver de esa página. Con un cobro pendiente, lo reintenta ya.
+   */
+  syncCardSetup: (token: string) =>
+    apiFetch<SubscriptionResponse>("/billing/payment-method/sync", { method: "POST", token }),
 
   /** Pasa a pago manual: deja de guardarse el medio de pago y no se cobra más. */
   removePaymentMethod: (token: string) =>

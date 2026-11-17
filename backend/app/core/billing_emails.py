@@ -59,6 +59,8 @@ def payment_emails(db: Session, settlement: Settlement) -> list[EmailMessage]:
                 currency=payment.currency,
                 source_label=source_label(subscription),
                 period_end=subscription.current_period_end,
+                # Sin reintento con esa tarjeta: se le pide que la cambie.
+                retry=not settlement.card_blocked,
                 url=frontend_url("/cuenta"),
             )
         ]
@@ -170,6 +172,25 @@ def payment_method_updated(
         currency=subscription.currency,
         charge_at=subscription.next_charge_at,
         period_end=subscription.current_period_end,
+        url=frontend_url("/cuenta"),
+    )
+
+
+def payment_authentication(
+    user: User, subscription: Subscription, amount_cents: int, authentication_url: str
+) -> EmailMessage:
+    """El banco pide 3D Secure para completar un cobro de renovacion: el
+    enlace para confirmarlo (decidido por el usuario el 2026-11-17)."""
+    return build_email(
+        "payment_authentication",
+        to=user.email,
+        display_name=user.display_name,
+        plan_name=subscription.plan.name,
+        amount_cents=amount_cents,
+        currency=subscription.currency,
+        source_label=source_label(subscription),
+        period_end=subscription.current_period_end,
+        authentication_url=authentication_url,
         url=frontend_url("/cuenta"),
     )
 

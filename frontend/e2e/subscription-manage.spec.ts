@@ -13,8 +13,9 @@ import {
 
 /**
  * Gestión de una suscripción ya pagada desde "Mi cuenta" (paso 5 de la Fase 4,
- * entrega 3; §3.6 y §5.4): pasar de un modo de pago al otro, cambiar el medio
- * de pago y eliminar la cuenta con una renovación activa.
+ * entrega 3; §3.6 y §5.4): pasar de un modo de pago al otro, cambiar la
+ * tarjeta y eliminar la cuenta con una renovación activa. La tarjeta se guarda
+ * en la página del procesador (paso 5.3b) y la cuenta la lee al volver.
  *
  * La API corre con la pasarela simulada: no se cobra nada ni se sale a la red.
  */
@@ -31,7 +32,7 @@ async function subscribeManually(page: Page): Promise<void> {
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 }
 
-test("de pago manual a renovación automática, cambio de medio y vuelta a pago manual", async ({
+test("de pago manual a renovación automática, cambio de tarjeta y vuelta a pago manual", async ({
   page,
   request,
 }) => {
@@ -53,11 +54,14 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   await expect(suscripcion.getByText("Pago manual: no se renueva solo")).toBeVisible();
   await expect(suscripcion.getByText("Próximo cobro")).toHaveCount(0);
 
-  // De manual a automática: se guarda el medio y no se cobra nada hoy.
+  // De manual a automática: la tarjeta se verifica en la página del procesador
+  // y no se cobra nada hoy.
   await suscripcion.getByRole("button", { name: "Activar la renovación automática" }).click();
   await expect(suscripcion.getByText(/Hoy no se te cobra nada: ya pagaste hasta el/)).toBeVisible();
-  const guardar = suscripcion.getByRole("button", { name: "Guardar medio de pago" });
-  await guardar.click();
+  await suscripcion.getByRole("button", { name: "Ir a guardar la tarjeta" }).click();
+  await expect(page.getByText(/Cada renovación \(hoy no se cobra\): 32.00 EUR/)).toBeVisible();
+  await page.getByRole("button", { name: "Pagar y guardar la tarjeta" }).click();
+  await expect(page).toHaveURL(/\/cuenta$/);
   await expect(
     suscripcion.getByText(
       "Renovación automática activada con Visa •••• 4242. Hoy no se te cobró nada.",
@@ -70,21 +74,24 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   // El historial sigue con un solo pago: activar la renovación no cobró nada.
   await expect(page.getByTestId("historial-de-pagos").getByRole("listitem")).toHaveCount(1);
 
-  // Un medio que la pasarela no deja guardar: lo dice y todo queda como estaba.
-  await suscripcion.getByRole("button", { name: "Cambiar el medio de pago" }).click();
-  await expect(suscripcion.getByText(/El medio nuevo reemplaza al que tienes guardado/)).toBeVisible();
-  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-rejected");
-  await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
-  await expect(page.getByText(/no aceptó ese medio de pago/)).toBeVisible();
-
-  // Con uno que sí se puede guardar.
-  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-ok");
-  await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
+  // Volver del procesador sin guardar nada: lo dice y todo queda como estaba.
+  await page.goto("/cuenta?tarjeta=no-guardada");
   await expect(
-    suscripcion.getByText("Medio de pago actualizado: Visa •••• 4242. Hoy no se te cobró nada."),
+    suscripcion.getByText("No se guardó ninguna tarjeta. Tu suscripción sigue como estaba."),
+  ).toBeVisible();
+  await expect(suscripcion.getByText("Visa •••• 4242")).toBeVisible();
+
+  // Cambiar la tarjeta: otra vez en la página del procesador.
+  await suscripcion.getByRole("button", { name: "Cambiar la tarjeta" }).click();
+  await expect(suscripcion.getByText(/La tarjeta nueva reemplaza a la que tienes guardada/)).toBeVisible();
+  await suscripcion.getByRole("button", { name: "Ir a guardar la tarjeta" }).click();
+  await page.getByRole("button", { name: "Guardar la tarjeta", exact: true }).click();
+  await expect(page).toHaveURL(/\/cuenta$/);
+  await expect(
+    suscripcion.getByText("Tarjeta actualizada: Mastercard •••• 5454. Hoy no se te cobró nada."),
   ).toBeVisible();
   // La confirmación se ve como tal, y la fila del medio de pago lo marca.
-  await expect(suscripcion.getByRole("status")).toContainText("Medio de pago actualizado");
+  await expect(suscripcion.getByRole("status")).toContainText("Tarjeta actualizada");
   await expect(suscripcion.getByText("Actualizado", { exact: true })).toBeVisible();
 
   // De automática a manual: pide confirmar, y se puede arrepentir.
@@ -104,7 +111,7 @@ test("de pago manual a renovación automática, cambio de medio y vuelta a pago 
   await expect(page).toHaveURL(/\/dashboard/);
 });
 
-test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, request }) => {
+test("renovación cancelada: se reanuda con otra tarjeta", async ({ page, request }) => {
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
   await confirmEmail(request, email);
@@ -114,7 +121,8 @@ test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, 
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR con tarjeta" }).click();
+  await page.getByRole("button", { name: "Pagar y guardar la tarjeta" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 
   await page.goto("/cuenta");
@@ -123,11 +131,13 @@ test("renovación cancelada: se reanuda con otro medio de pago", async ({ page, 
   await suscripcion.getByRole("button", { name: "Sí, cancelar la renovación" }).click();
   await expect(suscripcion.getByText("Renovación cancelada", { exact: true })).toBeVisible();
 
-  await suscripcion.getByRole("button", { name: "Reanudar con otro medio de pago" }).click();
-  await suscripcion.getByRole("button", { name: "Guardar medio de pago" }).click();
+  await suscripcion.getByRole("button", { name: "Reanudar con otra tarjeta" }).click();
+  await suscripcion.getByRole("button", { name: "Ir a guardar la tarjeta" }).click();
+  await page.getByRole("button", { name: "Guardar la tarjeta", exact: true }).click();
+  await expect(page).toHaveURL(/\/cuenta$/);
   await expect(
     suscripcion.getByText(
-      "Renovación automática activada con Visa •••• 4242. Hoy no se te cobró nada.",
+      "Renovación automática activada con Mastercard •••• 5454. Hoy no se te cobró nada.",
     ),
   ).toBeVisible();
   await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
@@ -147,7 +157,8 @@ test("eliminar la cuenta con renovación automática: avisa qué pasa con la sus
     .getByRole("link", { name: "Suscribirme" })
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
-  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR con tarjeta" }).click();
+  await page.getByRole("button", { name: "Pagar y guardar la tarjeta" }).click();
   await expect(page.getByText("Pago aprobado")).toBeVisible();
 
   await page.goto("/cuenta");

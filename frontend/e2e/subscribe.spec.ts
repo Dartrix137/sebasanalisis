@@ -320,7 +320,7 @@ test("el administrador ve los planes sin la opción de suscribirse", async ({ pa
   await expect(page.getByText("Tu plan actual")).toHaveCount(0);
 });
 
-test("renovación automática: guarda el medio, entra a la mesa, cancela y reanuda", async ({
+test("renovación automática: paga en la página del procesador, entra a la mesa, cancela y reanuda", async ({
   page,
   request,
 }) => {
@@ -336,11 +336,15 @@ test("renovación automática: guarda el medio, entra a la mesa, cancela y reanu
 
   await page.getByRole("radio", { name: "Renovación automática" }).check();
   await expect(page.getByText(/Antes de cada cobro te avisamos por correo/)).toBeVisible();
-  const guardar = page.getByRole("button", { name: "Guardar medio de pago y pagar 32 EUR" });
-  await expect(page.getByText(/solo la referencia que entrega la pasarela/)).toBeVisible();
-  await guardar.click();
+  await expect(page.getByText(/Solo con tarjeta: la escribes en la página del procesador/)).toBeVisible();
+  await expect(page.getByText(/solo la referencia del procesador/)).toBeVisible();
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR con tarjeta" }).click();
 
-  await expect(page).toHaveURL(/\/pago\/[0-9a-f-]+$/);
+  // La página del procesador (aquí la de la pasarela simulada): paga y guarda la tarjeta.
+  await expect(page.getByText("Primer pago: 32.00 EUR")).toBeVisible();
+  await page.getByRole("button", { name: "Pagar y guardar la tarjeta" }).click();
+
+  await expect(page).toHaveURL(/\/pago\/[0-9a-f-]+/);
   await expect(page.getByText("Pago aprobado")).toBeVisible();
   await page.getByRole("link", { name: "Ir a la mesa" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
@@ -381,7 +385,7 @@ test("renovación automática: guarda el medio, entra a la mesa, cancela y reanu
   await expect(page.getByTestId("suscripcion").getByText("Próximo cobro")).toBeVisible();
 });
 
-test("renovación automática: primer cobro rechazado no da acceso", async ({ page, request }) => {
+test("renovación automática: primer pago rechazado no da acceso", async ({ page, request }) => {
   const email = uniqueEmail();
   await registerViaApi(request, email, { access: "ninguno" });
   await confirmEmail(request, email);
@@ -392,15 +396,9 @@ test("renovación automática: primer cobro rechazado no da acceso", async ({ pa
     .click();
   await page.getByRole("radio", { name: "Renovación automática" }).check();
 
-  // Un medio que la pasarela no deja guardar: se dice aquí mismo y no pasa nada más.
-  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-rejected");
-  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
-  await expect(page.getByText(/no aceptó ese medio de pago/)).toBeVisible();
-  await expect(page).toHaveURL(/\/planes\/pagar/);
-
-  // Uno que se guarda pero cuyo cobro se rechaza.
-  await page.getByLabel("Medio de pago simulado (solo pruebas)").selectOption("fake-token-declined");
-  await page.getByRole("button", { name: /Guardar medio de pago y pagar/ }).click();
+  await page.getByRole("button", { name: "Ir a pagar 32 EUR con tarjeta" }).click();
+  // El procesador rechaza el primer pago: no queda tarjeta guardada.
+  await page.getByRole("button", { name: "Rechazar el pago" }).click();
   await expect(page.getByText("El pago no se completó")).toBeVisible();
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/planes/);

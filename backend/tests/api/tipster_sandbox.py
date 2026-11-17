@@ -19,11 +19,19 @@ Lo que se comporta como dice el manual V2 de Tipster Page:
   serializa JavaScript (§10), o 404.
 - `aviso()` arma el cuerpo de la notificacion firmado con §9.1 sobre el monto
   tal como va en el texto (`32`, `12.5`).
+
+Y las suscripciones (paso 5.3b, `tspay-subscriptions.md` del 2026-11-17), en
+`SuscripcionesSandbox`: el catalogo, el alta y el cobro firmados sobre el JSON
+canonico (con su propio calculo), la idempotencia por `idempotency_key`, el
+`external_id` unico, la consulta de la suscripcion y de sus cobros, y los
+avisos firmados. El listado de cobros y los estados de la suscripcion van
+como se vieron en produccion el 2026-11-17.
 """
 
 import hashlib
 import hmac
 import json
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -160,6 +168,7 @@ class TipsterSandbox:
         #: Forzar la respuesta de la creacion de la orden: (codigo, cuerpo).
         self.respuesta_orden: tuple[int, str] | None = None
         self.pagina = PAGINA_REDSYS
+        self.suscripciones = SuscripcionesSandbox()
         self.consultas = 0
         self.consultas_de_catalogo = 0
         self.provider = TipsterPageProvider(
@@ -181,6 +190,10 @@ class TipsterSandbox:
         ):
             return httpx.Response(401, json={"statusCode": 401, "message": "Unauthorized"})
         path = request.url.path.removeprefix("/tspayv2")
+        if path.startswith("/subscriptions"):
+            respuesta = self.suscripciones.responder(request, path)
+            if respuesta is not None:
+                return respuesta
         if request.method == "GET" and path == "/payment-methods":
             return self._catalogo(request)
         if request.method == "POST" and path == "/create-order-tspay":
@@ -294,3 +307,317 @@ class TipsterSandbox:
             f'{{"paid_status":{json.dumps(estado)},"order_id":{json.dumps(referencia)},'
             f'"amount":{monto},"nt_signature":{json.dumps(firmado)}}}'
         ).encode()
+
+
+# ---------------------------------------------------------------- suscripciones (paso 5.3b)
+
+#: El medio de las suscripciones del sandbox, como lo devolvio el 2026-11-17.
+MEDIO_SUSCRIPCION: dict[str, Any] = {
+    "key": "solidgate",
+    "provider": "SOLIDGATE",
+    "name": "Solidgate (suscripciones)",
+    "currency": "EUR",
+    "billing_mode": "MERCHANT_MANAGED",
+    "countries": [],
+    "priceMin": 1,
+    "priceMax": 500000,
+    "fields": ["email", "country", "language", "terms_accepted"],
+    "periodicities": [
+        "diaria", "semanal", "2_semanas", "mensual", "bimestral", "trimestral", "semestral", "anual",
+    ],
+    "capabilities": {
+        "automatic_renewal": True,
+        "merchant_initiated_charges": True,
+        "payment_retries_configured": False,
+    },
+}
+
+ALTA_OBLIGATORIOS = (
+    "idempotency_key", "product_id", "product_name", "amount", "periodicity", "external_id",
+    "email", "country", "language", "url_ok", "url_ko", "notification_url", "terms_accepted",
+)
+COBRO_OBLIGATORIOS = ("idempotency_key", "period_id", "payment_method_id", "amount")
+
+
+def canonico(valor: Any) -> str:
+    """`tspay-subscriptions.md` §2.4, su implementacion de referencia en Python,
+    escrita aqui aparte de la de la aplicacion."""
+    return json.dumps(valor, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def firma_canonica(texto: str) -> str:
+    return hmac.new(SECRETO.encode(), texto.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+class SuscripcionesSandbox:
+    """Las suscripciones de Tipster Page, para `TipsterSandbox`."""
+
+    def __init__(self) -> None:
+        self.activas = True
+        #: subscription_id -> la suscripcion.
+        self.suscripciones: dict[str, dict[str, Any]] = {}
+        #: payment_id -> el cobro.
+        self.cobros: dict[str, dict[str, Any]] = {}
+        #: Los cuerpos de las peticiones firmadas tal como llegaron.
+        self.pedidos: list[tuple[str, dict[str, Any]]] = []
+        self._claves: dict[str, tuple[str, str]] = {}
+        #: Lo que respondera el proximo cobro: PAID, FAILED, PENDING, 3DS (pendiente
+        #: de que el titular se autentique) o SIN_REINTENTO (rechazado con
+        #: `retry_allowed: false`, como una tarjeta bloqueada).
+        self.resultado_del_cobro = "PAID"
+        #: Los enlaces de cambio de tarjeta abiertos: subscription_id -> accion.
+        self.cambios_de_tarjeta: dict[str, str] = {}
+        #: Forzar la respuesta del proximo cobro: (codigo, mensaje).
+        self.respuesta_cobro: tuple[int, str] | None = None
+
+    def responder(self, request: httpx.Request, path: str) -> httpx.Response | None:
+        if request.method == "GET" and path == "/subscriptions/payment-methods":
+            return httpx.Response(200, json=[MEDIO_SUSCRIPCION] if self.activas else [])
+        if request.method == "POST" and path == "/subscriptions":
+            return self._alta(request)
+        partes = path.removeprefix("/subscriptions/").split("/")
+        if not path.startswith("/subscriptions/") or partes[0] not in self.suscripciones:
+            return None if not path.startswith("/subscriptions") else _no_encontrada()
+        sid = partes[0]
+        if request.method == "GET" and len(partes) == 1:
+            return httpx.Response(200, json=self._vista(sid))
+        if request.method == "GET" and partes[1:] == ["payments"]:
+            items = [_como_en_el_listado(c) for c in self.cobros.values() if c["subscription_id"] == sid]
+            return httpx.Response(200, json={"items": items, "next_cursor": None})
+        if request.method == "GET" and len(partes) == 3 and partes[1] == "payments":
+            cobro = self.cobros.get(partes[2])
+            if cobro is None or cobro["subscription_id"] != sid:
+                return _no_encontrada()
+            return httpx.Response(200, json=cobro)
+        if request.method == "POST" and partes[1:] == ["payments"]:
+            return self._cobro(request, sid)
+        if request.method == "POST" and partes[1:] in (["payment-method"], ["payment-recovery"]):
+            return self._enlace_de_tarjeta(request, sid, partes[1])
+        if request.method == "DELETE" and partes[1:] == ["payment-method"]:
+            return self._borrar_tarjeta(request, sid)
+        return None
+
+    def _enlace_de_tarjeta(self, request: httpx.Request, sid: str, ruta: str) -> httpx.Response:
+        accion = "RECOVERY" if ruta == "payment-recovery" else "PAYMENT_METHOD"
+        body = self._firmado(request, accion, sid)
+        if body is None:
+            return _error("Invalid signature")
+        if set(body) != {"idempotency_key"}:
+            return _error("Invalid parameters")
+        self.cambios_de_tarjeta[sid] = accion
+        return httpx.Response(
+            201,
+            json={
+                "checkout_url": f"https://checkout.solidgate.test/tarjeta/{sid}",
+                "expires_at": "2026-11-19T19:00:00.000Z",
+            },
+        )
+
+    def _borrar_tarjeta(self, request: httpx.Request, sid: str) -> httpx.Response:
+        body = self._firmado(request, "DELETE_PAYMENT_METHOD", sid)
+        if body is None:
+            return _error("Invalid signature")
+        suscripcion = self.suscripciones[sid]
+        if body.get("scope") != "SUBSCRIPTION" or body.get("payment_method_id") != suscripcion["payment_method_id"]:
+            return _error("Invalid parameters")
+        suscripcion.update(
+            status="CANCELLED",
+            payment_method_deletion={
+                "status": "CONFIRMED",
+                "scope": "SUBSCRIPTION",
+                "provider_revoked": False,
+                "payment_method_id": suscripcion["payment_method_id"],
+                "deleted_at": "2026-11-17T20:00:00.000Z",
+            },
+        )
+        return httpx.Response(200, json=self._vista(sid))
+
+    # ---- lo que hace la pasarela
+
+    def _firmado(self, request: httpx.Request, action: str, resource: str) -> dict[str, Any] | None:
+        body = json.loads(request.content)
+        self.pedidos.append((action, body))
+        firma = body.pop("tspay_signature", None)
+        texto = canonico(
+            {"merchant": MERCHANT, "action": action, "resource": resource, "parameters": body}
+        )
+        return body if firma == firma_canonica(texto) else None
+
+    def _idempotente(self, body: dict[str, Any]) -> httpx.Response | None:
+        """Suscripciones §2.6: misma clave y mismos parametros devuelve lo de
+        antes; misma clave y otros parametros, 409."""
+        anterior = self._claves.get(body["idempotency_key"])
+        if anterior is None:
+            return None
+        if anterior[0] != canonico(body):
+            return httpx.Response(
+                409, json={"statusCode": 409, "message": "idempotency_key ya tiene otros parámetros"}
+            )
+        return httpx.Response(201, content=anterior[1].encode(), headers={"Content-Type": "application/json"})
+
+    def _alta(self, request: httpx.Request) -> httpx.Response:
+        body = self._firmado(request, "CREATE", "")
+        if body is None:
+            return _error("Invalid signature")
+        if any(campo not in body for campo in ALTA_OBLIGATORIOS) or body["terms_accepted"] is not True:
+            return _error("Invalid parameters")
+        repetida = self._idempotente(body)
+        if repetida is not None:
+            return repetida
+        if any(s["external_id"] == body["external_id"] for s in self.suscripciones.values()):
+            return httpx.Response(409, json={"statusCode": 409, "message": "external_id ya existe"})
+        if body["periodicity"] not in MEDIO_SUSCRIPCION["periodicities"]:
+            return _error("Invalid periodicity")
+        sid = str(uuid.uuid4())
+        self.suscripciones[sid] = {
+            "subscription_id": sid,
+            "external_id": body["external_id"],
+            "status": "PENDING_PAYMENT",
+            "payment_status": "PENDING",
+            "amount": body["amount"],
+            "currency": "EUR",
+            "periodicity": body["periodicity"],
+            "billing_mode": "MERCHANT_MANAGED",
+            "payment_method_id": None,
+            "next_charge_at": None,
+            "checkout_url": f"https://checkout.solidgate.test/{sid}",
+            "_email": body["email"],
+            "_tarjeta": None,
+        }
+        texto = json.dumps(self._vista(sid))
+        self._claves[body["idempotency_key"]] = (canonico(body), texto)
+        return httpx.Response(201, content=texto.encode(), headers={"Content-Type": "application/json"})
+
+    def _cobro(self, request: httpx.Request, sid: str) -> httpx.Response:
+        body = self._firmado(request, "CHARGE", sid)
+        if body is None:
+            return _error("Invalid signature")
+        if any(campo not in body for campo in COBRO_OBLIGATORIOS) or body["period_id"] == "initial":
+            return _error("Invalid parameters")
+        repetida = self._idempotente(body)
+        if repetida is not None:
+            return repetida
+        if self.respuesta_cobro is not None:
+            codigo, mensaje = self.respuesta_cobro
+            self.respuesta_cobro = None
+            return httpx.Response(codigo, json={"statusCode": codigo, "message": mensaje})
+        suscripcion = self.suscripciones[sid]
+        if body["payment_method_id"] != suscripcion["payment_method_id"]:
+            return _error("Payment method not available")
+        if any(
+            c["period_id"] == body["period_id"] and c["status"] == "PAID"
+            for c in self.cobros.values()
+            if c["subscription_id"] == sid
+        ):
+            return httpx.Response(409, json={"statusCode": 409, "message": "Periodo ya pagado"})
+        estado = "FAILED" if suscripcion["_tarjeta"] == "falla_renovacion" else self.resultado_del_cobro
+        cobro = self._anotar_cobro(sid, body["period_id"], body["amount"], estado)
+        cobro["payment_method_id"] = body["payment_method_id"]
+        texto = json.dumps(cobro)
+        self._claves[body["idempotency_key"]] = (canonico(body), texto)
+        return httpx.Response(201, content=texto.encode(), headers={"Content-Type": "application/json"})
+
+    def _anotar_cobro(self, sid: str, period_id: str, amount: Any, estado: str) -> dict[str, Any]:
+        pid = str(uuid.uuid4())
+        sin_reintento = estado == "SIN_REINTENTO"
+        tres_ds = estado == "3DS"
+        cobro = {
+            "payment_id": pid,
+            "subscription_id": sid,
+            "period_id": period_id,
+            "payment_method_id": self.suscripciones[sid]["payment_method_id"],
+            "amount": amount,
+            "currency": "EUR",
+            "status": "FAILED" if sin_reintento else ("PENDING" if tres_ds else estado),
+            "error_code": "3.01" if sin_reintento else ("3.02" if estado == "FAILED" else None),
+            "retry_allowed": False if sin_reintento else (True if estado == "FAILED" else None),
+            "authentication_required": tres_ds,
+            "authentication_url": f"https://3ds.solidgate.test/{pid}" if tres_ds else None,
+        }
+        self.cobros[pid] = cobro
+        return cobro
+
+    def _vista(self, sid: str) -> dict[str, Any]:
+        return {k: v for k, v in self.suscripciones[sid].items() if not k.startswith("_")}
+
+    # ---- lo que hace un test
+
+    def de_pago(self, external_id: str) -> dict[str, Any]:
+        return next(s for s in self.suscripciones.values() if s["external_id"] == external_id)
+
+    def pagar_alta(self, external_id: str, tarjeta: str = "ok") -> dict[str, Any]:
+        """El cliente termino en la pagina de Solidgate: `ok`, `falla_renovacion`
+        (el alta va bien y las renovaciones se rechazan) o `rechazada` (el
+        primer pago falla y la suscripcion queda `EXPIRED`, sin cobro)."""
+        suscripcion = self.de_pago(external_id)
+        if tarjeta == "rechazada":
+            suscripcion["status"] = "EXPIRED"
+            return suscripcion
+        suscripcion.update(
+            status="ACTIVE",
+            payment_status="PAID",
+            payment_method_id=str(uuid.uuid4()),
+            _tarjeta=tarjeta,
+        )
+        self._anotar_cobro(suscripcion["subscription_id"], "initial", suscripcion["amount"], "PAID")
+        return suscripcion
+
+    def verificar(self, external_id: str, tarjeta: str = "ok") -> dict[str, Any]:
+        """El cliente verifico la tarjeta por 0 en un alta `setup_only`: queda
+        guardada, sin cobro (suscripciones §3.2)."""
+        suscripcion = self.de_pago(external_id)
+        suscripcion.update(
+            status="ACTIVE",
+            payment_status="VERIFIED",
+            payment_method_id=str(uuid.uuid4()),
+            _tarjeta=tarjeta,
+        )
+        return suscripcion
+
+    def guardar_tarjeta(self, sid: str, tarjeta: str = "ok") -> dict[str, Any]:
+        """El cliente guardo otra tarjeta con el enlace de cambio o de
+        recuperacion: la suscripcion tiene otro `payment_method_id`."""
+        assert sid in self.cambios_de_tarjeta, "no se abrio el enlace"
+        del self.cambios_de_tarjeta[sid]
+        suscripcion = self.suscripciones[sid]
+        suscripcion.update(payment_method_id=str(uuid.uuid4()), _tarjeta=tarjeta)
+        return suscripcion
+
+    def aviso(self, suscripcion: dict[str, Any], event_type: str, data: dict[str, Any] | None = None,
+              *, event_id: str | None = None, firma: str | None = None) -> bytes:
+        """Un aviso de la suscripcion (§3.1), firmado sobre su JSON canonico sin
+        `nt_signature` (§3.3), con las claves en el orden en que las manda."""
+        cuerpo: dict[str, Any] = {
+            "event_id": event_id or uuid.uuid4().hex,
+            "event_type": event_type,
+            "subscription_id": suscripcion["subscription_id"],
+            "external_id": suscripcion["external_id"],
+            "occurred_at": "2026-12-17T10:00:00.000Z",
+            "data": data or {},
+        }
+        cuerpo["nt_signature"] = firma or firma_canonica(canonico(cuerpo))
+        return json.dumps(cuerpo).encode()
+
+
+def _como_en_el_listado(cobro: dict[str, Any]) -> dict[str, Any]:
+    """Un cobro como lo trae `GET /subscriptions/{id}/payments`, visto en
+    produccion el 2026-11-17: con `order_id` y `cycle`, sin `subscription_id`
+    y con el estado en minusculas."""
+    return {
+        "payment_id": cobro["payment_id"],
+        "order_id": f"{cobro['period_id']}:{cobro['payment_id']}",
+        "cycle": 1 if cobro["period_id"] == "initial" else 2,
+        "period_id": cobro["period_id"],
+        "amount": cobro["amount"],
+        "currency": cobro["currency"],
+        "status": cobro["status"].lower(),
+        "occurred_at": "2026-11-17T19:41:01.000Z",
+    }
+
+
+def _error(mensaje: str) -> httpx.Response:
+    return httpx.Response(400, json={"statusCode": 400, "message": mensaje, "error": "Bad Request"})
+
+
+def _no_encontrada() -> httpx.Response:
+    return httpx.Response(404, json={"statusCode": 404, "message": "Suscripción no encontrada"})

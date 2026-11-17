@@ -1,0 +1,12 @@
+{% extends "base.txt" %}
+{% block content %}
+Hola{% if display_name %} {{ display_name }}{% endif %}:
+
+Tu banco pide que confirmes el cobro de {{ amount_cents | money(currency) }} a {{ source_label }} por la renovación de tu plan {{ plan_name }}. Es la verificación de seguridad de tu tarjeta (3D Secure): sin ella, el cobro no se completa.
+
+Confírmalo antes del {{ period_end | fecha }}, que es cuando termina el período que ya pagaste. Si para esa fecha el cobro no se completa, tu suscripción vence ese día.
+
+Confirmar el cobro: {{ authentication_url }}
+
+Tu suscripción: {{ url }}
+{% endblock %}

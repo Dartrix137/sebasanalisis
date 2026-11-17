@@ -438,9 +438,11 @@ def test_el_id_de_la_orden_va_escapado_en_la_ruta() -> None:
     assert respuestas.peticiones[0].url.raw_path == b"/tspayv2/order-status/SA%2F..%2Fx"
 
 
-def test_lo_que_no_tiene() -> None:
+def test_se_reconsulta_por_referencia_y_no_tokeniza() -> None:
+    """La orden se reconsulta con nuestra referencia, y una tarjeta nunca se
+    tokeniza en el navegador: se escribe en la pagina de la pasarela (5.3b)."""
     proveedor = _proveedor(Respuestas())
-    assert proveedor.tokenizer() is None and proveedor.lookup_by_reference
+    assert proveedor.lookup_by_reference and not hasattr(proveedor, "tokenizer")
     assert proveedor.describe() == "Tipster Page (sandbox)"
 
 

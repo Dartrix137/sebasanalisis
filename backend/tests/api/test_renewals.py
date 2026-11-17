@@ -1,9 +1,11 @@
-"""Tokenizacion y renovacion automatica (§3.5, §3.6, §3.8 y §3.9 de la Fase 4).
+"""Renovacion automatica (§3.5, §3.6, §3.8 y §3.9 de la Fase 4; paso 5.3b de la Fase 5).
 
-El alta va por la API; el job de renovaciones se llama directo
-(`core/renewals.run_renewals`) con el `now` que cada test necesita: el tiempo no
-se espera, se pasa. La pasarela es la simulada (`pasarela_simulada.py`):
-Tipster Page no tiene cobros recurrentes.
+El alta va por la API: el cliente paga el primer periodo en la pagina de la
+pasarela y la tarjeta queda guardada alli. El job de renovaciones se llama
+directo (`core/renewals.run_renewals`) con el `now` que cada test necesita: el
+tiempo no se espera, se pasa. La pasarela es la simulada
+(`pasarela_simulada.py`); las suscripciones de Tipster Page, con su proveedor
+de verdad, estan en `test_tipster_suscripciones.py`.
 """
 
 import uuid
@@ -17,11 +19,6 @@ from app.core.email import EmailMessage, FakeEmailSender
 from app.core.renewals import advisory_lock, renewal_reference, run_renewals
 from app.models import Payment, Plan, Subscription
 from tests.api.conftest import auth
-from tests.api.pasarela_simulada import (
-    TOKEN_OTRO_MEDIO,
-    TOKEN_RECHAZADO,
-    TOKEN_TARJETA,
-)
 from tests.api.pasarela_simulada import PasarelaSimulada as Pasarela
 from tests.api.test_billing import _cupon, _mensual
 from tests.api.test_subscriptions import (
@@ -53,11 +50,12 @@ def sin_suscripciones_de_otros_tests(db) -> None:
 
 
 def _alta_automatica(client, token: str, plan_id, *, codigo=None, **cambios):
+    """Abre el alta de la renovacion automatica: responde la pagina de la
+    pasarela donde se paga el primer periodo (paso 5.3b)."""
     body = {
         "plan_id": str(plan_id),
         "renewal_mode": "automatic",
-        "payment_source_token": TOKEN_TARJETA,
-        "payment_source_type": "CARD",
+        "country": "CO",
         **cambios,
     }
     if codigo is not None:
@@ -65,11 +63,23 @@ def _alta_automatica(client, token: str, plan_id, *, codigo=None, **cambios):
     return client.post("/billing/subscriptions", json=body, headers=auth(token))
 
 
+def _pagar_alta(client, token: str, pasarela: Pasarela, respuesta, outcome: str = "approved") -> dict:
+    """El cliente paga en la pagina de la pasarela y vuelve: la pantalla del
+    pago reconsulta. Devuelve el pago como lo ve el cliente."""
+    assert respuesta.status_code == 202, respuesta.text
+    data = respuesta.json()
+    pasarela.completar_alta(data["checkout_url"], outcome)
+    r = client.get(f"/billing/payments/{data['payment_id']}", headers=auth(token))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def _suscriptor_automatico(client, db, pasarela: Pasarela, *, codigo=None) -> tuple[str, str, str, Subscription]:
     """Una cuenta con el primer cobro aprobado y la renovacion automatica encendida."""
     token, user_id, correo = _cuenta(client, db)
     r = _alta_automatica(client, token, _mensual(db).id, codigo=codigo)
-    assert r.status_code == 202, r.text
+    assert _pagar_alta(client, token, pasarela, r)["status"] == "approved"
+    db.expire_all()
     [suscripcion] = _suscripciones(db, user_id)
     assert suscripcion.status == "active", suscripcion.status
     return token, user_id, correo, suscripcion
@@ -98,12 +108,18 @@ def _de(reporte, correo: str) -> list[str]:
 # ---------- Disponibilidad y contratos ----------
 
 
-def test_disponibilidad_dice_como_se_guarda_un_medio_de_pago(client, pasarela) -> None:
-    assert client.get("/billing/availability").json() == {"enabled": True, "tokenizer": "fake"}
+def test_disponibilidad_dice_si_hay_renovacion_automatica(client, pasarela) -> None:
+    assert client.get("/billing/availability").json() == {
+        "enabled": True,
+        "automatic_renewal": True,
+    }
 
 
 def test_sin_pasarela_no_se_ofrece_la_renovacion_automatica(client, db) -> None:
-    assert client.get("/billing/availability").json() == {"enabled": False, "tokenizer": None}
+    assert client.get("/billing/availability").json() == {
+        "enabled": False,
+        "automatic_renewal": False,
+    }
 
 
 def test_los_contratos_y_la_llave_de_cifrado_de_wompi_ya_no_existen(client, db, pasarela) -> None:
@@ -116,52 +132,56 @@ def test_los_contratos_y_la_llave_de_cifrado_de_wompi_ya_no_existen(client, db, 
         assert ruta not in rutas
 
 
-# ---------- Alta con medio de pago guardado ----------
+# ---------- Alta: el primer periodo se paga en la pagina de la pasarela (paso 5.3b) ----------
 
 
-def test_alta_automatica_guarda_el_medio_y_hace_el_primer_cobro(client, db, pasarela, outbox) -> None:
+def test_alta_automatica_abre_la_pagina_y_al_pagar_guarda_la_tarjeta(
+    client, db, pasarela, outbox
+) -> None:
     token, user_id, correo = _cuenta(client, db)
     outbox.clear()
     r = _alta_automatica(client, token, _mensual(db).id)
     assert r.status_code == 202, r.text
     data = r.json()
-    # No hay pagina a donde ir: el cobro ya se envio.
-    assert data["checkout_url"] is None
+    assert data["checkout_url"].startswith("http://testserver/dev/fake-checkout/subscription/")
     assert (data["total_cents"], data["currency"]) == (PRECIO, "EUR")
 
-    # A la pasarela se le pidio guardar el medio con el token.
-    [fuente] = pasarela.fuentes_pedidas
-    assert fuente == {"type": "CARD", "token": TOKEN_TARJETA, "customer_email": correo}
-    # Y se le cobro a esa fuente, con el monto del servidor.
-    [cobro] = pasarela.cobros
+    # A la pasarela se le abrio el alta con el monto del servidor, el pais y
+    # la referencia del pago; todavia no se cobro nada.
+    [alta] = pasarela.altas
     [pago] = _pagos(db, user_id)
-    assert cobro == {
-        "reference": pago.reference,
-        "amount_cents": PRECIO,
-        "currency": "EUR",
-        "customer_email": correo,
-        "source_id": "3000",
-        "source_type": "CARD",
-    }
+    assert (alta.reference, alta.amount_cents, alta.currency) == (pago.reference, PRECIO, "EUR")
+    assert (alta.country, alta.email, alta.interval, alta.interval_count) == ("CO", correo, "month", 1)
+    assert alta.notification_url.endswith("/webhooks/payments")
+    assert alta.url_ok.endswith(f"/pago/{pago.id}")
+    assert (pago.status, pago.kind) == ("pending", "initial")
+    assert pasarela.cobros == []
+    suscripcion = _suscripcion(db, user_id)
+    assert (suscripcion.status, suscripcion.renewal_mode, suscripcion.payment_source_id) == (
+        "pending",
+        "automatic",
+        None,
+    )
+    assert not _tiene_acceso(client, token)
 
+    # El cliente paga en la pagina y vuelve: la reconsulta aprueba el pago y
+    # guarda la tarjeta que quedo en la pasarela.
+    pasarela.completar_alta(data["checkout_url"])
+    assert client.get(f"/billing/payments/{pago.id}", headers=auth(token)).json()["status"] == (
+        "approved"
+    )
     suscripcion = _suscripcion(db, user_id)
     assert (suscripcion.status, suscripcion.renewal_mode) == ("active", "automatic")
-    # Solo la referencia del proveedor, la marca y los ultimos cuatro.
+    # Solo la referencia de la pasarela, la marca y los ultimos cuatro.
     assert (
         suscripcion.payment_source_id,
         suscripcion.payment_source_type,
+        suscripcion.provider_subscription_id,
         suscripcion.card_brand,
         suscripcion.card_last4,
-    ) == ("3000", "CARD", "VISA", "4242")
+    ) == ("3000", "CARD", f"fake-agreement-{data['checkout_url'].rsplit('/', 1)[1]}", "VISA", "4242")
     assert suscripcion.next_charge_at == suscripcion.current_period_end - 48 * H
-    assert (pago.status, pago.kind) == ("approved", "initial")
     assert _tiene_acceso(client, token)
-
-    # En la base no quedo el token ni nada parecido a un numero de tarjeta.
-    volcado = str(
-        db.execute(text("SELECT row_to_json(s) FROM subscriptions s WHERE user_id = :u"), {"u": user_id}).all()
-    ) + str(db.execute(text("SELECT row_to_json(p) FROM payments p WHERE user_id = :u"), {"u": user_id}).all())
-    assert TOKEN_TARJETA not in volcado and "424242" not in volcado
 
     assert _asuntos(outbox, correo) == [
         "Tu suscripción a Sebasanálisis está activa",
@@ -179,112 +199,77 @@ def test_alta_automatica_guarda_el_medio_y_hace_el_primer_cobro(client, db, pasa
     assert visto["next_charge_at"] is not None and visto["next_charge_cents"] == PRECIO
 
 
-def test_alta_con_un_medio_que_no_es_tarjeta(client, db, pasarela) -> None:
-    """El tipo del medio lo define la pasarela: la aplicacion lo guarda tal cual."""
+def test_el_alta_la_puede_resolver_el_aviso_de_la_pasarela(client, db, pasarela) -> None:
     token, user_id, _ = _cuenta(client, db)
-    r = _alta_automatica(
-        client, token, _mensual(db).id, payment_source_token=TOKEN_OTRO_MEDIO, payment_source_type="WALLET"
-    )
-    assert r.status_code == 202, r.text
-    assert pasarela.fuentes_pedidas[0]["type"] == "WALLET"
-    assert pasarela.cobros[0]["source_type"] == "WALLET"
-    suscripcion = _suscripcion(db, user_id)
-    assert (suscripcion.payment_source_type, suscripcion.card_brand, suscripcion.card_last4) == (
-        "WALLET",
-        None,
-        None,
-    )
-
-
-def test_el_primer_cobro_puede_quedar_pendiente_y_resolverlo_el_webhook(client, db, pasarela) -> None:
-    token, user_id, _ = _cuenta(client, db)
-    pasarela.estado_del_cobro = "PENDING"
     r = _alta_automatica(client, token, _mensual(db).id)
     assert r.status_code == 202, r.text
     [pago] = _pagos(db, user_id)
-    assert pago.status == "pending" and pago.provider_transaction_id is not None
-    assert not _tiene_acceso(client, token)
+    pasarela.completar_alta(r.json()["checkout_url"])
 
-    pasarela.resolver(pago.provider_transaction_id, "APPROVED")
+    # El cliente cerro la pestana: lo resuelve el aviso, con la reconsulta.
     assert _webhook(client, pasarela.evento(pago.provider_transaction_id)).status_code == 200
     assert _suscripcion(db, user_id).status == "active"
     assert _tiene_acceso(client, token)
 
 
-def test_primer_cobro_rechazado_no_da_acceso_y_se_puede_reintentar(client, db, pasarela, outbox) -> None:
+def test_primer_pago_rechazado_no_da_acceso_y_se_puede_reintentar(client, db, pasarela, outbox) -> None:
     token, user_id, _ = _cuenta(client, db)
     outbox.clear()
-    pasarela.estado_del_cobro = "DECLINED"
     r = _alta_automatica(client, token, _mensual(db).id)
-    assert r.status_code == 202, r.text
-    assert client.get(f"/billing/payments/{r.json()['payment_id']}", headers=auth(token)).json()[
-        "status"
-    ] == "declined"
-    assert _suscripcion(db, user_id).status == "pending"
+    assert _pagar_alta(client, token, pasarela, r, "declined")["status"] == "declined"
+    suscripcion = _suscripcion(db, user_id)
+    assert (suscripcion.status, suscripcion.payment_source_id) == ("pending", None)
     assert not _tiene_acceso(client, token)
     # No es una renovacion: no se manda el correo de cobro fallido.
     assert outbox == []
 
-    pasarela.estado_del_cobro = "APPROVED"
-    assert _alta_automatica(client, token, _mensual(db).id).status_code == 202
+    r = _alta_automatica(client, token, _mensual(db).id)
+    assert _pagar_alta(client, token, pasarela, r)["status"] == "approved"
     assert _suscripcion(db, user_id).status == "active"
 
 
-def test_medio_de_pago_que_pasarela_no_acepta(client, db, pasarela) -> None:
+def test_la_renovacion_automatica_exige_el_pais(client, db, pasarela) -> None:
     token, user_id, _ = _cuenta(client, db)
-    r = _alta_automatica(client, token, _mensual(db).id, payment_source_token=TOKEN_RECHAZADO)
-    assert (r.status_code, r.json()["detail"]["code"]) == (400, "payment_source_rejected")
-    # Ni suscripcion, ni pago, ni cobro.
-    assert _suscripciones(db, user_id) == [] and _pagos(db, user_id) == []
-    assert pasarela.cobros == []
+    r = _alta_automatica(client, token, _mensual(db).id, country=None)
+    assert (r.status_code, r.json()["detail"]["code"]) == (400, "country_required")
+    assert _pagos(db, user_id) == [] and pasarela.altas == []
 
 
-@pytest.mark.parametrize(
-    ("cambios", "codigo"),
-    [
-        ({"payment_source_token": None}, "payment_source_required"),
-        ({"payment_source_token": "  "}, "payment_source_required"),
-        ({"payment_source_type": None}, "payment_source_type_not_supported"),
-        ({"payment_source_type": " "}, "payment_source_type_not_supported"),
-    ],
-)
-def test_la_renovacion_automatica_exige_el_medio(
-    client, db, pasarela, cambios, codigo
-) -> None:
+def test_sin_el_medio_de_la_pasarela_no_hay_alta_automatica(client, db, pasarela, monkeypatch) -> None:
     token, user_id, _ = _cuenta(client, db)
-    r = _alta_automatica(client, token, _mensual(db).id, **cambios)
-    assert (r.status_code, r.json()["detail"]["code"]) == (400, codigo)
-    assert _pagos(db, user_id) == [] and pasarela.fuentes_pedidas == []
+    monkeypatch.setattr(pasarela, "recurring_method", lambda country: None)
+    r = _alta_automatica(client, token, _mensual(db).id)
+    assert (r.status_code, r.json()["detail"]["code"]) == (503, "automatic_unavailable")
+    assert _pagos(db, user_id) == [] and pasarela.altas == []
 
 
-def test_un_tipo_de_medio_demasiado_largo_no_se_acepta(client, db, pasarela) -> None:
-    token, _, _ = _cuenta(client, db)
-    r = _alta_automatica(client, token, _mensual(db).id, payment_source_type="X" * 17)
-    assert r.status_code == 422
-
-
-def test_un_monto_del_cliente_tampoco_cuenta_en_el_cobro_automatico(client, db, pasarela) -> None:
+def test_un_monto_del_cliente_tampoco_cuenta_en_el_alta_automatica(client, db, pasarela) -> None:
     token, _, _ = _cuenta(client, db)
     r = _alta_automatica(client, token, _mensual(db).id, amount_cents=1, total_cents=1)
     assert r.status_code == 202
-    assert pasarela.cobros[0]["amount_cents"] == PRECIO
+    assert pasarela.altas[0].amount_cents == PRECIO
 
 
-def test_si_pasarela_no_responde_al_cobrar_se_dice_y_un_evento_tardio_lo_resuelve(
-    client, db, pasarela
-) -> None:
+def test_el_alta_automatica_lleva_el_descuento_del_cupon(client, db, pasarela) -> None:
+    token, _, _ = _cuenta(client, db)
+    cupon = _cupon(db, value=50)
+    r = _alta_automatica(client, token, _mensual(db).id, codigo=cupon.code)
+    assert r.status_code == 202, r.text
+    assert pasarela.altas[0].amount_cents == PRECIO // 2
+
+
+def test_si_pasarela_no_crea_el_alta_se_dice_y_no_queda_nada_abierto(client, db, pasarela) -> None:
     token, user_id, _ = _cuenta(client, db)
-    pasarela.cobro_caido = True
+    pasarela.alta_caida = True
     r = _alta_automatica(client, token, _mensual(db).id)
     assert (r.status_code, r.json()["detail"]["code"]) == (502, "provider_unavailable")
     [pago] = _pagos(db, user_id)
     assert (pago.status, pago.provider_transaction_id) == ("error", None)
     assert not _tiene_acceso(client, token)
 
-    # El cobro si habia llegado a la pasarela: su evento aparece despues.
-    tx_id = pasarela.transaccion(pago, "APPROVED")
-    assert _webhook(client, pasarela.evento(tx_id)).json() == {"status": "processed"}
-    assert _pagos(db, user_id)[0].status == "approved"
+    pasarela.alta_caida = False
+    r = _alta_automatica(client, token, _mensual(db).id)
+    assert _pagar_alta(client, token, pasarela, r)["status"] == "approved"
     assert _tiene_acceso(client, token)
 
 
@@ -878,9 +863,36 @@ def test_una_suscripcion_con_problemas_no_detiene_a_las_demas(client, db, pasare
 def test_el_plan_de_dos_meses_renueva_dos_meses(client, db, pasarela) -> None:
     token, user_id, _ = _cuenta(client, db)
     bimestral = db.scalar(select(Plan).where(Plan.code == "bimestral"))
-    assert _alta_automatica(client, token, bimestral.id).status_code == 202
+    assert _pagar_alta(client, token, pasarela, _alta_automatica(client, token, bimestral.id))[
+        "status"
+    ] == "approved"
     suscripcion = _suscripcion(db, user_id)
     vence = _avisada(db, pasarela, suscripcion)
     assert _correr(db, pasarela, vence - 48 * H).approved == 1
     assert pasarela.cobros[-1]["amount_cents"] == 4_600
     assert _suscripcion(db, user_id).current_period_end == add_interval(vence, "month", 2)
+
+
+# ---------- Cambio de tarjeta en la pagina de la pasarela (paso 5.3b) ----------
+
+
+def test_cambiar_la_tarjeta_en_la_pagina_de_la_pasarela_simulada(client, db, pasarela) -> None:
+    token, user_id, _, suscripcion = _suscriptor_automatico(client, db, pasarela)
+    vieja = suscripcion.payment_source_id
+    r = client.post("/billing/payment-method/checkout", headers=auth(token))
+    assert r.status_code == 200, r.text
+    url = r.json()["checkout_url"]
+    assert url.startswith("http://testserver/dev/fake-checkout/card/")
+
+    ruta = url.removeprefix("http://testserver")
+    assert client.get(ruta).status_code == 200
+    r = client.post(ruta, data={"outcome": "approved"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("/cuenta?tarjeta=guardada")
+
+    r = client.post("/billing/payment-method/sync", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["card_last4"] == "5454"
+    [suscripcion] = _suscripciones(db, user_id)
+    assert suscripcion.payment_source_id not in (None, vieja)
+    # Ese enlace ya se uso.
+    assert client.get(ruta).status_code == 404

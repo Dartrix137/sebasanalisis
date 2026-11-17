@@ -32,6 +32,8 @@ SUBJECTS: dict[str, str] = {
     "renewal_notice": "Aviso: próximo cobro de tu suscripción a Sebasanálisis",
     "period_ending": "Tu acceso a Sebasanálisis está por terminar",
     "payment_failed": "No pudimos cobrar la renovación de tu suscripción a Sebasanálisis",
+    # El banco pide 3D Secure en un cobro de renovacion (paso 5.3b).
+    "payment_authentication": "Confirma el cobro de tu suscripción a Sebasanálisis",
     "subscription_expired": "Tu suscripción a Sebasanálisis venció",
     "subscription_canceled": "Cancelaste la renovación de tu suscripción a Sebasanálisis",
     "payment_method_updated": "Cambió el medio de pago de tu suscripción a Sebasanálisis",

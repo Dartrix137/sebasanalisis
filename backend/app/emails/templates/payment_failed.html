@@ -6,6 +6,7 @@
   No pudimos cobrar <strong>{{ amount_cents | money(currency) }}</strong> a {{ source_label }}
   por la renovación de tu plan <strong>{{ plan_name }}</strong>.
 </p>
+{% if retry %}
 <p style="margin:0 0 12px 0;">
   Vamos a intentarlo de nuevo antes del <strong>{{ period_end | fecha }}</strong>, que es
   cuando termina el período que ya pagaste. Mientras tanto conservas el acceso. Si para esa
@@ -16,4 +17,13 @@
   prefieres no renovar, puedes cancelar la renovación desde tu cuenta.
 </p>
 {{ button(url, "Ver mi suscripción") }}
+{% else %}
+<p style="margin:0 0 12px 0;">
+  Tu banco no permite volver a intentar el cobro con esa tarjeta. Para renovar, cambia la
+  tarjeta desde tu cuenta antes del <strong>{{ period_end | fecha }}</strong>, que es cuando
+  termina el período que ya pagaste: el cobro se hace al guardarla. Mientras tanto conservas
+  el acceso. Si para esa fecha no la cambias, tu suscripción vence ese día.
+</p>
+{{ button(url, "Cambiar la tarjeta") }}
+{% endif %}
 {% endblock %}

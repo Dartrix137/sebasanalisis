@@ -8,9 +8,11 @@
  * - **Pago manual**: un pago por período. El cliente elige aquí su país y el
  *   medio de pago (`CheckoutMethodPicker`), y paga en la página del procesador
  *   (Redsys o EBANX, detrás de Tipster Page). No se guarda nada.
- * - **Renovación automática**: el cliente guarda un medio de pago con
- *   `PaymentSourceForm`, y se le cobra cada período, con un aviso por correo
- *   antes. Solo se ofrece si la pasarela tokeniza (`availability.tokenizer`).
+ * - **Renovación automática** (paso 5.3b): el cliente paga el primer período
+ *   con tarjeta en la página del procesador, donde la tarjeta queda guardada, y
+ *   se le cobra cada período, con un aviso por correo antes. Solo se ofrece si
+ *   la pasarela la tiene (`availability.automatic_renewal`). El país que pide
+ *   el procesador sale de los datos de facturación.
  *
  * Ningún modo entra marcado (decidido el 2026-10-13): nadie queda con cobros
  * automáticos sin haberlo escogido.
@@ -21,9 +23,10 @@
  * pide un medio local (nombre, documento, teléfono) pasan por la API hacia la
  * pasarela y no se guardan.
  *
- * Al abrir el pago la API devuelve un enlace de un solo uso a la página de
- * pago (`GET /billing/checkout/:token`); de allá el navegador sigue al
- * procesador y vuelve a /pago/:id.
+ * Al abrir el pago la API devuelve a dónde ir: en el pago manual, un enlace de
+ * un solo uso a la página de pago (`GET /billing/checkout/:token`), y en la
+ * renovación automática, la página del procesador. En los dos casos el
+ * navegador vuelve a /pago/:id.
  *
  * Antes de pagar, el cliente da sus datos de facturación (`BillingProfileForm`,
  * §3.17, "Paso 5.4"): la factura electrónica va a su nombre. Quedan en la cuenta
@@ -44,7 +47,6 @@ import {
 } from "@/components/billing/BillingProfileForm";
 import { CheckoutMethodPicker } from "@/components/billing/CheckoutMethodPicker";
 import type { CheckoutChoice } from "@/components/billing/CheckoutMethodPicker";
-import { PaymentSourceForm } from "@/components/billing/PaymentSourceForm";
 import { InlineSkeleton } from "@/components/PageSkeleton";
 import { AppHeader } from "@/components/AppHeader";
 import { Button, Card, ErrorBox, Field } from "@/components/ui";
@@ -52,7 +54,6 @@ import { ApiError, billingApi } from "@/lib/api-client";
 import { formatLegalDate } from "@/lib/legal";
 import { CURRENCY_NOTE, formatMoney, intervalLabel, periodLabel } from "@/lib/money";
 import { useSession } from "@/lib/session";
-import type { TokenizedSource } from "@/components/billing/PaymentSourceForm";
 import type {
   BillingAvailabilityResponse,
   PlanResponse,
@@ -185,7 +186,7 @@ function Checkout() {
   const period = periodLabel(plan.interval, plan.interval_count);
 
   // La renovación automática solo se ofrece en el alta, y si la pasarela la permite.
-  const automaticOffered = !renewing && availability.tokenizer !== null;
+  const automaticOffered = !renewing && availability.automatic_renewal;
   const chosen: RenewalMode | null = automaticOffered ? mode : "manual";
 
   function chooseMode(next: RenewalMode) {
@@ -259,8 +260,8 @@ function Checkout() {
     }
   }
 
-  /** Con el token que devolvió la pasarela: guarda el medio y hace el primer cobro. */
-  async function subscribeWith(source: TokenizedSource) {
+  /** El primer período, con tarjeta, en la página del procesador, donde queda guardada. */
+  async function payAutomatically() {
     setError(null);
     setCouponError(null);
     setPaying(true);
@@ -270,12 +271,12 @@ function Checkout() {
           plan_id: planId,
           coupon_code: appliedCode,
           renewal_mode: "automatic",
-          payment_source_token: source.token,
-          payment_source_type: source.type,
+          country: countryOf(profile),
         }),
       );
-      // El cobro ya se envió: la pantalla de resultado espera la respuesta.
-      router.push(`/pago/${started.payment_id}`);
+      if (!started.checkout_url) throw new Error("sin página de pago");
+      // De ahí vuelve a /pago/:id, que espera el resultado.
+      window.location.assign(started.checkout_url);
     } catch (e) {
       handleFailure(e);
     }
@@ -301,7 +302,7 @@ function Checkout() {
             nuevo empieza ese día: no pierdes los días que te quedan.
           </p>
         ) : null}
-        {renewing && availability.tokenizer !== null ? (
+        {renewing && availability.automatic_renewal ? (
           <p className="mt-3 text-sm text-muted">
             Si prefieres que se renueve sola, sin pagar nada hoy,{" "}
             <Link href="/cuenta" className={LINK}>
@@ -389,25 +390,12 @@ function Checkout() {
                 title="Renovación automática"
                 lines={[
                   `Se cobra ahora y luego cada ${interval}, hasta que canceles.`,
-                  "Guardas un medio de pago; sus datos van directo a la pasarela.",
+                  "Solo con tarjeta: la escribes en la página del procesador de pagos, donde queda guardada.",
                   "Antes de cada cobro te avisamos por correo con el monto y la fecha. Cancelas cuando quieras desde tu cuenta.",
                 ]}
               />
             </div>
           </fieldset>
-
-          {mode === "automatic" ? (
-            <div className="mt-5 border-t border-edge pt-4">
-              <PaymentSourceForm
-                availability={availability}
-                submitLabel={`Guardar medio de pago y pagar ${totalText}`}
-                busyLabel="Enviando el cobro…"
-                busy={paying}
-                disabled={blocked}
-                onSource={subscribeWith}
-              />
-            </div>
-          ) : null}
         </Card>
       ) : null}
 
@@ -450,7 +438,11 @@ function Checkout() {
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="space-y-3">
-        {chosen === "automatic" ? null : (
+        {chosen === "automatic" ? (
+          <Button onClick={payAutomatically} disabled={blocked}>
+            {paying ? "Abriendo el pago…" : `Ir a pagar ${totalText} con tarjeta`}
+          </Button>
+        ) : (
           <Button onClick={payManually} disabled={blocked || chosen === null || choice === null}>
             {paying ? "Abriendo el pago…" : `Ir a pagar ${totalText}`}
           </Button>
@@ -469,7 +461,7 @@ function Checkout() {
         ) : null}
         <p className="max-w-prose text-xs leading-relaxed text-muted">
           {chosen === "automatic"
-            ? null
+            ? "Al continuar vas a la página del procesador de pagos, donde pagas con tarjeta y la tarjeta queda guardada para las renovaciones. Sebasanálisis no recibe ni guarda los datos de tu tarjeta: solo la referencia del procesador. "
             : "Al continuar vas a la página del procesador de pagos del medio que elegiste, donde completas el pago. Sebasanálisis no recibe ni guarda los datos de tu tarjeta ni de tu cuenta. "}
           Consulta los{" "}
           <Link href="/legal/terminos" className={LINK}>
@@ -480,6 +472,13 @@ function Checkout() {
       </div>
     </div>
   );
+}
+
+/** El país de los datos de facturación, en las dos letras que pide el procesador
+ * (`Co` → `CO`). Sin él, la API responde que falta el país. */
+function countryOf(profile: BillingProfileResponse | null): string | null {
+  const code = profile?.country_code.trim() ?? "";
+  return /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : null;
 }
 
 function ModeOption({

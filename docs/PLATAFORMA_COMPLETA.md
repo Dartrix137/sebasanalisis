@@ -1323,6 +1323,71 @@ Resultados, uno por uno, en `DESPLIEGUE.md`, "Pruebas en el sandbox de Tipster P
 - **El regreso de Redsys** a `/pago/:id` trae en la URL sus parámetros `Ds_*`: la marca, el país y el tipo de tarjeta, y el código de autorización, sin el número ni el titular. No se usan, y desde el 2026-11-05 la página los quita de la barra de direcciones al cargar (`history.replaceState`; solo se queda el `?id=` de la pasarela simulada), para que no queden en el historial del navegador ni en una URL copiada. GlitchTip ya los quitaba por su lado (`lib/monitoring.ts` borra los parámetros de toda URL). Lo prueba `e2e/subscribe.spec.ts`.
 - **Un `order_id` repetido reemplaza la orden**, con el monto nuevo. No nos afecta, porque la referencia es una por pago; no se debe reusar una referencia.
 
+### 3.20 Renovación automática con las suscripciones de Tipster Page (Fase 5, paso 5.3b; en construcción desde el 2026-11-17)
+
+**Decidido por el usuario el 2026-11-17**: vuelve la renovación automática, ahora con las suscripciones de Tipster Page. Se construye ya y no frena el lanzamiento, porque su producción tampoco está activa. El pago manual con todos los medios sigue, y **el cliente elige** el modo en `/planes/pagar`. Si el banco pide 3DS en una renovación, al cliente se le manda un correo con el enlace; si no se autentica antes del vencimiento, cuenta como intento fallido. Un rechazo sin reintento (`retry_allowed: false`, por ejemplo una tarjeta bloqueada) no se vuelve a intentar con esa tarjeta: se le pide al cliente que la cambie, y si no la cambia, la suscripción vence en su fecha, sin gracia.
+
+**Fuente**, nunca de memoria: las 14 rutas `/tspayv2/subscriptions…` de su OpenAPI y `tspay-subscriptions.md`, que Tipster Page mandó el 2026-11-17 (firma canónica, avisos, tarjetas de prueba de Solidgate). Los dos están en `docs/docs tipsterpage/`, fuera del repositorio.
+
+**Cómo es la pasarela:**
+- Un solo medio, **Solidgate**, solo con tarjeta y en euros. El comercio decide cuándo cobrar (`MERCHANT_MANAGED`): Tipster Page nunca cobra por su cuenta.
+- **El alta** (`POST /subscriptions`, acción `CREATE`) devuelve una página de Solidgate (`checkout_url`). Ahí el cliente paga el primer período y la tarjeta queda guardada.
+- **Cada renovación** es un `CHARGE` (`POST /subscriptions/{id}/payments`) con un `period_id` por período y una clave de idempotencia por intento. Admite hasta 6 intentos por período; nosotros hacemos 3.
+- **La firma** es un HMAC-SHA256 sobre el JSON canónico de `{merchant, action, resource, parameters}`, con la misma clave secreta de las órdenes. Los avisos se firman igual sobre su cuerpo sin `nt_signature`. Traen un `event_id` estable y se reintentan hasta 5 veces en unos 6-7 minutos.
+- La `notification_url`, `url_ok` y `url_ko` tienen que ir por **HTTPS**, y la `notification_url` no se puede cambiar después del alta. **En local no se prueba contra el sandbox** sin un túnel HTTPS: se prueba en el VPS.
+
+**Entrega 1 (2026-11-17): la firma.** `backend/app/payments/tipsterpage_signing.py`, Python puro. Coincide con los dos ejemplos firmados del documento (`tests/payments/test_tipsterpage_signing.py`). Los montos van en su forma más corta (`32`, `9.9`), comprobado con todos los montos de 0,01 a 10.000 €. El 2026-11-17 el sandbox aceptó nuestra firma: una firma mala da `400 Invalid signature`. Pero respondió `503 "El almacenamiento de medios de pago no está configurado"`: falta que Tipster Page lo configure.
+
+**Entrega 2 (2026-11-17): el proveedor, el alta, el webhook y la pasarela simulada.**
+
+| Parte | Cómo |
+|---|---|
+| Interfaz (`payments/base.py`) | `recurring_method(country)` (el medio, si la pasarela lo ofrece en ese país) y `start_recurring(RecurringOrder) -> RecurringStart` (la página y el id para reconsultar). `charge` recibe el período (`ChargePeriod`: la clave y el fin, iguales en los tres intentos). Una transacción puede traer el medio que quedó guardado (`saved_source`), `retry_allowed` y `authentication_url` |
+| Alta (`core/subscriptions.start_payment`) | Con `renewal_mode: automatic` se valida el medio y el monto antes de escribir nada, y se exige el país (`country_required`). El pago queda `pending` con el id de reconsulta y la respuesta trae la página de la pasarela en `checkout_url`. Si la pasarela no crea el alta, el pago queda en `error`, como con una orden |
+| La tarjeta | Llega con el pago del alta aprobado (`_note_saved_source`, dentro de `apply_transaction`): `payment_source_id` es el medio de la pasarela y `provider_subscription_id` (columna nueva, migración `a5c81e3f9d27`, solo DDL) su suscripción. Se toma del pago aprobado, no de cuando se abrió la página |
+| Reconsulta (`tipsterpage.fetch_transaction`) | Los pagos de una suscripción llevan un id que armamos nosotros: `sub:<suscripción>:<pago o initial>:<referencia>`. El del alta lee la suscripción (su `external_id` tiene que ser nuestra referencia) y su pago `initial`; sin ese pago, `EXPIRED` es un rechazo y lo demás sigue pendiente. Un cobro se lee en `GET …/payments/{paymentId}`. `REVIEW_REQUIRED` sigue pendiente |
+| Webhook | Un aviso con `event_type` es de una suscripción. Si la firma es válida, se reconsultan los pagos pendientes de esa suscripción (`subscriptions.requery_agreement`, por el `external_id` y por `provider_subscription_id`). La idempotencia es `tipsterpage:sub:<event_id>`. La devolución (`subscription.payment_refunded`) se acepta sin mover nada, como la de una orden |
+| Job de renovaciones | Cada cobro lleva `period_id = p<vencimiento>` y el fin del período siguiente, calculado desde el vencimiento y no desde la hora del intento. La clave de idempotencia sale de la referencia del intento. Un 400 o 409 del `CHARGE` cuenta como intento sin respuesta: la suscripción queda en mora |
+| Pasarela simulada | `PAYMENT_PROVIDER=fake` tiene su página del alta (`/dev/fake-checkout/subscription/:token`), con tres botones: pagar, pagar con una tarjeta que rechaza las renovaciones, y rechazar |
+| `GET /billing/availability` | Suma `automatic_renewal` |
+
+**Tests:** `tests/api/test_tipster_suscripciones.py` corre el proveedor real sobre `tipster_sandbox.SuscripcionesSandbox`, que verifica la firma con su propio cálculo. Los tests de renovación (`test_renewals.py`) abren el alta en la página de la pasarela simulada.
+
+**Entrega 3 (2026-11-17): 3DS, tarjeta sin reintento, cambio de tarjeta y modos.**
+
+| Parte | Cómo |
+|---|---|
+| 3DS en una renovación | Si el `CHARGE` queda pendiente con `authentication_url`, el job le manda al cliente el correo `payment_authentication` con el enlace, una sola vez (al cobrar). El cobro sigue pendiente y se reconsulta cada hora. Si la pasarela lo rechaza porque nadie lo confirmó, cuenta como intento fallido. El acceso termina en `current_period_end`, como siempre |
+| Rechazo sin reintento | Un cobro rechazado con `retry_allowed: false` marca `subscriptions.payment_source_blocked` (migración `b8d4f2a61c39`, solo DDL). El job no vuelve a intentar con esa tarjeta, y al terminar el período la suscripción vence. El correo de cobro fallido dice que se cambie la tarjeta en vez de "lo intentamos de nuevo", y la suscripción expone `card_update_required` |
+| Cambio de tarjeta | `POST /billing/payment-method/checkout` devuelve la página de la pasarela: `payment-method` (acción `PAYMENT_METHOD`), o `payment-recovery` (`RECOVERY`) si hay un cobro rechazado en el período. Es un enlace de 48 h que verifica por 0 y no cobra nada. La clave de idempotencia sale de la suscripción, el tipo y el día: dos clics el mismo día dan el mismo enlace |
+| La tarjeta nueva | La lee siempre `subscriptions.sync_saved_source`, desde `GET /subscriptions/{id}` en la pasarela. La piden tres caminos: `POST /billing/payment-method/sync` (la cuenta, al volver de la página), el aviso de la suscripción y el job, que la lee en cada corrida para las suscripciones en mora, con la tarjeta bloqueada o con una verificación abierta. Con una tarjeta nueva, la suscripción se desbloquea, y si está en mora el cobro del período se reintenta ya (`renewals.after_source_change`, que también manda el correo `payment_method_updated`) |
+| De pago manual a automática | Sin tarjeta guardada, `checkout` crea un alta con `setup_only: true`: verifica la tarjeta por 0 y no cobra nada. El monto es el de la renovación, el país sale de los datos de facturación (`Co` → `CO`) y el `external_id` es `SA-S-…`. La suscripción sigue de pago manual hasta que la sincronización ve la tarjeta verificada |
+| Pasar a pago manual, eliminar la cuenta | Después de borrar lo nuestro, se borra la tarjeta en la pasarela con `DELETE …/payment-method`, `scope: SUBSCRIPTION` (que además cancela su suscripción), en segundo plano. Si la pasarela no responde, queda en el log para borrarla a mano; nunca se le vuelve a cobrar |
+| Pasarela simulada | Tiene su página de cambio de tarjeta (`/dev/fake-checkout/card/:token`), que guarda una Mastercard terminada en 5454 |
+
+**Lo que no se hace, a propósito:** cancelar y reanudar no llaman a la pasarela. Con `MERCHANT_MANAGED`, la suscripción de la pasarela solo guarda la tarjeta: si no le pedimos cobros, no cobra. La tarjeta se borra al pasar a pago manual y al eliminar la cuenta. La conciliación con `GET …/events` tampoco se construyó: el job ya reconsulta cada hora los pagos pendientes y la tarjeta de las suscripciones que esperan una, que es lo que un aviso perdido dejaría sin aplicar.
+
+**Entrega 4 (2026-11-17): el frontend, y fuera el token del navegador.**
+- **`/planes/pagar`:** con `availability.automatic_renewal`, el cliente elige entre pago manual y renovación automática; ningún modo entra marcado. La automática no pide medio ni país: el país sale de los datos de facturación, y el botón "Ir a pagar … con tarjeta" lleva a la página del procesador, que vuelve a `/pago/:id`.
+- **`/cuenta`:** "Cambiar la tarjeta", "Activar la renovación automática" y "Reanudar con otra tarjeta" abren la página del procesador (`startCardSetup`). Al volver (`/cuenta?tarjeta=guardada` o `=no-guardada`), la cuenta llama a `syncCardSetup` y dice qué pasó: tarjeta actualizada, renovación activada, cobro pendiente aprobado, o que no se guardó nada. Con `card_update_required`, el texto pide cambiar la tarjeta y ese botón pasa a ser el principal.
+- **Se quitó el camino del token:**
+  - en el backend: `tokenizer()`, `create_payment_source`, `TokenizerInfo`, `set_payment_source`, `PUT /billing/payment-method`, `PaymentMethodRequest` y los campos del token en `SubscribeRequest`;
+  - en el frontend: `availability.tokenizer` y `components/billing/PaymentSourceForm.tsx`.
+
+  Toda tarjeta se guarda en la página de la pasarela, también con la pasarela simulada.
+- **Tests:** los de cambio de medio (`test_subscription_changes.py`) usan ahora el flujo de la página. Salieron los tres que solo existían por el token, y entró "un cambio que no se termina deja todo como estaba". Playwright (`subscribe.spec.ts`, `subscription-manage.spec.ts`, `plans.spec.ts`) recorre las páginas de la pasarela simulada; los 74 pasan.
+
+**Lo que falta:**
+- **Entrega 5:** probar en el sandbox desde el VPS con las tarjetas de Solidgate, y sumar a Solidgate en la política de datos.
+- **Comprobado en producción el 2026-11-17**, con una suscripción de prueba de 1 EUR y la tarjeta del usuario. El sandbox seguía sin almacenamiento de medios (503). Fueron 2,50 EUR reales en cobros, más el alta:
+  - **El alta:** la suscripción pasa de `PENDING_PAYMENT` a `ACTIVE`, con `payment_status` `PAID` y el `payment_method_id` guardado.
+  - **El listado de cobros:** trae el estado **en minúsculas** (`paid`), sin `subscription_id`, con `order_id`, `cycle` y `occurred_at`. El código esperaba `PAID` y el alta se habría quedado pendiente; ya se corrigió.
+  - **Un `CHARGE` responde `PENDING`** y a los pocos segundos queda `PAID`. **Acepta un monto distinto del de la suscripción**: de 1,50 EUR sobre una de 1 EUR, sin `PATCH`.
+  - **Los avisos:** se generan `subscription.created` y `subscription.payment_succeeded` (`cycle` 1, `period_id` `initial`), y quedan `delivered: false` con una `notification_url` que no responde 2xx.
+  - **La reconsulta** de `TipsterPageProvider` leyó bien el alta (aprobada, con la tarjeta guardada) y los dos cobros.
+  - **`CANCEL` con `mode: NOW`** responde 201 con la suscripción `CANCELLED`, `auto_renew: false`, `cancel_effective_at` y `operation.status: CONFIRMED`. La tarjeta sigue guardada: borrarla es `DELETE …/payment-method`. La prueba no se canceló desde el código, sino con el comando que corrió el usuario.
+- **Por preguntar a Tipster Page:** qué nombre de comercio ve el cliente con Solidgate.
+
 ---
 
 ## 4. Admin dashboard

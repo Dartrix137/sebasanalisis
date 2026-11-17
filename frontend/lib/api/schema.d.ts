@@ -1143,8 +1143,8 @@ export interface paths {
         };
         /**
          * Availability
-         * @description Si se puede pagar, y como se guarda un medio de pago. Publico: /planes
-         *     lo usa para encender el boton.
+         * @description Si se puede pagar, y si se ofrece la renovacion automatica. Publico:
+         *     /planes lo usa para encender el boton.
          */
         get: operations["availability_billing_availability_get"];
         put?: never;
@@ -1163,25 +1163,63 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /**
-         * Set Payment Method
-         * @description Guarda un medio de pago en la suscripcion vigente, que queda renovandose
-         *     sola con el: cambia el medio guardado, pasa de pago manual a renovacion
-         *     automatica, o reanuda una renovacion cancelada con otro medio.
-         *
-         *     No cobra nada: el periodo vigente ya esta pagado. Si la suscripcion tiene
-         *     un cobro sin aprobar, se reintenta ya con el medio nuevo. Por aqui nunca
-         *     pasan datos de tarjeta: solo el token que el procesador le dio al navegador.
-         */
-        put: operations["set_payment_method_billing_payment_method_put"];
+        put?: never;
         post?: never;
         /**
          * Remove Payment Method
          * @description Pasa la renovacion automatica a pago manual: deja de guardarse el medio
          *     de pago y no se cobra mas. La cuenta conserva el acceso hasta que termine
-         *     el periodo que ya pago, y paga el siguiente cuando quiera.
+         *     el periodo que ya pago, y paga el siguiente cuando quiera. Si la tarjeta
+         *     estaba guardada en la pasarela, tambien se borra alli.
          */
         delete: operations["remove_payment_method_billing_payment_method_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/payment-method/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Payment Method Checkout
+         * @description Abre la pagina de la pasarela donde el cliente guarda una tarjeta para
+         *     su suscripcion vigente, sin cobrar nada (paso 5.3b): cambia la tarjeta,
+         *     recupera un cobro rechazado con una nueva, o pasa de pago manual a
+         *     renovacion automatica. Lo que cambie se aplica al volver, con
+         *     `POST /billing/payment-method/sync`, o con el aviso de la pasarela.
+         */
+        post: operations["start_payment_method_checkout_billing_payment_method_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/payment-method/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Payment Method
+         * @description Lee de la pasarela que tarjeta tiene guardada la suscripcion y, si es
+         *     otra, la suscripcion queda renovandose sola con ella; con un cobro sin
+         *     aprobar en el periodo, se reintenta ya. La cuenta lo llama al volver de la
+         *     pagina de la pasarela. Lo que vale es lo que dice la pasarela.
+         */
+        post: operations["sync_payment_method_billing_payment_method_sync_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1432,10 +1470,11 @@ export interface paths {
          *     el enlace de un solo uso de la pagina de pago (`checkout_url`). Los datos
          *     del comprador van a la pasarela y no se guardan. No se tokeniza nada.
          *
-         *     Renovacion automatica (`automatic`): recibe el token que el procesador le
-         *     dio al navegador, guarda el medio de pago en el proveedor y le hace el
-         *     primer cobro. Por aqui nunca pasan datos de tarjeta, y solo se guardan la
-         *     referencia del proveedor, la marca y los ultimos cuatro digitos.
+         *     Renovacion automatica (`automatic`): crea el alta en la pasarela y
+         *     devuelve su pagina (`checkout_url`), donde el cliente paga el primer
+         *     periodo y guarda la tarjeta (paso 5.3b). Solo cuenta el pais. Por aqui
+         *     nunca pasan datos de tarjeta: de la tarjeta solo se guarda la referencia
+         *     de la pasarela.
          *
          *     En los dos casos exige correo confirmado y documentos legales aceptados, y
          *     el total sale de `billing/pricing`: cualquier monto que mande el cliente se
@@ -2433,6 +2472,11 @@ export interface components {
             /** Card Last4 */
             card_last4: string | null;
             /**
+             * Card Update Required
+             * @default false
+             */
+            card_update_required: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -2764,9 +2808,13 @@ export interface components {
          * @description Si hay una pasarela configurada. Sin ella, /planes no deja suscribirse.
          */
         BillingAvailabilityResponse: {
+            /**
+             * Automatic Renewal
+             * @default false
+             */
+            automatic_renewal: boolean;
             /** Enabled */
             enabled: boolean;
-            tokenizer: components["schemas"]["TokenizerKind"] | null;
         };
         /**
          * BillingIdType
@@ -2876,6 +2924,15 @@ export interface components {
          * @enum {string}
          */
         BuyerFieldName: "first_name" | "last_name" | "personal_id" | "phone";
+        /**
+         * CardSetupResponse
+         * @description POST /billing/payment-method/checkout: la pagina de la pasarela donde el
+         *     cliente guarda la tarjeta. No cobra nada.
+         */
+        CardSetupResponse: {
+            /** Checkout Url */
+            checkout_url: string;
+        };
         /**
          * CategoryGroup
          * @description Un grupo dentro de una categoría, ej: 'red' dentro de 'color'.
@@ -4006,17 +4063,6 @@ export interface components {
             total: number;
         };
         /**
-         * PaymentMethodRequest
-         * @description PUT /billing/payment-method: el medio de pago que el cliente tokenizo en
-         *     la ventana del procesador. No son datos de tarjeta.
-         */
-        PaymentMethodRequest: {
-            /** Payment Source Token */
-            payment_source_token: string;
-            /** Payment Source Type */
-            payment_source_type: string;
-        };
-        /**
          * PaymentRefundResponse
          * @description Un reembolso hecho en el panel del proveedor y registrado aqui.
          */
@@ -4815,10 +4861,6 @@ export interface components {
             coupon_code?: string | null;
             /** Payment Method */
             payment_method?: string | null;
-            /** Payment Source Token */
-            payment_source_token?: string | null;
-            /** Payment Source Type */
-            payment_source_type?: string | null;
             /**
              * Plan Id
              * Format: uuid
@@ -4829,8 +4871,7 @@ export interface components {
         };
         /**
          * SubscribeResponse
-         * @description El pago quedo abierto. En el pago manual falta que el cliente pague en
-         *     la pasarela; con un medio guardado, el cobro ya se envio.
+         * @description El pago quedo abierto: falta que el cliente pague en la pasarela.
          */
         SubscribeResponse: {
             /** Checkout Url */
@@ -4889,6 +4930,11 @@ export interface components {
             card_brand: string | null;
             /** Card Last4 */
             card_last4: string | null;
+            /**
+             * Card Update Required
+             * @default false
+             */
+            card_update_required: boolean;
             /** Currency */
             currency: string;
             /** Current Period End */
@@ -4941,11 +4987,6 @@ export interface components {
             token_type: string;
             user: components["schemas"]["UserResponse"];
         };
-        /**
-         * TokenizerKind
-         * @enum {string}
-         */
-        TokenizerKind: "fake";
         /**
          * UpcomingPriceChange
          * @description Un precio nuevo que ya se le aviso a la cuenta y todavia no corre (§4.10).
@@ -7183,18 +7224,14 @@ export interface operations {
             };
         };
     };
-    set_payment_method_billing_payment_method_put: {
+    remove_payment_method_billing_payment_method_delete: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PaymentMethodRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -7205,18 +7242,29 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+        };
+    };
+    start_payment_method_checkout_billing_payment_method_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["CardSetupResponse"];
                 };
             };
         };
     };
-    remove_payment_method_billing_payment_method_delete: {
+    sync_payment_method_billing_payment_method_sync_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_button.html" import button %}
+{% block content %}
+<p style="margin:0 0 12px 0;">Hola{% if display_name %} {{ display_name }}{% endif %}:</p>
+<p style="margin:0 0 12px 0;">
+  Tu banco pide que confirmes el cobro de <strong>{{ amount_cents | money(currency) }}</strong>
+  a {{ source_label }} por la renovación de tu plan <strong>{{ plan_name }}</strong>. Es la
+  verificación de seguridad de tu tarjeta (3D Secure): sin ella, el cobro no se completa.
+</p>
+<p style="margin:0 0 12px 0;">
+  Confírmalo antes del <strong>{{ period_end | fecha }}</strong>, que es cuando termina el
+  período que ya pagaste. Si para esa fecha el cobro no se completa, tu suscripción vence
+  ese día.
+</p>
+{{ button(authentication_url, "Confirmar el cobro") }}
+<p style="margin:12px 0 0 0;"><a href="{{ url }}">Ver mi suscripción</a></p>
+{% endblock %}

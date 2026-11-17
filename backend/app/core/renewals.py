@@ -13,6 +13,11 @@ Lo corre `scripts/run_renewals.py` cada hora. Una corrida:
    vencio sin pagar, la deja vencida.
 3. Suscripciones canceladas cuyo periodo termino: quedan vencidas.
 
+Con una pasarela donde la tarjeta se guarda en su pagina (Tipster Page, paso
+5.3b), antes de todo se lee que tarjeta tiene guardada la suscripcion que
+espera una (en mora, con la tarjeta bloqueada o pasando de pago manual a
+automatico): por si su aviso no llego (`subscriptions.sync_saved_source`).
+
 Cuando toca cada cosa lo decide `billing/schedule.py` (puro). Un cobro y su
 suscripcion solo los mueve `core/subscriptions.apply_transaction`.
 
@@ -44,10 +49,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.billing import pricing, schedule
+from app.billing.periods import add_interval
 from app.core import billing_emails, price_changes, subscriptions
 from app.core.email import EmailMessage, EmailSender
 from app.models import Payment, Subscription, User
-from app.payments.base import PaymentProvider, PaymentProviderError
+from app.payments.base import ChargePeriod, PaymentProvider, PaymentProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +126,18 @@ def _reference_prefix(subscription: Subscription, period_end: datetime) -> str:
     return f"SA-R-{subscription.id.hex}-{int(period_end.timestamp())}-"
 
 
+def charge_period(subscription: Subscription, period_end: datetime) -> ChargePeriod:
+    """El periodo que paga el cobro que sigue a `period_end`: la misma clave y
+    el mismo fin en sus tres intentos, como pide Tipster Page (paso 5.3b). El
+    fin sale de `period_end` y no de la hora del cobro, asi que un intento que
+    sale tarde no lo cambia."""
+    plan = subscription.plan
+    return ChargePeriod(
+        key=f"p{int(period_end.timestamp())}",
+        end=add_interval(period_end, plan.interval, plan.interval_count),  # type: ignore[arg-type]
+    )
+
+
 def run_renewals(
     db: Session, provider: PaymentProvider, sender: EmailSender, now: datetime
 ) -> RenewalReport:
@@ -181,7 +199,11 @@ def _requery_pending(
     )
     db.commit()
     for payment in payments:
-        key = payment.reference if provider.lookup_by_reference else payment.provider_transaction_id
+        # El id que se guardo al abrir el pago; si no hay, la referencia, con
+        # una pasarela que se reconsulta con ella.
+        key = payment.provider_transaction_id or (
+            payment.reference if provider.lookup_by_reference else None
+        )
         if key is None:
             continue
         try:
@@ -248,6 +270,16 @@ def _process(
     user = db.get(User, subscription.user_id)
     if user is None:
         return
+
+    if provider.enabled and _waits_for_card(subscription):
+        try:
+            change = subscriptions.sync_saved_source(db, provider, subscription, now)
+        except PaymentProviderError:
+            logger.warning("Renovaciones: no se pudo leer la tarjeta de la suscripcion %s", subscription.id)
+            change = None
+        if change is not None:
+            report.emails.extend(after_source_change(db, provider, change, user, now))
+        db.refresh(subscription)
 
     if subscription.status == "canceled":
         # No se le cobra ni se le avisa: solo vence cuando termina lo que pago.
@@ -336,8 +368,12 @@ def _process_automatic(
                     report.emails.append(expired)
         return
 
-    # 3. El intento que toque.
-    attempt = None if in_flight else schedule.next_attempt(now, period_end, len(attempts))
+    # 3. El intento que toque. Con la tarjeta bloqueada (la pasarela no admite
+    #    otro intento con ella), ninguno hasta que el cliente guarde otra.
+    blocked = subscription.payment_source_blocked
+    attempt = (
+        None if in_flight or blocked else schedule.next_attempt(now, period_end, len(attempts))
+    )
     if attempt is not None:
         _charge(db, provider, subscription, user, period_end, attempt, now, report)
         db.refresh(subscription)
@@ -346,8 +382,10 @@ def _process_automatic(
         attempts = _attempts(db, prefix)
         in_flight = any(p.status == "pending" for p in attempts)
 
-    # 4. Agotados los intentos y terminado el periodo: vence, sin gracia.
-    if schedule.should_expire(now, period_end, len(attempts), attempt_in_flight=in_flight):
+    # 4. Agotados los intentos (o bloqueada la tarjeta) y terminado el
+    #    periodo: vence, sin gracia.
+    made = schedule.MAX_ATTEMPTS if subscription.payment_source_blocked else len(attempts)
+    if schedule.should_expire(now, period_end, made, attempt_in_flight=in_flight):
         message = billing_emails.subscription_expired(user, subscription, automatic=True)
         _expire(db, subscription)
         report.expired += 1
@@ -467,7 +505,9 @@ def _charge(
         logger.warning("Renovaciones: el intento %s ya existia", payment.reference)
         return
     report.charges += 1
-    settlement = subscriptions.charge_payment(db, provider, payment, source, user.email, now)
+    settlement = subscriptions.charge_payment(
+        db, provider, payment, source, user.email, charge_period(subscription, period_end), now
+    )
     if settlement is None:
         # El proveedor no contesto. Cuenta como intento hecho; no como rechazo
         # de la tarjeta, asi que no se le escribe al cliente.
@@ -476,7 +516,51 @@ def _charge(
         db.commit()
         report.failed += 1
         return
+    if settlement.authentication_url and settlement.payment.status == "pending":
+        # El banco pide 3D Secure: el cobro espera a que el cliente lo
+        # confirme. Si no lo hace, la pasarela lo rechaza y cuenta como intento.
+        report.emails.append(
+            billing_emails.payment_authentication(
+                user, subscription, settlement.payment.amount_cents, settlement.authentication_url
+            )
+        )
     _count(db, settlement, report)
+
+
+def _waits_for_card(subscription: Subscription) -> bool:
+    """La suscripcion espera una tarjeta guardada en la pagina de la pasarela:
+    en mora, con la tarjeta bloqueada, o de pago manual con una verificacion
+    abierta."""
+    if subscription.provider_subscription_id is None:
+        return False
+    return (
+        subscription.renewal_mode == "manual"
+        or subscription.status == "past_due"
+        or subscription.payment_source_blocked
+    )
+
+
+def after_source_change(
+    db: Session,
+    provider: PaymentProvider,
+    change: subscriptions.SourceChange,
+    user: User,
+    now: datetime,
+) -> list[EmailMessage]:
+    """Lo que sigue a guardar otra tarjeta: el correo que lo confirma y, con un
+    cobro sin aprobar en el periodo, su reintento con la tarjeta nueva."""
+    subscription = change.subscription
+    amount = _renewal_quote(
+        db, subscription, _period_price(db, subscription, subscription.current_period_end)
+    ).total_cents if subscription.current_period_end is not None else subscription.price_cents
+    messages = [
+        billing_emails.payment_method_updated(
+            user, subscription, amount, activated_renewal=change.activated_renewal
+        )
+    ]
+    if change.retry_due:
+        messages.extend(retry_now(db, provider, subscription, user, now).emails)
+    return messages
 
 
 def _count(db: Session, settlement: subscriptions.Settlement | None, report: RenewalReport) -> None:
