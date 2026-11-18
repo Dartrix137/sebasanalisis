@@ -67,12 +67,26 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
   return event;
 }
 
+/**
+ * Errores que no son de la aplicación y no se pueden corregir desde aquí. Se
+ * suman a los que Sentry ya ignora por defecto (`DEFAULT_IGNORE_ERRORS`).
+ *
+ * - "Error invoking post: Method not found" (2026-11-18, Chrome Mobile en
+ *   Android): lo lanza un script que el navegador o una app del teléfono
+ *   inyecta en la página (marco `<anonymous>`, sin archivo). Ningún código de
+ *   la aplicación llama a un método `post` de ese modo.
+ *
+ * Cada patrón va anclado y completo: uno amplio escondería errores reales.
+ */
+const IGNORED_ERRORS = [/^Error invoking post: Method not found$/];
+
 /** Opciones comunes al navegador y al servidor de Next. */
 export const monitoringOptions = {
   dsn: DSN,
   enabled: DSN !== "",
   sendDefaultPii: false,
   beforeSend: scrubEvent,
+  ignoreErrors: IGNORED_ERRORS,
   // Solo errores: sin trazas de rendimiento ni grabación de sesiones.
   tracesSampleRate: 0,
 };
