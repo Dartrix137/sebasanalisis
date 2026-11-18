@@ -43,8 +43,8 @@ class GameGuides:
 GUIDES: dict[str, GameGuides] = {
     "roulette": GameGuides(
         videos=(
-            GuideVideo(title="Parte 1", youtube_id="fzoc2zF5Lsg"),
-            GuideVideo(title="Parte 2", youtube_id="wpRE5B5gYtI"),
+            GuideVideo(title="Parte 1", youtube_id="cZ0VoSNrKUM"),
+            GuideVideo(title="Parte 2", youtube_id="la34ov-blyM"),
         ),
         # `fl_attachment` hace que Cloudinary lo entregue como descarga.
         pdf=GuidePdf(
