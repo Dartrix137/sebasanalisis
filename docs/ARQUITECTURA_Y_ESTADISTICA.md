@@ -385,6 +385,27 @@ Cuatro estados de salida y nada más (decididos el 2026-09-24; SEÑAL DÉBIL se 
 - **Con menos de 11 números registrados en la sesión no hay recomendación**, aunque el score pase el umbral (`MIN_SPINS_FOR_SIGNAL`). Con el umbral en 50, cinco rojos seguidos ya daban 51 puntos. La pantalla lo muestra como FALTA INFORMACIÓN · x de 11. Hasta el 2026-10-15 el mínimo era la ventana más corta (10); ese día el usuario lo subió a 11, la cifra que el formulario de mesa nueva pide antes de abrir: con el número 11 registrado sale la primera recomendación, para el giro 12. Cuentan los de la carga inicial y los de giro a giro. El backtest no cambia (semilla 7, 200 × 150, idéntico con 10 y con 11): empieza a evaluar después de 12 giros de calentamiento (`engine/backtest.WARMUP`), así que el giro que se pierde queda fuera de lo que mide.
 - Se devuelve **una sola** recomendación, y la pantalla muestra solo esa: aunque otro mercado también pase el umbral, no aparece como segunda jugada. Con SIN SEÑAL no se nombra ninguna alternativa. Desempate determinista: mayor score → menor cobertura → índice de la categoría en el array `categories` → `group_ids` alfabético → clave del mercado. Ninguna parte de la clave depende del orden de un objeto JSON.
 
+#### Variación tras tres repeticiones (2026-11-19)
+
+Pedida por el usuario: el motor repetía el mismo mercado giro tras giro, y la recomendación dejaba de aportar. En 120 mesas justas de 150 giros, el 37 % de las recomendaciones eran la 4.ª seguida o más del mismo mercado, con rachas de 10 o más.
+
+- **Como mucho tres veces seguidas el mismo mercado** (`MAX_REPEATS = 3`). Si las tres recomendaciones emitidas en los tres giros anteriores fueron el mismo mercado y el motor lo vuelve a elegir, la cuarta se varía.
+- **Entra el mejor mercado de otra categoría**, por el mismo desempate, y solo si llega al umbral débil; trae su propio score y su propia banda (más baja, a veces DÉBIL, y entonces solo la apuesta base). Otra categoría y no solo otro mercado: el segundo mejor suele ser casi la misma jugada (tras "Columna 2", "Columnas 2 y 3", que la contiene). Si es de otra categoría, una docena tras "Alto" sigue solapándose con él, y eso se acepta: en las simulaciones nunca hubo una alternativa en el umbral que no se solapara.
+- **Si ningún mercado de otra categoría llega al umbral débil, NO APOSTAR**, y el mejor que se guarda es el de otra categoría, así que la banda sigue diciendo SIN SEÑAL. La mejor alternativa no se asciende a señal (regla de arriba).
+- **La racha se cuenta sobre lo emitido**, no sobre lo que el motor habría elegido sin variar: las filas de `statistical_suggestions` de los tres giros anteriores. Un NO APOSTAR en medio, o un giro sin fila (los de la carga inicial antes del último), corta la racha. Después de la variación, el mercado repetido puede volver: el patrón es A, A, A, B, A, A, A, B… Deshacer un giro borra su fila, así que la racha se recalcula sola.
+- Con una sola categoría en la variante no hay con qué variar y se recomienda igual.
+- **La tarjeta no avisa que es una variación** (decisión del usuario): se ve como cualquier otra recomendación. El motor la marca (`Recommendation.varied_from`), y el backtest la cuenta, pero la API no la expone.
+- **No cambia lo que se espera ganar.** Cada giro es independiente y todo mercado paga con la ventaja de la casa: variar no empeora ni mejora la coincidencia ni el ROI. Lo que cambia es cuánto habla el motor y con qué banda.
+
+Backtest fuera de muestra con la variación y los umbrales por defecto (semilla 90217, 150 × 150):
+
+| variante | recomienda (% de giros) | variadas (% de giros) | DÉBIL | MEDIA | FUERTE | coincidencia | ROI/unidad |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| europea | 87.4 % (antes 90.6 %) | 12.5 % | 6966 (48.3 %) | 10073 (47.2 %) | 1056 (46.1 %) | 47.6 % | −0.019 |
+| americana | 84.7 % (antes 87.8 %) | 12.0 % | 6679 (46.9 %) | 9683 (45.7 %) | 1166 (46.3 %) | 46.2 % | −0.044 |
+
+Entre paréntesis, la coincidencia de cada banda. FUERTE baja a ~6 % de las recomendaciones (antes ~7 %), porque una racha de la misma jugada suele ser la de los scores altos. Las diferencias entre bandas siguen siendo ruido.
+
 #### Gestión de apuesta
 
 El flujo es: primero la recomendación, después el monto. Desde la Fase 3 **la sesión no elige una progresión al crearse**: la mesa muestra las tres (plana, martingala, recuperación de dos sectores) con lo que pide cada una, y el usuario sigue la que quiera. D'Alembert y Fibonacci salen del producto.

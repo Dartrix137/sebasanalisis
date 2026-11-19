@@ -21,6 +21,7 @@ from app.api.v1.sessions import get_owned_session
 from app.engine import bankroll as bk
 from app.engine.probability import GameConfig, expected_value
 from app.engine.recommendation import (
+    MAX_REPEATS,
     MIN_SPINS_FOR_SIGNAL,
     Decision,
     Market,
@@ -80,8 +81,38 @@ def load_spins(db: DbSession, session: GameSession) -> list[str]:
     )
 
 
+def emitted_before(db: DbSession, session: GameSession, total_spins: int) -> list[str | None]:
+    """Los mercados recomendados despues de cada uno de los `MAX_REPEATS` giros
+    anteriores al ultimo, del mas antiguo al mas reciente.
+
+    Salen de las filas guardadas, que son lo que el usuario vio: la variacion
+    tras tres repeticiones (§2.10) mira lo emitido, no lo que el motor habria
+    elegido sin variar. Un NO APOSTAR, o un giro sin fila (los de la carga
+    inicial antes del ultimo), cuenta como None y corta la racha. Deshacer un
+    giro borra su fila, asi que esto se recalcula solo.
+    """
+    ultimo = total_spins - 1
+    desde = ultimo - MAX_REPEATS
+    if desde < 0:
+        return []
+    filas = db.execute(
+        select(Spin.spin_index, StatisticalSuggestion.decision, StatisticalSuggestion.market_key)
+        .join(Spin, Spin.id == StatisticalSuggestion.spin_id)
+        .where(
+            StatisticalSuggestion.session_id == session.id,
+            Spin.spin_index >= desde,
+            Spin.spin_index < ultimo,
+        )
+        .order_by(StatisticalSuggestion.created_at.asc())
+    ).all()
+    por_giro: dict[int, str | None] = {}
+    for indice, decision, clave in filas:
+        por_giro[indice] = clave if decision == Decision.recommend.value else None
+    return [por_giro.get(i) for i in range(desde, ultimo)]
+
+
 def build_recommendation(
-    config: GameConfig, session: GameSession, historial: list[str]
+    db: DbSession, config: GameConfig, session: GameSession, historial: list[str]
 ) -> Recommendation:
     """La recomendacion para el giro siguiente.
 
@@ -90,7 +121,12 @@ def build_recommendation(
     a las señales ponderadas recortar no les cuesta casi nada (§2.3).
     """
     ventana = historial[-session.window_size :]
-    return recommend(config, ventana, full_history=historial)
+    return recommend(
+        config,
+        ventana,
+        full_history=historial,
+        previous=emitted_before(db, session, len(historial)),
+    )
 
 
 def current_stages(session: GameSession) -> dict[bk.Strategy, int]:
@@ -364,7 +400,7 @@ def latest_recommendation(
     session = get_owned_session(db, user.id, session_id)
     config = load_config(db, session)
     historial = load_spins(db, session)
-    resultado = build_recommendation(config, session, historial)
+    resultado = build_recommendation(db, config, session, historial)
     return to_response(session, resultado, stakes_for(session, resultado), len(historial))
 
 

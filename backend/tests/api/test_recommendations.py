@@ -105,6 +105,22 @@ def _historial(client, token, sid):
     return r.json()
 
 
+def _cargar_rojo(client, token, sid) -> None:
+    """Historial cargado a rojo, por carga inicial.
+
+    Por carga inicial y no giro a giro: giro a giro, la misma recomendacion
+    saldria mas de tres veces seguidas y la ultima se variaria (`MAX_REPEATS`),
+    y estos tests dejarian de mirar el caso que quieren mirar. La carga inicial
+    emite una sola fila, asi que no arma racha.
+    """
+    r = client.post(
+        f"/sessions/{sid}/spins/bulk",
+        json={"values": ["1", "3", "5"] * 6, "order": "most_recent_last"},
+        headers=auth(token),
+    )
+    assert r.status_code == 201, r.text
+
+
 def _sesion(client, token, sid):
     return client.get(f"/sessions/{sid}", headers=auth(token)).json()
 
@@ -262,8 +278,7 @@ def test_la_recomendacion_se_resuelve_con_el_giro_siguiente(
     client: TestClient, user_token: str, sesion: str
 ) -> None:
     # Historial muy cargado a rojo para que el motor recomiende algo.
-    for valor in ["1", "3", "5"] * 6:
-        _girar(client, user_token, sesion, valor)
+    _cargar_rojo(client, user_token, sesion)
 
     antes = _recomendacion(client, user_token, sesion)
     if antes["decision"] != "RECOMMEND":
@@ -333,8 +348,7 @@ def test_las_apuestas_reales_no_mueven_las_progresiones(
 def _recomendacion_de_un_sector(client, token, sid) -> dict:
     """Historial cargado a rojo hasta que el motor recomiende un mercado de una
     zona, o salta el test si este historial no lo logra."""
-    for valor in ["1", "3", "5"] * 6:
-        _girar(client, token, sid, valor)
+    _cargar_rojo(client, token, sid)
     rec = _recomendacion(client, token, sid)
     if rec["decision"] != "RECOMMEND" or rec["market"]["sectors"] != 1:
         pytest.skip("este historial no dejo una recomendacion de un sector")
@@ -528,3 +542,43 @@ def test_anotar_martingala_sobre_una_senal_debil_no_mueve_el_escalon(
 
     assert _sesion(client, user_token, sesion)["stage_martingale"] == 0
 
+
+
+# ---------- Variacion tras tres repeticiones (2026-11-19) ----------
+
+
+def _deshacer_ultimo(client, token, sid) -> None:
+    giros = client.get(f"/sessions/{sid}/spins", headers=auth(token)).json()
+    r = client.delete(f"/sessions/{sid}/spins/{giros[-1]['id']}", headers=auth(token))
+    assert r.status_code == 204
+
+
+def test_la_cuarta_recomendacion_igual_se_varia_y_deshacer_la_recalcula(
+    client: TestClient, user_token: str, sesion: str
+) -> None:
+    """Siempre sale el 5: el motor elige el mismo mercado en cada giro. Tres
+    seguidas se recomiendan; la cuarta pasa a otra categoria, y la quinta puede
+    volver al repetido. La mesa (GET) dice lo mismo que la fila guardada, y
+    deshacer el giro recalcula la racha desde las filas que quedan."""
+    from app.engine.recommendation import MIN_SPINS_FOR_SIGNAL
+
+    for _ in range(MIN_SPINS_FOR_SIGNAL + 3):
+        _girar(client, user_token, sesion, "5")
+
+    emitidas = [h for h in _historial(client, user_token, sesion) if h["decision"] == "RECOMMEND"]
+    assert len(emitidas) == 4
+    repetida = emitidas[0]["market_key"]
+    assert [h["market_key"] for h in emitidas[:3]] == [repetida] * 3
+    assert emitidas[3]["category"] != emitidas[0]["category"]
+    variada = emitidas[3]["market_key"]
+    assert _recomendacion(client, user_token, sesion)["market"]["key"] == variada
+
+    _girar(client, user_token, sesion, "5")
+    assert _recomendacion(client, user_token, sesion)["market"]["key"] == repetida
+
+    # Deshacer el quinto vuelve a la variada; deshacer tambien el cuarto, a la
+    # tercera repeticion, que todavia se recomienda.
+    _deshacer_ultimo(client, user_token, sesion)
+    assert _recomendacion(client, user_token, sesion)["market"]["key"] == variada
+    _deshacer_ultimo(client, user_token, sesion)
+    assert _recomendacion(client, user_token, sesion)["market"]["key"] == repetida

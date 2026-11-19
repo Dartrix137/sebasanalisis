@@ -146,6 +146,7 @@ def print_report(
     print(f"  Decisiones             {informe.decisions:>8}")
     print(f"  Recomendaciones        {informe.overall.recommendations:>8}")
     print(f"  NO APOSTAR             {informe.no_bets:>8}  ({informe.no_bet_rate:.1%})")
+    print(f"  Variadas (4.a repetida) {informe.varied:>7}")
     print(f"  Umbral debil           {weak_threshold:>8.0f}")
     print(f"  Umbral medio           {threshold:>8.0f}")
     print()

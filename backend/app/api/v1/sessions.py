@@ -419,7 +419,7 @@ def create_spin(
             .order_by(Spin.spin_index.asc())
         )
     )
-    siguiente = build_recommendation(motor_config, session, historial)
+    siguiente = build_recommendation(db, motor_config, session, historial)
     montos = stakes_for(session, siguiente)
     # El monto que se guarda es el de la progresion que el mercado admite y que
     # mas se usa como referencia: la primera aplicable del menu.
@@ -504,7 +504,7 @@ def create_spins_bulk(
             .order_by(Spin.spin_index.asc())
         )
     )
-    siguiente = build_recommendation(config, session, historial)
+    siguiente = build_recommendation(db, config, session, historial)
     montos = stakes_for(session, siguiente)
     aplicable = next((m for m in montos if m.applicable), None)
     persist_recommendation(
