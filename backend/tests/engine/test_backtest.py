@@ -12,10 +12,22 @@ from app.engine.backtest import (
     Report,
     Tally,
     backtest,
+    fair_roi,
     fair_wheel_histories,
     net_units,
 )
-from app.engine.recommendation import SignalBand, market_for_key
+from app.engine.recommendation import SignalBand, market_catalog, market_for_key
+
+
+def test_la_referencia_es_la_ventaja_de_la_casa_en_cada_mercado(
+    europea, americana
+) -> None:
+    """Europea -1/37 y americana -2/38, en todos los mercados, dos docenas
+    incluidas. Antes el script usaba -1/N y en la americana daba la mitad."""
+    for config, esperado in ((europea, -1 / 37), (americana, -2 / 38)):
+        n = len(config.possible_outcomes)
+        for m in market_catalog(config):
+            assert fair_roi(m, n) == pytest.approx(esperado)
 
 # --------------------------------------------------------------------------
 # Pagos reales
