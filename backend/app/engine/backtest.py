@@ -124,6 +124,20 @@ def net_units(market: Market, hit: bool) -> tuple[float, float]:
     return market.payout - (market.sectors - 1), arriesgado
 
 
+def fair_roi(market: Market, total_outcomes: int) -> float:
+    """ROI esperado de un mercado en una mesa sin sesgo, con sus pagos reales.
+
+    Es la referencia contra la que se lee el backtest. Sale de los pagos y de
+    la cobertura, no de suponer un solo cero: en la europea da -1/37 y en la
+    americana -2/38 en todos los mercados. Hasta el 2026-11-19 el script usaba
+    -1/N, que en la americana daba la mitad de la ventaja real.
+    """
+    p = market.coverage / total_outcomes
+    ganado, arriesgado = net_units(market, hit=True)
+    perdido, _ = net_units(market, hit=False)
+    return (p * ganado + (1 - p) * perdido) / arriesgado
+
+
 # --------------------------------------------------------------------------
 # Corrida
 # --------------------------------------------------------------------------

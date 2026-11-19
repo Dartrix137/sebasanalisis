@@ -45,10 +45,15 @@ from app.engine.backtest import (  # noqa: E402
     Report,
     Tally,
     backtest,
+    fair_roi,
     fair_wheel_histories,
 )
 from app.engine.probability import GameConfig  # noqa: E402
-from app.engine.recommendation import SignalBand, weak_threshold_for  # noqa: E402
+from app.engine.recommendation import (  # noqa: E402
+    SignalBand,
+    market_catalog,
+    weak_threshold_for,
+)
 
 SEED_DATA = Path(__file__).resolve().parents[1] / "app" / "db" / "seed_data"
 
@@ -137,7 +142,8 @@ def _fmt_tally(nombre: str, t: Tally) -> str:
 def print_report(
     informe: Report, config: GameConfig, threshold: float, weak_threshold: float
 ) -> None:
-    ventaja = -1 / len(config.possible_outcomes)
+    rois = [fair_roi(m, len(config.possible_outcomes)) for m in market_catalog(config)]
+    ventaja = min(rois)
     print()
     print("=" * 96)
     print("BACKTEST DEL MOTOR DE RECOMENDACION — metrica interna, no visible al cliente")
@@ -161,10 +167,16 @@ def print_report(
     for banda in SignalBand:
         print(f"    {BAND_LABEL[banda]:<12} {informe.no_bet_by_band[banda]:>8}")
     print()
-    print(
-        f"  Referencia: en una mesa sin sesgo el ROI de CUALQUIER apuesta es "
-        f"{ventaja:+.4f}."
-    )
+    if max(rois) - ventaja < 1e-9:
+        print(
+            f"  Referencia: en una mesa sin sesgo el ROI de CUALQUIER apuesta es "
+            f"{ventaja:+.4f}."
+        )
+    else:
+        print(
+            f"  Referencia: en una mesa sin sesgo el ROI de las apuestas va de "
+            f"{ventaja:+.4f} a {max(rois):+.4f}."
+        )
     print(
         "  Un ROI cercano a esa cifra es el resultado esperado, no un fallo: "
         "significa que"
