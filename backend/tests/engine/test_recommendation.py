@@ -14,6 +14,7 @@ import pytest
 from app.engine.probability import GameConfig
 from app.engine.recommendation import (
     CHI_SQUARE_BONUS,
+    MAX_REPEATS,
     MIN_SPINS_FOR_SIGNAL,
     STRONG_THRESHOLD,
     WEIGHT_CONSISTENCY,
@@ -459,6 +460,137 @@ def test_a_igual_score_gana_la_menor_cobertura(europea) -> None:
     ]
     coberturas = [c.market.coverage for c in empatados]
     assert coberturas == sorted(coberturas)
+
+
+# --------------------------------------------------------------------------
+# Variacion tras tres repeticiones (2026-11-19)
+# --------------------------------------------------------------------------
+
+
+def test_el_maximo_de_repeticiones_es_tres() -> None:
+    assert MAX_REPEATS == 3
+
+
+def test_la_cuarta_repeticion_pasa_al_mejor_de_otra_categoria(europea) -> None:
+    """El barrido 0-36 seis veces da "Alto". Si ya se recomendo tres veces
+    seguidas, entra el mejor mercado que no sea de alto/bajo, con su propio
+    score y su banda."""
+    barrido = list(europea.possible_outcomes) * 6
+    sin_variar = recommend(europea, barrido)
+    assert sin_variar.market.key == "high_low:high"
+
+    variada = recommend(europea, barrido, previous=["high_low:high"] * 3)
+    assert variada.varied_from == "high_low:high"
+    assert variada.decision is Decision.recommend
+    assert variada.market.category_id != "high_low"
+    esperado = next(
+        c for c in sin_variar.candidates if c.market.category_id != "high_low"
+    )
+    assert variada.best.market.key == esperado.market.key
+    assert variada.signal_score == esperado.signal_score
+    assert variada.signal_score >= variada.weak_threshold
+    assert variada.signal_band is esperado.signal_band
+    # Los candidatos no cambian: la variacion solo elige otro.
+    assert [c.market.key for c in variada.candidates] == [
+        c.market.key for c in sin_variar.candidates
+    ]
+
+
+def test_con_menos_de_tres_repeticiones_no_varia(europea) -> None:
+    barrido = list(europea.possible_outcomes) * 6
+    for previas in (
+        [],
+        ["high_low:high"],
+        ["high_low:high"] * 2,
+        ["color:red", "high_low:high", "high_low:high"],
+    ):
+        resultado = recommend(europea, barrido, previous=previas)
+        assert resultado.market.key == "high_low:high"
+        assert resultado.varied_from is None
+
+
+def test_un_no_apostar_en_medio_corta_la_racha(europea) -> None:
+    barrido = list(europea.possible_outcomes) * 6
+    previas = ["high_low:high", None, "high_low:high", "high_low:high"]
+    resultado = recommend(europea, barrido, previous=previas)
+    assert resultado.market.key == "high_low:high"
+    assert resultado.varied_from is None
+
+
+def test_tras_la_variacion_el_mercado_puede_volver(europea) -> None:
+    """La racha se cuenta sobre lo emitido: despues de la variacion, las tres
+    ultimas ya no son el mismo mercado y el repetido vuelve a salir."""
+    barrido = list(europea.possible_outcomes) * 6
+    previas = ["high_low:high"] * 3 + ["dozen:third"]
+    resultado = recommend(europea, barrido, previous=previas)
+    assert resultado.market.key == "high_low:high"
+    assert resultado.varied_from is None
+
+
+def test_sin_otra_categoria_en_el_umbral_no_apuesta(europea) -> None:
+    """Si ningun mercado de otra categoria llega al umbral debil, la cuarta es
+    NO APOSTAR, y el mejor que se guarda es el de otra categoria, con SIN SEÑAL:
+    la banda no contradice a la decision."""
+    barrido = list(europea.possible_outcomes) * 6
+    sin_variar = recommend(europea, barrido)
+    mejor_otra = max(
+        c.signal_score
+        for c in sin_variar.candidates
+        if c.market.category_id != "high_low"
+    )
+    assert sin_variar.signal_score > mejor_otra
+    corte = (sin_variar.signal_score + mejor_otra) / 2
+
+    resultado = recommend(
+        europea,
+        barrido,
+        threshold=corte,
+        weak_threshold=corte,
+        previous=["high_low:high"] * 3,
+    )
+    assert resultado.varied_from == "high_low:high"
+    assert resultado.decision is Decision.no_bet
+    assert resultado.market is None
+    assert resultado.signal_band is SignalBand.none
+    assert resultado.best.market.category_id != "high_low"
+
+
+def test_un_no_apostar_no_se_varia(europea) -> None:
+    numeros = list(europea.possible_outcomes)
+    uniforme = [numeros[(i * 16) % len(numeros)] for i in range(len(numeros))] * 6
+    sin_variar = recommend(europea, uniforme)
+    clave = sin_variar.best.market.key
+    resultado = recommend(europea, uniforme, previous=[clave] * 3)
+    assert resultado.decision is Decision.no_bet
+    assert resultado.varied_from is None
+    assert resultado.best.market.key == clave
+
+
+def test_en_una_mesa_nunca_salen_cuatro_iguales_seguidas(europea) -> None:
+    """Giro a giro, como la mesa: con lo emitido como `previous`, ningun mercado
+    se recomienda mas de tres veces seguidas."""
+    from app.engine.backtest import fair_wheel_histories
+
+    (historial,) = fair_wheel_histories(europea, 1, 220, seed=4401)
+    emitidas: list[str | None] = []
+    variadas = 0
+    for i in range(MIN_SPINS_FOR_SIGNAL, len(historial)):
+        previos = historial[:i]
+        r = recommend(europea, previos[-50:], full_history=previos, previous=emitidas)
+        emitidas.append(r.market.key if r.market else None)
+        variadas += r.varied_from is not None
+
+    assert variadas > 0
+    for i in range(len(emitidas) - MAX_REPEATS):
+        tramo = emitidas[i : i + MAX_REPEATS + 1]
+        assert not (tramo[0] is not None and len(set(tramo)) == 1)
+
+
+def test_con_una_sola_categoria_no_hay_con_que_variar(dados) -> None:
+    giros = ["2", "4", "6", "8", "10", "12"] * 8
+    resultado = recommend(dados, giros, previous=["parity:even"] * 3)
+    assert resultado.market.key == "parity:even"
+    assert resultado.varied_from is None
 
 
 def test_funciona_con_un_juego_que_no_es_ruleta(dados) -> None:

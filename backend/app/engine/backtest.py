@@ -97,6 +97,9 @@ class Report:
     no_bet_by_band: dict[SignalBand, int] = field(
         default_factory=lambda: {b: 0 for b in SignalBand}
     )
+    #: Decisiones en las que el motor vario el mercado repetido (`MAX_REPEATS`),
+    #: haya terminado en otra recomendacion o en NO APOSTAR.
+    varied: int = 0
 
     @property
     def decisions(self) -> int:
@@ -143,6 +146,10 @@ def backtest(
     informe = Report()
 
     for historial in historiales:
+        #: Lo que el motor emitio en cada giro de esta sesion, como las filas de
+        #: `statistical_suggestions`: la variacion tras tres repeticiones mira
+        #: lo emitido, no lo que habria elegido sin variar.
+        emitidas: list[str | None] = []
         for i in range(warmup, len(historial)):
             previos = list(historial[:i])
             siguiente = historial[i]
@@ -154,7 +161,11 @@ def backtest(
                 full_history=previos,
                 threshold=threshold,
                 weak_threshold=weak_threshold,
+                previous=emitidas,
             )
+            emitidas.append(resultado.market.key if resultado.market else None)
+            if resultado.varied_from is not None:
+                informe.varied += 1
 
             banda = resultado.best.signal_band if resultado.best else SignalBand.none
             if resultado.decision is Decision.no_bet:

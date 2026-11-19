@@ -10,7 +10,9 @@ ninguna alternativa alcanza el umbral. Hay cuatro salidas y nada mas: SEÑAL
 FUERTE (desde el umbral alto), SEÑAL MEDIA (del umbral medio al alto), SEÑAL
 DEBIL (del umbral debil al medio: solo apuesta base) y SIN SEÑAL (por debajo
 del debil, no apostar). Solo se evalua la mejor alternativa: una
-segunda que tambien pase el umbral no se ofrece como otra apuesta. El score mide **cuanto se separo la
+segunda que tambien pase el umbral no se ofrece como otra apuesta. La excepcion
+es la variacion tras tres repeticiones (`MAX_REPEATS`): la cuarta vez seguida
+del mismo mercado pasa al mejor de otra categoria. El score mide **cuanto se separo la
 muestra ya ocurrida de lo que la mesa da de por si**, no la probabilidad de
 acertar el proximo giro: esa sigue siendo la teorica, y no la cambia nada de lo
 que se calcule aqui.
@@ -104,6 +106,13 @@ STRONG_THRESHOLD = 80.0
 #: al abrir la mesa: con 11 numeros registrados sale la primera recomendacion,
 #: para el giro 12. Ya no esta atado a `WINDOWS[0]`.
 MIN_SPINS_FOR_SIGNAL = 11
+
+#: Veces seguidas que se puede recomendar el mismo mercado (2026-11-19, pedido
+#: del usuario). Si las ultimas tres recomendaciones emitidas fueron el mismo
+#: mercado y el motor lo vuelve a elegir, la cuarta se varia: entra el mejor
+#: mercado de OTRA categoria, si llega al umbral debil, y si no, NO_BET. Un
+#: NO_BET en medio corta la racha. Ver `recommend` y §2.10.
+MAX_REPEATS = 3
 
 
 class Decision(str, Enum):
@@ -572,6 +581,10 @@ class Recommendation:
     best: ScoredMarket | None
     #: Todos los mercados, ya ordenados por el desempate. Incluye a `best`.
     candidates: tuple[ScoredMarket, ...]
+    #: La clave del mercado que el motor habria repetido por cuarta vez, cuando
+    #: la recomendacion se vario (`MAX_REPEATS`). None si no se vario. No se
+    #: muestra al cliente (decision del usuario, 2026-11-19).
+    varied_from: str | None = None
 
     @property
     def market(self) -> Market | None:
@@ -611,6 +624,16 @@ def _tie_break_key(
     )
 
 
+def repeats_exhausted(previous: Sequence[str | None], key: str) -> bool:
+    """Si las ultimas `MAX_REPEATS` recomendaciones emitidas fueron `key`.
+
+    `previous` va del mas antiguo al mas reciente, con None en los giros sin
+    recomendacion (NO_BET, o un giro sin fila): un None corta la racha.
+    """
+    ultimas = list(previous[-MAX_REPEATS:])
+    return len(ultimas) == MAX_REPEATS and all(k == key for k in ultimas)
+
+
 def recommend(
     config: GameConfig,
     results: Sequence[str],
@@ -618,6 +641,7 @@ def recommend(
     full_history: Sequence[str] | None = None,
     threshold: float | None = None,
     weak_threshold: float | None = None,
+    previous: Sequence[str | None] = (),
 ) -> Recommendation:
     """La recomendacion para el giro siguiente.
 
@@ -629,6 +653,20 @@ def recommend(
     `threshold` gana sobre el umbral medio de la variante; sirve para que el
     admin pruebe un valor sin tocar la configuracion guardada; `weak_threshold`,
     igual sobre el debil. El debil nunca queda por encima del medio.
+
+    `previous` son los mercados de las recomendaciones ya emitidas en los giros
+    anteriores, del mas antiguo al mas reciente (None si fue NO_BET). Si las
+    ultimas `MAX_REPEATS` fueron el mismo mercado y el motor lo vuelve a elegir,
+    se varia (2026-11-19): entra el mejor candidato de OTRA categoria, por el
+    mismo desempate, y solo si llega al umbral debil; si no llega, NO_BET con
+    ese candidato como mejor, para que la banda siga diciendo SIN SEÑAL. Otra
+    categoria y no solo otro mercado: el segundo mejor suele ser casi la misma
+    jugada (tras "Columna 2", "Columnas 2 y 3"). Con una sola categoria en la
+    variante no hay con que variar y se recomienda igual.
+
+    Variar no cambia lo que se espera ganar: cada giro es independiente y todos
+    los mercados pagan con la ventaja de la casa. Lo que cambia es que la
+    jugada variada trae su propio score, mas bajo, y su propia banda.
     """
     umbral = threshold if threshold is not None else config.recommendation_threshold
     umbral_debil = weak_threshold_for(
@@ -672,12 +710,26 @@ def recommend(
         if hay_datos and mejor.signal_score >= umbral_debil
         else Decision.no_bet
     )
+
+    variado_de: str | None = None
+    if decision is Decision.recommend and repeats_exhausted(previous, mejor.market.key):
+        otras = [s for s in puntuados if s.market.category_id != mejor.market.category_id]
+        if otras:
+            variado_de = mejor.market.key
+            mejor = otras[0]
+            decision = (
+                Decision.recommend
+                if mejor.signal_score >= umbral_debil
+                else Decision.no_bet
+            )
+
     return Recommendation(
         decision=decision,
         threshold=umbral,
         weak_threshold=umbral_debil,
         best=mejor,
         candidates=tuple(puntuados),
+        varied_from=variado_de,
     )
 
 
