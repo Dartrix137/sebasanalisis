@@ -76,6 +76,7 @@ Ajustes posteriores, ya construidos:
 - **2026-09-23:** la vista deja de pintar el top-3, las señales por categoría, la racha y la tasa de coincidencia (los endpoints siguen). Un escalón de progresión solo avanza si el usuario apostó con esa gestión.
 - **2026-09-24:** cuatro estados de salida (FUERTE, MEDIA, DÉBIL, SIN SEÑAL) con umbrales por variante; calibración vigente (`Z_MAX` 1.6, pesos 0.58/0.32/0.10); estado de parar de la mesa (banca agotada, límite de pérdida).
 - **2026-11-19:** un mismo mercado se recomienda como mucho tres veces seguidas; la cuarta pasa al mejor de otra categoría, o a NO APOSTAR si ninguno llega al umbral débil (`MAX_REPEATS`, `ARQUITECTURA_Y_ESTADISTICA.md` §2.10, "Variación tras tres repeticiones"). Pedido del usuario, ya con la venta abierta: es el primer cambio del motor en la Fase 5.
+- **2026-11-20:** más variación, por quejas de clientes. Un mercado amplio (color, paridad, alto/bajo) se refina en la docena o columna donde más cayeron sus resultados, si alguna llega al umbral débil. Y como mucho dos recomendaciones seguidas de la misma categoría (antes, tres del mismo mercado). Se descartó jugar solo a dos docenas o dos columnas: sube el acierto pero bajan las sesiones en positivo. La coincidencia baja del 47,6 % al 44,8 % y el ROI no cambia (`ARQUITECTURA_Y_ESTADISTICA.md` §2.10, "Más variación: refinamiento y racha por categoría").
 
 Definido en `ARQUITECTURA_Y_ESTADISTICA.md` §2.10. El origen del cambio está en `docs/reference/Comparativo_Software_Actual_vs_Software_Deseado.md`.
 
@@ -94,6 +95,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Las progresiones avanzaban con el cierre de la recomendación, apostara o no el usuario. | Un escalón solo avanza si el usuario apostó con esa gestión. | 2026-09-23 |
 | Tres bandas de señal. | Cuatro estados, con DÉBIL limitada a gestión plana. | 2026-09-24 |
 | El motor recomendaba siempre el mercado de mayor score, aunque fuera el mismo giro tras giro (el 37 % de las recomendaciones eran la 4.ª seguida o más). | Como mucho tres veces seguidas el mismo mercado; la cuarta pasa al mejor de otra categoría o a NO APOSTAR. La tarjeta no avisa que es una variación (decisión del usuario). | 2026-11-19 |
+| Como mucho tres veces seguidas el mismo mercado; un mercado 1:1 se recomendaba tal cual. | Como mucho dos seguidas de la misma categoría. Un mercado amplio se refina en la docena o columna donde más cayeron sus resultados, si alguna llega al umbral débil. La tarjeta no avisa de ninguna de las dos cosas. | 2026-11-20 |
 | Lectura de pantallazos con un modelo de visión para cargar números. | Descartada. Todo número lo ingresa el usuario a mano; el proyecto no llama a ninguna IA. | MVP |
 | Prueba gratuita (`access_type = trial`). | Desaparece. Cuenta nueva sin acceso hasta pagar, o acceso manual del admin. | Fase 4 |
 | Cualquier cuenta registrada usa la mesa. | El acceso lo decide una sola función en el servidor, en todos los endpoints de juego. | Fase 4, paso 3 |
@@ -130,7 +132,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 
 ## 5. Lo que se construye ahora: Fase 5 — Salida al mercado
 
-Decidida el 2026-10-23. Deja la aplicación lista para vender. No toca el motor, salvo la variación tras tres repeticiones que pidió el usuario el 2026-11-19 (§3, Fase 3). Parte de tres hechos:
+Decidida el 2026-10-23. Deja la aplicación lista para vender. No toca el motor, salvo la variación de la recomendación que pidió el usuario el 2026-11-19 y amplió el 2026-11-20 (§3, Fase 3). Parte de tres hechos:
 - Wompi salió (2026-10-22). Se probó solo contra su sandbox, nunca con dinero real.
 - Tipster Page lo reemplaza y cobra en euros.
 - Cada pago aprobado lleva una factura electrónica emitida con Siigo (desde el 2026-11-05; Dataico quedó descartado).
