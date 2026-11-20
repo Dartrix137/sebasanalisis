@@ -86,7 +86,7 @@ def emitted_before(db: DbSession, session: GameSession, total_spins: int) -> lis
     anteriores al ultimo, del mas antiguo al mas reciente.
 
     Salen de las filas guardadas, que son lo que el usuario vio: la variacion
-    tras tres repeticiones (§2.10) mira lo emitido, no lo que el motor habria
+    tras dos de la misma categoria (§2.10) mira lo emitido, no lo que el motor habria
     elegido sin variar. Un NO APOSTAR, o un giro sin fila (los de la carga
     inicial antes del ultimo), cuenta como None y corta la racha. Deshacer un
     giro borra su fila, asi que esto se recalcula solo.

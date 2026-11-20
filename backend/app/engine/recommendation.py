@@ -10,9 +10,11 @@ ninguna alternativa alcanza el umbral. Hay cuatro salidas y nada mas: SEÑAL
 FUERTE (desde el umbral alto), SEÑAL MEDIA (del umbral medio al alto), SEÑAL
 DEBIL (del umbral debil al medio: solo apuesta base) y SIN SEÑAL (por debajo
 del debil, no apostar). Solo se evalua la mejor alternativa: una
-segunda que tambien pase el umbral no se ofrece como otra apuesta. La excepcion
-es la variacion tras tres repeticiones (`MAX_REPEATS`): la cuarta vez seguida
-del mismo mercado pasa al mejor de otra categoria. El score mide **cuanto se separo la
+segunda que tambien pase el umbral no se ofrece como otra apuesta. Hay dos
+excepciones, las dos para que la recomendacion varie mas (2026-11-20): el
+refinamiento (`refine`), que cambia un mercado amplio por el mas fino de otra
+categoria donde mas cayeron sus resultados, y la variacion tras dos de la misma
+categoria (`MAX_REPEATS`), que pasa al mejor de otra. El score mide **cuanto se separo la
 muestra ya ocurrida de lo que la mesa da de por si**, no la probabilidad de
 acertar el proximo giro: esa sigue siendo la teorica, y no la cambia nada de lo
 que se calcule aqui.
@@ -107,12 +109,14 @@ STRONG_THRESHOLD = 80.0
 #: para el giro 12. Ya no esta atado a `WINDOWS[0]`.
 MIN_SPINS_FOR_SIGNAL = 11
 
-#: Veces seguidas que se puede recomendar el mismo mercado (2026-11-19, pedido
-#: del usuario). Si las ultimas tres recomendaciones emitidas fueron el mismo
-#: mercado y el motor lo vuelve a elegir, la cuarta se varia: entra el mejor
-#: mercado de OTRA categoria, si llega al umbral debil, y si no, NO_BET. Un
-#: NO_BET en medio corta la racha. Ver `recommend` y §2.10.
-MAX_REPEATS = 3
+#: Veces seguidas que se puede recomendar un mercado de la misma categoria
+#: (pedido del usuario). Si las ultimas dos recomendaciones emitidas fueron de
+#: la misma categoria y el motor vuelve a elegir una de ella, la tercera se
+#: varia: entra el mejor mercado de OTRA categoria, si llega al umbral debil, y
+#: si no, NO_BET. Un NO_BET en medio corta la racha. Ver `recommend` y §2.10.
+#: Hasta el 2026-11-20 eran tres seguidas del mismo mercado (la misma clave):
+#: "Columna 2", "Columnas 2 y 3", "Columna 2" no contaba como racha.
+MAX_REPEATS = 2
 
 
 class Decision(str, Enum):
@@ -581,10 +585,13 @@ class Recommendation:
     best: ScoredMarket | None
     #: Todos los mercados, ya ordenados por el desempate. Incluye a `best`.
     candidates: tuple[ScoredMarket, ...]
-    #: La clave del mercado que el motor habria repetido por cuarta vez, cuando
+    #: La clave del mercado que habria alargado la racha de su categoria, cuando
     #: la recomendacion se vario (`MAX_REPEATS`). None si no se vario. No se
     #: muestra al cliente (decision del usuario, 2026-11-19).
     varied_from: str | None = None
+    #: La clave del mercado amplio que se cambio por uno mas fino (`refine`).
+    #: None si no se refino. Tampoco se muestra al cliente.
+    refined_from: str | None = None
 
     @property
     def market(self) -> Market | None:
@@ -624,14 +631,66 @@ def _tie_break_key(
     )
 
 
-def repeats_exhausted(previous: Sequence[str | None], key: str) -> bool:
-    """Si las ultimas `MAX_REPEATS` recomendaciones emitidas fueron `key`.
+def repeats_exhausted(previous_categories: Sequence[str | None], category_id: str) -> bool:
+    """Si las ultimas `MAX_REPEATS` recomendaciones emitidas fueron de `category_id`.
 
-    `previous` va del mas antiguo al mas reciente, con None en los giros sin
-    recomendacion (NO_BET, o un giro sin fila): un None corta la racha.
+    `previous_categories` va del mas antiguo al mas reciente, con None en los
+    giros sin recomendacion (NO_BET, o un giro sin fila): un None corta la racha.
     """
-    ultimas = list(previous[-MAX_REPEATS:])
-    return len(ultimas) == MAX_REPEATS and all(k == key for k in ultimas)
+    ultimas = list(previous_categories[-MAX_REPEATS:])
+    return len(ultimas) == MAX_REPEATS and all(c == category_id for c in ultimas)
+
+
+def refine(
+    candidates: Sequence[ScoredMarket],
+    best: ScoredMarket,
+    results: Sequence[str],
+    weak_threshold: float,
+    lambda_: float = RECENCY_LAMBDA,
+) -> ScoredMarket | None:
+    """El mercado mas fino por el que cambiar `best`, o None si no hay (2026-11-20).
+
+    Pedido del usuario: si la recomendacion es "Par", que diga en que docena o
+    columna cayeron mas de los pares que salieron. Generico: un mercado de un
+    solo sector se refina en los de un solo sector de OTRA categoria con menos
+    cobertura (en la ruleta, color, paridad y alto/bajo en docenas y columnas).
+    Una docena no tiene nada mas fino y una combinacion no se refina.
+
+    De esos, solo cuentan los que llegan al umbral debil por su propio score: el
+    refinado nunca hereda el score de `best`, asi que su banda sigue saliendo
+    de su propia muestra y nunca contradice la decision. Entre ellos gana el de
+    mayor conteo, ponderado por recencia, de los resultados de la ventana que
+    caen a la vez en `best` y en el; los empates, por el desempate de siempre
+    (`candidates` ya viene ordenado). Cuenta lo que salio, nunca lo que falto.
+
+    Refinar no cambia lo que se espera ganar: un mercado fino acierta menos
+    veces y paga mas, con la misma ventaja de la casa.
+    """
+    amplio = best.market
+    if amplio.sectors != 1:
+        return None
+    finos = [
+        s
+        for s in candidates
+        if s.market.sectors == 1
+        and s.market.category_id != amplio.category_id
+        and s.market.coverage < amplio.coverage
+        and s.signal_score >= weak_threshold
+    ]
+    if not finos:
+        return None
+
+    pesos = recency_weights(len(results), lambda_)
+
+    def conteo(s: ScoredMarket) -> float:
+        return sum(
+            w
+            for r, w in zip(results, pesos)
+            if r in amplio.outcomes and r in s.market.outcomes
+        )
+
+    # `max` se queda con el primero de los empatados: el del desempate.
+    return max(finos, key=conteo)
 
 
 def recommend(
@@ -654,19 +713,24 @@ def recommend(
     admin pruebe un valor sin tocar la configuracion guardada; `weak_threshold`,
     igual sobre el debil. El debil nunca queda por encima del medio.
 
+    Si el mejor es un mercado amplio, primero se refina (`refine`): se cambia
+    por el mas fino de otra categoria donde mas cayeron sus resultados, si
+    alguno llega al umbral debil.
+
     `previous` son los mercados de las recomendaciones ya emitidas en los giros
     anteriores, del mas antiguo al mas reciente (None si fue NO_BET). Si las
-    ultimas `MAX_REPEATS` fueron el mismo mercado y el motor lo vuelve a elegir,
-    se varia (2026-11-19): entra el mejor candidato de OTRA categoria, por el
-    mismo desempate, y solo si llega al umbral debil; si no llega, NO_BET con
-    ese candidato como mejor, para que la banda siga diciendo SIN SEÑAL. Otra
-    categoria y no solo otro mercado: el segundo mejor suele ser casi la misma
-    jugada (tras "Columna 2", "Columnas 2 y 3"). Con una sola categoria en la
-    variante no hay con que variar y se recomienda igual.
+    ultimas `MAX_REPEATS` fueron de la misma categoria y el motor vuelve a
+    elegir una de ella (ya refinada), se varia: entra el mejor candidato de
+    OTRA categoria, por el mismo desempate, y solo si llega al umbral debil; si
+    no llega, NO_BET con ese candidato como mejor, para que la banda siga
+    diciendo SIN SEÑAL. La racha es por categoria y no por mercado: tras
+    "Columna 2", "Columnas 2 y 3" es casi la misma jugada. El variado no se
+    refina, para no volver a la categoria de la racha. Con una sola categoria
+    en la variante no hay con que variar y se recomienda igual.
 
-    Variar no cambia lo que se espera ganar: cada giro es independiente y todos
-    los mercados pagan con la ventaja de la casa. Lo que cambia es que la
-    jugada variada trae su propio score, mas bajo, y su propia banda.
+    Refinar y variar no cambian lo que se espera ganar: cada giro es
+    independiente y todos los mercados pagan con la ventaja de la casa. Lo que
+    cambia es que la jugada trae su propio score y su propia banda.
     """
     umbral = threshold if threshold is not None else config.recommendation_threshold
     umbral_debil = weak_threshold_for(
@@ -711,11 +775,27 @@ def recommend(
         else Decision.no_bet
     )
 
+    refinado_de: str | None = None
+    if decision is Decision.recommend:
+        fino = refine(puntuados, mejor, results, umbral_debil, lambda_)
+        if fino is not None:
+            refinado_de = mejor.market.key
+            mejor = fino
+
+    # La racha se cuenta por categoria. Una clave que ya no esta en el catalogo
+    # (una variante editada) no es de ninguna categoria y corta la racha.
+    por_clave = {s.market.key: s.market.category_id for s in puntuados}
+    categorias_previas = [por_clave.get(k) if k is not None else None for k in previous]
+
     variado_de: str | None = None
-    if decision is Decision.recommend and repeats_exhausted(previous, mejor.market.key):
+    if decision is Decision.recommend and repeats_exhausted(
+        categorias_previas, mejor.market.category_id
+    ):
         otras = [s for s in puntuados if s.market.category_id != mejor.market.category_id]
         if otras:
             variado_de = mejor.market.key
+            # El variado es otra jugada: lo refinado ya no se recomienda.
+            refinado_de = None
             mejor = otras[0]
             decision = (
                 Decision.recommend
@@ -730,6 +810,7 @@ def recommend(
         best=mejor,
         candidates=tuple(puntuados),
         varied_from=variado_de,
+        refined_from=refinado_de,
     )
 
 
