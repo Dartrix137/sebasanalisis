@@ -169,7 +169,6 @@ Con eso el paso 5.6 queda cerrado. Lo que sigue abierto no frena la venta:
 | Asociar en Siigo la resolución `18764107841164` | Con la vigente vencida, las facturas se quedan en `pending` | **Antes del 2026-12-05** |
 | La excepción de `picomatch` en el CI (`frontend/scripts/npm-audit.mjs`) | Vence y el CI vuelve a fallar si no hay versión corregida | 2026-12-17 |
 | La contraseña inicial del admin | Una de las pistas de la auditoría del 2026-11-12: confirmar que ya no sirve | Ya |
-| El "Google Pay" duplicado en la pantalla de pago | Producción tiene `google-apple-pay` (Redsys) y `google-pay` (Stripe), los dos con el mismo nombre | Cuando el usuario decida |
 
 **Lista del lanzamiento (paso 5.6)**, heredada del paso 9 con lo que cambió:
 

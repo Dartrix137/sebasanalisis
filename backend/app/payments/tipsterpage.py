@@ -109,10 +109,16 @@ STRIPE_METHODS = frozenset({
     "multibanco-stripe",
 })
 
-#: El catalogo trae dos medios con el mismo nombre, "Tarjeta de credito/debito":
-#: `cardtpv` (Redsys) y `stripe`. El de Stripe se distingue (decidido por el
-#: usuario el 2026-11-13).
-DISPLAY_NAMES = {"stripe": "Tarjeta de crédito/débito (Stripe)"}
+#: El catalogo trae medios repetidos con el mismo nombre, uno de Redsys y otro
+#: de Stripe. El de Stripe se distingue y el de Redsys queda con el nombre del
+#: catalogo:
+#: - "Tarjeta de credito/debito": `cardtpv` y `stripe` (decidido por el usuario
+#:   el 2026-11-13);
+#: - "Google Pay": `google-apple-pay` y `google-pay` (2026-11-19).
+DISPLAY_NAMES = {
+    "stripe": "Tarjeta de crédito/débito (Stripe)",
+    "google-pay": "Google Pay (Stripe)",
+}
 
 #: Manual §7.1: el orden fijo de los campos que entran en `tspay_signature`.
 ORDER_SIGNATURE_FIELDS = (
