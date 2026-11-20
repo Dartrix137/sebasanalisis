@@ -304,17 +304,20 @@ def test_el_catalogo_exige_sesion_y_dice_que_pedir(client, db, tipster) -> None:
 def test_la_tarjeta_de_stripe_se_distingue_y_avisa_el_cobro_en_usd(client, db, tipster) -> None:
     """Decidido por el usuario el 2026-11-13: las dos "Tarjeta de credito/debito"
     del catalogo (Redsys y Stripe) se ven distintas, y los medios de Stripe
-    avisan que fuera de la zona euro cobran en USD (OpenAPI de Tipster Page)."""
+    avisan que fuera de la zona euro cobran en USD (OpenAPI de Tipster Page).
+    Los dos "Google Pay" igual, desde el 2026-11-19."""
     tarjeta = next(m for m in tipster.catalogo if m["key"] == "cardtpv")
     tipster.catalogo.append({**tarjeta, "key": "stripe", "provider": "Stripe"})
     tipster.catalogo.append({**tarjeta, "key": "google-pay", "name": "Google Pay", "provider": "Stripe"})
+    tipster.catalogo.append({**tarjeta, "key": "google-apple-pay", "name": "Google Pay", "provider": "Redsys"})
     token, _, _ = _cuenta(client, db)
     r = client.get("/billing/payment-methods", params={"country": "CO"}, headers=auth(token))
     assert r.status_code == 200, r.text
     medios = {m["key"]: (m["name"], m["usd_outside_eurozone"]) for m in r.json()}
     assert medios["cardtpv"] == ("Tarjeta de crédito/débito", False)
     assert medios["stripe"] == ("Tarjeta de crédito/débito (Stripe)", True)
-    assert medios["google-pay"] == ("Google Pay", True)
+    assert medios["google-pay"] == ("Google Pay (Stripe)", True)
+    assert medios["google-apple-pay"] == ("Google Pay", False)
     assert medios["ebanxpsecolombia"][1] is False
 
 
