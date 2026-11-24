@@ -2257,6 +2257,13 @@ Se fija aquí, antes de ver un solo resultado, y **no se cambia después de verl
 
 La cuota de cierre es la más difícil de batir, y la del usuario será en general otra (la de su casa, a otra hora). Medir contra la de cierre es lo conservador.
 
+**Fútbol, fijado por el usuario el 2026-11-24, antes de bajar un solo dato:**
+
+- **Fuente**: los CSV de football-data.co.uk. Su aviso de responsabilidad y su `notes.txt` no dicen nada sobre el uso de los datos: ni lo permiten ni lo prohíben. **El usuario decidió usarlos solo para uso interno**: quedan fuera del repositorio (`backend/data/sports/`), no se redistribuyen y nada de ellos llega al cliente.
+- **Mercado de cierre**: el **promedio del mercado al cierre**, columnas `AvgCH`, `AvgCD` y `AvgCA` (`notes.txt`: el sufijo "C" marca la cuota de cierre). Decisión del usuario: queda más cerca de lo que paga una casa típica que Pinnacle (`PSC*`), que era la opción más difícil de batir. El ROI de la condición secundaria se mide a esa cuota.
+- **Cuota antes del cierre**: `AvgH`, `AvgD`, `AvgA`. Según `notes.txt` se toma el viernes por la tarde para los partidos del fin de semana y el martes para los de entre semana. Va en el informe como "apertura", sin decidir nada.
+- Un partido sin las tres cuotas de cierre no se mide (cuenta como "sin cuota de cierre"), pero sí entra como historial del modelo.
+
 #### Datos para el backtest
 
 Un conjunto histórico con resultados y cuotas de cierre, cuyos términos permitan **uso interno de investigación**. La licencia se lee de sus términos vigentes y se verifica antes de bajarlo, nunca de memoria. Los archivos quedan fuera del repositorio si la licencia no deja redistribuirlos, y ningún dato del backtest se muestra al cliente. Si un deporte no tiene un conjunto así, espera al proveedor de la etapa 2.

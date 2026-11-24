@@ -186,13 +186,78 @@ def write_events(path: Path, events: Sequence[Event]) -> None:
         writer.writeheader()
         for e in events:
             odds = e.closing_odds or {}
+            opening = e.opening_odds or {}
             writer.writerow(
                 {
                     "competition": e.competition, "season": e.season, "date": e.date.isoformat(),
                     "home": e.home, "away": e.away, "home_score": e.home_score, "away_score": e.away_score,
                     "close_home": odds.get(HOME), "close_draw": odds.get(DRAW), "close_away": odds.get(AWAY),
+                    "open_home": opening.get(HOME), "open_draw": opening.get(DRAW), "open_away": opening.get(AWAY),
                 }  # fmt: skip
             )
+
+
+# --------------------------------------------------------------------------
+# football-data.co.uk
+# --------------------------------------------------------------------------
+
+#: Columnas de sus CSV, segun su `notes.txt` (pegado por el usuario el 2026-11-24):
+#: Div, Date (dd/mm/yy; los archivos recientes traen dd/mm/yyyy), HomeTeam,
+#: AwayTeam, FTHG, FTAG; la cuota antes del cierre es <casa>H/D/A y la de cierre
+#: lleva una "C" despues de la casa: AvgCH = promedio del mercado al cierre.
+FOOTBALL_DATA_DATE_FORMATS = ("%d/%m/%Y", "%d/%m/%y")
+
+#: Mercado de cierre fijado en PLATAFORMA_COMPLETA.md 8.5: el promedio (Avg).
+FOOTBALL_DATA_BOOK = "Avg"
+
+
+def _football_data_date(value: str) -> date:
+    for fmt in FOOTBALL_DATA_DATE_FORMATS:
+        try:
+            return datetime.strptime(value.strip(), fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"fecha que no se entiende: {value!r}")
+
+
+def _football_data_season(path: Path) -> str:
+    """`E0_2324.csv` -> "2023-2024": la temporada va en el nombre del archivo."""
+    code = path.stem.rsplit("_", 1)[-1]
+    if len(code) != 4 or not code.isdigit():
+        raise SystemExit(f"{path.name}: el archivo tiene que llamarse <liga>_<aaAA>.csv, como E0_2324.csv")
+    return f"20{code[:2]}-20{code[2:]}"
+
+
+def load_football_data(paths: Sequence[Path], book: str = FOOTBALL_DATA_BOOK) -> list[Event]:
+    events: list[Event] = []
+    for path in paths:
+        season = _football_data_season(path)
+        with path.open(newline="", encoding="utf-8-sig", errors="replace") as fh:
+            for n, raw in enumerate(csv.DictReader(fh)):
+                if not raw.get("Date") or not raw.get("HomeTeam") or not raw.get("AwayTeam"):
+                    continue
+
+                def odds(suffix: str, raw: dict[str, str] = raw) -> dict[str, float] | None:
+                    values = [_float(raw.get(f"{book}{suffix}{side}")) for side in ("H", "D", "A")]
+                    if any(v is None for v in values):
+                        return None
+                    return {HOME: values[0], DRAW: values[1], AWAY: values[2]}  # type: ignore[dict-item]
+
+                events.append(
+                    Event(
+                        event_id=f"{path.stem}:{n}",
+                        competition=raw.get("Div") or path.stem.rsplit("_", 1)[0],
+                        season=season,
+                        date=_football_data_date(raw["Date"]),
+                        home=raw["HomeTeam"].strip(),
+                        away=raw["AwayTeam"].strip(),
+                        home_score=_int(raw.get("FTHG")),
+                        away_score=_int(raw.get("FTAG")),
+                        closing_odds=odds("C"),
+                        opening_odds=odds(""),
+                    )
+                )
+    return events
 
 
 # --------------------------------------------------------------------------
@@ -277,6 +342,16 @@ def cmd_synthetic(args: argparse.Namespace) -> int:
         events = two_way_league(n_teams=args.teams, n_seasons=args.seasons, seed=args.seed, market=market)
     write_events(Path(args.out), events)
     print(f"{len(events)} partidos simulados en {args.out}. Sirven para probar el backtest, no para medir nada.")
+    return 0
+
+
+def cmd_from_football_data(args: argparse.Namespace) -> int:
+    paths = sorted(Path(p) for p in args.raw)
+    events = load_football_data(paths, args.book)
+    events.sort(key=lambda e: (e.competition, e.date, e.event_id))
+    write_events(Path(args.out), events)
+    with_close = sum(1 for e in events if e.closing_odds is not None)
+    print(f"{len(events)} partidos de {len(paths)} archivos en {args.out}; {with_close} con cuota de cierre {args.book}C.")
     return 0
 
 
@@ -378,6 +453,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     syn.add_argument("--margin", type=float, default=0.05)
     syn.add_argument("--uninformed", action="store_true", help="la cuota no sale de la probabilidad verdadera")
     syn.set_defaults(func=cmd_synthetic)
+
+    fd = sub.add_parser("from-football-data", help="convierte los CSV de football-data.co.uk (<liga>_<aaAA>.csv)")
+    fd.add_argument("--raw", nargs="+", required=True)
+    fd.add_argument("--out", required=True)
+    fd.add_argument("--book", default=FOOTBALL_DATA_BOOK, help="casa o mercado de la cuota (Avg, por PLATAFORMA_COMPLETA.md 8.5)")
+    fd.set_defaults(func=cmd_from_football_data)
 
     val = sub.add_parser("validate", help="elige margen, modelo y umbral, y congela la configuracion")
     val.add_argument("--sport", choices=SPORTS, required=True)
