@@ -19,6 +19,7 @@ La recomendación sale de reglas estadísticas sobre resultados ya registrados. 
 | Fase 3 | Motor de recomendación. | Construido |
 | Fase 4 | Plataforma comercial: acceso, pagos, correo, legal, admin completo, multijuego. | Construida; cerrada el 2026-10-23. El cobro con Wompi se probó solo en sandbox y salió en el paso 5.1 |
 | **Fase 5** | **Salida al mercado: retiro de Wompi, Tipster Page, facturación con Siigo, textos legales v2, lanzamiento.** | **Lanzada el 2026-11-17**: venta abierta. Quedan pendientes que no la frenan (`docs/HOJA_DE_RUTA.md` §5) |
+| **Fase 6** | **Recomendaciones deportivas: partido elegido y recomendaciones del día, varios deportes.** | **Decidida el 2026-11-24**, por etapas. Lo primero es el backtest fuera de muestra (`docs/HOJA_DE_RUTA.md` §5, "Fase 6") |
 
 El detalle de cada etapa, la tabla de decisiones que cambiaron y el avance paso a paso de las Fases 4 y 5 están en `docs/HOJA_DE_RUTA.md`. **Actualiza ese documento cuando cierres un paso o cuando el usuario tome una decisión de rumbo.**
 
@@ -204,7 +205,18 @@ El flujo de pagos no se da por cerrado sin estos cuatro tests, que son los que d
 - La pista de presentación `display` de `categories_json` es solo presentación: el motor no la lee. El frontend no supone ningún juego: el teclado sale de `possible_outcomes` y su tono de `display` (`lib/outcomes.toneOf`).
 - La mesa vive en `/juegos/<slug>/mesa/<id>` (`/games/roulette/<id>` redirige ahí) y su pantalla la elige `lib/game-modules.ts` según el módulo del juego. Los componentes de la mesa están en `components/mesa/`.
 - **Guías de uso** (2026-11-12, §7.10 del documento de la Fase 4): los videos en YouTube, como no listados e incrustados desde `youtube-nocookie.com`, y el PDF en Cloudinary. Son terceros que están en las políticas de cookies y de datos: cambiar de proveedor pide una versión nueva de las dos. El catálogo vive en `core/guides.py`, por el `type` del juego, y solo sale por `GET /games/{slug}/guides`, con acceso. La ventana del inicio sale una vez por cuenta (`users.guides_seen_at`).
-- Las apuestas deportivas no se construyen en esta fase. Lo decidido para cuando se construyan está en §8.4 del documento (paso 8, 2026-10-15): fútbol y resultado final; calendario y resultados del proveedor, la cuota la escribe el usuario; apuesta fija y proporcional, sin martingala, dos sectores ni Kelly; y **salen solo si el backtest supera al mercado**. Faltan el proveedor y el concepto del abogado (§10 n.º 13 y 14). No se crean `engine/sports/`, `/sports` ni `/deportes` vacíos: el módulo ya está reservado en el enum y en los registros.
+- Las apuestas deportivas son la **Fase 6** (más abajo). Lo decidido en el paso 8 sigue en §8.4 del documento (2026-10-15): calendario y resultados del proveedor, la cuota la escribe el usuario; apuesta fija y proporcional, sin martingala, dos sectores ni Kelly; y **salen solo si el backtest supera al mercado**. Lo que cambió el 2026-11-24 (dos modos, varios deportes, el criterio de "supera al mercado") está en §8.5.
+
+## Fase 6 — recomendaciones deportivas (trabajo en curso)
+
+Decidida el 2026-11-24. Etapas y bloqueos en `docs/HOJA_DE_RUTA.md` §5, "Fase 6"; reglas en §8.4 y §8.5 del documento de la Fase 4.
+
+- **Dos modos**: primero el **partido elegido** (el usuario escribe la cuota de su casa), después las **recomendaciones del día** (el mismo motor sobre los partidos del día).
+- **Varios deportes**, cada uno con su modelo, su backtest y su propia condición de salida. El primero es el fútbol 1X2. Un deporte que no pasa no sale, aunque otro sí pase.
+- **Primero el backtest** (etapa 1), en `backend/app/engine/sports/`: puro, sin DB ni red, con la disciplina de `engine/` y `mypy` estricto. Nada de API, modelos, `/sports` ni `/deportes` hasta la etapa 2.
+- **El criterio de "supera al mercado" está fijado en §8.5 y no se cambia después de ver resultados.** Los parámetros se eligen solo con las temporadas de validación; las de prueba se corren una vez. No se elige después la liga a la que mejor le fue. Si el criterio se cambia, las temporadas de prueba ya vistas dejan de servir.
+- La etapa 2 espera a que un deporte pase, al proveedor con licencia por escrito (§10 n.º 13) y al concepto del abogado (§10 n.º 14). Los datos del backtest se usan solo internamente, con la licencia verificada antes de bajarlos, y quedan fuera del repositorio si no se pueden redistribuir.
+- En pantalla, "Recomendaciones del día", nunca "picks", "fijas" ni "tipster". En código, `recommendation`, nunca `prediction` ni `forecast`.
 
 ### Decisiones pendientes
 
@@ -239,7 +251,8 @@ Decidida el 2026-10-23. El detalle, lo que bloquea cada paso y la lista del lanz
 - No repitas la lógica de acceso fuera de `core/access.py`.
 - No construyas el builder visual de categorías del admin — usa un formulario estructurado simple.
 - No implementes las señales avanzadas (transición condicional, k-gramas, ciclo, señales de pleno) sin que el usuario lo pida explícitamente (ver §2.9 del doc de arquitectura).
-- No construyas el juego de dados como producto ni las apuestas deportivas, ni exportar CSV.
+- No construyas el juego de dados como producto, ni exportar CSV.
+- No construyas la pantalla, la API ni las tablas de deportes antes de que un deporte pase su backtest y lleguen el proveedor y el abogado (Fase 6, etapa 2).
 - No uses SQLite ni Prisma (eso era del boceto de referencia) — este proyecto usa PostgreSQL + SQLAlchemy/Alembic.
 - No agregues Redis, Celery ni una cola (§13.5 del documento de la Fase 4).
 - No agregues reconocimiento de imágenes, OCR, ni ninguna llamada a un modelo de visión o de lenguaje para leer los números de un pantallazo. Se evaluó y se descartó: el usuario los ingresa a mano.

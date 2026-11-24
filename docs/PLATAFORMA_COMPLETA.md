@@ -2229,6 +2229,49 @@ Respuestas del usuario a §8.3, en el paso 8. **Deportes no se construye en esta
 
 **Qué no se hizo en el paso 8, a propósito**: no se crearon `backend/app/engine/sports/`, el prefijo `/sports` de la API ni la ruta `/deportes`. Una carpeta o una ruta vacía no reserva nada que el enum y los registros de módulos no reserven ya, y una pantalla que no hace nada sería una promesa en la interfaz.
 
+### 8.5 Fase 6: lo decidido el 2026-11-24
+
+El usuario abrió la Fase 6 (`HOJA_DE_RUTA.md` §5, "Fase 6"). Todo lo de §8.4 sigue vigente salvo lo que esta sección cambia: el alcance y los dos modos.
+
+**Lo que cambia respecto de §8.4**
+
+| Tema | §8.4 (2026-10-15) | Ahora (2026-11-24) |
+|---|---|---|
+| Modos | Uno: el usuario escribe la cuota de un partido | **Dos**. Primero el **partido elegido** (el de §8.4); después las **recomendaciones del día**, el mismo motor corrido sobre los partidos del día |
+| Alcance | Fútbol, resultado final, pocas ligas | **Varios deportes**. Cada deporte lleva su propio modelo, su propio backtest y su propia condición de salida. El primero es el fútbol 1X2; los demás entran de a uno, y solo sale al cliente el que pase |
+| Orden | Sin fecha | Por etapas: 0 documentos, 1 backtest, 2 partido elegido, 3 recomendaciones del día (`HOJA_DE_RUTA.md` §5) |
+
+**Lo que no cambia**: el ingreso mixto (n.º 3), la medición contra la cuota de cierre (n.º 4), la apuesta fija y proporcional sin martingala, dos sectores ni Kelly (n.º 7), los términos de §0 de `ARQUITECTURA_Y_ESTADISTICA.md` y la excepción acotada de "pronóstico". Siguen pendientes el proveedor (§10 n.º 13) y el abogado (§10 n.º 14), que bloquean las etapas 2 y 3 pero no el backtest.
+
+#### Qué significa "supera al mercado" (fijado antes de correr el backtest)
+
+Se fija aquí, antes de ver un solo resultado, y **no se cambia después de verlos**. Si hiciera falta cambiarlo, el conjunto de prueba ya visto deja de servir y se espera a una temporada nueva.
+
+1. **Partición por temporada, por deporte.** Las dos temporadas completas más recientes de cada liga son de **prueba**. Las dos anteriores son de **validación**, y todo lo previo es de entrenamiento. El modelo se ajusta caminando hacia adelante (walk-forward): cada partido se estima solo con lo ocurrido antes de su fecha.
+2. **Parámetros solo con validación.** El decaimiento temporal, el umbral mínimo de la recomendación y el método para quitar el margen se eligen en validación. La prueba se corre **una sola vez**, con todo congelado.
+3. **El mercado es la cuota de cierre sin margen.** El margen se quita con el método (proporcional o de Shin) que dé menor log-loss en validación. Es la línea base más fuerte de las dos, y la elección más conservadora.
+4. **Condición primaria**: la log-loss media del modelo, menos la del mercado, en los partidos de prueba, con un intervalo bootstrap al 95 % (10.000 remuestreos por partido) que quede entero por debajo de 0.
+5. **Condición secundaria**: el ROI de las recomendaciones a la cuota de cierre (una unidad por recomendación), con su intervalo bootstrap al 95 % entero por encima de 0, y **al menos 300 recomendaciones** en prueba. Con menos, el resultado es "no concluyente", que cuenta como no superar.
+6. **Las dos condiciones**, por deporte, con todas sus ligas juntas. No se elige después la liga a la que mejor le fue: serían varias pruebas a la vez, y una pasaría por azar.
+7. El informe trae además lo que no decide pero hay que ver: número de recomendaciones, ROI a la cuota de apertura si el conjunto la tiene, caída máxima, Brier y CLV.
+
+La cuota de cierre es la más difícil de batir, y la del usuario será en general otra (la de su casa, a otra hora). Medir contra la de cierre es lo conservador.
+
+#### Datos para el backtest
+
+Un conjunto histórico con resultados y cuotas de cierre, cuyos términos permitan **uso interno de investigación**. La licencia se lee de sus términos vigentes y se verifica antes de bajarlo, nunca de memoria. Los archivos quedan fuera del repositorio si la licencia no deja redistribuirlos, y ningún dato del backtest se muestra al cliente. Si un deporte no tiene un conjunto así, espera al proveedor de la etapa 2.
+
+#### Las recomendaciones del día y la licencia del proveedor
+
+- **Si la licencia deja mostrar sus cuotas**: la recomendación lleva la cuota del proveedor y su hora.
+- **Si no**: la recomendación lleva la **cuota mínima** que la justifica ("Apostar: Local, si tu casa paga al menos 2,10"), y el usuario la compara con su casa. Usar las cuotas del proveedor para elegir los partidos del día también tiene que estar permitido por la licencia.
+- En pantalla se llaman "Recomendaciones del día". Nunca "picks", "fijas" ni "tipster" (§0 de `ARQUITECTURA_Y_ESTADISTICA.md`). Si ningún partido llega al umbral, la lista lo dice y no publica nada.
+- Lo publicado se congela al publicarse y se liquida y se mide aparte del partido elegido.
+
+#### Qué se crea en la etapa 1
+
+Solo `backend/app/engine/sports/` (puro, sin DB ni red, `mypy` estricto, con tests) y `scripts/backtest_sports.py`. Nada de API, modelos ni frontend: el prefijo `/sports` y la ruta `/deportes` siguen sin crearse hasta la etapa 2, por lo mismo que en el paso 8.
+
 ---
 
 ## 9. Orden de construcción
@@ -2281,8 +2324,8 @@ Lo que este documento no puede cerrar y necesita respuesta del usuario (o de un 
 | 10 | Correo y responsable que figuran en la política de datos | **Correo resuelto (2026-10-07): `sebas.analisis.ia.com@gmail.com`**, una cuenta de Gmail, separada del remitente transaccional; no hay buzón en Hostinger. El responsable sigue pendiente: el usuario decidió el 2026-10-08 no ponerlo todavía, y los borradores publicados lo llevan como `[PENDIENTE]`. Bloquea el lanzamiento. |
 | 11 | Servicio de monitoreo de errores | **Resuelta (2026-10-05): GlitchTip autohospedado** en el mismo VPS. Ver §13.6. |
 | 12 | Mejoras opcionales de §13.4 (`ruff`/`mypy`, cabeceras CSP, refresh token en cookie) | `ruff` y `mypy`: **resueltas (2026-10-06)**, en el CI. Cabeceras CSP y refresh token en cookie: no se hacen hasta que el usuario lo diga. **El 2026-10-19 el usuario puso las cabeceras de seguridad y la protección de las cookies de sesión en la lista del paso 9**: las cabeceras se construyen en ese paso; el refresh token en cookie se decide ahí, porque hoy no hay cookies de sesión (los tokens viven en `localStorage`). **Resuelta (2026-10-20):** las cabeceras se construyeron, con una CSP con nonce (`frontend/proxy.ts`, `lib/csp.ts`). El refresh token **no** pasa a una cookie: los tokens siguen en `localStorage`, y lo que los protege es que la CSP no deja correr un script inyectado. Una cookie exigiría CORS con credenciales y protección CSRF, porque la API está en otro dominio. Los tests de frontend ya están decididos (§13.3). |
-| 13 | Deportes: proveedor de calendario, resultados y cuotas, y presupuesto mensual (§8.3 n.º 1) | No se elige hasta que se vaya a construir deportes. Requisito: confirmación por escrito de que la licencia permite el uso comercial en un producto de pago; sus cuotas, solo para el backtest interno salvo que la licencia permita mostrarlas. Ver §8.4. Bloquea construir deportes, no el lanzamiento de la ruleta. |
-| 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. |
+| 13 | Deportes: proveedor de calendario, resultados y cuotas, y presupuesto mensual (§8.3 n.º 1) | No se elige hasta que se vaya a construir deportes. Requisito: confirmación por escrito de que la licencia permite el uso comercial en un producto de pago; sus cuotas, solo para el backtest interno salvo que la licencia permita mostrarlas. Ver §8.4. Bloquea construir deportes, no el lanzamiento de la ruleta. **Desde el 2026-11-24 (§8.5)**: bloquea las etapas 2 y 3 de la Fase 6, no el backtest de la etapa 1, que usa un conjunto histórico propio. |
+| 14 | Deportes: si el análisis deportivo por suscripción requiere autorización de Coljuegos, qué avisos exige y si se puede usar la palabra "pronóstico" (§8.3 n.º 6) | Lo responde el abogado. Mientras tanto se supone que podría requerirla, y deportes no sale sin concepto escrito. Ver §8.4. Bloquea que salga deportes, no el lanzamiento de la ruleta. **Desde el 2026-11-24 (§8.5)**: bloquea las etapas 2 y 3 de la Fase 6. |
 | 15 | Qué exige Wompi, y PCI DSS, con un formulario de tarjeta propio (§3.16) | **Superada (2026-10-23):** Wompi salió y el formulario propio con él (§3.18). La pregunta pasa a la pasarela nueva (n.º 16). Lo que decía: preguntarle a Wompi antes de lanzar. Con el widget la tarjeta se escribía en una ventana de Wompi; con el formulario propio se escribe en nuestra página, y en general eso amplía lo que el comercio tiene que cumplir (de SAQ A a SAQ A-EP). Bloquea el lanzamiento, no la construcción en sandbox. |
 | 16 | Pasarela nueva: las respuestas de Tipster Page al anexo técnico (medios y monedas, cobro por un monto propio, página alojada, tokenización o recurrencia suya, firma de los webhooks, id de evento, reconsulta, reembolsos, contracargos, sandbox, seguridad de pagos) | Pendiente de Tipster Page (anexo enviado el 2026-10-22). Decide el diseño del paso 5.3: si se conserva el calendario de cobros propio, la moneda de cobro, la forma de `PaymentSourceType` y `acceptance()`, sus orígenes en la CSP y las protecciones de arranque que salieron con Wompi (§3.18). Bloquea vender (5.3). |
 | 17 | A quién va la factura electrónica: a consumidor final, o con el nombre y la identificación del cliente | **Resuelta por el usuario (2026-11-06): a cada comprador, con su nombre, su documento y todos los datos que pida Siigo; nunca a consumidor final.** Se piden al pagar (`/planes/pagar`), con los tipos de documento aprobados por el usuario; Siigo exige además la dirección y la ciudad, que da el cliente. Falta la política de datos v2 (5.5) y lo que se conserva al eliminar la cuenta. §3.17, punto 8 del diseño del 5.4. |

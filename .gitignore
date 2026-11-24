@@ -26,3 +26,6 @@ Thumbs.db
 
 # Documentacion privada de terceros (pasarelas): solo en el equipo, el repo es publico
 docs/docs tipsterpage/
+
+# Datos historicos del backtest de deportes: su licencia casi nunca deja redistribuirlos
+backend/data/sports/

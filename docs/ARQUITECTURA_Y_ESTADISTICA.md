@@ -470,6 +470,24 @@ Permitido: "Recomendación", "Apostar: …", "No apostar este giro", "Fuerza de 
 
 **La regla que hace que esto sirva de algo**: los pesos se fijaron mirando simulaciones de ruedas justas, no historiales concretos. El backtest corre sobre sesiones reales —fuera de muestra por construcción— y las ruedas simuladas quedan como línea base, donde el ROI tiene que quedarse en la ventaja de la casa. Si ahí apareciera una ventaja, sería un error de medición y no un hallazgo.
 
+### 2.11 Motor de deportes (Fase 6, etapa 1, 2026-11-24)
+
+Lo que se decidió y por qué está en `PLATAFORMA_COMPLETA.md` §8.4 y §8.5. Aquí, cómo está construido. Vive en `backend/app/engine/sports/`, puro como el resto de `engine/`, y **todavía no lo usa ningún endpoint**: solo el backtest. No comparte nada con el motor de la ruleta salvo el enum `Decision` (`RECOMMEND` / `NO_BET`).
+
+| Módulo | Qué hace |
+|---|---|
+| `odds.py` | Probabilidad implícita (`1/cuota`), margen de la casa y cómo quitárselo: proporcional o de Shin (1993). Con dos resultados, Shin resta la mitad del margen a cada uno, y un test lo comprueba a mano. |
+| `events.py` | El partido, genérico sobre sus resultados: `HOME_DRAW_AWAY` (fútbol) o `HOME_AWAY` (deportes sin empate). |
+| `models/dixon_coles.py` | Fútbol 1X2: Dixon y Coles (1997), goles Poisson con ataque, defensa, ventaja de local y la corrección `rho` de los marcadores bajos, con decaimiento temporal `xi` y una penalización ridge. Se ajusta por máxima verosimilitud con el gradiente analítico, y un test lo compara con el numérico. |
+| `models/elo.py` | Deportes de dos resultados: Elo con ventaja de local (0 en deportes sin localía). |
+| `recommendation.py` | `edge = p_modelo × cuota − 1`. "Apostar" solo si el mejor `edge` llega a `min_edge`; si no, `NO_BET` con la mejor candidata a la vista. Una sola recomendación, con desempate determinista. Cada candidata lleva juntas la estimación propia y la probabilidad implícita sin margen. |
+| `backtest.py` | Partición por temporadas, walk-forward sin fuga (el modelo solo ve partidos anteriores a la fecha que estima), métricas (log-loss, Brier, ROI, caída máxima, CLV), intervalos bootstrap y el veredicto de §8.5. |
+| `synthetic.py` | Ligas simuladas para probar el backtest: contra un mercado informado el veredicto tiene que fallar, y un test lo exige. No miden ningún modelo. |
+
+**Dirección de la señal.** La estimación sale de resultados anteriores, y el `edge` dice cuánto paga la cuota por encima de ella. No es una predicción del partido: es la comparación entre dos estimaciones de frecuencia, la del modelo y la del mercado, y el backtest es lo que dice si la del modelo vale algo.
+
+**Cómo se corre**: `scripts/backtest_sports.py` (`synthetic`, `validate`, `test`; uso en su docstring). `validate` congela margen, modelo y umbral en un archivo con la huella de los datos. `test` corre una sola vez, se niega a sobrescribir un informe y se niega a correr con datos distintos de los validados. Los datos van en `backend/data/sports/`, fuera del repositorio.
+
 ---
 
 ## 3. Arquitectura técnica
@@ -548,9 +566,10 @@ backend/app/
   emails/                        # plantillas HTML + texto (§5.5)
   api/v1/                        # legal.py, billing.py, webhooks.py, y admin por secciones
   api/game_modules.py            # module → (routers, validador de configuración) (§7.3)
-  engine/sports/                 # reservado, sin implementación (§8)
+  engine/sports/                 # PURO: motor de deportes, etapa 1 de la Fase 6 (§2.11)
 backend/scripts/
   run_renewals.py                # job de renovación (§3.5)
+  backtest_sports.py             # backtest fuera de muestra de deportes (§2.11)
   export_openapi.py              # entrada del generador de tipos (§13.2)
 
 frontend/

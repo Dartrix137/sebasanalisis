@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-11-17 (Fase 5: lanzamiento hecho, venta abierta con Tipster Page y Siigo en producción; la renovación automática, paso 5.3b, cerrada y probada en producción).
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-11-24 (Fase 6 decidida: recomendaciones deportivas, empezando por un backtest fuera de muestra; §5, "Fase 6"). Antes: 2026-11-17 (Fase 5: lanzamiento hecho, venta abierta con Tipster Page y Siigo en producción; la renovación automática, paso 5.3b, cerrada y probada en producción).
 
 ---
 
@@ -20,6 +20,8 @@ La recomendación sale de reglas estadísticas sobre los resultados registrados.
 - facturar cada pago con Siigo, convertido a pesos con la tasa del día;
 - publicar los textos legales revisados;
 - lanzar.
+
+Después viene la **Fase 6** (§5, "Fase 6"): recomendaciones de apuestas deportivas. Empieza por un backtest fuera de muestra, y la pantalla solo se construye si ese backtest supera al mercado.
 
 ---
 
@@ -127,6 +129,7 @@ Lo que un documento viejo o un trozo de código antiguo puede seguir sugiriendo,
 | Dos modos de cobro: renovación automática con fuente tokenizada y pago manual por período. | Con Tipster Page **solo pago manual por período**: su recurrencia está en desarrollo. El código de la renovación automática se conserva, apagado, para cuando una pasarela la ofrezca. | 2026-11-03 |
 | Con Tipster Page solo pago manual por período (2026-11-03). | **Vuelve la renovación automática**, con las suscripciones de Tipster Page (Solidgate, solo tarjeta, en euros; el comercio decide cuándo cobrar). Se construye ya, sin frenar el lanzamiento, porque su producción tampoco está activa todavía (decisión del usuario). El pago manual con todos los medios sigue. Paso 5.3b | 2026-11-17 |
 | PremiumPay descartada como base del cobro porque no se le veía API ni webhooks (2026-10-08). | Ya tiene API, con cobros recurrentes por token, pero sigue sin servir: sus avisos no van firmados, no hay forma de consultar un pago y no reintenta los avisos (§5, "Evaluación de PremiumPay"). | 2026-11-03 |
+| Deportes, fuera de alcance: solo fútbol 1X2 y el partido que elige el usuario, el día que se construyera (§8.4, 2026-10-15). | **Fase 6, por etapas**: dos modos (primero el partido que elige el usuario, después las recomendaciones del día) y **varios deportes**, cada uno con su modelo y su propio backtest. Se construye primero el backtest. La pantalla espera a que supere al mercado, al proveedor y al abogado (§5, "Fase 6") | 2026-11-24 |
 
 ---
 
@@ -302,6 +305,39 @@ Mientras tanto, el paso 5.3 deja lista la entrada de una segunda pasarela: cada 
 | Soporte de Siigo | ~~La empresa de pruebas~~ (credenciales recibidas el 2026-11-09). ~~La ciudad que falta, el documento de un cliente de fuera, la `Idempotency-Key` y los estados~~ (respondidos el 2026-11-09: `PLATAFORMA_COMPLETA.md` §3.17, "Respuestas de soporte de Siigo"). ~~Si el IVA del 0 % choca con un producto excluido~~ (la API lo acepta, probado el 2026-11-10). Queda: si el correo sale solo con la DIAN aceptada, ~~si la API acepta una ciudad creada en Siigo Nube~~ (sí, 2026-11-10) y el cuerpo del envío por correo | 5.4 (no frena el diseño) |
 | Abogado | Textos legales revisados, datos del responsable del tratamiento, precio en pantalla, frase de "apostar el mínimo" | 5.5 y 5.6 |
 | Usuario | ~~Respaldos con Cloudflare R2 y su prueba de restauración~~ (2026-11-12); ~~Resend Pro y `EMAIL_DAILY_LIMIT=1500`~~ (2026-11-12) | 5.6 |
+
+### Fase 6 — Recomendaciones deportivas (decidida el 2026-11-24)
+
+Decidida por el usuario el 2026-11-24. Agrega un apartado de deportes con dos modos:
+
+- **Partido elegido**: el usuario elige un partido, escribe la cuota de su casa y el motor responde "Apostar: …" o "No apostar este partido".
+- **Recomendaciones del día**: cada día se publican unas pocas recomendaciones sobre los partidos de los deportes aprobados.
+
+Las reglas que ya estaban (ingreso mixto, apuesta fija y proporcional, términos de deportes, la excepción acotada de "pronóstico") siguen en `PLATAFORMA_COMPLETA.md` §8.4 y en `ARQUITECTURA_Y_ESTADISTICA.md` §0. Lo decidido el 2026-11-24 está en §8.5 del primero.
+
+| Pregunta | Decisión (2026-11-24) |
+|---|---|
+| Qué modo | **Los dos, primero el partido elegido.** El de las recomendaciones del día reusa el mismo motor y se construye después |
+| Alcance | **Varios deportes.** Cada deporte lleva su modelo, su backtest y su propia condición de salida. El primero es el fútbol (1X2), porque es el que tiene más resultados históricos con cuota de cierre. Los demás entran de a uno |
+| Condición de salida | **Se mantiene**: un deporte sale solo si su backtest fuera de muestra supera al mercado, con el criterio fijado antes de correrlo (`PLATAFORMA_COMPLETA.md` §8.5). Lo más probable es que un modelo estadístico simple no lo supere, y ese resultado es una salida válida de la fase |
+| Proveedor y abogado | **Ninguno resuelto** (§10 n.º 13 y 14 de `PLATAFORMA_COMPLETA.md`). Bloquean la pantalla, no el backtest |
+
+**Etapas** (no se salta una sin que la anterior tenga sus tests y su verificación):
+
+| Etapa | Qué | Estado |
+|---|---|---|
+| 0 | Documentar el rumbo y fijar el criterio de "supera al mercado" antes de correr nada. Arrancan los trámites con el abogado y con los proveedores | **Hecha el 2026-11-24** |
+| 1 | Backtest fuera de muestra, en código puro (`backend/app/engine/sports/`): quitar el margen de la cuota, un modelo por deporte, la regla de recomendación y el backtest. Informe por deporte con el veredicto | **Código construido el 2026-11-24** (`ARQUITECTURA_Y_ESTADISTICA.md` §2.11): Dixon-Coles para el fútbol, Elo para los deportes sin empate, y `scripts/backtest_sports.py`, probado sobre ligas simuladas. **Falta correrlo con datos reales**: hace falta un conjunto histórico de resultados y cuotas de cierre cuya licencia permita el uso interno, verificada antes de bajarlo. De football-data.co.uk el usuario pegó el 2026-11-24 su aviso de responsabilidad y su `notes.txt`. **Ninguno dice nada sobre el uso de los datos**: ni lo permiten ni lo prohíben, ni hablan de redistribución. Sin informe no hay veredicto |
+| 2 | El partido elegido: datos del proveedor, la consulta con la cuota del usuario, banca fija y proporcional, liquidación automática y su pantalla | Espera a que al menos un deporte pase la etapa 1, al proveedor con licencia por escrito y al concepto del abogado |
+| 3 | Recomendaciones del día: el mismo motor sobre los partidos del día, congeladas al publicarse y medidas aparte | Después de la 2. Cómo se muestran depende de si la licencia deja mostrar las cuotas del proveedor (`PLATAFORMA_COMPLETA.md` §8.5) |
+
+**Pendiente de terceros (Fase 6)**
+
+| Quién | Qué | Bloquea |
+|---|---|---|
+| Abogado | Si el análisis deportivo por suscripción pide autorización de Coljuegos, qué avisos exige, la palabra "pronóstico" y la línea fija de la tarjeta de deportes | Etapas 2 y 3 |
+| Proveedor de datos (por elegir) | Por escrito: si su licencia permite (a) el uso comercial en un producto de pago y (b) mostrar sus cuotas al cliente. Precio y límites, leídos de sus términos vigentes | Etapa 2; la (b) decide cómo se muestra la etapa 3 |
+| Usuario | Elegir el proveedor de la lista corta, y decidir si deportes va en los planes actuales o en uno aparte (`plan_games`) | Etapa 2 |
 
 ---
 
@@ -697,7 +733,7 @@ No se construye hasta que el usuario lo pida explícitamente:
 - **Señales avanzadas del motor**: transición condicional, k-gramas, ciclo, señales de pleno, fusión multi-señal (`ARQUITECTURA_Y_ESTADISTICA.md` §2.9). Entran una por una.
 - **Builder visual de categorías** en el admin. Se usa formulario estructurado.
 - **Juego de dados como producto.** En la Fase 4 entra solo como fixture de test de genericidad.
-- **Apuestas deportivas.** Las respuestas a `PLATAFORMA_COMPLETA.md` §8.3 están en §8.4 (paso 8). Para construirlas faltan el proveedor de datos y el concepto del abogado (§10 n.º 13 y 14), y salen solo si el backtest supera al mercado.
+- ~~**Apuestas deportivas.**~~ Entraron como **Fase 6** el 2026-11-24 (§5, "Fase 6"), por etapas: primero el backtest. La pantalla espera al backtest, al proveedor de datos y al concepto del abogado (`PLATAFORMA_COMPLETA.md` §10 n.º 13 y 14).
 - **Cambio de plan en caliente** (mensual ↔ anual) y reembolsos por API.
 - **Exportar CSV**, migración de datos locales, notificaciones.
 - **Cualquier IA, OCR o lectura de imágenes.** Descartado, no pospuesto.
