@@ -7,6 +7,8 @@ vez y con los mismos datos que se validaron. Sin base de datos ni red.
 import json
 from pathlib import Path
 
+import pytest
+
 from app.engine.sports.events import AWAY, DRAW, HOME
 from scripts import backtest_sports as cli
 
@@ -54,3 +56,36 @@ def test_la_prueba_se_corre_una_sola_vez_y_con_los_mismos_datos(tmp_path: Path) 
     antes = informe.read_text(encoding="utf-8")
     assert cli.main(["test", "--config", str(config), "--data", str(datos), "--report", str(informe)]) == 1
     assert informe.read_text(encoding="utf-8") == antes
+
+
+def test_cuota_americana_a_decimal_a_mano() -> None:
+    # +130 paga 130 por 100: 2.30. -150 pide 150 para ganar 100: 1 + 100/150 = 1.666667.
+    assert cli.american_to_decimal(130) == pytest.approx(2.30)
+    assert cli.american_to_decimal(-150) == pytest.approx(1.666667, abs=1e-6)
+    assert cli.american_to_decimal(100) == pytest.approx(2.0)
+    with pytest.raises(ValueError):
+        cli.american_to_decimal(0)
+
+
+def test_nba_de_olivier_promedio_de_las_casas_con_las_dos_cuotas(tmp_path: Path) -> None:
+    csv = tmp_path / "nba.csv"
+    csv.write_text(
+        "League,Game_ID,Season,Home_Team,Away_Team,Home_Score,Away_Score,"
+        "Pinnacle_ML_Home_Close,Pinnacle_ML_Away_Close,FanDuel_ML_Home_Close,FanDuel_ML_Away_Close,"
+        "Kalshi_ML_Home_Close,Kalshi_ML_Away_Close,Pinnacle_ML_Home_Open,Pinnacle_ML_Away_Open\n"
+        # Juego de la costa este del 1 de noviembre aunque en UTC sea el 2.
+        "NBA,20261101_BOS_ORL,2026/2027,Orlando Magic,Boston Celtics,97,108,200,-250,100,,500,-900,150,-180\n",
+        encoding="utf-8",
+    )
+    [evento] = cli.load_olivier_nba([csv])
+    assert evento.date.isoformat() == "2026-11-01"
+    assert evento.season == "2026-2027"
+    assert (evento.home, evento.away, evento.home_score, evento.away_score) == ("Orlando Magic", "Boston Celtics", 97, 108)
+    # FanDuel no tiene la cuota del visitante y Kalshi no es una casa: solo entra Pinnacle.
+    # +200 -> 3.00; -250 -> 1 + 100/250 = 1.40.
+    assert evento.closing_odds == pytest.approx({HOME: 3.0, AWAY: 1.4})
+    # Apertura: +150 -> 2.50; -180 -> 1.555556.
+    assert evento.opening_odds == pytest.approx({HOME: 2.5, AWAY: 1.555556}, abs=1e-6)
+    # Con una casa sola.
+    [solo] = cli.load_olivier_nba([csv], "FanDuel")
+    assert solo.closing_odds is None

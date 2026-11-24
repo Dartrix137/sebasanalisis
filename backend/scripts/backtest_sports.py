@@ -345,6 +345,90 @@ def cmd_synthetic(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# NBA de Olivier Sports Data
+# --------------------------------------------------------------------------
+
+#: Las once casas del archivo (su README). Kalshi y Polymarket no entran: son
+#: mercados de prediccion, no casas, y aparecen en diciembre de 2025, en plena
+#: temporada de prueba, con lo que cambiarian el promedio a mitad de camino.
+OLIVIER_NBA_BOOKS = (
+    "Pinnacle", "Bet365", "FanDuel", "DraftKings", "BetMGM", "Caesars",
+    "BetRivers", "BetOnline", "theScore", "Fanatics", "HardRock",
+)  # fmt: skip
+
+#: "Avg" = promedio de las casas con las dos cuotas, como el AvgC* de football-data.
+OLIVIER_AVERAGE = "Avg"
+
+
+def american_to_decimal(value: float) -> float:
+    """Cuota americana a decimal: +130 -> 2.30; -150 -> 1.6667."""
+    if value > 0:
+        return 1.0 + value / 100.0
+    if value < 0:
+        return 1.0 + 100.0 / -value
+    raise ValueError("una cuota americana no puede ser 0")
+
+
+def _olivier_odds(raw: dict[str, str], book: str, phase: str) -> dict[str, float] | None:
+    """Cuota de local y visitante de una casa (o el promedio) en apertura ("Open") o cierre ("Close")."""
+    books = OLIVIER_NBA_BOOKS if book == OLIVIER_AVERAGE else (book,)
+    homes: list[float] = []
+    aways: list[float] = []
+    for b in books:
+        home = _float(raw.get(f"{b}_ML_Home_{phase}"))
+        away = _float(raw.get(f"{b}_ML_Away_{phase}"))
+        if home is None or away is None or home == 0 or away == 0:
+            continue
+        homes.append(american_to_decimal(home))
+        aways.append(american_to_decimal(away))
+    if not homes:
+        return None
+    return {HOME: sum(homes) / len(homes), AWAY: sum(aways) / len(aways)}
+
+
+def load_olivier_nba(paths: Sequence[Path], book: str = OLIVIER_AVERAGE) -> list[Event]:
+    """Lee el CSV de "NBA Opening & Closing Odds" (una fila por partido, cuotas americanas).
+
+    Segun su README: `Game_ID` es `AAAAMMDD_VISITANTE_LOCAL` con la fecha de la
+    costa este, `Season` es `2018/2019`, el marcador incluye la prorroga (la
+    linea de dinero tambien) y el cierre es el ultimo precio antes del salto.
+    """
+    if book != OLIVIER_AVERAGE and book not in OLIVIER_NBA_BOOKS:
+        raise SystemExit(f"casa desconocida: {book!r}; validas: {OLIVIER_AVERAGE}, {', '.join(OLIVIER_NBA_BOOKS)}")
+    events: list[Event] = []
+    for path in paths:
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            for raw in csv.DictReader(fh):
+                game_id = raw.get("Game_ID", "")
+                if not game_id or not raw.get("Home_Team") or not raw.get("Away_Team"):
+                    continue
+                events.append(
+                    Event(
+                        event_id=game_id,
+                        competition=raw.get("League") or "NBA",
+                        season=(raw.get("Season") or "").replace("/", "-"),
+                        date=datetime.strptime(game_id[:8], "%Y%m%d").date(),
+                        home=raw["Home_Team"].strip(),
+                        away=raw["Away_Team"].strip(),
+                        home_score=_int(raw.get("Home_Score")),
+                        away_score=_int(raw.get("Away_Score")),
+                        closing_odds=_olivier_odds(raw, book, "Close"),
+                        opening_odds=_olivier_odds(raw, book, "Open"),
+                    )
+                )
+    return events
+
+
+def cmd_from_olivier_nba(args: argparse.Namespace) -> int:
+    events = load_olivier_nba([Path(p) for p in args.raw], args.book)
+    events.sort(key=lambda e: (e.date, e.event_id))
+    write_events(Path(args.out), events)
+    with_close = sum(1 for e in events if e.closing_odds is not None)
+    print(f"{len(events)} partidos en {args.out}; {with_close} con cuota de cierre ({args.book}).")
+    return 0
+
+
 def cmd_from_football_data(args: argparse.Namespace) -> int:
     paths = sorted(Path(p) for p in args.raw)
     events = load_football_data(paths, args.book)
@@ -459,6 +543,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     fd.add_argument("--out", required=True)
     fd.add_argument("--book", default=FOOTBALL_DATA_BOOK, help="casa o mercado de la cuota (Avg, por PLATAFORMA_COMPLETA.md 8.5)")
     fd.set_defaults(func=cmd_from_football_data)
+
+    nba = sub.add_parser("from-olivier-nba", help="convierte el CSV de NBA de Olivier Sports Data")
+    nba.add_argument("--raw", nargs="+", required=True)
+    nba.add_argument("--out", required=True)
+    nba.add_argument("--book", default=OLIVIER_AVERAGE, help="Avg (promedio de las once casas) o una casa")
+    nba.set_defaults(func=cmd_from_olivier_nba)
 
     val = sub.add_parser("validate", help="elige margen, modelo y umbral, y congela la configuracion")
     val.add_argument("--sport", choices=SPORTS, required=True)

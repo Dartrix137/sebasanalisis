@@ -338,6 +338,7 @@ Las reglas que ya estaban (ingreso mixto, apuesta fija y proporcional, términos
 | Abogado | Si el análisis deportivo por suscripción pide autorización de Coljuegos, qué avisos exige, la palabra "pronóstico" y la línea fija de la tarjeta de deportes | Etapas 2 y 3 |
 | Proveedor de datos (por elegir) | Por escrito: si su licencia permite (a) el uso comercial en un producto de pago y (b) mostrar sus cuotas al cliente. Precio y límites, leídos de sus términos vigentes | Etapa 2; la (b) decide cómo se muestra la etapa 3 |
 | Usuario | Elegir el proveedor de la lista corta, y decidir si deportes va en los planes actuales o en uno aparte (`plan_games`) | Etapa 2 |
+| Usuario | **Baloncesto** (2026-11-24): comprar "NBA Opening & Closing Odds" de Olivier Sports Data (Whop o Gumroad; pago único). Su licencia dice: *"Single commercial user. Use the data as you wish, including the models … and products you sell. Redistribution and resale … are not permitted."* Su muestra gratis (20 partidos) se revisó: trae las columnas, las temporadas 2018/19 a 2025/26 con el marcador y la cuota de cierre de once casas, y el script ya la convierte (`from-olivier-nba`). Falta fijar qué cierre es "el mercado" antes de mirar datos | Etapa 1, baloncesto |
 
 ---
 
