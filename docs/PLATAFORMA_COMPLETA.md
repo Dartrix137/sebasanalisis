@@ -2264,6 +2264,8 @@ La cuota de cierre es la más difícil de batir, y la del usuario será en gener
 - **Cuota antes del cierre**: `AvgH`, `AvgD`, `AvgA`. Según `notes.txt` se toma el viernes por la tarde para los partidos del fin de semana y el martes para los de entre semana. Va en el informe como "apertura", sin decidir nada.
 - Un partido sin las tres cuotas de cierre no se mide (cuenta como "sin cuota de cierre"), pero sí entra como historial del modelo.
 
+**Resultado del fútbol (2026-11-24): no superado en validación; la prueba no se corrió.** Sobre cinco ligas (Inglaterra, España, Italia, Alemania y Francia), el mejor Dixon-Coles describe los resultados peor que el promedio de cierre: log-loss +0.023 por encima del mercado, con IC 95 % [+0.017, +0.029]. Y su ROI al cierre es −13.6 %, con IC 95 % [−19.1 %, −7.9 %]. El usuario decidió parar ahí sin correr la prueba. Las temporadas 2024/25 y 2025/26 quedan sin usar: solo sirven para medir un modelo nuevo **validado antes** en 2022/23 y 2023/24. **El fútbol no sale con este modelo.** Se sigue con el baloncesto.
+
 #### Datos para el backtest
 
 Un conjunto histórico con resultados y cuotas de cierre, cuyos términos permitan **uso interno de investigación**. La licencia se lee de sus términos vigentes y se verifica antes de bajarlo, nunca de memoria. Los archivos quedan fuera del repositorio si la licencia no deja redistribuirlos, y ningún dato del backtest se muestra al cliente. Si un deporte no tiene un conjunto así, espera al proveedor de la etapa 2.
