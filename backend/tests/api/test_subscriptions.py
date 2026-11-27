@@ -863,6 +863,35 @@ def test_pagar_antes_del_vencimiento_extiende_desde_el_vencimiento(client, db, t
     assert _asuntos(outbox, correo) == ["Recibo de tu pago en Sebasanálisis"]
 
 
+def test_plan_desactivado_el_periodo_siguiente_se_paga_y_un_alta_no(client, db, tipster) -> None:
+    """Desactivar un plan no deja sin renovar a quien lo paga a mano (§4.4).
+
+    El periodo siguiente sale con el precio congelado. Con el periodo vencido,
+    volver es un alta, y un plan que ya no se ofrece no se puede tomar.
+    """
+    plan = _plan(db, price_cents=4_000, interval_count=2)
+    token, user_id, _ = _cuenta(client, db)
+    _aprobar(client, tipster, _abrir_pago(client, db, token, plan))
+    [suscripcion] = _suscripciones(db, user_id)
+    vence = suscripcion.current_period_end
+
+    db.execute(text("UPDATE plans SET active = false, price_cents = 5000 WHERE id = :id"), {"id": plan.id})
+    db.commit()
+
+    segundo = _abrir_pago(client, db, token, plan)
+    assert (segundo.kind, segundo.amount_cents) == ("renewal", 4_000)
+    _aprobar(client, tipster, segundo)
+    [suscripcion] = _suscripciones(db, user_id)
+    assert suscripcion.current_period_end == add_interval(vence, "month", 2)
+
+    db.execute(
+        text("UPDATE subscriptions SET current_period_end = :e WHERE user_id = :u"),
+        {"e": datetime.now(UTC) - timedelta(days=1), "u": user_id},
+    )
+    db.commit()
+    assert _suscribir(client, token, plan.id).status_code == 404
+
+
 def test_pagar_despues_del_vencimiento_cuenta_desde_el_pago(client, db, tipster) -> None:
     token, user_id, _ = _cuenta(client, db)
     _aprobar(client, tipster, _abrir_pago(client, db, token))

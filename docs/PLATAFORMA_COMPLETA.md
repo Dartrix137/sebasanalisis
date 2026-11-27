@@ -1432,6 +1432,9 @@ Todas las listas del backend se paginan (`limit`, `cursor` u `offset`) y filtran
 
 - Crear, editar, activar / desactivar, ordenar.
 - Un plan con suscripciones (de cualquier estado) **no se borra**, se desactiva: deja de ofrecerse y las suscripciones existentes siguen renovando.
+  - Con renovación automática, el job las sigue cobrando con su precio congelado.
+  - Con pago manual, el período siguiente se sigue pagando (2026-11-27): `/planes` le muestra su plan a quien lo tiene vigente, sin destacarlo, y `/planes/pagar` lo toma de la suscripción en lugar de la lista de planes que se ofrecen. Antes la página decía "Ese plan no está disponible" y el acceso se vencía.
+  - Con el período ya vencido, volver es un alta, y un plan desactivado no se puede tomar: se elige otro.
 - Editar el precio muestra cuántas suscripciones vigentes **no** se ven afectadas (§3.7).
 - Selección de juegos incluidos (`plan_games`, §7.4).
 
