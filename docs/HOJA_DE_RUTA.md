@@ -2,7 +2,7 @@
 
 > Punto de entrada a la documentación. Dice qué es el producto hoy, qué se construyó, qué decisiones cambiaron por el camino y qué se construye ahora. No define reglas ni fórmulas: apunta al documento que las define.
 >
-> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-11-24 (Fase 6 decidida: recomendaciones deportivas, empezando por un backtest fuera de muestra; §5, "Fase 6"). Antes: 2026-11-17 (Fase 5: lanzamiento hecho, venta abierta con Tipster Page y Siigo en producción; la renovación automática, paso 5.3b, cerrada y probada en producción).
+> **Se actualiza cada vez que se cierra un paso o se toma una decisión de rumbo.** Última actualización: 2026-11-27 (Fase 6: requerimientos del cliente recibidos y proveedor propuesto, api-sports.io, solo para fútbol, baloncesto y voleibol; §5, "Fase 6"). Antes: 2026-11-24 (Fase 6 decidida: recomendaciones deportivas, empezando por un backtest fuera de muestra). Antes: 2026-11-17 (Fase 5: lanzamiento hecho, venta abierta con Tipster Page y Siigo en producción; la renovación automática, paso 5.3b, cerrada y probada en producción).
 
 ---
 
@@ -336,9 +336,10 @@ Las reglas que ya estaban (ingreso mixto, apuesta fija y proporcional, términos
 | Quién | Qué | Bloquea |
 |---|---|---|
 | Abogado | Si el análisis deportivo por suscripción pide autorización de Coljuegos, qué avisos exige, la palabra "pronóstico" y la línea fija de la tarjeta de deportes | Etapas 2 y 3 |
-| Proveedor de datos (por elegir) | Por escrito: si su licencia permite (a) el uso comercial en un producto de pago y (b) mostrar sus cuotas al cliente. Precio y límites, leídos de sus términos vigentes | Etapa 2; la (b) decide cómo se muestra la etapa 3 |
+| Proveedor de datos (propuesto: api-sports.io) | Por escrito: si su licencia permite (a) el uso comercial en un producto de pago y (b) mostrar sus cuotas al cliente. Precio por deporte y límites, leídos de sus términos vigentes (su sitio rechaza la lectura automática: se revisa a mano) | Etapa 2; la (b) decide cómo se muestra la etapa 3 |
+| Cliente | Responder la propuesta del 2026-11-27: api-sports.io y solo fútbol, baloncesto (con la NBA) y voleibol, sin tenis ni tenis de mesa. Sus requerimientos y la cotización del equipo comercial están en `docs/`; las diferencias con las reglas vigentes están en `PLATAFORMA_COMPLETA.md` §8.5, "Requerimientos del cliente y proveedor propuesto" | Etapa 2 |
 | Usuario | Elegir el proveedor de la lista corta, y decidir si deportes va en los planes actuales o en uno aparte (`plan_games`) | Etapa 2 |
-| Usuario | **Baloncesto** (2026-11-24): comprar "NBA Opening & Closing Odds" de Olivier Sports Data (Whop o Gumroad; pago único). Su licencia dice: *"Single commercial user. Use the data as you wish, including the models … and products you sell. Redistribution and resale … are not permitted."* Su muestra gratis (20 partidos) se revisó: trae las columnas, las temporadas 2018/19 a 2025/26 con el marcador y la cuota de cierre de once casas, y el script ya la convierte (`from-olivier-nba`). Falta fijar qué cierre es "el mercado" antes de mirar datos | Etapa 1, baloncesto |
+| Usuario | **Baloncesto** (2026-11-24): comprar "NBA Opening & Closing Odds" de Olivier Sports Data (Whop o Gumroad; pago único). Su licencia dice: *"Single commercial user. Use the data as you wish, including the models … and products you sell. Redistribution and resale … are not permitted."* Su muestra gratis (20 partidos) se revisó: trae las columnas, las temporadas 2018/19 a 2025/26 con el marcador y la cuota de cierre de once casas, y el script ya la convierte (`from-olivier-nba`). "El mercado" quedó fijado: el promedio de las casas al cierre (§8.5). El usuario no lo compra por ahora: busca antes una fuente gratuita | Etapa 1, baloncesto |
 
 ---
 
