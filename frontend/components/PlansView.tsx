@@ -24,7 +24,8 @@
  *   Si además tiene una suscripción vigente, su plan va marcado igual, sin botón.
  * - Con una suscripción pagada y vigente: su plan va marcado "Tu plan actual",
  *   con hasta cuándo tiene acceso y el botón de pagar el período siguiente.
- *   Los demás planes no llevan botón.
+ *   Los demás planes no llevan botón. Si su plan se desactivó, igual sale
+ *   (primero y sin destacar), para que pueda pagar el período siguiente.
  *   Si esa suscripción se renueva sola, no hay botón: se gestiona en la cuenta.
  * - Sin acceso: "Suscribirme" si la pasarela ofrece la renovación automática;
  *   si no (Tipster Page, o sin pasarela), "Elegir plan mensual" (o el período
@@ -135,12 +136,17 @@ export function PlansView() {
     plans
       .filter((p) => savings.get(p.id))
       .sort((a, b) => savings.get(b.id)!.percent - savings.get(a.id)!.percent)[0]?.id ?? null;
+  // El plan de la suscripción vigente sale aunque ya no se ofrezca (se
+  // desactivó): quien lo paga a mano tiene que poder pagar el período
+  // siguiente. No se destaca, y su descripción no se compara con el mensual.
+  const shown =
+    current && !plans.some((p) => p.id === current.plan.id) ? [current.plan, ...plans] : plans;
 
   // Una al lado de la otra; en pantallas angostas, una debajo de la otra.
   return (
     <>
-      <div className={`grid gap-5 ${plans.length > 1 ? "md:grid-cols-2" : ""}`}>
-        {plans.map((plan) => (
+      <div className={`grid gap-5 ${shown.length > 1 ? "md:grid-cols-2" : ""}`}>
+        {shown.map((plan) => (
           <PlanCard
             key={plan.id}
             plan={plan}

@@ -104,25 +104,34 @@ function Checkout() {
       return;
     }
     let cancelled = false;
-    Promise.all([
-      billingApi.plans(),
-      withToken((t) => billingApi.subscription(t)),
-      withToken((t) => billingApi.quote(t, { plan_id: planId })),
-      billingApi.availability(),
-      withToken((t) => billingApi.billingProfile(t)),
-    ])
-      .then(([plans, current, first, available, billing]) => {
-        if (cancelled) return;
-        setProfile(billing);
-        setPlan(plans.find((p) => p.id === planId) ?? null);
-        setSubscription(current);
-        setQuote(first);
-        setAvailability(available);
-        setReady(true);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(messageOf(e, "No se pudo cargar el plan"));
-      });
+    async function load() {
+      const [plans, current, available, billing] = await Promise.all([
+        billingApi.plans(),
+        withToken((t) => billingApi.subscription(t)),
+        billingApi.availability(),
+        withToken((t) => billingApi.billingProfile(t)),
+      ]);
+      // El período siguiente se paga sobre el plan de la suscripción, aunque ese
+      // plan ya no se ofrezca: desactivarlo no deja sin renovar a quien lo paga
+      // a mano. Si no es el de su suscripción, solo un plan que se ofrece.
+      const own = current?.in_force && current.plan.id === planId ? current.plan : null;
+      const offered = plans.find((p) => p.id === planId) ?? null;
+      // El período siguiente no se cotiza: su precio es el congelado de la suscripción.
+      const first =
+        own === null && offered !== null
+          ? await withToken((t) => billingApi.quote(t, { plan_id: planId }))
+          : null;
+      if (cancelled) return;
+      setProfile(billing);
+      setPlan(own ?? offered);
+      setSubscription(current);
+      setQuote(first);
+      setAvailability(available);
+      setReady(true);
+    }
+    load().catch((e) => {
+      if (!cancelled) setError(messageOf(e, "No se pudo cargar el plan"));
+    });
     return () => {
       cancelled = true;
     };
@@ -140,7 +149,13 @@ function Checkout() {
     );
   }
   if (!ready) return <InlineSkeleton cards={2} />;
-  if (!plan || !quote || !availability) {
+
+  // Con un período pagado y vigente, lo que se paga es el siguiente del mismo
+  // plan, por el precio congelado de la suscripción y sin cupón.
+  const current = subscription?.in_force ? subscription : null;
+  const renewing = plan !== null && current !== null && current.plan.id === plan.id;
+
+  if (!plan || !availability || (!renewing && !quote)) {
     return (
       <div className="space-y-4">
         <ErrorBox message="Ese plan no está disponible." />
@@ -150,11 +165,6 @@ function Checkout() {
       </div>
     );
   }
-
-  // Con un período pagado y vigente, lo que se paga es el siguiente del mismo
-  // plan, por el precio congelado de la suscripción y sin cupón.
-  const current = subscription?.in_force ? subscription : null;
-  const renewing = current !== null && current.plan.id === plan.id;
 
   if (current && current.renewal_mode === "automatic" && current.status !== "canceled") {
     // Se renueva sola: no hay nada que pagar a mano.
@@ -176,10 +186,18 @@ function Checkout() {
     );
   }
 
-  const subtotal = renewing ? current.price_cents : quote.subtotal_cents;
-  const total = renewing ? (current.next_charge_cents ?? current.price_cents) : quote.total_cents;
+  const priced = renewing
+    ? {
+        subtotal: current.price_cents,
+        total: current.next_charge_cents ?? current.price_cents,
+        currency: current.currency,
+      }
+    : quote
+      ? { subtotal: quote.subtotal_cents, total: quote.total_cents, currency: quote.currency }
+      : null;
+  if (!priced) return null;
+  const { subtotal, total, currency } = priced;
   const discount = subtotal - total;
-  const currency = renewing ? current.currency : quote.currency;
   const totalText = formatMoney(total, currency);
   const interval = intervalLabel(plan.interval, plan.interval_count);
   // "un mes de acceso", no "mes de acceso".

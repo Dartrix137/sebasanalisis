@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  adminAuth,
+  API_URL,
   chooseFakeCard,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -195,6 +197,82 @@ test("suscriptor con acceso manual: /planes no le ofrece un pago que se rechazar
   await expect(suscripcion.getByText("Vigente", { exact: true })).toBeVisible();
   await expect(suscripcion.getByText(/acceso otorgado por un administrador/)).toBeVisible();
   await expect(suscripcion.getByRole("link", { name: "paga el siguiente período" })).toHaveCount(0);
+});
+
+test("plan desactivado: quien lo paga a mano sigue pudiendo pagar el período siguiente", async ({
+  page,
+  request,
+  browser,
+}) => {
+  // Un plan propio del test: desactivar uno sembrado cambiaría lo que ven los demás.
+  const headers = await adminAuth(request);
+  const sufijo = Math.random().toString(36).slice(2, 8);
+  const name = `Plan retirado ${sufijo}`;
+  const created = await request.post(`${API_URL}/admin/plans`, {
+    headers,
+    data: {
+      code: `e2e-retirado-${sufijo}`,
+      name,
+      description: "Acceso a la plataforma. Solo para un test.",
+      price_cents: 4000,
+      interval: "month",
+      interval_count: 1,
+      sort_order: 950,
+      reason: "Plan de un test de punta a punta",
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  const planId = ((await created.json()) as { id: string }).id;
+
+  const email = uniqueEmail();
+  await registerViaApi(request, email, { access: "ninguno" });
+  await confirmEmail(request, email);
+  await loginViaUi(page, email);
+  await expect(page).toHaveURL(/\/planes/);
+  await page.goto(`/planes/pagar?plan=${planId}`);
+  await page.getByRole("radio", { name: "Pago manual" }).check();
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 40 EUR" }).click();
+  await page.getByRole("button", { name: "Aprobar el pago" }).click();
+  await expect(page.getByText("Pago aprobado")).toBeVisible();
+
+  // El administrador lo desactiva: deja de ofrecerse.
+  const off = await request.patch(`${API_URL}/admin/plans/${planId}`, {
+    headers,
+    data: { active: false, reason: "Retiro del plan en un test" },
+  });
+  expect(off.ok()).toBeTruthy();
+
+  // A quien lo tiene vigente se le sigue mostrando, con el pago del período siguiente.
+  await page.goto("/planes");
+  const suyo = page.getByRole("article", { name });
+  await expect(suyo.getByText("Tu plan actual")).toBeVisible();
+  await expect(suyo.getByText("Promoción", { exact: false })).toHaveCount(0);
+  await suyo.getByRole("link", { name: "Pagar el siguiente período" }).click();
+
+  await expect(page.getByText(/El período nuevo empieza ese día/)).toBeVisible();
+  await expect(page.getByTestId("total-a-pagar")).toHaveText("40 EUR");
+  await chooseFakeCard(page);
+  await page.getByRole("button", { name: "Ir a pagar 40 EUR" }).click();
+  await expect(page.getByText("Monto: 40.00 EUR")).toBeVisible();
+  await page.getByRole("button", { name: "Aprobar el pago" }).click();
+  await expect(page.getByText("Pago aprobado")).toBeVisible();
+
+  // Una cuenta sin ese plan no lo ve ni lo puede pagar.
+  await page.goto("/cuenta");
+  await expect(page.getByTestId("suscripcion").getByText(name)).toBeVisible();
+  const otra = uniqueEmail();
+  await registerViaApi(request, otra, { access: "ninguno" });
+  await confirmEmail(request, otra);
+  const contexto = await browser.newContext();
+  const visita = await contexto.newPage();
+  await loginViaUi(visita, otra);
+  await expect(visita).toHaveURL(/\/planes/);
+  await expect(visita.getByRole("article", { name: "Acceso Mensual" })).toBeVisible();
+  await expect(visita.getByRole("article", { name })).toHaveCount(0);
+  await visita.goto(`/planes/pagar?plan=${planId}`);
+  await expect(visita.getByText("Ese plan no está disponible.")).toBeVisible();
+  await contexto.close();
 });
 
 test("cuenta que nunca ha pagado: Mi cuenta lo dice y lleva a los planes", async ({
